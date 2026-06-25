@@ -8,6 +8,8 @@ import type {
 
 export interface PurchaseEvent {
   stripe_event_id: string;
+  checkout_session_id?: string | null;
+  payment_intent_id?: string | null;
   product_id?: string | null;
   page_type?: string | null;
   amount_cents: number;

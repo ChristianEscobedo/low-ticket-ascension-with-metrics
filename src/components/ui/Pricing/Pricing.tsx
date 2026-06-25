@@ -24,15 +24,31 @@ interface SubscriptionWithProduct extends Subscription {
   prices: PriceWithProduct | null;
 }
 
+interface ProductCourseSummary {
+  id: string;
+  title: string;
+  short_description: string | null;
+  thumbnail_url: string | null;
+}
+
 interface Props {
   user: User | null | undefined;
   products: ProductWithPrices[];
   subscription: SubscriptionWithProduct | null;
+  courseSummariesByProduct?: Record<string, ProductCourseSummary[]>;
+  accessibleCourseIds?: string[];
 }
 
 type BillingInterval = 'lifetime' | 'year' | 'month';
 
-export default function Pricing({ user, products, subscription }: Props) {
+export default function Pricing({
+  user,
+  products,
+  subscription,
+  courseSummariesByProduct,
+  accessibleCourseIds
+}: Props) {
+  const accessibleSet = new Set(accessibleCourseIds ?? []);
   const intervals = Array.from(
     new Set(
       products.flatMap((product) =>
@@ -85,13 +101,13 @@ export default function Pricing({ user, products, subscription }: Props) {
 
   if (!products.length) {
     return (
-      <section className="bg-black">
-        <div className="max-w-6xl px-4 py-8 mx-auto sm:py-24 sm:px-6 lg:px-8">
-          <div className="sm:flex sm:flex-col sm:align-center"></div>
-          <p className="text-4xl font-extrabold text-white sm:text-center sm:text-6xl">
+      <section className="relative bg-black overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-amber-200/[0.04] blur-3xl rounded-full pointer-events-none" />
+        <div className="max-w-6xl px-4 py-8 mx-auto sm:py-24 sm:px-6 lg:px-8 relative">
+          <p className="text-2xl font-light text-white/70 sm:text-center max-w-2xl mx-auto">
             No subscription pricing plans found. Create them in your{' '}
             <a
-              className="text-pink-500 underline"
+              className="text-amber-300 hover:text-amber-200 underline underline-offset-4"
               href="https://dashboard.stripe.com/products"
               rel="noopener noreferrer"
               target="_blank"
@@ -106,26 +122,30 @@ export default function Pricing({ user, products, subscription }: Props) {
     );
   } else {
     return (
-      <section className="bg-black">
-        <div className="max-w-6xl px-4 py-8 mx-auto sm:py-24 sm:px-6 lg:px-8">
+      <section className="relative bg-black overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-amber-200/[0.04] blur-3xl rounded-full pointer-events-none" />
+        <div className="max-w-6xl px-4 py-8 mx-auto sm:py-24 sm:px-6 lg:px-8 relative">
           <div className="sm:flex sm:flex-col sm:align-center">
-            <h1 className="text-4xl font-extrabold text-white sm:text-center sm:text-6xl">
-              Pricing Plans
-            </h1>
-            <p className="max-w-2xl m-auto mt-5 text-xl text-zinc-200 sm:text-center sm:text-2xl">
-              Start building for free, then add a site plan to go live. Account
-              plans unlock additional features.
+            <p className="text-xs text-amber-300 font-bold uppercase tracking-[0.25em] sm:text-center mb-3">
+              Pricing
             </p>
-            <div className="relative self-center mt-6 bg-zinc-900 rounded-lg p-0.5 flex sm:mt-8 border border-zinc-800">
+            <h1 className="text-4xl font-extrabold sm:text-center sm:text-6xl bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent">
+              Choose your plan
+            </h1>
+            <p className="max-w-2xl m-auto mt-5 text-lg text-white/60 sm:text-center sm:text-xl font-light">
+              Start free, then upgrade when you&rsquo;re ready. Every plan unlocks the
+              full course library and ships with the same support.
+            </p>
+            <div className="relative self-center mt-8 rounded-xl p-1 flex border border-amber-200/20 bg-white/[0.03] backdrop-blur-sm">
               {intervals.includes('month') && (
                 <button
                   onClick={() => setBillingInterval('month')}
                   type="button"
                   className={`${
                     billingInterval === 'month'
-                      ? 'relative w-1/2 bg-zinc-700 border-zinc-800 shadow-sm text-white'
-                      : 'ml-0.5 relative w-1/2 border border-transparent text-zinc-400'
-                  } rounded-md m-1 py-2 text-sm font-medium whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-opacity-50 focus:z-10 sm:w-auto sm:px-8`}
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-[0_0_20px_rgba(251,191,36,0.25)]'
+                      : 'text-white/60 hover:text-white'
+                  } relative rounded-lg px-6 py-2 text-sm font-semibold whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300/50 focus:z-10 sm:px-8`}
                 >
                   Monthly billing
                 </button>
@@ -136,9 +156,9 @@ export default function Pricing({ user, products, subscription }: Props) {
                   type="button"
                   className={`${
                     billingInterval === 'year'
-                      ? 'relative w-1/2 bg-zinc-700 border-zinc-800 shadow-sm text-white'
-                      : 'ml-0.5 relative w-1/2 border border-transparent text-zinc-400'
-                  } rounded-md m-1 py-2 text-sm font-medium whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-opacity-50 focus:z-10 sm:w-auto sm:px-8`}
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-[0_0_20px_rgba(251,191,36,0.25)]'
+                      : 'text-white/60 hover:text-white'
+                  } relative rounded-lg px-6 py-2 text-sm font-semibold whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300/50 focus:z-10 sm:px-8`}
                 >
                   Yearly billing
                 </button>
@@ -151,6 +171,14 @@ export default function Pricing({ user, products, subscription }: Props) {
                 (price) => price.interval === billingInterval
               );
               if (!price) return null;
+              const isCurrent =
+                !!subscription &&
+                product.name === subscription?.prices?.products?.name;
+              const bundledCourses =
+                courseSummariesByProduct?.[product.id] ?? [];
+              const ownedCount = bundledCourses.filter((c) =>
+                accessibleSet.has(c.id)
+              ).length;
               const priceString = new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: price.currency!,
@@ -160,38 +188,84 @@ export default function Pricing({ user, products, subscription }: Props) {
                 <div
                   key={product.id}
                   className={cn(
-                    'flex flex-col rounded-lg shadow-sm divide-y divide-zinc-600 bg-zinc-900',
-                    {
-                      'border border-pink-500': subscription
-                        ? product.name === subscription?.prices?.products?.name
-                        : product.name === 'Freelancer'
-                    },
-                    'flex-1', // This makes the flex item grow to fill the space
-                    'basis-1/3', // Assuming you want each card to take up roughly a third of the container's width
-                    'max-w-xs' // Sets a maximum width to the cards to prevent them from getting too large
+                    'relative flex flex-col rounded-2xl bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-sm transition-all',
+                    isCurrent
+                      ? 'border-2 border-amber-500/50 shadow-[0_0_40px_rgba(251,191,36,0.15)]'
+                      : 'border border-amber-200/20 hover:border-amber-200/40',
+                    'flex-1 basis-1/3 max-w-xs'
                   )}
                 >
+                  {isCurrent && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 to-amber-500 text-black text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
+                      Current plan
+                    </span>
+                  )}
                   <div className="p-6">
                     <h2 className="text-2xl font-semibold leading-6 text-white">
                       {product.name}
                     </h2>
-                    <p className="mt-4 text-zinc-300">{product.description}</p>
+                    <p className="mt-4 text-sm text-white/60 font-light leading-relaxed min-h-[3rem]">
+                      {product.description}
+                    </p>
                     <p className="mt-8">
-                      <span className="text-5xl font-extrabold white">
+                      <span className="text-5xl font-black bg-gradient-to-r from-amber-200 to-amber-400 bg-clip-text text-transparent">
                         {priceString}
                       </span>
-                      <span className="text-base font-medium text-zinc-100">
+                      <span className="text-base font-medium text-white/50 ml-1">
                         /{billingInterval}
                       </span>
                     </p>
+                    {bundledCourses.length > 0 && (
+                      <div className="mt-6 pt-6 border-t border-white/[0.06] space-y-2">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300/80">
+                          Includes {bundledCourses.length}{' '}
+                          {bundledCourses.length === 1 ? 'course' : 'courses'}
+                        </p>
+                        <ul className="space-y-1.5">
+                          {bundledCourses.slice(0, 4).map((c) => {
+                            const owned = accessibleSet.has(c.id);
+                            return (
+                              <li
+                                key={c.id}
+                                className="flex items-start gap-2 text-sm text-white/70"
+                              >
+                                <span
+                                  className={cn(
+                                    'mt-1 inline-block w-1.5 h-1.5 rounded-full flex-shrink-0',
+                                    owned ? 'bg-amber-400' : 'bg-white/30'
+                                  )}
+                                />
+                                <span className="leading-snug">{c.title}</span>
+                              </li>
+                            );
+                          })}
+                          {bundledCourses.length > 4 && (
+                            <li className="text-xs text-white/40 pl-3.5">
+                              + {bundledCourses.length - 4} more
+                            </li>
+                          )}
+                        </ul>
+                        {user && ownedCount > 0 && (
+                          <p className="text-xs text-amber-200/80 font-medium pt-1">
+                            You already have access to {ownedCount} of{' '}
+                            {bundledCourses.length}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <Button
                       variant="slim"
                       type="button"
                       loading={priceIdLoading === price.id}
                       onClick={() => handleStripeCheckout(price)}
-                      className="block w-full py-2 mt-8 text-sm font-semibold text-center text-white rounded-md hover:bg-zinc-900"
+                      className={cn(
+                        'block w-full py-2.5 mt-8 text-sm font-bold text-center rounded-lg transition-colors',
+                        isCurrent
+                          ? 'bg-white/[0.06] hover:bg-white/[0.1] text-white border border-amber-200/30'
+                          : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-[0_0_20px_rgba(251,191,36,0.2)]'
+                      )}
                     >
-                      {subscription ? 'Manage' : 'Subscribe'}
+                      {isCurrent ? 'Manage' : 'Subscribe'}
                     </Button>
                   </div>
                 </div>

@@ -11,7 +11,13 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/subscriptions', label: 'Subscriptions' },
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/products', label: 'Products' },
+  { href: '/admin/courses', label: 'Courses' },
+  { href: '/admin/course-access', label: 'Course Access' },
+  { href: '/admin/cta-analytics', label: 'CTA Analytics' },
+  { href: '/admin/licenses', label: 'Licenses' },
   { href: '/admin/integrations', label: 'Integrations' },
+  { href: '/admin/email-templates', label: 'Email Templates' },
+  { href: '/admin/receipt-log', label: 'Receipt Log' },
   { href: '/admin/stripe', label: 'Stripe' }
 ];
 

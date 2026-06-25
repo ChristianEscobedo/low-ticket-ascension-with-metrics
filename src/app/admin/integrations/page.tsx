@@ -1,5 +1,10 @@
 import IntegrationCard from './IntegrationCard';
+import ResendHealthCard from './ResendHealthCard';
+import TestReceiptCard from './TestReceiptCard';
 import { getIntegration } from '@/utils/integrations/store';
+import { getResendWebhookHealth } from '@/utils/email/receipt-log';
+import { createClient } from '@/utils/supabase/server';
+import { getUser } from '@/utils/supabase/queries';
 import type {
   GenericWebhookConfig,
   GhlConfig,
@@ -9,10 +14,13 @@ import type {
 export const dynamic = 'force-dynamic';
 
 export default async function IntegrationsPage() {
-  const [webhook, ghl, mass] = await Promise.all([
+  const supabase = createClient();
+  const [webhook, ghl, mass, user, resendHealth] = await Promise.all([
     getIntegration<GenericWebhookConfig>('generic_webhook'),
     getIntegration<GhlConfig>('ghl'),
-    getIntegration<MassConfig>('mass')
+    getIntegration<MassConfig>('mass'),
+    getUser(supabase),
+    getResendWebhookHealth()
   ]);
 
   return (
@@ -112,6 +120,19 @@ export default async function IntegrationsPage() {
           initialConfig={(mass?.config as Record<string, unknown>) ?? {}}
           hideTestButton
         />
+      </div>
+
+      <div className="mt-10">
+        <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+          Diagnostics
+        </div>
+        <h2 className="text-xl font-bold tracking-tight mb-4">
+          Transactional email
+        </h2>
+        <div className="space-y-4">
+          <ResendHealthCard health={resendHealth} />
+          <TestReceiptCard defaultEmail={user?.email ?? ''} />
+        </div>
       </div>
     </div>
   );

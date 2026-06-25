@@ -40,3 +40,8 @@ yarn-error.log*
 # certificates
 certificates
 .env*.local
+
+# build artifacts / local logs
+*.tsbuildinfo
+build*.log
+*.log

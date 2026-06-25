@@ -2,6 +2,7 @@ import { getProductsWithPrices } from '@/utils/supabase/admin';
 import SyncButton from './SyncButton';
 import CreateProductForm from './CreateProductForm';
 import StageEditor from './StageEditor';
+import CourseAccessSelector from '@/components/admin/CourseAccessSelector';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,13 +63,14 @@ export default async function ProductsPage() {
                 <p className="text-xs text-white/40 mt-1">
                   <code>{p.id}</code>
                 </p>
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <StageEditor
                     productId={p.id}
                     initialPageType={
                       (p.metadata?.page_type as string | undefined) ?? null
                     }
                   />
+                  <CourseAccessSelector productId={p.id} compact />
                 </div>
               </div>
               <a

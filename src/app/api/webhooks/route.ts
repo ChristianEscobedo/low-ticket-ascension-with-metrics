@@ -9,6 +9,8 @@ import {
   recordFunnelPurchase
 } from '@/utils/supabase/admin';
 import { dispatchPurchase } from '@/utils/integrations/dispatch';
+import { sendPurchaseReceipt } from '@/utils/email/receipt';
+import { grantCoursesForPurchase } from '@/utils/courses/grant';
 
 const relevantEvents = new Set([
   'product.created',
@@ -106,6 +108,12 @@ export async function POST(req: Request) {
             };
             await recordFunnelPurchase(subPurchase);
             await dispatchPurchase(subPurchase);
+            await sendPurchaseReceipt(subPurchase);
+            await grantCoursesForPurchase({
+              productId: subPurchase.product_id,
+              customerEmail: subPurchase.customer_email,
+              accessType: 'subscription'
+            });
           } else if (checkoutSession.mode === 'payment') {
             // One-time hosted Checkout. Record into funnel_purchases so it
             // shows up in /admin/funnel-stats alongside inline charges.
@@ -129,6 +137,12 @@ export async function POST(req: Request) {
             };
             await recordFunnelPurchase(sessionPurchase);
             await dispatchPurchase(sessionPurchase);
+            await sendPurchaseReceipt(sessionPurchase);
+            await grantCoursesForPurchase({
+              productId: sessionPurchase.product_id,
+              customerEmail: sessionPurchase.customer_email,
+              accessType: 'purchase'
+            });
           }
           break;
         case 'payment_intent.succeeded':
@@ -153,6 +167,12 @@ export async function POST(req: Request) {
           };
           await recordFunnelPurchase(piPurchase);
           await dispatchPurchase(piPurchase);
+          await sendPurchaseReceipt(piPurchase);
+          await grantCoursesForPurchase({
+            productId: piPurchase.product_id,
+            customerEmail: piPurchase.customer_email,
+            accessType: 'purchase'
+          });
           break;
         default:
           throw new Error('Unhandled relevant event!');

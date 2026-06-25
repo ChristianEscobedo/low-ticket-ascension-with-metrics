@@ -21,6 +21,10 @@ vi.mock('@/utils/integrations/dispatch', () => ({
   dispatchPurchase: vi.fn(),
 }));
 
+vi.mock('@/utils/courses/grant', () => ({
+  grantCoursesForPurchase: vi.fn().mockResolvedValue({ granted: 0 }),
+}));
+
 const reqWithEvent = () =>
   ({
     text: async () => 'raw-body',

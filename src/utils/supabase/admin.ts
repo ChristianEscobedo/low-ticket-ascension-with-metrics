@@ -605,6 +605,109 @@ const getCustomerById = async (id: string): Promise<CustomerDetail | null> => {
   };
 };
 
+export interface CustomerReceiptLogEntry {
+  id: string;
+  created_at: string;
+  status: string;
+  provider: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  payment_intent_id: string | null;
+  message_id: string | null;
+  delivery_status: string | null;
+  bounce_reason: string | null;
+  error: string | null;
+  skipped_reason: string | null;
+}
+
+export interface CustomerCtaClickEntry {
+  id: string;
+  created_at: string;
+  lesson_id: string;
+  cta_id: string;
+  lesson_title: string | null;
+  course_id: string | null;
+  course_title: string | null;
+}
+
+export interface CustomerLessonProgressEntry {
+  lesson_id: string;
+  lesson_title: string | null;
+  course_id: string | null;
+  course_title: string | null;
+  progress_seconds: number;
+  is_completed: boolean;
+  completed_at: string | null;
+  last_watched_at: string | null;
+}
+
+export interface CustomerActivity {
+  receiptLog: CustomerReceiptLogEntry[];
+  ctaClicks: CustomerCtaClickEntry[];
+  lessonProgress: CustomerLessonProgressEntry[];
+}
+
+const getCustomerActivity = async (
+  userId: string,
+  email: string | null
+): Promise<CustomerActivity> => {
+  const [receiptRes, clickRes, progressRes] = await Promise.all([
+    email
+      ? (supabaseAdmin as any)
+          .from('receipt_log')
+          .select(
+            'id, created_at, status, provider, amount_cents, currency, payment_intent_id, message_id, delivery_status, bounce_reason, error, skipped_reason'
+          )
+          .eq('customer_email', email)
+          .order('created_at', { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: [] }),
+    (supabaseAdmin as any)
+      .from('cta_click_events')
+      .select('id, created_at, lesson_id, cta_id, lessons(title, course_id, courses(title))')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    (supabaseAdmin as any)
+      .from('user_lesson_progress')
+      .select(
+        'lesson_id, progress_seconds, is_completed, completed_at, last_watched_at, lessons(title, course_id, courses(title))'
+      )
+      .eq('user_id', userId)
+      .order('last_watched_at', { ascending: false })
+      .limit(100)
+  ]);
+
+  const receiptLog = (receiptRes?.data ?? []) as CustomerReceiptLogEntry[];
+
+  const ctaClicks: CustomerCtaClickEntry[] = (clickRes?.data ?? []).map(
+    (r: any) => ({
+      id: r.id,
+      created_at: r.created_at,
+      lesson_id: r.lesson_id,
+      cta_id: r.cta_id,
+      lesson_title: r.lessons?.title ?? null,
+      course_id: r.lessons?.course_id ?? null,
+      course_title: r.lessons?.courses?.title ?? null
+    })
+  );
+
+  const lessonProgress: CustomerLessonProgressEntry[] = (
+    progressRes?.data ?? []
+  ).map((r: any) => ({
+    lesson_id: r.lesson_id,
+    lesson_title: r.lessons?.title ?? null,
+    course_id: r.lessons?.course_id ?? null,
+    course_title: r.lessons?.courses?.title ?? null,
+    progress_seconds: r.progress_seconds ?? 0,
+    is_completed: !!r.is_completed,
+    completed_at: r.completed_at ?? null,
+    last_watched_at: r.last_watched_at ?? null
+  }));
+
+  return { receiptLog, ctaClicks, lessonProgress };
+};
+
 const getSubscriptionsList = async (page = 1, pageSize = 50) => {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -674,6 +777,133 @@ const getLastWebhookEventAt = async (): Promise<string | null> => {
   return (data?.created_at as string | null) ?? null;
 };
 
+export interface CtaClickerRow {
+  user_id: string | null;
+  email: string | null;
+  clicks: number;
+  first_click_at: string;
+  last_click_at: string;
+}
+
+const CTA_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Per-user click breakdown for a single (lesson, CTA) pair, ordered by click
+ * count. Anonymous clicks are aggregated into a single row with user_id null.
+ * Returns [] when env vars are missing or the query fails.
+ */
+const getCtaClickers = async (
+  lessonId: string,
+  ctaId: string,
+  opts: {
+    startDate?: string | null;
+    endDate?: string | null;
+    limit?: number;
+  } = {}
+): Promise<CtaClickerRow[]> => {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    return [];
+  }
+  const endBound = opts.endDate
+    ? CTA_DATE_RE.test(opts.endDate)
+      ? `${opts.endDate}T23:59:59.999Z`
+      : opts.endDate
+    : null;
+  let q = (supabaseAdmin as any)
+    .from('cta_click_events')
+    .select('user_id, created_at')
+    .eq('lesson_id', lessonId)
+    .eq('cta_id', ctaId)
+    .order('created_at', { ascending: false })
+    .limit(opts.limit ?? 5000);
+  if (opts.startDate) q = q.gte('created_at', opts.startDate);
+  if (endBound) q = q.lte('created_at', endBound);
+  const { data, error } = await q;
+  if (error) return [];
+
+  type Row = { user_id: string | null; created_at: string };
+  const agg = new Map<
+    string,
+    { user_id: string | null; clicks: number; first: string; last: string }
+  >();
+  for (const e of (data ?? []) as Row[]) {
+    const key = e.user_id ?? '__anon__';
+    const cur =
+      agg.get(key) ??
+      { user_id: e.user_id, clicks: 0, first: e.created_at, last: e.created_at };
+    cur.clicks += 1;
+    if (e.created_at < cur.first) cur.first = e.created_at;
+    if (e.created_at > cur.last) cur.last = e.created_at;
+    agg.set(key, cur);
+  }
+
+  const userIds = Array.from(agg.values())
+    .map((v) => v.user_id)
+    .filter((id): id is string => !!id);
+  const emailMap = new Map<string, string>();
+  if (userIds.length > 0) {
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({
+      perPage: 1000
+    });
+    for (const u of users) if (u.email) emailMap.set(u.id, u.email);
+  }
+
+  return Array.from(agg.values())
+    .map((v) => ({
+      user_id: v.user_id,
+      email: v.user_id ? emailMap.get(v.user_id) ?? null : null,
+      clicks: v.clicks,
+      first_click_at: v.first,
+      last_click_at: v.last
+    }))
+    .sort((a, b) => b.clicks - a.clicks);
+};
+
+export interface CtaContextInfo {
+  lessonId: string;
+  ctaId: string;
+  lessonTitle: string | null;
+  courseId: string | null;
+  courseTitle: string | null;
+  ctaTitle: string | null;
+  ctaButtonText: string | null;
+  ctaLink: string | null;
+}
+
+/** Hydrate (lesson, cta) metadata for the clickers page header. */
+const getCtaContext = async (
+  lessonId: string,
+  ctaId: string
+): Promise<CtaContextInfo | null> => {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    return null;
+  }
+  const { data: lesson } = await (supabaseAdmin as any)
+    .from('lessons')
+    .select('id, title, course_id, ctas, courses(title)')
+    .eq('id', lessonId)
+    .maybeSingle();
+  if (!lesson) return null;
+  const ctaList = Array.isArray(lesson.ctas) ? (lesson.ctas as any[]) : [];
+  const cta = ctaList.find((c) => c?.id === ctaId);
+  return {
+    lessonId,
+    ctaId,
+    lessonTitle: lesson.title ?? null,
+    courseId: lesson.course_id ?? null,
+    courseTitle: (lesson.courses as any)?.title ?? null,
+    ctaTitle: cta?.title ?? null,
+    ctaButtonText: cta?.buttonText ?? null,
+    ctaLink: cta?.link ?? null
+  };
+};
+
 export {
   upsertProductRecord,
   upsertPriceRecord,
@@ -687,6 +917,9 @@ export {
   getPurchasesList,
   getCustomersList,
   getCustomerById,
+  getCustomerActivity,
+  getCtaClickers,
+  getCtaContext,
   getSubscriptionsList,
   getProductsWithPrices,
   syncProductsFromStripe,

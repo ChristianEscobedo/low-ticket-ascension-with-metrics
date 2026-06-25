@@ -8,6 +8,7 @@ import {
   getSubscription,
   getUser
 } from '@/utils/supabase/queries';
+import MyCoursesSection from './MyCoursesSection';
 
 export default async function Account() {
   const supabase = createClient();
@@ -33,7 +34,8 @@ export default async function Account() {
           </p>
         </div>
       </div>
-      <div className="p-4">
+      <div className="p-4 max-w-6xl mx-auto">
+        <MyCoursesSection userId={user.id} email={user.email ?? null} />
         <CustomerPortalForm subscription={subscription} />
         <NameForm userName={userDetails?.full_name ?? ''} />
         <EmailForm userEmail={user.email} />
