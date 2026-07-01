@@ -2,6 +2,7 @@
 // `EmailProvider.send` and wiring it into `getEmailProvider`. The receipt
 // module talks only to this interface so swapping providers is a config
 // change rather than a code change at call sites.
+import { getEmailProviderConfig } from '@/utils/integrations/runtime-config';
 
 export interface EmailMessage {
   from: string;
@@ -27,25 +28,21 @@ export interface EmailProvider {
 }
 
 /**
- * Resolve the configured provider from env. Returns null when no provider
- * is configured (caller should treat as a no-op). Selection is driven by
- * `RECEIPT_PROVIDER` (defaults to "resend").
+ * Resolve the configured provider. An enabled in-app `email` integration wins,
+ * otherwise the `RECEIPT_PROVIDER` / `RESEND_API_KEY` / `POSTMARK_API_TOKEN`
+ * env vars. Returns null when no provider is configured (caller no-ops).
  */
-export function getEmailProvider(): EmailProvider | null {
-  const choice = (process.env.RECEIPT_PROVIDER ?? 'resend')
-    .trim()
-    .toLowerCase();
+export async function getEmailProvider(): Promise<EmailProvider | null> {
+  const cfg = await getEmailProviderConfig();
 
-  if (choice === 'postmark') {
-    const token = process.env.POSTMARK_API_TOKEN;
-    if (!token) return null;
-    return createPostmarkProvider(token);
+  if (cfg.choice === 'postmark') {
+    if (!cfg.postmarkToken) return null;
+    return createPostmarkProvider(cfg.postmarkToken, cfg.postmarkStream);
   }
 
   // Default: Resend
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
-  return createResendProvider(key);
+  if (!cfg.resendKey) return null;
+  return createResendProvider(cfg.resendKey);
 }
 
 export function createResendProvider(apiKey: string): EmailProvider {
@@ -79,8 +76,14 @@ export function createResendProvider(apiKey: string): EmailProvider {
   };
 }
 
-export function createPostmarkProvider(token: string): EmailProvider {
-  const stream = process.env.RECEIPT_POSTMARK_STREAM?.trim() || 'outbound';
+export function createPostmarkProvider(
+  token: string,
+  postmarkStream?: string
+): EmailProvider {
+  const stream =
+    postmarkStream?.trim() ||
+    process.env.RECEIPT_POSTMARK_STREAM?.trim() ||
+    'outbound';
   return {
     name: 'postmark',
     async send(message) {

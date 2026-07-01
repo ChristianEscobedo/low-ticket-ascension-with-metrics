@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
+import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
 
 // Inline PaymentIntents for the funnel's one-time charges (FE $27, OTO3, OTO4
 // deposit). When called with one_click: true we try to charge the customer's
@@ -18,12 +19,14 @@ interface Body {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY_LIVE) {
+    // Secret key resolves DB-first (enabled `stripe` integration) then env.
+    if (!(await getStripeSecretKey())) {
       return NextResponse.json(
-        { error: 'Stripe is not configured. Set STRIPE_SECRET_KEY in .env.local.' },
+        { error: 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.' },
         { status: 503 }
       );
     }
+    const stripe = await getStripeClient();
 
     const body = (await request.json()) as Body;
     const { amount, currency, customer_data, product_id, one_click, metadata = {} } = body;

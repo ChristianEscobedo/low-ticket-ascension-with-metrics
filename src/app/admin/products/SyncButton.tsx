@@ -25,11 +25,11 @@ export default function SyncButton() {
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="rounded-lg bg-brass hover:bg-brass/90 text-ink px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {pending ? 'Syncing…' : 'Sync from Stripe'}
       </button>
-      {result && <span className="text-sm text-white/60">{result}</span>}
+      {result && <span className="text-sm text-bone/60">{result}</span>}
     </div>
   );
 }

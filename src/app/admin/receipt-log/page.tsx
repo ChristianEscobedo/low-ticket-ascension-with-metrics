@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 const STATUSES: ReceiptLogStatus[] = ['sent', 'skipped', 'failed'];
 
 function formatDate(iso: string | null) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString('en-US', {
       month: 'short',
@@ -23,12 +23,12 @@ function formatDate(iso: string | null) {
       minute: '2-digit'
     });
   } catch {
-    return '—';
+    return '-';
   }
 }
 
 function formatAmount(cents: number | null, currency: string | null) {
-  if (cents === null) return '—';
+  if (cents === null) return '-';
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -42,7 +42,7 @@ function formatAmount(cents: number | null, currency: string | null) {
 
 const STATUS_TONE: Record<ReceiptLogStatus, string> = {
   sent: 'border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-200',
-  skipped: 'border-white/15 bg-white/[0.03] text-white/50',
+  skipped: 'border-bone/15 bg-bone/[0.03] text-bone/50',
   failed: 'border-red-400/30 bg-red-400/[0.06] text-red-200'
 };
 
@@ -79,13 +79,13 @@ export default async function ReceiptLogPage({
   return (
     <div>
       <div className="mb-6">
-        <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+        <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
           Email
         </div>
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
           Receipt log
         </h1>
-        <p className="text-sm text-white/60 mt-2 max-w-2xl">
+        <p className="text-sm text-bone/60 mt-2 max-w-2xl">
           Every transactional receipt attempt, including no-ops (missing env)
           and provider failures. Use this to confirm a buyer received their
           receipt without leaving the dashboard.
@@ -94,16 +94,16 @@ export default async function ReceiptLogPage({
 
       <form
         method="get"
-        className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-4 mb-6 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end"
+        className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-4 mb-6 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end"
       >
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+          <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             Status
           </span>
           <select
             name="status"
             defaultValue={status ?? ''}
-            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="mt-1 w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none"
           >
             <option value="">All</option>
             {STATUSES.map((s) => (
@@ -114,7 +114,7 @@ export default async function ReceiptLogPage({
           </select>
         </label>
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+          <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             Email contains
           </span>
           <input
@@ -122,20 +122,20 @@ export default async function ReceiptLogPage({
             name="email"
             defaultValue={email ?? ''}
             placeholder="buyer@example.com"
-            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="mt-1 w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none"
           />
         </label>
         <div className="flex gap-2">
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 text-black text-sm font-bold hover:from-amber-300 hover:to-amber-400"
+            className="px-4 py-2 rounded-lg bg-brass text-ink text-sm font-bold hover:bg-brass/90"
           >
             Apply
           </button>
           {hasFilters && (
             <Link
               href="/admin/receipt-log"
-              className="px-3 py-2 rounded-lg border border-white/10 text-sm text-white/60 hover:text-white hover:border-white/30"
+              className="px-3 py-2 rounded-lg border border-bone/10 text-sm text-bone/60 hover:text-bone hover:border-bone/30"
             >
               Clear
             </Link>
@@ -151,28 +151,28 @@ export default async function ReceiptLogPage({
 
       <ReceiptLogTable rows={rows} hasFilters={hasFilters} />
 
-      <div className="mt-6 rounded-2xl border border-amber-200/15 bg-white/[0.02] p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-white/50">
-        <span className="inline-flex items-center gap-2 text-white/70">
-          <Archive className="w-3.5 h-3.5 text-amber-200/80" />
+      <div className="mt-6 rounded-2xl border border-brass/15 bg-bone/[0.02] p-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-bone/50">
+        <span className="inline-flex items-center gap-2 text-bone/70">
+          <Archive className="w-3.5 h-3.5 text-brass/80" />
           Retention
         </span>
         <span>
           Window:{' '}
-          <span className="text-white font-semibold">{retentionDays} days</span>
+          <span className="text-bone font-semibold">{retentionDays} days</span>
         </span>
         <span>
           Total rows:{' '}
-          <span className="text-white font-semibold">
-            {stats.total === null ? '—' : stats.total.toLocaleString()}
+          <span className="text-bone font-semibold">
+            {stats.total === null ? '-' : stats.total.toLocaleString()}
           </span>
         </span>
         <span>
           Oldest:{' '}
-          <span className="text-white font-semibold">
-            {oldestAgeDays === null ? '—' : `${oldestAgeDays}d ago`}
+          <span className="text-bone font-semibold">
+            {oldestAgeDays === null ? '-' : `${oldestAgeDays}d ago`}
           </span>
         </span>
-        <span className="text-white/30">
+        <span className="text-bone/30">
           Nightly purge: <code className="font-mono">17 3 * * *</code> UTC
         </span>
       </div>
@@ -194,13 +194,13 @@ function StatCard({
       ? 'text-emerald-200'
       : tone === 'red'
         ? 'text-red-200'
-        : 'text-white';
+        : 'text-bone';
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-white/[0.04] to-transparent p-5">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold">
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-bone/[0.04] to-transparent p-5">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-bone/50 font-semibold">
         {label}
       </div>
-      <div className={`text-2xl font-black mt-1 ${toneCls}`}>{value}</div>
+      <div className={`font-display text-2xl font-semibold mt-1 ${toneCls}`}>{value}</div>
     </div>
   );
 }
@@ -214,13 +214,13 @@ function ReceiptLogTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-10 text-center">
-        <p className="text-white/70 font-medium">
+      <div className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-10 text-center">
+        <p className="text-bone/70 font-medium">
           {hasFilters
             ? 'No receipt attempts match these filters'
             : 'No receipt attempts logged yet'}
         </p>
-        <p className="text-sm text-white/40 mt-1">
+        <p className="text-sm text-bone/40 mt-1">
           {hasFilters
             ? 'Try widening the filters or clearing them.'
             : 'Entries will appear here once your first paid order completes.'}
@@ -229,10 +229,10 @@ function ReceiptLogTable({
     );
   }
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-white/[0.02] overflow-hidden">
+    <div className="rounded-2xl border border-brass/15 bg-bone/[0.02] overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-[11px] uppercase tracking-wider text-white/50">
+          <thead className="bg-bone/[0.03] text-[11px] uppercase tracking-wider text-bone/50">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">When</th>
               <th className="text-left px-4 py-3 font-semibold">Status</th>
@@ -243,10 +243,10 @@ function ReceiptLogTable({
               <th className="text-left px-4 py-3 font-semibold">Detail</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.04]">
+          <tbody className="divide-y divide-bone/[0.04]">
             {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-white/[0.02] align-top">
-                <td className="px-4 py-3 text-white/60 text-xs whitespace-nowrap">
+              <tr key={r.id} className="hover:bg-bone/[0.02] align-top">
+                <td className="px-4 py-3 text-bone/60 text-xs whitespace-nowrap">
                   {formatDate(r.created_at)}
                 </td>
                 <td className="px-4 py-3">
@@ -258,20 +258,20 @@ function ReceiptLogTable({
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="text-white">{r.customer_email ?? '—'}</div>
+                  <div className="text-bone">{r.customer_email ?? '-'}</div>
                   {r.payment_intent_id && (
-                    <div className="text-[11px] text-white/30 font-mono">
+                    <div className="text-[11px] text-bone/30 font-mono">
                       {r.payment_intent_id}
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right text-white/70 font-mono text-xs">
+                <td className="px-4 py-3 text-right text-bone/70 font-mono text-xs">
                   {formatAmount(r.amount_cents, r.currency)}
                 </td>
-                <td className="px-4 py-3 text-white/50 text-xs">
-                  {r.provider ?? '—'}
+                <td className="px-4 py-3 text-bone/50 text-xs">
+                  {r.provider ?? '-'}
                   {r.http_status ? (
-                    <span className="text-white/30"> · {r.http_status}</span>
+                    <span className="text-bone/30"> · {r.http_status}</span>
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-xs">
@@ -284,7 +284,7 @@ function ReceiptLogTable({
                     </span>
                   )}
                   {r.status === 'skipped' && (
-                    <span className="text-white/50">{r.skipped_reason}</span>
+                    <span className="text-bone/50">{r.skipped_reason}</span>
                   )}
                   {r.status === 'failed' && (
                     <span className="text-red-200/80">{r.error}</span>
@@ -305,9 +305,9 @@ const DELIVERY_TONE: Record<string, string> = {
   clicked: 'border-sky-400/30 bg-sky-400/[0.06] text-sky-200',
   bounced: 'border-red-400/30 bg-red-400/[0.06] text-red-200',
   failed: 'border-red-400/30 bg-red-400/[0.06] text-red-200',
-  complained: 'border-amber-400/30 bg-amber-400/[0.06] text-amber-200',
-  delayed: 'border-amber-400/30 bg-amber-400/[0.06] text-amber-200',
-  sent: 'border-white/15 bg-white/[0.03] text-white/60'
+  complained: 'border-brass/30 bg-brass/[0.06] text-brass',
+  delayed: 'border-brass/30 bg-brass/[0.06] text-brass',
+  sent: 'border-bone/15 bg-bone/[0.03] text-bone/60'
 };
 
 function DeliveryPill({
@@ -315,15 +315,15 @@ function DeliveryPill({
 }: {
   row: Awaited<ReturnType<typeof getRecentReceiptLog>>[number];
 }) {
-  if (row.status !== 'sent') return <span className="text-white/30">—</span>;
+  if (row.status !== 'sent') return <span className="text-bone/30">-</span>;
   const s = row.delivery_status;
   if (!s) {
     return (
-      <span className="text-white/40 text-[11px] italic">awaiting webhook</span>
+      <span className="text-bone/40 text-[11px] italic">awaiting webhook</span>
     );
   }
   const tone =
-    DELIVERY_TONE[s] ?? 'border-white/15 bg-white/[0.03] text-white/60';
+    DELIVERY_TONE[s] ?? 'border-bone/15 bg-bone/[0.03] text-bone/60';
   return (
     <div className="flex flex-col gap-0.5">
       <span

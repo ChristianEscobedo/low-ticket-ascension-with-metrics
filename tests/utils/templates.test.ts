@@ -71,7 +71,7 @@ describe('buildReceiptTokens', () => {
     expect(tokens.email).toBe('buyer@example.com');
     expect(tokens.ref).toBe('pi_123');
     expect(tokens.brand).toBe('Mindshift');
-    expect(tokens.signoff).toBe('— The Mindshift team');
+    expect(tokens.signoff).toBe('From the Mindshift team');
   });
 
   it('falls back to "there" when no customer_name is present', () => {

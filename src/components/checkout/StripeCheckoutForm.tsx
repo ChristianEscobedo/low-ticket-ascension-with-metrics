@@ -15,7 +15,7 @@ interface CustomerData {
   email: string;
 }
 
-type AccentColor = 'green' | 'amber' | 'violet';
+type AccentColor = 'green' | 'amber' | 'violet' | 'mode';
 
 interface StripeCheckoutFormProps {
   customerData: CustomerData;
@@ -41,6 +41,10 @@ const ACCENT_STYLES: Record<AccentColor, { button: string; icon: string }> = {
     button:
       'bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-400 hover:to-violet-500 hover:shadow-violet-500/25 text-white',
     icon: 'text-violet-400',
+  },
+  mode: {
+    button: 'bg-mode hover:bg-mode-deep hover:shadow-mode/25 text-bone',
+    icon: 'text-mode',
   },
 };
 

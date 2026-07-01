@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
+import { getStripeWebhookSecret } from '@/utils/integrations/runtime-config';
 import {
   upsertProductRecord,
   upsertPriceRecord,
@@ -10,6 +11,7 @@ import {
 } from '@/utils/supabase/admin';
 import { dispatchPurchase } from '@/utils/integrations/dispatch';
 import { sendPurchaseReceipt } from '@/utils/email/receipt';
+import { enrollOnPurchase } from '@/utils/email/sequences/engine';
 import { grantCoursesForPurchase } from '@/utils/courses/grant';
 
 const relevantEvents = new Set([
@@ -36,12 +38,14 @@ const processedEventIds = new Set<string>();
 export async function POST(req: Request) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature') as string;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  // Webhook secret resolves DB-first (enabled `stripe` integration) then env.
+  const webhookSecret = await getStripeWebhookSecret();
   let event: Stripe.Event;
 
   try {
     if (!sig || !webhookSecret)
       return new Response('Webhook secret not found.', { status: 400 });
+    const stripe = await getStripeClient();
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
     console.log(`🔔  Webhook received: ${event.type}`);
   } catch (err: any) {
@@ -109,6 +113,7 @@ export async function POST(req: Request) {
             await recordFunnelPurchase(subPurchase);
             await dispatchPurchase(subPurchase);
             await sendPurchaseReceipt(subPurchase);
+            await enrollOnPurchase(subPurchase);
             await grantCoursesForPurchase({
               productId: subPurchase.product_id,
               customerEmail: subPurchase.customer_email,
@@ -138,6 +143,7 @@ export async function POST(req: Request) {
             await recordFunnelPurchase(sessionPurchase);
             await dispatchPurchase(sessionPurchase);
             await sendPurchaseReceipt(sessionPurchase);
+            await enrollOnPurchase(sessionPurchase);
             await grantCoursesForPurchase({
               productId: sessionPurchase.product_id,
               customerEmail: sessionPurchase.customer_email,
@@ -168,6 +174,7 @@ export async function POST(req: Request) {
           await recordFunnelPurchase(piPurchase);
           await dispatchPurchase(piPurchase);
           await sendPurchaseReceipt(piPurchase);
+          await enrollOnPurchase(piPurchase);
           await grantCoursesForPurchase({
             productId: piPurchase.product_id,
             customerEmail: piPurchase.customer_email,

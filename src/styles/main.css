@@ -57,3 +57,26 @@ p a {
 .height-screen-helper {
   min-height: calc(100vh - 80px);
 }
+
+/* Tiptap rich-text field (content sheet Edit tab). */
+.tiptap p {
+  margin: 0 0 0.5rem;
+}
+.tiptap p:last-child {
+  margin-bottom: 0;
+}
+.tiptap ul {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+.tiptap ul li {
+  margin: 0.1rem 0;
+}
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  @apply text-ink/35;
+}

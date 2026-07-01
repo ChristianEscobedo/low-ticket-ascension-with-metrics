@@ -35,7 +35,7 @@ export default function CreateProductForm() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-amber-200/20 px-4 py-2 text-sm text-amber-200 hover:bg-amber-200/[0.06] hover:border-amber-200/40 transition-colors"
+        className="rounded-lg border border-brass/20 px-4 py-2 text-sm text-brass hover:bg-brass/[0.06] hover:border-brass/40 transition-colors"
       >
         + Create product
       </button>
@@ -45,38 +45,38 @@ export default function CreateProductForm() {
   return (
     <form
       action={onSubmit}
-      className="rounded-2xl border border-amber-200/30 bg-gradient-to-br from-gray-900/80 to-gray-950/80 backdrop-blur p-5 shadow-[0_0_30px_rgba(251,191,36,0.08)]"
+      className="rounded-2xl border border-brass/30 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 shadow-[0_0_30px_rgba(168,139,92,0.08)]"
     >
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold tracking-tight">New product</h3>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="text-white/40 hover:text-white text-sm"
+          className="text-bone/40 hover:text-bone text-sm"
         >
           Cancel
         </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block text-sm sm:col-span-2">
-          <span className="text-white/70">Name</span>
+          <span className="text-bone/70">Name</span>
           <input
             name="name"
             required
-            placeholder="Millionaire Mindshift FE"
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-300/60"
+            placeholder="MotherMode FE"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/60"
           />
         </label>
         <label className="block text-sm sm:col-span-2">
-          <span className="text-white/70">Description</span>
+          <span className="text-bone/70">Description</span>
           <textarea
             name="description"
             rows={2}
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-300/60"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/60"
           />
         </label>
         <label className="block text-sm">
-          <span className="text-white/70">Price (USD)</span>
+          <span className="text-bone/70">Price (USD)</span>
           <input
             name="amount"
             type="number"
@@ -84,15 +84,15 @@ export default function CreateProductForm() {
             min="0.50"
             required
             placeholder="27.00"
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-300/60"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/60"
           />
         </label>
         <label className="block text-sm">
-          <span className="text-white/70">Billing</span>
+          <span className="text-bone/70">Billing</span>
           <select
             name="interval"
             defaultValue="one_time"
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-300/60"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/60"
           >
             <option value="one_time">One-time</option>
             <option value="month">Monthly</option>
@@ -100,13 +100,13 @@ export default function CreateProductForm() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-white/70">Funnel stage</span>
+          <span className="text-bone/70">Funnel stage</span>
           <select
             name="page_type"
             defaultValue=""
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-300/60"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/60"
           >
-            <option value="">— none —</option>
+            <option value="">(none)</option>
             {PAGE_TYPES.map((pt) => (
               <option key={pt} value={pt}>
                 {pt}
@@ -115,11 +115,11 @@ export default function CreateProductForm() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="text-white/70">Funnel slug</span>
+          <span className="text-bone/70">Funnel slug</span>
           <input
             name="funnel"
-            defaultValue="millionaire-mindshift"
-            className="mt-1 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-300/60"
+            defaultValue="mothermode"
+            className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/60"
           />
         </label>
         <input type="hidden" name="currency" value="usd" />
@@ -131,11 +131,11 @@ export default function CreateProductForm() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
+          className="rounded-lg bg-brass hover:bg-brass/90 text-ink px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
         >
           {pending ? 'Creating…' : 'Create in Stripe'}
         </button>
-        <span className="text-xs text-white/40">
+        <span className="text-xs text-bone/40">
           Creates a Stripe product + price and syncs to Supabase.
         </span>
       </div>

@@ -6,6 +6,8 @@ import { clsx } from 'clsx';
 
 const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin', label: 'Overview' },
+  { href: '/admin/assets', label: 'Asset Hub' },
+  { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
   { href: '/admin/purchases', label: 'Purchases' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },
@@ -29,10 +31,11 @@ export default function AdminSidebar({ userEmail }: { userEmail: string }) {
   return (
     <aside className="lg:sticky lg:top-10 lg:self-start">
       <div className="mb-5">
-        <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold">
+        <div className="font-display text-lg font-semibold text-bone">MotherMode</div>
+        <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mt-1">
           Admin
         </div>
-        <div className="text-sm text-white/60 truncate mt-1" title={userEmail}>
+        <div className="text-sm text-bone/50 truncate mt-1" title={userEmail}>
           {userEmail}
         </div>
       </div>
@@ -44,8 +47,8 @@ export default function AdminSidebar({ userEmail }: { userEmail: string }) {
             className={clsx(
               'rounded-lg px-3 py-2 text-sm transition-colors whitespace-nowrap',
               isActive(pathname, item.href)
-                ? 'bg-amber-200/[0.08] text-amber-200 font-semibold border border-amber-200/20'
-                : 'text-white/60 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                ? 'bg-brass/[0.12] text-brass font-semibold border border-brass/25'
+                : 'text-bone/55 hover:text-bone hover:bg-bone/[0.05] border border-transparent'
             )}
           >
             {item.label}

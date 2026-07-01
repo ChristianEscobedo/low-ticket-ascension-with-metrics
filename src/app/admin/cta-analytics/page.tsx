@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function formatDate(iso: string | null) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString('en-US', {
       month: 'short',
@@ -21,7 +21,7 @@ function formatDate(iso: string | null) {
       minute: '2-digit'
     });
   } catch {
-    return '—';
+    return '-';
   }
 }
 
@@ -65,34 +65,34 @@ export default async function CtaAnalyticsPage({
   );
 
   const formatCtr = (ctr: number | null) =>
-    ctr === null ? '—' : `${(ctr * 100).toFixed(1)}%`;
+    ctr === null ? '-' : `${(ctr * 100).toFixed(1)}%`;
   const ctrTone = (ctr: number | null) =>
     ctr === null
-      ? 'text-white/30'
+      ? 'text-bone/30'
       : ctr >= 0.1
         ? 'text-emerald-300'
         : ctr >= 0.03
-          ? 'text-amber-200'
-          : 'text-white/60';
+          ? 'text-brass'
+          : 'text-bone/60';
 
   return (
     <div>
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+          <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
             Course Area
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
             CTA Analytics
           </h1>
-          <p className="text-sm text-white/60 mt-2 max-w-2xl">
+          <p className="text-sm text-bone/60 mt-2 max-w-2xl">
             Top-performing in-video call-to-action overlays across the entire
             course library, ranked by total clicks.
           </p>
         </div>
         <a
           href={exportHref}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-200/30 bg-amber-300/[0.06] text-amber-200 text-sm font-semibold hover:bg-amber-300/[0.12] hover:border-amber-200/50"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-brass/30 bg-brass/[0.06] text-brass text-sm font-semibold hover:bg-brass/[0.12] hover:border-brass/50"
         >
           <Download className="w-4 h-4" />
           Download CSV
@@ -101,38 +101,38 @@ export default async function CtaAnalyticsPage({
 
       <form
         method="get"
-        className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-4 mb-6 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-3 items-end"
+        className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-4 mb-6 grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-3 items-end"
       >
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+          <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             From
           </span>
           <input
             type="date"
             name="from"
             defaultValue={from ?? ''}
-            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="mt-1 w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none"
           />
         </label>
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+          <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             To
           </span>
           <input
             type="date"
             name="to"
             defaultValue={to ?? ''}
-            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="mt-1 w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none"
           />
         </label>
         <label className="block">
-          <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+          <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             Course
           </span>
           <select
             name="course"
             defaultValue={courseId ?? ''}
-            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="mt-1 w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none"
           >
             <option value="">All courses</option>
             {courseOptions.map((c) => (
@@ -145,14 +145,14 @@ export default async function CtaAnalyticsPage({
         <div className="flex gap-2">
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 text-black text-sm font-bold hover:from-amber-300 hover:to-amber-400"
+            className="px-4 py-2 rounded-lg bg-brass text-ink text-sm font-bold hover:bg-brass/90"
           >
             Apply
           </button>
           {hasFilters && (
             <Link
               href="/admin/cta-analytics"
-              className="px-3 py-2 rounded-lg border border-white/10 text-sm text-white/60 hover:text-white hover:border-white/30"
+              className="px-3 py-2 rounded-lg border border-bone/10 text-sm text-bone/60 hover:text-bone hover:border-bone/30"
             >
               Clear
             </Link>
@@ -166,7 +166,7 @@ export default async function CtaAnalyticsPage({
         <StatCard label="Overall CTR" value={formatCtr(overallCtr)} />
         <StatCard
           label="Top performer"
-          value={rows[0]?.clicks ? `${rows[0].clicks} clicks` : '—'}
+          value={rows[0]?.clicks ? `${rows[0].clicks} clicks` : '-'}
           sub={rows[0]?.ctaTitle ?? rows[0]?.ctaId ?? undefined}
         />
       </div>
@@ -175,7 +175,7 @@ export default async function CtaAnalyticsPage({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
           <BreakdownPanel title="By course" subtitle="Aggregated across all CTAs">
             <table className="w-full text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-white/50">
+              <thead className="text-[11px] uppercase tracking-wider text-bone/50">
                 <tr>
                   <th className="text-left py-2 font-semibold">Course</th>
                   <th className="text-right py-2 font-semibold">Lessons</th>
@@ -184,28 +184,28 @@ export default async function CtaAnalyticsPage({
                   <th className="text-right py-2 font-semibold">CTR</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-bone/[0.04]">
                 {byCourse.map((c) => (
                   <tr key={c.courseId ?? '__none__'}>
                     <td className="py-2 pr-2">
                       {c.courseId ? (
                         <Link
                           href={`/courses/${c.courseId}`}
-                          className="text-amber-300 hover:text-amber-200"
+                          className="text-brass hover:text-brass/80"
                         >
                           {c.courseTitle ?? c.courseId}
                         </Link>
                       ) : (
-                        <span className="text-white/30 italic">Unattributed</span>
+                        <span className="text-bone/30 italic">Unattributed</span>
                       )}
                     </td>
-                    <td className="py-2 text-right text-white/50 text-xs font-mono">
+                    <td className="py-2 text-right text-bone/50 text-xs font-mono">
                       {c.lessonCount}
                     </td>
-                    <td className="py-2 text-right text-white/60 text-xs font-mono">
+                    <td className="py-2 text-right text-bone/60 text-xs font-mono">
                       {c.views.toLocaleString()}
                     </td>
-                    <td className="py-2 text-right text-white font-semibold">
+                    <td className="py-2 text-right text-bone font-semibold">
                       {c.clicks.toLocaleString()}
                     </td>
                     <td className={`py-2 text-right text-xs font-semibold ${ctrTone(c.ctr)}`}>
@@ -222,7 +222,7 @@ export default async function CtaAnalyticsPage({
             subtitle={`Showing ${topLessons.length} of ${byLesson.length}`}
           >
             <table className="w-full text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-white/50">
+              <thead className="text-[11px] uppercase tracking-wider text-bone/50">
                 <tr>
                   <th className="text-left py-2 font-semibold">Lesson</th>
                   <th className="text-left py-2 font-semibold">Volume</th>
@@ -230,35 +230,35 @@ export default async function CtaAnalyticsPage({
                   <th className="text-right py-2 font-semibold">CTR</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-bone/[0.04]">
                 {topLessons.map((l) => {
                   const pct =
                     lessonMaxClicks > 0 ? (l.clicks / lessonMaxClicks) * 100 : 0;
                   return (
                     <tr key={l.lessonId}>
                       <td className="py-2 pr-2 max-w-[16rem]">
-                        <div className="text-white truncate">
+                        <div className="text-bone truncate">
                           {l.lessonTitle ?? (
-                            <span className="font-mono text-xs text-white/40">
+                            <span className="font-mono text-xs text-bone/40">
                               {l.lessonId.slice(0, 8)}…
                             </span>
                           )}
                         </div>
                         {l.courseTitle && (
-                          <div className="text-[11px] text-white/40 truncate">
+                          <div className="text-[11px] text-bone/40 truncate">
                             {l.courseTitle}
                           </div>
                         )}
                       </td>
                       <td className="py-2 pr-2 w-[40%]">
-                        <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
+                        <div className="h-1.5 rounded-full bg-bone/[0.05] overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
+                            className="h-full bg-gradient-to-r from-brass to-brass/60"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
                       </td>
-                      <td className="py-2 text-right text-white font-semibold">
+                      <td className="py-2 text-right text-bone font-semibold">
                         {l.clicks.toLocaleString()}
                       </td>
                       <td className={`py-2 text-right text-xs font-semibold ${ctrTone(l.ctr)}`}>
@@ -274,24 +274,24 @@ export default async function CtaAnalyticsPage({
       )}
 
       {rows.length === 0 ? (
-        <div className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-10 text-center">
-          <MousePointerClick className="w-8 h-8 text-amber-200/40 mx-auto mb-3" />
-          <p className="text-white/70 font-medium">
+        <div className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-10 text-center">
+          <MousePointerClick className="w-8 h-8 text-brass/40 mx-auto mb-3" />
+          <p className="text-bone/70 font-medium">
             {hasFilters
               ? 'No CTA clicks match these filters'
               : 'No CTA clicks recorded yet'}
           </p>
-          <p className="text-sm text-white/40 mt-1">
+          <p className="text-sm text-bone/40 mt-1">
             {hasFilters
               ? 'Try widening the date range or selecting a different course.'
               : 'Once viewers start clicking overlays, performance data will appear here.'}
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-amber-200/15 bg-white/[0.02] overflow-hidden">
+        <div className="rounded-2xl border border-brass/15 bg-bone/[0.02] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-white/[0.03] text-[11px] uppercase tracking-wider text-white/50">
+              <thead className="bg-bone/[0.03] text-[11px] uppercase tracking-wider text-bone/50">
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold">CTA</th>
                   <th className="text-left px-4 py-3 font-semibold">Lesson</th>
@@ -305,29 +305,29 @@ export default async function CtaAnalyticsPage({
                   <th className="text-right px-4 py-3 font-semibold">Link</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-bone/[0.04]">
                 {rows.map((r) => (
                   <tr
                     key={`${r.lessonId}::${r.ctaId}`}
-                    className="hover:bg-white/[0.02]"
+                    className="hover:bg-bone/[0.02]"
                   >
                     <td className="px-4 py-3">
-                      <div className="text-white font-medium">
+                      <div className="text-bone font-medium">
                         {r.ctaTitle ?? (
-                          <span className="text-white/40 italic">
+                          <span className="text-bone/40 italic">
                             {r.ctaId}
                           </span>
                         )}
                       </div>
                       {r.ctaButtonText && (
-                        <div className="text-xs text-white/40 mt-0.5">
+                        <div className="text-xs text-bone/40 mt-0.5">
                           “{r.ctaButtonText}”
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-white/70">
+                    <td className="px-4 py-3 text-bone/70">
                       {r.lessonTitle ?? (
-                        <span className="text-white/30 font-mono text-xs">
+                        <span className="text-bone/30 font-mono text-xs">
                           {r.lessonId.slice(0, 8)}…
                         </span>
                       )}
@@ -336,22 +336,22 @@ export default async function CtaAnalyticsPage({
                       {r.courseId ? (
                         <Link
                           href={`/courses/${r.courseId}`}
-                          className="text-amber-300 hover:text-amber-200"
+                          className="text-brass hover:text-brass/80"
                         >
                           {r.courseTitle ?? r.courseId}
                         </Link>
                       ) : (
-                        <span className="text-white/30">—</span>
+                        <span className="text-bone/30">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-white/60 text-xs font-mono">
+                    <td className="px-4 py-3 text-right text-bone/60 text-xs font-mono">
                       {r.views.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {r.clicks > 0 ? (
                         <Link
                           href={`/admin/cta-analytics/clickers?lesson=${encodeURIComponent(r.lessonId)}&cta=${encodeURIComponent(r.ctaId)}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-300/[0.08] border border-amber-300/30 text-amber-200 text-xs font-semibold hover:bg-amber-300/[0.16]"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brass/[0.08] border border-brass/30 text-brass text-xs font-semibold hover:bg-brass/[0.16]"
                           title="View clickers"
                         >
                           <MousePointerClick className="w-3 h-3" />
@@ -359,7 +359,7 @@ export default async function CtaAnalyticsPage({
                           <Users className="w-3 h-3 opacity-60" />
                         </Link>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/10 text-white/30 text-xs font-semibold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-bone/[0.03] border border-bone/10 text-bone/30 text-xs font-semibold">
                           <MousePointerClick className="w-3 h-3" />0
                         </span>
                       )}
@@ -368,18 +368,18 @@ export default async function CtaAnalyticsPage({
                       <span
                         className={`text-xs font-semibold ${
                           r.ctr === null
-                            ? 'text-white/30'
+                            ? 'text-bone/30'
                             : r.ctr >= 0.1
                               ? 'text-emerald-300'
                               : r.ctr >= 0.03
-                                ? 'text-amber-200'
-                                : 'text-white/60'
+                                ? 'text-brass'
+                                : 'text-bone/60'
                         }`}
                       >
                         {formatCtr(r.ctr)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-white/50 text-xs">
+                    <td className="px-4 py-3 text-bone/50 text-xs">
                       {formatDate(r.lastClickAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -388,13 +388,13 @@ export default async function CtaAnalyticsPage({
                           href={r.ctaLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-white/50 hover:text-amber-200"
+                          className="inline-flex items-center gap-1 text-xs text-bone/50 hover:text-brass"
                         >
                           Open
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       ) : (
-                        <span className="text-white/20">—</span>
+                        <span className="text-bone/20">-</span>
                       )}
                     </td>
                   </tr>
@@ -418,13 +418,13 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-white/[0.04] to-transparent p-5">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold">
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-bone/[0.04] to-transparent p-5">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-bone/50 font-semibold">
         {label}
       </div>
-      <div className="text-2xl font-black text-white mt-1">{value}</div>
+      <div className="font-display text-2xl font-semibold text-bone mt-1">{value}</div>
       {sub && (
-        <div className="text-xs text-white/40 mt-1 truncate" title={sub}>
+        <div className="text-xs text-bone/40 mt-1 truncate" title={sub}>
           {sub}
         </div>
       )}
@@ -442,13 +442,13 @@ function BreakdownPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-5">
+    <div className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-5">
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-sm font-semibold text-white tracking-wide">
+        <h2 className="text-sm font-semibold text-bone tracking-wide">
           {title}
         </h2>
         {subtitle && (
-          <span className="text-[11px] text-white/40">{subtitle}</span>
+          <span className="text-[11px] text-bone/40">{subtitle}</span>
         )}
       </div>
       <div className="overflow-x-auto">{children}</div>

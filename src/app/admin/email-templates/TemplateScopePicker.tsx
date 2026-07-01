@@ -26,10 +26,10 @@ export default function TemplateScopePicker({
   };
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200/15 bg-white/[0.02] px-4 py-3">
+    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-brass/15 bg-bone/[0.02] px-4 py-3">
       <label
         htmlFor="rt-scope"
-        className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold"
+        className="text-[11px] uppercase tracking-[0.18em] text-bone/50 font-semibold"
       >
         Editing
       </label>
@@ -38,7 +38,7 @@ export default function TemplateScopePicker({
         value={currentProductId ?? ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={pending}
-        className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:border-amber-300/50 focus:outline-none disabled:opacity-50"
+        className="bg-ink/40 border border-bone/10 rounded-lg px-3 py-1.5 text-sm text-bone focus:border-brass/50 focus:outline-none disabled:opacity-50"
       >
         <option value="">Default (all products)</option>
         {products.map((p) => (
@@ -48,11 +48,11 @@ export default function TemplateScopePicker({
         ))}
       </select>
       {currentProductId && (
-        <span className="text-[11px] text-amber-200/70">
+        <span className="text-[11px] text-brass/70">
           Falls back to the default template when fields are left empty.
         </span>
       )}
-      {pending && <span className="text-[11px] text-white/40">Loading…</span>}
+      {pending && <span className="text-[11px] text-bone/40">Loading…</span>}
     </div>
   );
 }

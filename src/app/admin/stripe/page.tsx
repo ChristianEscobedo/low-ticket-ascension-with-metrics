@@ -1,6 +1,12 @@
 import IntegrationCard from '../integrations/IntegrationCard';
 import { getIntegration } from '@/utils/integrations/store';
 import { getLastWebhookEventAt } from '@/utils/supabase/admin';
+import { maskConfig } from '@/utils/integrations/mask';
+import {
+  getStripeSecretKey,
+  getStripeWebhookSecret,
+  getStripePublishableKey
+} from '@/utils/integrations/runtime-config';
 import type { StripeConfig } from '@/utils/integrations/types';
 import { getURL } from '@/utils/helpers';
 
@@ -20,47 +26,80 @@ export default async function StripeAdminPage() {
     getIntegration<StripeConfig>('stripe'),
     getLastWebhookEventAt()
   ]);
-  const envSecret =
-    process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY ?? '';
-  const envPub =
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE ??
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ??
-    '';
-  const envWh = process.env.STRIPE_WEBHOOK_SECRET ?? '';
-  const mode = detectMode(envSecret) || detectMode(envPub);
+  // Only an enabled row overrides at runtime, matching the resolver semantics.
+  const cfg =
+    (row?.enabled ? (row?.config as StripeConfig | undefined) : undefined) ?? {};
+  const dbHas = (k: keyof StripeConfig) =>
+    Boolean(cfg[k] && String(cfg[k]).trim());
+
+  // Resolve exactly like runtime does: enabled DB row first, then env.
+  const [secretKey, pubKey, whSecret] = await Promise.all([
+    getStripeSecretKey(),
+    getStripePublishableKey(),
+    getStripeWebhookSecret()
+  ]);
+  const mode = detectMode(secretKey) || detectMode(pubKey);
   const webhookEndpoint = getURL('api/webhooks');
-  const status: Array<{ key: string; ok: boolean; label: string }> = [
+
+  const sourceLabel = (resolved: string | null, dbKey: keyof StripeConfig) =>
+    !present(resolved)
+      ? 'missing'
+      : dbHas(dbKey)
+        ? 'from database'
+        : 'from environment';
+
+  const status: Array<{
+    key: string;
+    ok: boolean;
+    label: string;
+    source: string;
+  }> = [
     {
       key: 'pub',
-      label: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
-      ok: present(envPub)
+      label: 'Publishable key',
+      ok: present(pubKey),
+      source: sourceLabel(pubKey, 'publishable_key')
     },
-    { key: 'sec', label: 'STRIPE_SECRET_KEY', ok: present(envSecret) },
-    { key: 'wh', label: 'STRIPE_WEBHOOK_SECRET', ok: present(envWh) }
+    {
+      key: 'sec',
+      label: 'Secret key',
+      ok: present(secretKey),
+      source: sourceLabel(secretKey, 'secret_key')
+    },
+    {
+      key: 'wh',
+      label: 'Webhook signing secret',
+      ok: present(whSecret),
+      source: sourceLabel(whSecret, 'webhook_secret')
+    }
   ];
   const allOk = status.every((s) => s.ok);
+  const stripeMask = maskConfig(
+    row?.config as Record<string, unknown> | undefined,
+    ['secret_key', 'webhook_secret']
+  );
   return (
     <div>
-      <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+      <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
         Payments
       </div>
-      <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+      <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
         Stripe Connection
       </h1>
-      <p className="mt-2 text-white/60 max-w-2xl">
+      <p className="mt-2 text-bone/60 max-w-2xl">
         Health check for the Stripe credentials your deployment is running
-        with. Runtime always reads from environment variables; the editor
-        below stores a reference copy in the integrations table so you can
-        manage keys without grepping `.env` files.
+        with. Runtime reads the editor below first when this integration is
+        enabled, then falls back to the environment variables. Each row shows
+        which source is in effect.
       </p>
 
-      <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur p-6 mt-8 shadow-[0_0_30px_rgba(251,191,36,0.04)]">
+      <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-6 mt-8 shadow-[0_0_30px_rgba(168,139,92,0.06)]">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <span
               className={
                 allOk
-                  ? 'inline-block h-2.5 w-2.5 rounded-full bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.7)]'
+                  ? 'inline-block h-2.5 w-2.5 rounded-full bg-brass shadow-[0_0_12px_rgba(168,139,92,0.7)]'
                   : 'inline-block h-2.5 w-2.5 rounded-full bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.6)]'
               }
             />
@@ -70,10 +109,10 @@ export default async function StripeAdminPage() {
             <span
               className={
                 mode === 'live'
-                  ? 'text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  ? 'text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-brass/15 text-brass border border-brass/30'
                   : mode === 'test'
                     ? 'text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-sky-500/10 text-sky-300 border border-sky-500/30'
-                    : 'text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-white/[0.06] text-white/50 border border-white/10'
+                    : 'text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-bone/[0.06] text-bone/50 border border-bone/10'
               }
             >
               {mode === 'unknown' ? 'no key' : `${mode} mode`}
@@ -83,7 +122,7 @@ export default async function StripeAdminPage() {
             href="https://dashboard.stripe.com/"
             target="_blank"
             rel="noreferrer"
-            className="text-amber-300 text-sm hover:text-amber-200 hover:underline whitespace-nowrap"
+            className="text-brass text-sm hover:text-brass/80 hover:underline whitespace-nowrap"
           >
             Open Stripe Dashboard ↗
           </a>
@@ -95,47 +134,45 @@ export default async function StripeAdminPage() {
               <span
                 className={
                   s.ok
-                    ? 'inline-flex items-center justify-center h-5 w-5 rounded-full bg-amber-500/15 text-amber-300 text-xs font-bold'
+                    ? 'inline-flex items-center justify-center h-5 w-5 rounded-full bg-brass/15 text-brass text-xs font-bold'
                     : 'inline-flex items-center justify-center h-5 w-5 rounded-full bg-red-500/15 text-red-300 text-xs font-bold'
                 }
               >
                 {s.ok ? '✓' : '!'}
               </span>
-              <code className="text-white/80">{s.label}</code>
-              <span className="text-white/40">
-                {s.ok ? 'set' : 'missing from environment'}
-              </span>
+              <code className="text-bone/80">{s.label}</code>
+              <span className="text-bone/40">{s.source}</span>
             </li>
           ))}
         </ul>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-white/10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-bone/10">
           <div>
-            <div className="text-xs uppercase tracking-wider text-amber-200/70 font-semibold mb-1.5">
+            <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold mb-1.5">
               Webhook endpoint
             </div>
-            <code className="block break-all text-xs text-white/70 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-2">
+            <code className="block break-all text-xs text-bone/70 bg-bone/[0.03] border border-bone/10 rounded-lg px-3 py-2">
               {webhookEndpoint}
             </code>
             <a
               href="https://dashboard.stripe.com/webhooks"
               target="_blank"
               rel="noreferrer"
-              className="text-amber-300 text-xs hover:text-amber-200 hover:underline mt-2 inline-block"
+              className="text-brass text-xs hover:text-brass/80 hover:underline mt-2 inline-block"
             >
               Configure in Stripe ↗
             </a>
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wider text-amber-200/70 font-semibold mb-1.5">
+            <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold mb-1.5">
               Last funnel event recorded
             </div>
-            <div className="text-sm text-white/80">
+            <div className="text-sm text-bone/80">
               {lastEventAt
                 ? new Date(lastEventAt).toLocaleString()
                 : 'No events yet.'}
             </div>
-            <div className="text-xs text-white/40 mt-1">
+            <div className="text-xs text-bone/40 mt-1">
               From <code>funnel_purchases.created_at</code>
             </div>
           </div>
@@ -143,18 +180,19 @@ export default async function StripeAdminPage() {
       </div>
 
       <div className="mt-8">
-        <h2 className="text-xl font-bold tracking-tight">Editable copy</h2>
-        <p className="text-sm text-white/60 mt-1 max-w-2xl">
-          Keys saved here are a managed reference, not the runtime source.
-          Paste them into your hosting provider's environment (Vercel, fly,
-          etc.) and redeploy for changes to take effect.
+        <h2 className="font-display text-xl font-semibold tracking-tight">Runtime keys</h2>
+        <p className="text-sm text-bone/60 mt-1 max-w-2xl">
+          Enable this integration and the keys saved here are used at runtime,
+          DB-first, with no redeploy. Leave it disabled to keep running on the
+          STRIPE_* environment variables. Secrets are write-only; a blank field
+          keeps the stored value.
         </p>
         <div className="mt-4">
           <IntegrationCard
             provider="stripe"
             title="Stripe keys"
-            description="Stored encrypted-at-rest in Supabase. Runtime still reads STRIPE_SECRET_KEY / NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY / STRIPE_WEBHOOK_SECRET from process.env."
-            badge={{ label: 'Reference', tone: 'soon' }}
+            description="Stored in Supabase and read DB-first when enabled. Falls back to STRIPE_SECRET_KEY / NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY / STRIPE_WEBHOOK_SECRET."
+            badge={{ label: 'Live', tone: 'live' }}
             fields={[
               {
                 key: 'publishable_key',
@@ -176,7 +214,8 @@ export default async function StripeAdminPage() {
             ]}
             initialEnabled={row?.enabled ?? false}
             initialEvents={row?.events ?? []}
-            initialConfig={(row?.config as Record<string, unknown>) ?? {}}
+            initialConfig={stripeMask.safeConfig}
+            secretStatus={stripeMask.secretStatus}
             hideEventsFilter
             hideTestButton
           />

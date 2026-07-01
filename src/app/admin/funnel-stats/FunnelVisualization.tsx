@@ -1,4 +1,4 @@
-// Funnel visualization — renders a horizontal bar per stage in the canonical
+// Funnel visualization - renders a horizontal bar per stage in the canonical
 // FE → OTO1 → OTO2 → OTO3 → OTO4 order, showing count + take-rate vs FE +
 // dollars contributed. "Other" sweeps up any page_type values that don't map
 // to a known stage (e.g. legacy data or future stages).
@@ -50,10 +50,10 @@ export default function FunnelVisualization({
   const maxCount = Math.max(feCount, ...stageData.map((s) => s.count), 1);
 
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur p-5 shadow-[0_0_30px_rgba(251,191,36,0.04)]">
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 shadow-[0_0_30px_rgba(168,139,92,0.06)]">
       {feCount === 0 && (
-        <div className="mb-4 text-xs text-amber-300/90">
-          No <code>page_type: &quot;fe&quot;</code> conversions yet — take-rate
+        <div className="mb-4 text-xs text-brass/90">
+          No <code>page_type: &quot;fe&quot;</code> conversions yet, take-rate
           percentages will read 0% until at least one front-end sale lands.
         </div>
       )}
@@ -64,35 +64,35 @@ export default function FunnelVisualization({
             feCount > 0 && s.label !== 'FE'
               ? `${((s.count / feCount) * 100).toFixed(1)}%`
               : s.label === 'FE'
-              ? '—'
+              ? '-'
               : '0%';
           return (
             <div key={s.label} className="grid grid-cols-[60px_1fr_auto] gap-3 items-center">
-              <div className="text-sm font-semibold text-amber-200/90 uppercase tracking-wider">
+              <div className="text-sm font-semibold text-brass/90 uppercase tracking-wider">
                 {s.label}
               </div>
-              <div className="relative h-8 bg-white/[0.04] rounded-lg overflow-hidden border border-white/5">
+              <div className="relative h-8 bg-bone/[0.04] rounded-lg overflow-hidden border border-bone/5">
                 <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-300 flex items-center px-2"
+                  className="h-full bg-gradient-to-r from-brass to-brass/60 flex items-center px-2"
                   style={{ width: `${Math.max(widthPct, s.count > 0 ? 2 : 0)}%` }}
                 >
                   {s.count > 0 && widthPct > 12 && (
-                    <span className="text-xs font-semibold text-black tabular-nums">
+                    <span className="text-xs font-semibold text-ink tabular-nums">
                       {s.count}
                     </span>
                   )}
                 </div>
                 {s.count > 0 && widthPct <= 12 && (
-                  <span className="absolute inset-y-0 left-2 flex items-center text-xs font-semibold text-white/80 tabular-nums">
+                  <span className="absolute inset-y-0 left-2 flex items-center text-xs font-semibold text-bone/80 tabular-nums">
                     {s.count}
                   </span>
                 )}
               </div>
-              <div className="text-xs text-white/60 tabular-nums whitespace-nowrap min-w-[120px] text-right">
-                <span className="text-white font-medium">
+              <div className="text-xs text-bone/60 tabular-nums whitespace-nowrap min-w-[120px] text-right">
+                <span className="text-bone font-medium">
                   {fmt(s.totalCents)}
                 </span>
-                <span className="ml-2 text-white/40">{takeRate}</span>
+                <span className="ml-2 text-bone/40">{takeRate}</span>
               </div>
             </div>
           );

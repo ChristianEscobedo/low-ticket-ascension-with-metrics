@@ -59,7 +59,7 @@ export default function DownloadCsvButton({ rows }: { rows: Row[] }) {
       type="button"
       onClick={onClick}
       disabled={rows.length === 0}
-      className="inline-flex items-center gap-2 rounded-lg border border-amber-200/30 bg-amber-200/[0.04] px-3 py-1.5 text-sm font-medium text-amber-200 hover:bg-amber-200/[0.08] hover:border-amber-200/50 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex items-center gap-2 rounded-lg border border-brass/30 bg-brass/[0.04] px-3 py-1.5 text-sm font-medium text-brass hover:bg-brass/[0.08] hover:border-brass/50 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
     >
       Download CSV
     </button>

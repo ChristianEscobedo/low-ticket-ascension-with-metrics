@@ -58,10 +58,10 @@ const ACTIONS = {
 } as const;
 
 const inputClass =
-  'w-full px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-neutral-600 transition-all';
+  'w-full px-4 py-3 rounded-xl border border-ink/15 bg-white text-ink placeholder:text-ink/40 focus:outline-none focus:ring-2 focus:ring-mode/40 focus:border-mode/40 transition-all';
 
 const oauthButtonClass =
-  'w-full px-6 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors flex items-center justify-center gap-3 disabled:opacity-60';
+  'w-full px-6 py-3 rounded-xl border border-ink/15 bg-white text-ink font-medium hover:bg-bone transition-colors flex items-center justify-center gap-3 disabled:opacity-60';
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
@@ -124,10 +124,10 @@ function OAuthRow({ disabled }: { disabled: boolean }) {
 
 function FooterLinks({ view, allowEmail }: { view: AuthView; allowEmail: boolean }) {
   const linkClass =
-    'text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium transition-colors no-underline';
+    'text-mode hover:text-mode-deep font-medium transition-colors no-underline';
   if (view === 'update_password') return null;
   return (
-    <div className="mt-6 space-y-2 text-center text-sm text-neutral-600 dark:text-neutral-400">
+    <div className="mt-6 space-y-2 text-center text-sm text-ink/60">
       {view === 'password_signin' && (
         <Link href="/signin/forgot_password" className={`block ${linkClass}`}>
           Forgot password?
@@ -189,14 +189,14 @@ export function Auth2({
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-white dark:bg-neutral-950">
-      {/* Left column — brand panel, hidden on mobile */}
+    <div className="min-h-screen w-full flex bg-bone font-sans text-ink">
+      {/* Left column, brand panel, hidden on mobile */}
       <div className="hidden lg:flex lg:w-1/2 p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6 }}
-          className="w-full rounded-2xl p-12 flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500"
+          className="w-full rounded-2xl p-12 flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-mode to-mode-deep"
         >
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -204,32 +204,32 @@ export function Auth2({
             transition={{ duration: 0.5, delay: 0.2 }}
             className="flex items-center gap-3"
           >
-            <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8z" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white">Millionaire Mindshift</span>
+            <div className="h-px w-10 bg-gradient-to-r from-transparent to-brass/60" />
+            <span className="font-display text-2xl font-semibold text-bone">
+              MotherMode
+            </span>
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
           >
-            <h2 className="text-4xl font-bold text-white leading-tight">
+            <h2 className="font-display text-4xl font-semibold text-bone leading-tight">
               Welcome back.
               <br />
-              Let&apos;s keep building.
+              Motherhood, redesigned.
             </h2>
-            <p className="mt-4 text-white/80 max-w-sm">
-              Access your dashboard, track conversions, and manage your funnel — all in
-              one place.
+            <p className="mt-4 text-bone/80 max-w-sm">
+              Your dashboard, your offers, and your numbers, all in one calm place.
             </p>
           </motion.div>
+          <p className="text-xs uppercase tracking-[0.25em] text-brass">
+            The OS for modern motherhood
+          </p>
         </motion.div>
       </div>
 
-      {/* Right column — form */}
+      {/* Right column, form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 lg:p-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -237,12 +237,12 @@ export function Auth2({
           transition={{ duration: 0.5, delay: 0.2 }}
           className="w-full max-w-md"
         >
-          <h1 className="text-3xl sm:text-4xl font-bold text-neutral-900 dark:text-white mb-2">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">
             {TITLES[view]}
           </h1>
-          <p className="text-neutral-600 dark:text-neutral-400 mb-8">
+          <p className="text-ink/60 mb-8">
             {view === 'signup'
-              ? 'Start your journey in seconds.'
+              ? 'Set up your account in seconds.'
               : view === 'forgot_password'
                 ? 'Enter your email and we will send a reset link.'
                 : view === 'update_password'
@@ -259,9 +259,9 @@ export function Auth2({
               transition={{ duration: 0.4, delay: 0.4 }}
               className="flex items-center gap-4 mb-6"
             >
-              <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-800" />
-              <span className="text-sm text-neutral-500">or</span>
-              <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-800" />
+              <div className="flex-1 h-px bg-ink/10" />
+              <span className="text-sm text-ink/40">or</span>
+              <div className="flex-1 h-px bg-ink/10" />
             </motion.div>
           )}
 
@@ -299,7 +299,7 @@ export function Auth2({
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-ink/40 hover:text-ink transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -319,9 +319,9 @@ export function Auth2({
             <button
               type="submit"
               disabled={isSubmitting || disableButton}
-              className="w-full px-6 py-3 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-medium hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 rounded-xl bg-mode text-bone font-medium hover:bg-mode-deep transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Please wait…' : SUBMIT_LABELS[view]}
+              {isSubmitting ? 'Please wait...' : SUBMIT_LABELS[view]}
             </button>
           </motion.form>
 

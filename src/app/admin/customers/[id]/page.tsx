@@ -33,22 +33,22 @@ export default async function CustomerDetailPage({
     <div>
       <Link
         href="/admin/customers"
-        className="text-white/50 hover:text-amber-200 text-sm transition-colors"
+        className="text-bone/50 hover:text-brass text-sm transition-colors"
       >
         ← Back to customers
       </Link>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight">{user.email}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">{user.email}</h1>
         <a
           href={`/api/admin/customers/${user.id}/report`}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200/25 bg-amber-400/[0.06] text-amber-200 text-xs font-semibold uppercase tracking-wider hover:bg-amber-400/[0.12]"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-brass/25 bg-brass/[0.06] text-brass text-xs font-semibold uppercase tracking-wider hover:bg-brass/[0.12]"
         >
           ↓ Download buyer report
         </a>
       </div>
-      <p className="mt-2 text-white/60 text-sm">
+      <p className="mt-2 text-bone/60 text-sm">
         Joined {new Date(user.created_at).toLocaleString()} · user id{' '}
-        <code className="text-white/80">{user.id}</code>
+        <code className="text-bone/80">{user.id}</code>
       </p>
       {stripe_customer_id && (
         <p className="mt-1 text-sm">
@@ -57,7 +57,7 @@ export default async function CustomerDetailPage({
             href={`https://dashboard.stripe.com/customers/${stripe_customer_id}`}
             target="_blank"
             rel="noreferrer"
-            className="text-amber-300 hover:text-amber-200 hover:underline"
+            className="text-brass hover:text-brass/80 hover:underline"
           >
             {stripe_customer_id} ↗
           </a>
@@ -73,10 +73,10 @@ export default async function CustomerDetailPage({
         />
       </div>
 
-      <h2 className="text-2xl font-bold mt-12 mb-4 tracking-tight">Subscriptions</h2>
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur">
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">Subscriptions</h2>
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">Status</th>
               <th className="text-left px-4 py-3 font-semibold">Plan</th>
@@ -88,35 +88,35 @@ export default async function CustomerDetailPage({
           <tbody>
             {subscriptions.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={5} className="px-4 py-6 text-center text-bone/40">
                   No subscriptions.
                 </td>
               </tr>
             )}
             {subscriptions.map((s: any) => (
-              <tr key={s.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
+              <tr key={s.id} className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors">
                 <td className="px-4 py-2.5">{s.status}</td>
                 <td className="px-4 py-2.5">
-                  {s.prices?.products?.name ?? '—'}{' '}
-                  <span className="text-white/40 text-xs">
-                    ({s.prices?.unit_amount ? fmt(s.prices.unit_amount) : '—'}/
+                  {s.prices?.products?.name ?? '-'}{' '}
+                  <span className="text-bone/40 text-xs">
+                    ({s.prices?.unit_amount ? fmt(s.prices.unit_amount) : '-'}/
                     {s.prices?.interval ?? '?'})
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-white/60">
-                  {s.created ? new Date(s.created).toLocaleDateString() : '—'}
+                <td className="px-4 py-2.5 text-bone/60">
+                  {s.created ? new Date(s.created).toLocaleDateString() : '-'}
                 </td>
-                <td className="px-4 py-2.5 text-white/60">
+                <td className="px-4 py-2.5 text-bone/60">
                   {s.current_period_end
                     ? new Date(s.current_period_end).toLocaleDateString()
-                    : '—'}
+                    : '-'}
                 </td>
                 <td className="px-4 py-2.5">
                   <a
                     href={`https://dashboard.stripe.com/subscriptions/${s.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-amber-300 hover:text-amber-200 hover:underline"
+                    className="text-brass hover:text-brass/80 hover:underline"
                   >
                     open ↗
                   </a>
@@ -127,10 +127,10 @@ export default async function CustomerDetailPage({
         </table>
       </div>
 
-      <h2 className="text-2xl font-bold mt-12 mb-4 tracking-tight">Purchases</h2>
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur">
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">Purchases</h2>
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">When</th>
               <th className="text-left px-4 py-3 font-semibold">Product</th>
@@ -141,18 +141,18 @@ export default async function CustomerDetailPage({
           <tbody>
             {purchases.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={4} className="px-4 py-6 text-center text-bone/40">
                   No purchases.
                 </td>
               </tr>
             )}
             {purchases.map((p) => (
-              <tr key={p.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
-                <td className="px-4 py-2.5 text-white/60 whitespace-nowrap">
+              <tr key={p.id} className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors">
+                <td className="px-4 py-2.5 text-bone/60 whitespace-nowrap">
                   {new Date(p.created_at).toLocaleString()}
                 </td>
-                <td className="px-4 py-2.5">{p.product_id ?? '—'}</td>
-                <td className="px-4 py-2.5">{p.page_type ?? '—'}</td>
+                <td className="px-4 py-2.5">{p.product_id ?? '-'}</td>
+                <td className="px-4 py-2.5">{p.page_type ?? '-'}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums">
                   {fmt(p.amount_cents ?? 0)}
                 </td>
@@ -162,12 +162,12 @@ export default async function CustomerDetailPage({
         </table>
       </div>
 
-      <h2 className="text-2xl font-bold mt-12 mb-4 tracking-tight">
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">
         Receipt deliveries
       </h2>
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur">
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">When</th>
               <th className="text-left px-4 py-3 font-semibold">Status</th>
@@ -180,7 +180,7 @@ export default async function CustomerDetailPage({
           <tbody>
             {activity.receiptLog.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={6} className="px-4 py-6 text-center text-bone/40">
                   No receipt attempts.
                 </td>
               </tr>
@@ -188,9 +188,9 @@ export default async function CustomerDetailPage({
             {activity.receiptLog.map((r) => (
               <tr
                 key={r.id}
-                className="border-t border-white/5 hover:bg-white/[0.02] transition-colors"
+                className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors"
               >
-                <td className="px-4 py-2.5 text-white/60 whitespace-nowrap text-xs">
+                <td className="px-4 py-2.5 text-bone/60 whitespace-nowrap text-xs">
                   {new Date(r.created_at).toLocaleString()}
                 </td>
                 <td className="px-4 py-2.5">
@@ -198,22 +198,22 @@ export default async function CustomerDetailPage({
                     {r.status}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-white/70 text-xs">
-                  {r.delivery_status ?? (r.status === 'sent' ? 'awaiting' : '—')}
+                <td className="px-4 py-2.5 text-bone/70 text-xs">
+                  {r.delivery_status ?? (r.status === 'sent' ? 'awaiting' : '-')}
                   {r.bounce_reason && (
                     <div className="text-red-200/70 text-[10px] mt-0.5">
                       {r.bounce_reason}
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-white/50 text-xs">
-                  {r.provider ?? '—'}
+                <td className="px-4 py-2.5 text-bone/50 text-xs">
+                  {r.provider ?? '-'}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-xs">
-                  {r.amount_cents != null ? fmt(r.amount_cents) : '—'}
+                  {r.amount_cents != null ? fmt(r.amount_cents) : '-'}
                 </td>
-                <td className="px-4 py-2.5 text-xs text-white/50">
-                  {r.error ?? r.skipped_reason ?? r.message_id ?? '—'}
+                <td className="px-4 py-2.5 text-xs text-bone/50">
+                  {r.error ?? r.skipped_reason ?? r.message_id ?? '-'}
                 </td>
               </tr>
             ))}
@@ -221,12 +221,12 @@ export default async function CustomerDetailPage({
         </table>
       </div>
 
-      <h2 className="text-2xl font-bold mt-12 mb-4 tracking-tight">
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">
         CTA clicks
       </h2>
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur">
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">When</th>
               <th className="text-left px-4 py-3 font-semibold">Course</th>
@@ -237,7 +237,7 @@ export default async function CustomerDetailPage({
           <tbody>
             {activity.ctaClicks.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={4} className="px-4 py-6 text-center text-bone/40">
                   No CTA clicks recorded.
                 </td>
               </tr>
@@ -245,18 +245,18 @@ export default async function CustomerDetailPage({
             {activity.ctaClicks.map((c) => (
               <tr
                 key={c.id}
-                className="border-t border-white/5 hover:bg-white/[0.02] transition-colors"
+                className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors"
               >
-                <td className="px-4 py-2.5 text-white/60 whitespace-nowrap text-xs">
+                <td className="px-4 py-2.5 text-bone/60 whitespace-nowrap text-xs">
                   {new Date(c.created_at).toLocaleString()}
                 </td>
-                <td className="px-4 py-2.5 text-white/70 text-xs">
-                  {c.course_title ?? '—'}
+                <td className="px-4 py-2.5 text-bone/70 text-xs">
+                  {c.course_title ?? '-'}
                 </td>
-                <td className="px-4 py-2.5 text-white/80 text-xs">
+                <td className="px-4 py-2.5 text-bone/80 text-xs">
                   {c.lesson_title ?? c.lesson_id}
                 </td>
-                <td className="px-4 py-2.5 text-amber-200 font-mono text-xs">
+                <td className="px-4 py-2.5 text-brass font-mono text-xs">
                   {c.cta_id}
                 </td>
               </tr>
@@ -265,12 +265,12 @@ export default async function CustomerDetailPage({
         </table>
       </div>
 
-      <h2 className="text-2xl font-bold mt-12 mb-4 tracking-tight">
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">
         Lesson progress
       </h2>
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur">
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">Last watched</th>
               <th className="text-left px-4 py-3 font-semibold">Course</th>
@@ -282,7 +282,7 @@ export default async function CustomerDetailPage({
           <tbody>
             {activity.lessonProgress.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={5} className="px-4 py-6 text-center text-bone/40">
                   No lessons watched yet.
                 </td>
               </tr>
@@ -290,20 +290,20 @@ export default async function CustomerDetailPage({
             {activity.lessonProgress.map((p) => (
               <tr
                 key={p.lesson_id}
-                className="border-t border-white/5 hover:bg-white/[0.02] transition-colors"
+                className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors"
               >
-                <td className="px-4 py-2.5 text-white/60 whitespace-nowrap text-xs">
+                <td className="px-4 py-2.5 text-bone/60 whitespace-nowrap text-xs">
                   {p.last_watched_at
                     ? new Date(p.last_watched_at).toLocaleString()
-                    : '—'}
+                    : '-'}
                 </td>
-                <td className="px-4 py-2.5 text-white/70 text-xs">
-                  {p.course_title ?? '—'}
+                <td className="px-4 py-2.5 text-bone/70 text-xs">
+                  {p.course_title ?? '-'}
                 </td>
-                <td className="px-4 py-2.5 text-white/80 text-xs">
+                <td className="px-4 py-2.5 text-bone/80 text-xs">
                   {p.lesson_title ?? p.lesson_id}
                 </td>
-                <td className="px-4 py-2.5 text-white/70 tabular-nums text-xs">
+                <td className="px-4 py-2.5 text-bone/70 tabular-nums text-xs">
                   {fmtSeconds(p.progress_seconds)}
                 </td>
                 <td className="px-4 py-2.5">
@@ -312,7 +312,7 @@ export default async function CustomerDetailPage({
                       Completed
                     </span>
                   ) : (
-                    <span className="text-[11px] uppercase tracking-wider font-semibold text-amber-200/70">
+                    <span className="text-[11px] uppercase tracking-wider font-semibold text-brass/70">
                       In progress
                     </span>
                   )}
@@ -328,9 +328,9 @@ export default async function CustomerDetailPage({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur p-5 shadow-[0_0_30px_rgba(251,191,36,0.04)]">
-      <div className="text-xs uppercase tracking-wider text-amber-200/70 font-semibold">{label}</div>
-      <div className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{value}</div>
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 shadow-[0_0_30px_rgba(168,139,92,0.04)]">
+      <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold">{label}</div>
+      <div className="mt-2 font-display text-3xl font-semibold tabular-nums tracking-tight">{value}</div>
     </div>
   );
 }

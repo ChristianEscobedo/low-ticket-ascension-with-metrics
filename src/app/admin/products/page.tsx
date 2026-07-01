@@ -16,11 +16,11 @@ export default async function ProductsPage() {
     <div>
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+          <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
             Catalog
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Products</h1>
-          <p className="mt-2 text-white/60 max-w-2xl">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">Products</h1>
+          <p className="mt-2 text-bone/60 max-w-2xl">
             Create products directly in Stripe, tag each one with its funnel
             stage (FE, OTO1, …), and re-sync if you set anything up outside
             this UI.
@@ -37,7 +37,7 @@ export default async function ProductsPage() {
 
       <div className="space-y-4 mt-8">
         {products.length === 0 && (
-          <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur p-8 text-center text-white/50">
+          <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-8 text-center text-bone/50">
             No products synced. Create products in Stripe and click
             “Sync from Stripe”.
           </div>
@@ -45,22 +45,22 @@ export default async function ProductsPage() {
         {products.map((p) => (
           <div
             key={p.id}
-            className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur p-5 shadow-[0_0_30px_rgba(251,191,36,0.04)] hover:border-amber-200/30 transition-colors"
+            className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 shadow-[0_0_30px_rgba(168,139,92,0.06)] hover:border-brass/30 transition-colors"
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-lg truncate tracking-tight">{p.name}</h3>
                   {!p.active && (
-                    <span className="text-xs rounded bg-white/[0.06] text-white/50 border border-white/10 px-2 py-0.5">
+                    <span className="text-xs rounded bg-bone/[0.06] text-bone/50 border border-bone/10 px-2 py-0.5">
                       inactive
                     </span>
                   )}
                 </div>
                 {p.description && (
-                  <p className="text-sm text-white/60 mt-1">{p.description}</p>
+                  <p className="text-sm text-bone/60 mt-1">{p.description}</p>
                 )}
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-bone/40 mt-1">
                   <code>{p.id}</code>
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -77,17 +77,17 @@ export default async function ProductsPage() {
                 href={`https://dashboard.stripe.com/products/${p.id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-amber-300 text-sm hover:text-amber-200 hover:underline whitespace-nowrap"
+                className="text-brass text-sm hover:text-brass/80 hover:underline whitespace-nowrap"
               >
                 Stripe ↗
               </a>
             </div>
-            <div className="mt-4 border-t border-white/10 pt-3">
-              <div className="text-xs text-amber-200/70 uppercase tracking-wider font-semibold mb-2">
+            <div className="mt-4 border-t border-bone/10 pt-3">
+              <div className="text-xs text-brass/70 uppercase tracking-wider font-semibold mb-2">
                 Prices
               </div>
               {(p.prices ?? []).length === 0 ? (
-                <div className="text-sm text-white/40">No prices.</div>
+                <div className="text-sm text-bone/40">No prices.</div>
               ) : (
                 <ul className="space-y-1">
                   {(p.prices ?? []).map((pr: any) => (
@@ -96,20 +96,20 @@ export default async function ProductsPage() {
                       className="flex items-center justify-between text-sm"
                     >
                       <span className="tabular-nums">
-                        {pr.unit_amount != null ? fmt(pr.unit_amount) : '—'}
+                        {pr.unit_amount != null ? fmt(pr.unit_amount) : '-'}
                         {pr.interval ? ` / ${pr.interval}` : ''}
                         {pr.type === 'one_time' && (
-                          <span className="ml-2 text-white/40 text-xs">
+                          <span className="ml-2 text-bone/40 text-xs">
                             one-time
                           </span>
                         )}
                         {!pr.active && (
-                          <span className="ml-2 text-amber-300/80 text-xs">
+                          <span className="ml-2 text-brass/80 text-xs">
                             inactive
                           </span>
                         )}
                       </span>
-                      <code className="text-xs text-white/40">{pr.id}</code>
+                      <code className="text-xs text-bone/40">{pr.id}</code>
                     </li>
                   ))}
                 </ul>

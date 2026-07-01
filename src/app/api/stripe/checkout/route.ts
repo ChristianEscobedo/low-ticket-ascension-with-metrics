@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
+import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
 
 // Hosted Checkout session creator for the funnel's subscription OTOs
 // (OTO1 Clearing Room monthly, OTO2 annual upgrade). Mirrors the
@@ -25,12 +26,14 @@ interface Body {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY_LIVE) {
+    // Secret key resolves DB-first (enabled `stripe` integration) then env.
+    if (!(await getStripeSecretKey())) {
       return NextResponse.json(
-        { error: 'Stripe is not configured. Set STRIPE_SECRET_KEY in .env.local.' },
+        { error: 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.' },
         { status: 503 }
       );
     }
+    const stripe = await getStripeClient();
 
     const body = (await request.json()) as Body;
     const { type, priceId, amount, interval = 'month', productName = 'Subscription', productId, email, returnPath, metadata = {} } = body;

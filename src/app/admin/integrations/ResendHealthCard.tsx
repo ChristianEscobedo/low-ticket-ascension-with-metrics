@@ -24,7 +24,7 @@ function formatRelative(iso: string | null, now: Date = new Date()): string {
 }
 
 function formatPct(rate: number | null): string {
-  if (rate === null) return '—';
+  if (rate === null) return '-';
   return `${(rate * 100).toFixed(1)}%`;
 }
 
@@ -54,10 +54,10 @@ export default function ResendHealthCard({ health }: Props) {
   const noEventsButSends = hasSends && !hasEvents;
 
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-white/[0.03] to-transparent p-5">
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-5">
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <PlugZap className="w-4 h-4 text-amber-200/80" />
+          <PlugZap className="w-4 h-4 text-brass/80" />
           <h3 className="text-sm font-bold tracking-wide text-white uppercase">
             Resend webhook
           </h3>
@@ -66,7 +66,7 @@ export default function ResendHealthCard({ health }: Props) {
               Not configured
             </span>
           ) : noEventsButSends ? (
-            <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-300/[0.08] border border-amber-300/30 text-amber-200 font-semibold">
+            <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-brass/[0.08] border border-brass/30 text-brass font-semibold">
               No events received
             </span>
           ) : bounceTrouble || complaintTrouble ? (
@@ -85,7 +85,7 @@ export default function ResendHealthCard({ health }: Props) {
         </div>
         <Link
           href="/admin/receipt-log"
-          className="text-xs text-amber-200/80 hover:text-amber-200"
+          className="text-xs text-brass/80 hover:text-brass"
         >
           View audit log →
         </Link>
@@ -94,7 +94,7 @@ export default function ResendHealthCard({ health }: Props) {
       <p className="text-xs text-white/50 mb-4 max-w-2xl">
         Last 7 days of receipt sends, cross-referenced with Resend's
         delivery / bounce / complaint webhooks. POST{' '}
-        <code className="text-amber-200/80">/api/webhooks/resend</code> with
+        <code className="text-brass/80">/api/webhooks/resend</code> with
         your signing secret to keep this in sync.
       </p>
 
@@ -113,7 +113,7 @@ export default function ResendHealthCard({ health }: Props) {
           sub={formatPct(bounceRate)}
         />
         <Stat
-          icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-300" />}
+          icon={<AlertTriangle className="w-3.5 h-3.5 text-brass" />}
           label="Complaints"
           value={complained7d}
           accent={complaintTrouble ? 'red' : undefined}

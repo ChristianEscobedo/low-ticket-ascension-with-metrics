@@ -1,37 +1,41 @@
-import Pricing from '@/components/ui/Pricing/Pricing';
-import { createClient } from '@/utils/supabase/server';
-import {
-  getProducts,
-  getSubscription,
-  getUser
-} from '@/utils/supabase/queries';
-import { getProductCourseSummaries } from '@/utils/courses/product-summaries';
-import { getUserCourseAccess } from '@/utils/courses/access';
+import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
+import { getOffer } from '@/lib/mothermode/offers';
+import { getPublishedOfferMedia } from '@/lib/mothermode/offerMedia';
+import { MotherModeSalesPage } from '@/components/mothermode/MotherModeSalesPage';
+import { OfferMediaEditor } from '@/components/mothermode/parts/OfferMediaEditor';
 
-export default async function PricingPage() {
-  const supabase = createClient();
-  const [user, products, subscription] = await Promise.all([
-    getUser(supabase),
-    getProducts(supabase),
-    getSubscription(supabase)
-  ]);
+// The flagship $7 front-end offer is the app's front page.
+const FLAGSHIP_SLUG = 'brain-dump-system';
 
-  const productIds = (products ?? []).map((p) => p.id);
-  const [courseSummariesByProduct, accessRows] = await Promise.all([
-    getProductCourseSummaries(productIds),
-    user
-      ? getUserCourseAccess(user.id, user.email ?? null)
-      : Promise.resolve([])
-  ]);
-  const accessibleCourseIds = accessRows.map((r) => r.course_id);
+// Re-render on a short interval so admin image edits propagate to buyers. The
+// admin API also calls revalidatePath after each write for near-instant updates.
+export const revalidate = 60;
+
+export function generateMetadata(): Metadata {
+  const offer = getOffer(FLAGSHIP_SLUG);
+  if (!offer) return { title: 'MotherMode' };
+  return {
+    title: `${offer.name} | MotherMode`,
+    description: offer.tagline,
+  };
+}
+
+/**
+ * Home route. Renders the flagship resource pack as the front page, with any
+ * admin-published images merged over the catalog defaults.
+ */
+export default async function HomePage() {
+  const offer = getOffer(FLAGSHIP_SLUG);
+  if (!offer || !offer.ready) notFound();
+
+  const published = await getPublishedOfferMedia(offer.slug);
+  const merged = { ...offer, media: { ...offer.media, ...published } };
 
   return (
-    <Pricing
-      user={user}
-      products={products ?? []}
-      subscription={subscription}
-      courseSummariesByProduct={courseSummariesByProduct}
-      accessibleCourseIds={accessibleCourseIds}
-    />
+    <>
+      <MotherModeSalesPage offer={merged} />
+      <OfferMediaEditor slug={offer.slug} />
+    </>
   );
 }

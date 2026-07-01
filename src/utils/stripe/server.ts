@@ -1,7 +1,7 @@
 'use server';
 
 import Stripe from 'stripe';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
 import { createClient } from '@/utils/supabase/server';
 import { createOrRetrieveCustomer } from '@/utils/supabase/admin';
 import {
@@ -87,6 +87,7 @@ export async function checkoutWithStripe(
     // Create a checkout session in Stripe
     let session;
     try {
+      const stripe = await getStripeClient();
       session = await stripe.checkout.sessions.create(params);
     } catch (err) {
       console.error(err);
@@ -151,6 +152,7 @@ export async function createStripePortal(currentPath: string) {
     }
 
     try {
+      const stripe = await getStripeClient();
       const { url } = await stripe.billingPortal.sessions.create({
         customer,
         return_url: getURL('/account')

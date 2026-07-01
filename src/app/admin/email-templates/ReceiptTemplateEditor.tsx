@@ -12,6 +12,11 @@ import {
   XCircle
 } from 'lucide-react';
 import { renderTemplate } from '@/utils/email/render';
+import {
+  DEFAULT_RECEIPT_SUBJECT,
+  DEFAULT_RECEIPT_BODY_HTML,
+  DEFAULT_RECEIPT_BODY_TEXT,
+} from '@/utils/email/defaults';
 import TemplateDiffPanel from './TemplateDiffPanel';
 
 interface Initial {
@@ -34,42 +39,25 @@ interface Props {
 // produced by buildReceiptTokens() on the server so the preview matches
 // what real buyers will see.
 const PREVIEW_TOKENS: Record<string, string> = {
-  brand: 'Mindshift',
+  brand: 'MotherMode',
   amount: '$27.00',
   currency: 'USD',
-  product: 'Millionaire Mindshift — Core',
+  product: 'MotherMode Core',
   name: 'Sarah',
   email: 'sarah@example.com',
   ref: 'pi_3OqXyZ2eZvKYlo2C0abcdef1',
-  signoff: '— The Mindshift team'
+  signoff: 'The MotherMode team'
 };
 
 type PreviewTab = 'html' | 'text';
 
-export const DEFAULT_RECEIPT_SUBJECT = 'Your {{brand}} receipt — {{amount}}';
-
-export const DEFAULT_RECEIPT_BODY_HTML = `<!doctype html>
-<html><body style="font-family:system-ui,Segoe UI,Arial,sans-serif;background:#000;color:#fff;padding:24px;margin:0">
-  <div style="max-width:560px;margin:0 auto;background:#0a0a0a;border:1px solid rgba(251,191,36,0.2);border-radius:16px;padding:24px">
-    <div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#fbbf24;font-weight:600">{{brand}}</div>
-    <h1 style="font-size:18px;font-weight:600;color:#fbbf24;margin:8px 0 16px">Payment received</h1>
-    <p style="margin:0 0 12px;color:rgba(255,255,255,0.8)">Hi {{name}}, thanks for your purchase.</p>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <tr><td style="padding:6px 0;color:rgba(255,255,255,0.5)">Amount</td><td style="padding:6px 0;text-align:right">{{amount}}</td></tr>
-      <tr><td style="padding:6px 0;color:rgba(255,255,255,0.5)">Product</td><td style="padding:6px 0;text-align:right">{{product}}</td></tr>
-      <tr><td style="padding:6px 0;color:rgba(255,255,255,0.5)">Reference</td><td style="padding:6px 0;text-align:right;font-family:monospace;font-size:12px">{{ref}}</td></tr>
-    </table>
-    <p style="margin:24px 0 0;font-size:12px;color:rgba(255,255,255,0.4)">{{signoff}}</p>
-  </div>
-</body></html>`;
-
-export const DEFAULT_RECEIPT_BODY_TEXT = `Payment received
-
-Amount: {{amount}}
-Product: {{product}}
-Reference: {{ref}}
-
-{{signoff}}`;
+// The themed default receipt now lives in one place so the editor's starting
+// point, the live sender fallback, and the preview all stay in sync.
+export {
+  DEFAULT_RECEIPT_SUBJECT,
+  DEFAULT_RECEIPT_BODY_HTML,
+  DEFAULT_RECEIPT_BODY_TEXT
+} from '@/utils/email/defaults';
 
 export default function ReceiptTemplateEditor({
   initial,
@@ -235,13 +223,13 @@ export default function ReceiptTemplateEditor({
   };
 
   return (
-    <div className="rounded-2xl border border-amber-200/15 bg-gradient-to-br from-white/[0.04] to-transparent p-5 space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-white/50">
+    <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-5 space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-bone/50">
         <span
           className={`px-2 py-0.5 rounded-md border font-semibold uppercase tracking-wider ${
             isStored
               ? 'border-emerald-400/30 bg-emerald-400/[0.05] text-emerald-200'
-              : 'border-white/10 bg-white/[0.03] text-white/40'
+              : 'border-bone/10 bg-bone/[0.03] text-bone/40'
           }`}
         >
           {isStored ? 'Custom' : 'Defaults'}
@@ -249,8 +237,8 @@ export default function ReceiptTemplateEditor({
         <span
           className={`px-2 py-0.5 rounded-md border font-semibold uppercase tracking-wider ${
             productId
-              ? 'border-amber-300/30 bg-amber-300/[0.06] text-amber-200'
-              : 'border-white/10 bg-white/[0.03] text-white/50'
+              ? 'border-brass/30 bg-brass/[0.06] text-brass'
+              : 'border-bone/10 bg-bone/[0.03] text-bone/50'
           }`}
         >
           {productId ? `Product · ${productName ?? productId}` : 'Default scope'}
@@ -268,7 +256,7 @@ export default function ReceiptTemplateEditor({
           id="rt-subject"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
-          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+          className="w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-2 text-sm text-bone focus:border-brass/50 focus:outline-none"
         />
       </Field>
 
@@ -279,7 +267,7 @@ export default function ReceiptTemplateEditor({
           onChange={(e) => setBodyHtml(e.target.value)}
           rows={14}
           spellCheck={false}
-          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-amber-300/50 focus:outline-none"
+          className="w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-2 text-xs font-mono text-bone focus:border-brass/50 focus:outline-none"
         />
       </Field>
 
@@ -290,16 +278,16 @@ export default function ReceiptTemplateEditor({
           onChange={(e) => setBodyText(e.target.value)}
           rows={8}
           spellCheck={false}
-          className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:border-amber-300/50 focus:outline-none"
+          className="w-full bg-ink/40 border border-bone/10 rounded-lg px-3 py-2 text-xs font-mono text-bone focus:border-brass/50 focus:outline-none"
         />
       </Field>
 
-      <div className="rounded-xl border border-amber-200/15 bg-black/30 overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 bg-white/[0.02] border-b border-white/5">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+      <div className="rounded-xl border border-brass/15 bg-ink/30 overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 bg-bone/[0.02] border-b border-bone/5">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
             <Eye className="w-3.5 h-3.5" />
             Live preview
-            <span className="text-white/30 normal-case tracking-normal font-normal">
+            <span className="text-bone/30 normal-case tracking-normal font-normal">
               · sample data
             </span>
           </div>
@@ -311,8 +299,8 @@ export default function ReceiptTemplateEditor({
                 onClick={() => setPreviewTab(tab)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider ${
                   previewTab === tab
-                    ? 'bg-amber-300/[0.12] text-amber-200 border border-amber-300/30'
-                    : 'text-white/40 hover:text-white/70 border border-transparent'
+                    ? 'bg-brass/[0.12] text-brass border border-brass/30'
+                    : 'text-bone/40 hover:text-bone/70 border border-transparent'
                 }`}
               >
                 {tab}
@@ -320,9 +308,9 @@ export default function ReceiptTemplateEditor({
             ))}
           </div>
         </div>
-        <div className="px-3 py-2 border-b border-white/5 text-xs">
-          <span className="text-white/40 mr-2">Subject:</span>
-          <span className="text-white">{renderedSubject}</span>
+        <div className="px-3 py-2 border-b border-bone/5 text-xs">
+          <span className="text-bone/40 mr-2">Subject:</span>
+          <span className="text-bone">{renderedSubject}</span>
         </div>
         {previewTab === 'html' ? (
           <iframe
@@ -332,7 +320,7 @@ export default function ReceiptTemplateEditor({
             className="w-full h-[420px] bg-white"
           />
         ) : (
-          <pre className="m-0 p-4 text-xs font-mono text-white/80 whitespace-pre-wrap break-words bg-black/40 max-h-[420px] overflow-auto">
+          <pre className="m-0 p-4 text-xs font-mono text-bone/80 whitespace-pre-wrap break-words bg-ink/40 max-h-[420px] overflow-auto">
             {renderedText}
           </pre>
         )}
@@ -352,7 +340,7 @@ export default function ReceiptTemplateEditor({
           type="button"
           onClick={save}
           disabled={busy || !dirty}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 text-black text-sm font-bold hover:from-amber-300 hover:to-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brass text-ink text-sm font-bold hover:bg-brass/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-4 h-4" />
           {busy ? 'Saving…' : 'Save template'}
@@ -360,7 +348,7 @@ export default function ReceiptTemplateEditor({
         <button
           type="button"
           onClick={resetToDefaults}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-sm text-white/60 hover:text-white hover:border-white/30"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-bone/10 text-sm text-bone/60 hover:text-bone hover:border-bone/30"
         >
           <RotateCcw className="w-3 h-3" />
           Reset to defaults
@@ -392,11 +380,11 @@ export default function ReceiptTemplateEditor({
         )}
       </div>
 
-      <div className="rounded-xl border border-amber-200/15 bg-black/30 p-4 mt-2">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/50 font-semibold mb-2">
+      <div className="rounded-xl border border-brass/15 bg-ink/30 p-4 mt-2">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-bone/50 font-semibold mb-2">
           <Send className="w-3.5 h-3.5" />
           Send test to my email
-          <span className="text-white/30 normal-case tracking-normal font-normal">
+          <span className="text-bone/30 normal-case tracking-normal font-normal">
             · uses the unsaved draft above
           </span>
         </div>
@@ -407,13 +395,13 @@ export default function ReceiptTemplateEditor({
             onChange={(e) => setTestEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
-            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-300/50 focus:outline-none"
+            className="flex-1 bg-ink/40 border border-bone/10 rounded-lg px-3 py-2 text-sm text-bone focus:border-brass/50 focus:outline-none"
           />
           <button
             type="button"
             onClick={sendTest}
             disabled={testBusy || !testEmail.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-300/40 bg-amber-300/[0.08] text-amber-200 text-sm font-bold hover:bg-amber-300/[0.15] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-brass/40 bg-brass/[0.08] text-brass text-sm font-bold hover:bg-brass/[0.15] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-3.5 h-3.5" />
             {testBusy ? 'Sending…' : 'Send test'}
@@ -451,7 +439,7 @@ function Field({
 }) {
   return (
     <label htmlFor={htmlFor} className="block">
-      <span className="text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+      <span className="text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
         {label}
       </span>
       <div className="mt-1">{children}</div>

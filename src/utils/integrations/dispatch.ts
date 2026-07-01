@@ -60,7 +60,7 @@ const fireGhl = async (cfg: GhlConfig, payload: PurchaseEvent) => {
       firstName: firstName || undefined,
       lastName,
       tags: [tag],
-      source: 'Millionaire Mindshift'
+      source: 'MotherMode'
     })
   });
 };

@@ -28,18 +28,18 @@ export default async function AdminLayout({ children }: PropsWithChildren) {
   }
 
   return (
-    <section className="bg-black min-h-screen text-white flex flex-col relative">
+    <section className="bg-ink min-h-screen text-bone font-sans flex flex-col relative">
       <div className="absolute inset-0 opacity-30 pointer-events-none">
         <div
           className="absolute inset-0"
           style={{
             backgroundImage:
-              'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.04) 1px, transparent 0)',
+              'radial-gradient(circle at 2px 2px, rgba(245,241,235,0.04) 1px, transparent 0)',
             backgroundSize: '30px 30px'
           }}
         />
       </div>
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-amber-200/[0.04] blur-3xl rounded-full pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-brass/[0.06] blur-3xl rounded-full pointer-events-none" />
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
           <AdminSidebar userEmail={user.email ?? ''} />

@@ -46,7 +46,7 @@ export function buildReceiptTokens(
     brand,
     amount: formatAmount(payload.amount_cents, payload.currency),
     currency: (payload.currency || 'usd').toUpperCase(),
-    product: payload.product_id ?? '—',
+    product: payload.product_id ?? '-',
     name: firstName,
     email: payload.customer_email ?? '',
     ref:
@@ -54,7 +54,7 @@ export function buildReceiptTokens(
       payload.checkout_session_id ||
       payload.stripe_event_id,
     signoff: brand
-      ? `— The ${brand} team`
+      ? `From the ${brand} team`
       : 'If anything looks off, just reply to this email.'
   };
 }

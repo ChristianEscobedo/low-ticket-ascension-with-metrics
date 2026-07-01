@@ -63,13 +63,13 @@ export default async function EmailTemplatesPage({ searchParams }: PageProps) {
   return (
     <div>
       <div className="mb-6">
-        <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+        <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
           Email
         </div>
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
           Receipt template
         </h1>
-        <p className="text-sm text-white/60 mt-2 max-w-2xl">
+        <p className="text-sm text-bone/60 mt-2 max-w-2xl">
           Override the default purchase receipt subject + body, or write a
           dedicated copy per product. Tokens in double braces are substituted
           per email; the most specific stored template wins (product &gt;
@@ -95,21 +95,21 @@ export default async function EmailTemplatesPage({ searchParams }: PageProps) {
           productName={selectedProduct?.name ?? null}
         />
 
-        <aside className="rounded-2xl border border-amber-200/15 bg-white/[0.02] p-5 h-fit lg:sticky lg:top-10">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold mb-3">
+        <aside className="rounded-2xl border border-brass/15 bg-bone/[0.02] p-5 h-fit lg:sticky lg:top-10">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-bone/50 font-semibold mb-3">
             Available tokens
           </div>
           <ul className="space-y-2 text-sm">
             {RECEIPT_TOKEN_KEYS.map((token) => (
               <li key={token} className="flex items-baseline gap-2">
-                <code className="px-1.5 py-0.5 rounded bg-black/40 border border-white/10 text-amber-200 font-mono text-xs">
+                <code className="px-1.5 py-0.5 rounded bg-ink/40 border border-bone/10 text-brass font-mono text-xs">
                   {`{{${token}}}`}
                 </code>
-                <span className="text-white/50 text-xs">{TOKEN_HELP[token]}</span>
+                <span className="text-bone/50 text-xs">{TOKEN_HELP[token]}</span>
               </li>
             ))}
           </ul>
-          <p className="text-xs text-white/40 mt-5 leading-relaxed">
+          <p className="text-xs text-bone/40 mt-5 leading-relaxed">
             Tokens are HTML-escaped inside the HTML body and inserted verbatim
             into the plaintext body. Unknown tokens render as empty strings.
           </p>

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
 import {
   syncProductsFromStripe,
   upsertProductRecord,
@@ -42,6 +42,7 @@ export async function createProductAction(input: CreateProductInput) {
   if (input.page_type) metadata.page_type = input.page_type;
   if (input.funnel) metadata.funnel = input.funnel;
 
+  const stripe = await getStripeClient();
   const product = await stripe.products.create({
     name: input.name.trim(),
     description: input.description?.trim() || undefined,
@@ -78,6 +79,7 @@ export async function updateProductStageAction(input: {
   if (input.page_type && !PAGE_TYPES.includes(input.page_type as any)) {
     throw new Error(`Invalid page_type: ${input.page_type}`);
   }
+  const stripe = await getStripeClient();
   const current = await stripe.products.retrieve(input.product_id);
   const metadata: Record<string, string> = { ...(current.metadata ?? {}) };
   if (input.page_type) metadata.page_type = input.page_type;

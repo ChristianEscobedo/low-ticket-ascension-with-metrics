@@ -147,7 +147,7 @@ describe('sendPurchaseReceipt', () => {
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
     expect(body.subject).toContain('Your Mindshift receipt');
     expect(body.html).toContain('Mindshift');
-    expect(body.text).toContain('— The Mindshift team');
+    expect(body.text).toContain('From the Mindshift team');
   });
 
   it('prepends RECEIPT_SUBJECT_PREFIX to the subject line', async () => {

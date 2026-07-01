@@ -52,7 +52,7 @@ export default function TemplateDiffPanel({ sections, dirty }: Props) {
 
   if (!dirty) {
     return (
-      <div className="rounded-xl border border-amber-200/15 bg-black/30 px-4 py-3 text-[11px] uppercase tracking-wider text-white/40 font-semibold flex items-center gap-2">
+      <div className="rounded-xl border border-brass/15 bg-ink/30 px-4 py-3 text-[11px] uppercase tracking-wider text-bone/40 font-semibold flex items-center gap-2">
         <GitCompare className="w-3.5 h-3.5" />
         Diff vs saved · no pending changes
       </div>
@@ -66,9 +66,9 @@ export default function TemplateDiffPanel({ sections, dirty }: Props) {
     active.summary.added + active.summary.removed;
 
   return (
-    <div className="rounded-xl border border-amber-200/15 bg-black/30 overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-white/[0.02] border-b border-white/5">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/50 font-semibold">
+    <div className="rounded-xl border border-brass/15 bg-ink/30 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-bone/[0.02] border-b border-bone/5">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-bone/50 font-semibold">
           <GitCompare className="w-3.5 h-3.5" />
           Diff vs saved
           <span className="text-emerald-300 normal-case tracking-normal font-normal">
@@ -79,16 +79,16 @@ export default function TemplateDiffPanel({ sections, dirty }: Props) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-white/50 normal-case tracking-normal font-normal cursor-pointer">
+          <label className="flex items-center gap-1.5 text-[11px] text-bone/50 normal-case tracking-normal font-normal cursor-pointer">
             <input
               type="checkbox"
               checked={onlyChanges}
               onChange={(e) => setOnlyChanges(e.target.checked)}
-              className="accent-amber-300 w-3 h-3"
+              className="accent-brass w-3 h-3"
             />
             only changes
           </label>
-          <div className="w-px h-4 bg-white/10" />
+          <div className="w-px h-4 bg-bone/10" />
           {sections.map((s, i) => {
             const t = diffs[i].summary;
             const changed = t.added + t.removed;
@@ -99,13 +99,13 @@ export default function TemplateDiffPanel({ sections, dirty }: Props) {
                 onClick={() => setActiveTab(i)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wider ${
                   activeTab === i
-                    ? 'bg-amber-300/[0.12] text-amber-200 border border-amber-300/30'
-                    : 'text-white/40 hover:text-white/70 border border-transparent'
+                    ? 'bg-brass/[0.12] text-brass border border-brass/30'
+                    : 'text-bone/40 hover:text-bone/70 border border-transparent'
                 }`}
               >
                 {s.label}
                 {changed > 0 && (
-                  <span className="ml-1 text-[10px] text-white/40 normal-case tracking-normal">
+                  <span className="ml-1 text-[10px] text-bone/40 normal-case tracking-normal">
                     +{t.added}/-{t.removed}
                   </span>
                 )}
@@ -115,7 +115,7 @@ export default function TemplateDiffPanel({ sections, dirty }: Props) {
         </div>
       </div>
       {sectionTotal === 0 ? (
-        <div className="px-4 py-3 text-xs text-white/40 italic">
+        <div className="px-4 py-3 text-xs text-bone/40 italic">
           {activeSection.label} unchanged.
         </div>
       ) : (
@@ -137,15 +137,15 @@ function DiffColumn({
 }) {
   const wantedOp = side === 'left' ? 'removed' : 'added';
   return (
-    <div className="border-r border-white/5 last:border-r-0 bg-black/40">
+    <div className="border-r border-bone/5 last:border-r-0 bg-ink/40">
       {rows.map((row, idx) => {
         if (row.kind === 'gap') {
           return (
             <div
               key={`${side}-gap-${idx}`}
-              className="flex gap-2 px-2 py-0.5 bg-white/[0.015] text-white/30 select-none"
+              className="flex gap-2 px-2 py-0.5 bg-bone/[0.015] text-bone/30 select-none"
             >
-              <span className="w-8 text-right text-white/20 flex-shrink-0">
+              <span className="w-8 text-right text-bone/20 flex-shrink-0">
                 ⋮
               </span>
               <span className="flex-1 min-w-0 italic">
@@ -162,14 +162,14 @@ function DiffColumn({
             ? 'bg-red-500/[0.08] text-red-100'
             : 'bg-emerald-500/[0.08] text-emerald-100'
           : row.op === 'equal'
-            ? 'text-white/60'
-            : 'text-white/15';
+            ? 'text-bone/60'
+            : 'text-bone/15';
         return (
           <div
             key={`${side}-${idx}`}
             className={`flex gap-2 px-2 py-0.5 ${cls} whitespace-pre-wrap break-words`}
           >
-            <span className="w-8 text-right text-white/25 select-none flex-shrink-0">
+            <span className="w-8 text-right text-bone/25 select-none flex-shrink-0">
               {no ?? ''}
             </span>
             <span className="flex-1 min-w-0">

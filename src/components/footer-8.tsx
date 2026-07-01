@@ -4,8 +4,8 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 
 // Source: shadcn registry @reactbits-pro/footer-8. Adapted for the admin
-// console: amber accent to match the millionaire-mindshift funnel, fixed
-// malformed SVG viewBoxes and invalid border-oklch(...) classes from the
+// console: Editorial Warm brass accent on an ink base to match MotherMode,
+// fixed malformed SVG viewBoxes and invalid border-oklch(...) classes from the
 // upstream block, and rewired columns to point at our admin/funnel routes.
 
 const socials = [
@@ -63,17 +63,17 @@ const cols = [
   {
     title: 'Funnel',
     links: [
-      { label: 'Sales page', href: '/millionaire-mindshift' },
-      { label: 'VSL', href: '/millionaire-mindshift/vsl' },
-      { label: 'Checkout', href: '/millionaire-mindshift/checkout' }
+      { label: 'Sales page', href: '/' },
+      { label: 'Content', href: '/mothermode/content' },
+      { label: 'Checkout', href: '/mothermode/checkout' }
     ]
   }
 ] as const;
 
 export default function Footer8() {
   return (
-    <footer className="relative w-full border-t border-amber-200/10 bg-black px-4 sm:px-6 lg:px-8 py-12 sm:py-16 overflow-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-amber-200/[0.04] blur-3xl rounded-full pointer-events-none" />
+    <footer className="relative w-full border-t border-brass/10 bg-ink px-4 sm:px-6 lg:px-8 py-12 sm:py-16 overflow-hidden">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-brass/[0.05] blur-3xl rounded-full pointer-events-none" />
       <div className="relative max-w-7xl mx-auto w-full">
         <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr_1fr_1fr] gap-10 lg:gap-12">
           <motion.div
@@ -84,17 +84,14 @@ export default function Footer8() {
             className="flex flex-col gap-6"
           >
             <div className="flex items-center gap-3">
-              <div className="h-px w-12 bg-gradient-to-r from-transparent to-amber-200/40" />
-              <span className="text-xl font-bold tracking-tight text-white">
-                Millionaire{' '}
-                <span className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-300 bg-clip-text text-transparent">
-                  Mindshift
-                </span>
+              <div className="h-px w-12 bg-gradient-to-r from-transparent to-brass/50" />
+              <span className="font-display text-xl font-semibold tracking-tight text-bone">
+                MotherMode
               </span>
             </div>
-            <p className="text-sm sm:text-base text-white/70 leading-relaxed max-w-xs">
-              The Subconscious Reset Method&trade; — admin console for the
-              funnel, customers, and recurring revenue.
+            <p className="text-sm sm:text-base text-bone/70 leading-relaxed max-w-xs">
+              The OS for modern motherhood. Admin console for the funnel,
+              customers, and recurring revenue.
             </p>
             <div className="flex items-center gap-2">
               {socials.map((s) => (
@@ -102,7 +99,7 @@ export default function Footer8() {
                   key={s.key}
                   href={s.href}
                   aria-label={s.label}
-                  className="w-9 h-9 rounded-md border border-amber-200/20 text-amber-200/80 flex items-center justify-center hover:bg-amber-200/[0.06] hover:text-amber-200 hover:border-amber-200/40 transition-colors"
+                  className="w-9 h-9 rounded-md border border-brass/20 text-brass/80 flex items-center justify-center hover:bg-brass/[0.08] hover:text-brass hover:border-brass/40 transition-colors"
                 >
                   {s.icon}
                 </a>
@@ -117,9 +114,9 @@ export default function Footer8() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.3, delay: 0.05 + ci * 0.05 }}
-              className="flex flex-col gap-2 lg:border-t lg:border-amber-200/10 lg:pt-5"
+              className="flex flex-col gap-2 lg:border-t lg:border-brass/10 lg:pt-5"
             >
-              <h4 className="text-xs font-semibold tracking-[0.15em] uppercase text-amber-200">
+              <h4 className="text-xs font-semibold tracking-[0.15em] uppercase text-brass">
                 {col.title}
               </h4>
               <ul className="flex flex-col gap-1">
@@ -127,7 +124,7 @@ export default function Footer8() {
                   <li key={link.label} className="flex items-center gap-2">
                     <Link
                       href={link.href}
-                      className="text-sm sm:text-base text-white/70 hover:text-white transition-colors"
+                      className="text-sm sm:text-base text-bone/70 hover:text-bone transition-colors"
                     >
                       {link.label}
                     </Link>
@@ -154,25 +151,25 @@ export default function Footer8() {
               fontSize: 'inherit',
               letterSpacing: '0.15em',
               paddingLeft: '0.15em',
-              color: 'rgba(251, 191, 36, 0.06)',
+              color: 'rgba(168, 139, 92, 0.07)',
               textShadow:
-                '0 -1.5px rgba(251,191,36,0.18), 1.5px 1px 1px rgba(251,191,36,0.10)'
+                '0 -1.5px rgba(168,139,92,0.18), 1.5px 1px 1px rgba(168,139,92,0.10)'
             }}
           >
-            Mindshift
+            MotherMode
           </div>
         </div>
 
-        <div className="pt-6 border-t border-amber-200/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs sm:text-sm text-white/50">
-          <p>© {new Date().getFullYear()} Millionaire Mindshift</p>
+        <div className="pt-6 border-t border-brass/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs sm:text-sm text-bone/50">
+          <p>© {new Date().getFullYear()} MotherMode</p>
           <div className="flex items-center gap-5">
-            <a href="#" className="hover:text-amber-200 transition-colors">
+            <a href="#" className="hover:text-brass transition-colors">
               Security
             </a>
-            <a href="#" className="hover:text-amber-200 transition-colors">
+            <a href="#" className="hover:text-brass transition-colors">
               Terms of service
             </a>
-            <a href="#" className="hover:text-amber-200 transition-colors">
+            <a href="#" className="hover:text-brass transition-colors">
               Privacy policy
             </a>
           </div>

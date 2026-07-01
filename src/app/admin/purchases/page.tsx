@@ -45,11 +45,11 @@ export default async function PurchasesPage({
     <div>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.25em] text-amber-200/80 font-semibold mb-2">
+          <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
             Ledger
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Purchases</h1>
-          <p className="mt-2 text-white/60">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">Purchases</h1>
+          <p className="mt-2 text-bone/60">
             {total} total · page {page} of {totalPages}
           </p>
         </div>
@@ -64,22 +64,22 @@ export default async function PurchasesPage({
         <div className="flex gap-2">
           <button
             type="submit"
-            className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 text-sm font-semibold transition-colors"
+            className="flex-1 rounded-lg bg-brass hover:bg-brass/90 text-ink px-3 py-2 text-sm font-semibold transition-colors"
           >
             Filter
           </button>
           <Link
             href="/admin/purchases"
-            className="rounded-lg border border-amber-200/20 px-3 py-2 text-sm text-white/70 hover:bg-amber-200/[0.06] hover:border-amber-200/40 hover:text-amber-200 transition-colors"
+            className="rounded-lg border border-brass/20 px-3 py-2 text-sm text-bone/70 hover:bg-brass/[0.06] hover:border-brass/40 hover:text-brass transition-colors"
           >
             Clear
           </Link>
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-2xl border border-amber-200/15 bg-gradient-to-br from-gray-900/60 to-gray-950/60 backdrop-blur mt-6">
+      <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur mt-6">
         <table className="w-full text-sm">
-          <thead className="bg-white/[0.03] text-amber-200/80 uppercase tracking-wider text-xs">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">When</th>
               <th className="text-left px-4 py-3 font-semibold">Product</th>
@@ -91,21 +91,21 @@ export default async function PurchasesPage({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-white/40">
+                <td colSpan={5} className="px-4 py-6 text-center text-bone/40">
                   No purchases match these filters.
                 </td>
               </tr>
             )}
             {rows.map((r) => (
-              <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
-                <td className="px-4 py-2.5 whitespace-nowrap text-white/60">
+              <tr key={r.id} className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors">
+                <td className="px-4 py-2.5 whitespace-nowrap text-bone/60">
                   {new Date(r.created_at).toLocaleString()}
                 </td>
-                <td className="px-4 py-2.5">{r.product_id ?? '—'}</td>
-                <td className="px-4 py-2.5">{r.page_type ?? '—'}</td>
+                <td className="px-4 py-2.5">{r.product_id ?? '-'}</td>
+                <td className="px-4 py-2.5">{r.page_type ?? '-'}</td>
                 <td className="px-4 py-2.5">
-                  <div>{r.customer_name ?? '—'}</div>
-                  <div className="text-white/40">{r.customer_email ?? '—'}</div>
+                  <div>{r.customer_name ?? '-'}</div>
+                  <div className="text-bone/40">{r.customer_email ?? '-'}</div>
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums">
                   {fmt(r.amount_cents ?? 0)}
@@ -120,17 +120,17 @@ export default async function PurchasesPage({
         <Link
           href={buildHref({ page: String(Math.max(1, page - 1)) })}
           aria-disabled={page <= 1}
-          className={`px-3 py-1.5 rounded-lg border border-amber-200/20 ${page <= 1 ? 'pointer-events-none opacity-40' : 'hover:bg-amber-200/[0.06] hover:border-amber-200/40 text-amber-200'}`}
+          className={`px-3 py-1.5 rounded-lg border border-brass/20 ${page <= 1 ? 'pointer-events-none opacity-40' : 'hover:bg-brass/[0.06] hover:border-brass/40 text-brass'}`}
         >
           ← Previous
         </Link>
-        <span className="text-white/40">
+        <span className="text-bone/40">
           Page {page} of {totalPages}
         </span>
         <Link
           href={buildHref({ page: String(Math.min(totalPages, page + 1)) })}
           aria-disabled={page >= totalPages}
-          className={`px-3 py-1.5 rounded-lg border border-amber-200/20 ${page >= totalPages ? 'pointer-events-none opacity-40' : 'hover:bg-amber-200/[0.06] hover:border-amber-200/40 text-amber-200'}`}
+          className={`px-3 py-1.5 rounded-lg border border-brass/20 ${page >= totalPages ? 'pointer-events-none opacity-40' : 'hover:bg-brass/[0.06] hover:border-brass/40 text-brass'}`}
         >
           Next →
         </Link>
@@ -143,7 +143,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-300/60 focus:bg-white/[0.05] transition-colors"
+      className="rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/60 focus:bg-bone/[0.05] transition-colors"
     />
   );
 }

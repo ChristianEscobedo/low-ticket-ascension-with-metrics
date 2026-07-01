@@ -1,5 +1,5 @@
 import { toDateTime } from '@/utils/helpers';
-import { stripe } from '@/utils/stripe/config';
+import { getStripeClient } from '@/utils/stripe/config';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import type { Database, Tables, TablesInsert } from '@/types_db';
@@ -104,6 +104,7 @@ const upsertCustomerToSupabase = async (uuid: string, customerId: string) => {
 };
 
 const createCustomerInStripe = async (uuid: string, email: string) => {
+  const stripe = await getStripeClient();
   const customerData = { metadata: { supabaseUUID: uuid }, email: email };
   const newCustomer = await stripe.customers.create(customerData);
   if (!newCustomer) throw new Error('Stripe customer creation failed.');
@@ -118,6 +119,7 @@ const createOrRetrieveCustomer = async ({
   email: string;
   uuid: string;
 }) => {
+  const stripe = await getStripeClient();
   // Check if the customer already exists in Supabase
   const { data: existingSupabaseCustomer, error: queryError } =
     await supabaseAdmin
@@ -196,6 +198,7 @@ const copyBillingDetailsToCustomer = async (
   const customer = payment_method.customer as string;
   const { name, phone, address } = payment_method.billing_details;
   if (!name || !phone || !address) return;
+  const stripe = await getStripeClient();
   //@ts-ignore
   await stripe.customers.update(customer, { name, phone, address });
   const { error: updateError } = await supabaseAdmin
@@ -225,6 +228,7 @@ const manageSubscriptionStatusChange = async (
 
   const { id: uuid } = customerData!;
 
+  const stripe = await getStripeClient();
   const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ['default_payment_method']
   });
@@ -751,6 +755,7 @@ const getProductsWithPrices = async () => {
 };
 
 const syncProductsFromStripe = async () => {
+  const stripe = await getStripeClient();
   let products = 0;
   let prices = 0;
   for await (const product of stripe.products.list({ limit: 100 })) {

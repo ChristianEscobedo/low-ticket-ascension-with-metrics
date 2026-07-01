@@ -5,7 +5,7 @@ import { X, CreditCard, Shield, CheckCircle, AlertCircle, Clock, Lock } from 'lu
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useStripeConfig } from '@/hooks/useStripeConfig';
 
-type ColorTheme = 'amber' | 'violet';
+type ColorTheme = 'amber' | 'violet' | 'mothermode';
 
 const COLOR_THEMES: Record<ColorTheme, {
   border: string; shadow: string; timerBg: string;
@@ -42,6 +42,21 @@ const COLOR_THEMES: Record<ColorTheme, {
     btnActiveText: 'text-white',
     innerBtnActive: 'bg-gradient-to-r from-violet-500 via-purple-500 to-violet-500 hover:from-violet-400 hover:via-purple-400 hover:to-violet-400 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]',
     innerBtnActiveText: 'text-white',
+  },
+  // Editorial Warm. Brass (#A88B5C) accent over the Mode (#532B3C) plum chrome.
+  mothermode: {
+    border: 'border-[#A88B5C]/45', shadow: 'shadow-[0_0_40px_rgba(168,139,92,0.18)]',
+    timerBg: 'bg-gradient-to-r from-[#532B3C] to-[#3D1F2D]',
+    priceGradient: 'from-[#C9A86A] to-[#A88B5C]', accent: 'text-[#C9A86A]',
+    checkIcon: 'text-[#C9A86A]', valueText: 'text-[#C9A86A]',
+    formBorder: 'border-[#A88B5C]/25', focusBorder: 'focus:border-[#A88B5C]/55',
+    formBtnGradient: 'from-[#532B3C] to-[#3D1F2D]', formBtnHover: 'hover:from-[#5f3344] hover:to-[#46243a]',
+    stripePrimary: '#A88B5C',
+    confirmBorder: 'border-[#A88B5C]/25', checkbox: 'text-[#A88B5C] focus:ring-[#A88B5C] accent-[#A88B5C]',
+    btnActive: 'bg-gradient-to-r from-[#C9A86A] via-[#A88B5C] to-[#C9A86A] hover:from-[#d4b67d] hover:via-[#b99a6b] hover:to-[#d4b67d] shadow-[0_0_20px_rgba(168,139,92,0.3)] hover:shadow-[0_0_30px_rgba(168,139,92,0.4)]',
+    btnActiveText: 'text-[#1A1816]',
+    innerBtnActive: 'bg-gradient-to-r from-[#C9A86A] via-[#A88B5C] to-[#C9A86A] hover:from-[#d4b67d] hover:via-[#b99a6b] hover:to-[#d4b67d] shadow-[0_0_20px_rgba(168,139,92,0.3)] hover:shadow-[0_0_30px_rgba(168,139,92,0.4)]',
+    innerBtnActiveText: 'text-[#1A1816]',
   },
 };
 
