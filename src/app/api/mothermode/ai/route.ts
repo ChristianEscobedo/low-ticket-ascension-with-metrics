@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import {
   generateContentImage,
+  editContentImage,
   rewriteContentText,
   amplifyContent,
   amplifyParts,
@@ -26,6 +27,8 @@ export const dynamic = 'force-dynamic';
  * Content hub AI backend. Admin-only. The actions the sheet tabs call:
  *   action 'image'   -> generate a post visual with the GPT Image API, then host
  *                       it in Supabase Storage and return its public URL.
+ *   action 'imageEdit' -> edit a seed image (optional reference images) with the
+ *                       image API, then host the result and return its public URL.
  *   action 'rewrite' -> rewrite or A/B-variant a hook, caption, or body, held
  *                       to the MotherMode voice rules, written by Claude Opus or
  *                       GPT-5.5 depending on configuration.
@@ -75,6 +78,50 @@ export async function POST(request: NextRequest) {
     const image = await hostGeneratedImage(result.data);
     return NextResponse.json({ ok: true, image });
   }
+
+  if (action === 'imageEdit') {
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!prompt) {
+      return NextResponse.json(
+        { ok: false, error: 'A prompt is required' },
+        { status: 400 },
+      );
+    }
+    const seed = typeof body.seed === 'string' ? body.seed.trim() : '';
+    if (!seed) {
+      return NextResponse.json(
+        { ok: false, error: 'A seed image is required' },
+        { status: 400 },
+      );
+    }
+    const references = Array.isArray(body.references)
+      ? body.references
+          .filter((s): s is string => typeof s === 'string' && !!s.trim())
+          .map((s) => s.trim())
+          .slice(0, 4)
+      : [];
+    const format = typeof body.format === 'string' ? body.format : undefined;
+    const size = imageSizeForFormat(format);
+    const model = typeof body.model === 'string' ? body.model : undefined;
+    // Softer style suffix so the seed composition leads; brand palette still applies.
+    const fullPrompt = `${prompt}. Keep the seed composition as the base. ${IMAGE_STYLE}`;
+    const result = await editContentImage(
+      fullPrompt,
+      size,
+      seed,
+      references,
+      model,
+    );
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    const image = await hostGeneratedImage(result.data);
+    return NextResponse.json({ ok: true, image });
+  }
+
 
   if (action === 'imagePrompts') {
     const hook = typeof body.hook === 'string' ? body.hook.trim() : '';

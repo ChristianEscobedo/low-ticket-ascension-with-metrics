@@ -38,6 +38,78 @@ export function buildImagePrompt(scene: string, hook: string): string {
   return `Scroll-stopping editorial documentary photograph, engineered to trigger one instant gut reaction. Before a word is read, the viewer should feel this: "${hook}". ${scene}`;
 }
 
+/**
+ * One-tap edit instructions for the Image Studio Edit tab. Each inject is
+ * appended to the freeform prompt so the seed stays the base composition.
+ */
+export interface ImageEditPreset {
+  id: string;
+  label: string;
+  /** Short instruction block appended when the chip is ticked. */
+  inject: string;
+}
+
+/** Max reference images sent with a seed edit (character, logo, product, etc.). */
+export const MAX_EDIT_REFERENCES = 4;
+
+/** Preset prompt injections for seed-based image edits. */
+export const IMAGE_EDIT_PRESETS: ImageEditPreset[] = [
+  {
+    id: 'colors',
+    label: 'Change colors',
+    inject:
+      'Adjust the color palette of the seed image while keeping composition, subjects, and lighting direction. Prefer warm bone, deep aubergine, and aged brass tones unless the prompt specifies otherwise.',
+  },
+  {
+    id: 'character',
+    label: 'Add character',
+    inject:
+      'Using the seed as the base composition, integrate the person or character from the attached reference image(s) naturally into the scene. Match lighting, perspective, scale, and color grade. Keep faces soft or out of frame unless the prompt asks otherwise.',
+  },
+  {
+    id: 'context',
+    label: 'Change context',
+    inject:
+      'Keep the main subject and framing from the seed, but change the narrative context and surrounding story so the image reads as a different moment or situation.',
+  },
+  {
+    id: 'environment',
+    label: 'Change environment',
+    inject:
+      'Keep the primary subject from the seed, but place them in a new environment or setting. Match light direction and photographic style so the composite feels seamless.',
+  },
+  {
+    id: 'text',
+    label: 'Change text',
+    inject:
+      'Edit, replace, or add any on-image text as described in the prompt. Keep typography legible and consistent with an editorial brand look. If no text is requested, leave lettering alone.',
+  },
+  {
+    id: 'lighting',
+    label: 'Adjust lighting',
+    inject:
+      'Restage the lighting of the seed image (time of day, softness, direction, warmth) while preserving composition and subjects.',
+  },
+  {
+    id: 'restyle',
+    label: 'Restyle',
+    inject:
+      'Keep the same composition and subjects as the seed, but restyle the photographic treatment (grain, contrast, palette, lens feel) to match the prompt and brand art direction.',
+  },
+  {
+    id: 'remove',
+    label: 'Remove object',
+    inject:
+      'Remove the object or element described in the prompt from the seed image. Fill the area naturally so the edit is seamless and the rest of the scene is unchanged.',
+  },
+  {
+    id: 'logo',
+    label: 'Add logo',
+    inject:
+      'Incorporate the logo or mark from the attached reference image(s) into the seed scene as described. Place it tastefully, keep edges clean, and do not invent a different logo.',
+  },
+];
+
 export const PLATFORM_LABEL: Record<ContentPlatform, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
@@ -89,3 +161,4 @@ export const TONE_LABEL: Record<ToneRegister, string> = {
   movement: 'The Movement',
   system: 'The System',
 };
+

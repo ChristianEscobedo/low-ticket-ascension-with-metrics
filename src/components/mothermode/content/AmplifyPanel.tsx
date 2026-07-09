@@ -256,6 +256,8 @@ export const AmplifyPanel: React.FC<{
             sophistication,
             source: piece,
             model: cfg.model || undefined,
+            // Amplify still one-shots into the library; Generate reviews first.
+            persist: true,
           }),
         ),
       );

@@ -71,7 +71,21 @@ export const ContentCard: React.FC<{
   onOpen?: () => void;
   /** When set, renders a delete control. Only passed for generated pieces. */
   onDelete?: () => void;
-}> = ({ piece, offerUrl, offerSlug, onOpen, onDelete }) => {
+  /** Multi-select for bulk export. */
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}> = ({
+  piece,
+  offerUrl,
+  offerSlug,
+  onOpen,
+  onDelete,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}) => {
+
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
@@ -159,14 +173,30 @@ export const ContentCard: React.FC<{
 
   return (
     <article
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-ink/10 bg-bone p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-ink/20 hover:shadow-md"
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-bone p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+        selected
+          ? 'border-mode ring-2 ring-mode/30'
+          : 'border-ink/10 hover:border-ink/20'
+      }`}
     >
       <span
         aria-hidden
         className="absolute inset-x-0 top-0 h-1"
         style={{ backgroundColor: PLATFORM_BRAND[piece.platform] }}
       />
+      {selectable && (
+        <label className="absolute right-4 top-4 z-10 flex cursor-pointer items-center gap-1.5 rounded-full border border-ink/15 bg-bone/95 px-2.5 py-1 text-xs text-ink/70 shadow-sm">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.()}
+            className="accent-[var(--mode,#5c3d5e)]"
+          />
+          Select
+        </label>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
+
         <span className="inline-flex items-center gap-1.5 rounded-full bg-mode px-2.5 py-1 font-semibold text-bone">
           <PlatformIcon platform={piece.platform} className="h-3.5 w-3.5" />
           {PLATFORM_LABEL[piece.platform]}

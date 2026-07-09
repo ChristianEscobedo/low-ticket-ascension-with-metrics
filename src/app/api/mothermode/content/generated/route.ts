@@ -33,13 +33,14 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Generated-content backend. Admin-only. Generates an offer-grounded batch of
- * formatted posts/ads (or variations of one post), persists them to Supabase,
- * and lists/deletes them for the content hub. The provider calls live in
- * src/utils/integrations/openai-content.ts.
- *   POST   -> generate + persist a batch, returns the pieces.
- *   GET    -> list every saved generated piece.
+ * Generated-content backend. Admin-only.
+ *   POST action generate (default) -> write a batch, optionally persist.
+ *   POST action save -> persist selected pieces the reviewer accepted.
+ *   GET  -> list every saved generated piece.
  *   DELETE -> remove one piece (?id=) or a whole batch (?batch=).
+ *
+ * The Generate drawer uses generate with persist:false, then save after review.
+ * Amplify full-post runs may still pass persist:true for the old one-shot path.
  */
 const bad = (error: string, status = 400) =>
   NextResponse.json({ ok: false, error }, { status });
@@ -59,14 +60,40 @@ function offerContext(offer: MotherModeOffer): BatchOfferContext {
     tagline: offer.tagline,
     audience: offer.hero?.audience,
     promise: offer.hero?.promise,
+    scene: offer.problem?.scene,
+    problemIntro: offer.problem?.intro,
     problemPoints: offer.problem?.points,
     cost: offer.problem?.cost,
+    mechanismLabel: offer.mechanism?.label,
+    mechanism: offer.mechanism?.paragraphs?.join(' '),
+    mechanismPoints: (offer.mechanism?.points ?? []).map(
+      (p) => `${p.title}: ${p.description}`,
+    ),
     insideOutcomes: (offer.inside?.items ?? [])
-      .map((i) => i.outcome)
+      .map((i) => i.outcome ?? `${i.title}: ${i.description}`)
       .filter((o): o is string => !!o),
+    methodSteps: (offer.method?.steps ?? []).map(
+      (s) => `${s.number}. ${s.title}: ${s.description}`,
+    ),
+    oldWay: offer.oldWay?.items,
+    newWay: offer.newWay?.items,
     priceLabel: `$${Number.isInteger(dollars) ? dollars : dollars.toFixed(2)}`,
     url: `${ROUTES.offerBase}/${offer.slug}`,
   };
+}
+
+/** Validate and normalize pieces the client wants to save. */
+function asPieces(raw: unknown): ContentPiece[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (p): p is ContentPiece =>
+      !!p &&
+      typeof p === 'object' &&
+      typeof (p as ContentPiece).id === 'string' &&
+      typeof (p as ContentPiece).platform === 'string' &&
+      typeof (p as ContentPiece).format === 'string' &&
+      typeof (p as ContentPiece).hook === 'string',
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -80,6 +107,34 @@ export async function POST(request: NextRequest) {
     return bad('invalid JSON body');
   }
 
+  const action = body.action === 'save' ? 'save' : 'generate';
+
+  // --- Save selected pieces after review (no re-generation) ---
+  if (action === 'save') {
+    const pieces = asPieces(body.pieces).map((p) => ({
+      ...p,
+      generated: true as const,
+    }));
+    if (pieces.length === 0) return bad('No pieces to save');
+    const batchId =
+      (typeof body.batchId === 'string' && body.batchId.trim()) || randomUUID();
+    try {
+      await insertGeneratedBatch(pieces, {
+        batchId,
+        offerSlug: str(body.offerSlug) ?? null,
+        sourcePieceId: str(body.sourcePieceId) ?? null,
+        guides: str(body.guides) ?? null,
+        model: str(body.model) ?? null,
+        createdBy: guard.email,
+      });
+    } catch (err) {
+      console.error('[mothermode/content/generated] save failed', err);
+      return bad('Could not save pieces', 500);
+    }
+    return NextResponse.json({ ok: true, pieces, batchId });
+  }
+
+  // --- Generate a batch (optionally persist immediately) ---
   const offer = getOffer(typeof body.offerSlug === 'string' ? body.offerSlug : '');
   if (!offer) return bad('A valid offerSlug is required');
 
@@ -99,6 +154,10 @@ export async function POST(request: NextRequest) {
       ? (body.source as ContentPiece)
       : undefined;
 
+  // Default false so the Generate drawer can review before library insert.
+  // Amplify (and any caller that wants the old path) passes persist: true.
+  const persist = body.persist === true;
+
   const input: BatchInput = {
     mode,
     count: clamp(Number(body.count) || 0, 1, 10),
@@ -115,27 +174,36 @@ export async function POST(request: NextRequest) {
       ? body.sophistication
       : undefined,
     model: str(body.model),
+    style: str(body.style),
   };
 
   const result = await generateContentBatch(input);
   if (!result.ok) return bad(result.error, result.status);
 
   const batchId = randomUUID();
-  try {
-    await insertGeneratedBatch(result.data.pieces, {
-      batchId,
-      offerSlug: offer.slug,
-      sourcePieceId: source?.id ?? null,
-      guides: input.guides ?? null,
-      model: result.data.model,
-      createdBy: guard.email,
-    });
-  } catch (err) {
-    console.error('[mothermode/content/generated] persist failed', err);
-    return bad('Generated, but saving failed', 500);
+  if (persist) {
+    try {
+      await insertGeneratedBatch(result.data.pieces, {
+        batchId,
+        offerSlug: offer.slug,
+        sourcePieceId: source?.id ?? null,
+        guides: input.guides ?? null,
+        model: result.data.model,
+        createdBy: guard.email,
+      });
+    } catch (err) {
+      console.error('[mothermode/content/generated] persist failed', err);
+      return bad('Generated, but saving failed', 500);
+    }
   }
 
-  return NextResponse.json({ ok: true, pieces: result.data.pieces, batchId });
+  return NextResponse.json({
+    ok: true,
+    pieces: result.data.pieces,
+    batchId: persist ? batchId : undefined,
+    model: result.data.model,
+    persisted: persist,
+  });
 }
 
 export async function GET() {

@@ -1,8 +1,9 @@
 /**
  * Browser-side wrappers for the generated-content endpoint
- * (/api/mothermode/content/generated). Generate a batch, list saved pieces, and
- * delete one. Each throws a readable Error on failure so the panel can surface
- * it inline. The route is admin-gated, so these only succeed for admins.
+ * (/api/mothermode/content/generated). Generate a batch (optionally without
+ * saving), save selected pieces after review, list saved pieces, and delete
+ * one. Each throws a readable Error on failure so the panel can surface it
+ * inline. The route is admin-gated, so these only succeed for admins.
  */
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import type {
@@ -31,6 +32,23 @@ export interface GenerateBatchArgs {
   sophistication?: Sophistication;
   /** Optional text model id. Omit/empty for Auto. */
   model?: string;
+  /** Prompt style id from the Generate drawer. Omit/empty for Auto. */
+  style?: string;
+  /**
+   * When true, the server inserts the batch immediately (Amplify full-post path).
+   * When false/omitted, pieces are returned for review and nothing is saved yet.
+   */
+  persist?: boolean;
+}
+
+/** Args for saving a reviewed selection into the library. */
+export interface SaveGeneratedBatchArgs {
+  pieces: ContentPiece[];
+  offerSlug?: string;
+  sourcePieceId?: string;
+  guides?: string;
+  model?: string;
+  batchId?: string;
 }
 
 async function parse(res: Response): Promise<Record<string, unknown>> {
@@ -43,14 +61,35 @@ async function parse(res: Response): Promise<Record<string, unknown>> {
   return json;
 }
 
-/** Generate and persist a batch, returning the new pieces. */
+/**
+ * Generate a batch. By default does NOT persist (review-before-library).
+ * Pass persist: true to keep the Amplify one-shot save behavior.
+ */
 export async function generateBatch(
   args: GenerateBatchArgs,
 ): Promise<ContentPiece[]> {
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(args),
+    body: JSON.stringify({
+      action: 'generate',
+      ...args,
+      // Explicit default: Generate UI reviews first. Amplify passes true.
+      persist: args.persist === true,
+    }),
+  });
+  const json = await parse(res);
+  return Array.isArray(json.pieces) ? (json.pieces as ContentPiece[]) : [];
+}
+
+/** Persist selected pieces after the reviewer accepts them. */
+export async function saveGeneratedBatch(
+  args: SaveGeneratedBatchArgs,
+): Promise<ContentPiece[]> {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'save', ...args }),
   });
   const json = await parse(res);
   return Array.isArray(json.pieces) ? (json.pieces as ContentPiece[]) : [];

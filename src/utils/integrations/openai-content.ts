@@ -35,6 +35,7 @@ import {
   type Perspective,
   type Sophistication,
 } from '@/lib/mothermode/content/amplify';
+import { styleCraftLine } from '@/lib/mothermode/content/promptStyles';
 import { stripDashes } from '@/lib/mothermode/content/compliance';
 import {
   getOpenAiKey,
@@ -145,12 +146,24 @@ async function resolveImageModel(
   return { provider: getImageModel(model)?.provider ?? 'openai', model };
 }
 
-/** The brand voice rules every rewrite must obey. See design-guide.txt. */
+/**
+ * Full MotherMode brand voice for generation. Drawn from the brand system:
+ * honest before flattering, calibrated not extreme, premium not precious,
+ * generational, confident. Signature move: bold claim → calibrate → permission
+ * → next step. See private/brand/mothermode-brand-system.pdf.
+ */
 const VOICE_RULES = [
-  'Never use em dashes or en dashes. Use periods or commas instead.',
-  'Never use these words: mama, thrive, empower, journey, girlboss, hustle, elevate, grind.',
-  'Write time with numerals, e.g. "5 pm", "20 minutes".',
-  'Warm, direct, editorial. No hype and no emojis unless the current text already has them.',
+  'Voice: a brilliant, slightly tired, deeply loving woman texting her smartest friend the truth at 11pm, with calm authority.',
+  'Equation: Truth + Calibration + Permission + Mission. Signature move: bold claim, then immediate calibration, then permission, then a next step.',
+  'Never use em dashes or en dashes. Use periods, commas, and short sentences instead.',
+  'Periods over exclamation points. Sentence fragments are encouraged. Never ALL CAPS for emphasis. No emoji spam.',
+  'Never use these words or their stems: mama, mommy, mompreneur, supermom, thrive, flourish, glow, bloom, journey, glow-up, self-care, me-time, balance, harmony, holistic, mindful, embrace, hustle, grind, girlboss, boss babe, empower, elevate, delight, unlock, leverage, optimize, solutions, innovative, cutting-edge, revolutionary, ecosystem, synergy, amazing, queen, warrior, tribe, village, hot mess, wine mom, crushing it, killing it.',
+  'Never write: "you have got this", "hope you are well", "just a quick note", bath-bomb wellness, vibe/manifest language, or productivity-bro advice.',
+  'Use brand idioms when they fit: the system is broken, refuse to disappear, name what you are carrying, both are true, you are allowed to want this, the work no one sees, run on MotherMode.',
+  'Hard lines: never punch down at partners or other mothers; never weaponize children; never sell from fear; never apologize for ambition; enemy is the system, not people.',
+  'Write time and counts with numerals, e.g. "5 pm", "20 minutes", "40 tabs".',
+  'Conversational and viral, never generic content-mill copy. Specific scenes beat abstract advice. Soft CTAs, not hard sells.',
+  'No hype. Warm without being soft. Sharp without being cruel.',
 ].join(' ');
 
 /** Generate a single post image and return it as a base64 data URL. The model
@@ -167,6 +180,119 @@ export async function generateContentImage(
     ? generateGeminiImage(prompt, size, resolved.model)
     : generateOpenAiImage(prompt, size, resolved.model);
 }
+
+/** A decoded image ready for a provider edit call. */
+export interface ImageInput {
+  mime: string;
+  base64: string;
+  /** Filename hint for multipart uploads. */
+  name: string;
+}
+
+/** Edit a seed image (with optional reference images) and return a base64 data URL. */
+export async function editContentImage(
+  prompt: string,
+  size: ImageSize,
+  seed: string,
+  references: string[] = [],
+  model?: string,
+): Promise<AiResult<string>> {
+  if (!prompt.trim()) return { ok: false, status: 400, error: 'A prompt is required' };
+  if (!seed?.trim()) return { ok: false, status: 400, error: 'A seed image is required' };
+
+  const seedImg = await resolveImageInput(seed, 'seed');
+  if (!seedImg.ok) return seedImg;
+
+  const refs: ImageInput[] = [];
+  for (let i = 0; i < references.length; i++) {
+    const ref = await resolveImageInput(references[i], `ref-${i + 1}`);
+    if (!ref.ok) return ref;
+    refs.push(ref.data);
+  }
+
+  // Prefer an edit-capable model. DALL-E 3 and unknown ids fall back to GPT Image.
+  let resolved = await resolveImageModel(model);
+  const supportsEdit = getImageModel(resolved.model)?.supportsEdit === true;
+  if (!supportsEdit) {
+    resolved = { provider: 'openai', model: DEFAULT_IMAGE_MODEL };
+  }
+
+  return resolved.provider === 'google'
+    ? editGeminiImage(prompt, size, resolved.model, seedImg.data, refs)
+    : editOpenAiImage(prompt, size, resolved.model, seedImg.data, refs);
+}
+
+/** Decode a data-URL or fetch a public http(s) URL into base64 + mime. */
+async function resolveImageInput(
+  src: string,
+  label: string,
+): Promise<AiResult<ImageInput>> {
+  const trimmed = src.trim();
+  if (!trimmed) return { ok: false, status: 400, error: `Missing ${label} image` };
+
+  const dataMatch = trimmed.match(/^data:([^;]+);base64,(.+)$/);
+  if (dataMatch) {
+    const mime = dataMatch[1] || 'image/png';
+    const base64 = dataMatch[2];
+    if (!base64) return { ok: false, status: 400, error: `Invalid ${label} image data` };
+    return {
+      ok: true,
+      data: {
+        mime,
+        base64,
+        name: `${label}.${extForMime(mime)}`,
+      },
+    };
+  }
+
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `${label} must be a data URL or http(s) image URL`,
+    };
+  }
+
+  try {
+    const res = await fetch(trimmed);
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Could not load ${label} image (${res.status})`,
+      };
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    // Cap ~12MB so edit payloads stay within provider limits.
+    if (buf.byteLength > 12 * 1024 * 1024) {
+      return { ok: false, status: 400, error: `${label} image is too large` };
+    }
+    const mime =
+      res.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+    if (!mime.startsWith('image/')) {
+      return { ok: false, status: 400, error: `${label} URL is not an image` };
+    }
+    return {
+      ok: true,
+      data: {
+        mime,
+        base64: buf.toString('base64'),
+        name: `${label}.${extForMime(mime)}`,
+      },
+    };
+  } catch (err) {
+    console.error('resolveImageInput failed', err);
+    return { ok: false, status: 502, error: `Could not load ${label} image` };
+  }
+}
+
+function extForMime(mime: string): string {
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('gif')) return 'gif';
+  return 'png';
+}
+
 
 /** GPT Image render via the OpenAI images API. Model is already resolved. */
 async function generateOpenAiImage(
@@ -247,6 +373,116 @@ async function generateGeminiImage(
     return { ok: false, status: 502, error: 'Could not reach Google' };
   }
 }
+
+/** GPT Image edit via multipart /images/edits. Seed is first; refs follow. */
+async function editOpenAiImage(
+  prompt: string,
+  size: ImageSize,
+  model: string,
+  seed: ImageInput,
+  references: ImageInput[],
+): Promise<AiResult<string>> {
+  const key = await apiKey();
+  if (!key) return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
+  try {
+    const form = new FormData();
+    form.append('model', model);
+    form.append('prompt', prompt);
+    form.append('size', size);
+    form.append('n', '1');
+    // GPT Image accepts multiple images; seed first so it anchors the edit.
+    // Repeat the `image` field (OpenAI multipart convention for multi-image edits).
+    const all = [seed, ...references];
+    for (const img of all) {
+      const bytes = new Uint8Array(Buffer.from(img.base64, 'base64'));
+      form.append('image', new Blob([bytes], { type: img.mime }), img.name);
+    }
+
+    const res = await fetch(`${OPENAI_BASE}/images/edits`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}` },
+      body: form,
+    });
+    const json = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: json?.error?.message || `Image edit failed (${res.status})`,
+      };
+    }
+    const b64 = json?.data?.[0]?.b64_json;
+    if (!b64) return { ok: false, status: 502, error: 'No image was returned' };
+    return { ok: true, data: `data:image/png;base64,${b64}` };
+  } catch (err) {
+    console.error('editOpenAiImage failed', err);
+    return { ok: false, status: 502, error: 'Could not reach OpenAI' };
+  }
+}
+
+/** Gemini multi-image edit: seed + refs as inline parts, then the text prompt. */
+async function editGeminiImage(
+  prompt: string,
+  size: ImageSize,
+  model: string,
+  seed: ImageInput,
+  references: ImageInput[],
+): Promise<AiResult<string>> {
+  const key = await getGoogleKey();
+  if (!key) return { ok: false, status: 501, error: 'GEMINI_API_KEY is not configured' };
+  try {
+    const parts: Array<Record<string, unknown>> = [
+      {
+        inlineData: {
+          mimeType: seed.mime,
+          data: seed.base64,
+        },
+      },
+      ...references.map((r) => ({
+        inlineData: {
+          mimeType: r.mime,
+          data: r.base64,
+        },
+      })),
+      {
+        text: [
+          'Edit the first image (the seed). Any images after it are references to incorporate as described.',
+          prompt,
+        ].join('\n\n'),
+      },
+    ];
+    const res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          responseModalities: ['IMAGE'],
+          imageConfig: { aspectRatio: geminiAspect(size) },
+        },
+      }),
+    });
+    const json = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: json?.error?.message || `Image edit failed (${res.status})`,
+      };
+    }
+    const outParts = json?.candidates?.[0]?.content?.parts ?? [];
+    const inline = outParts.find((p: any) => p?.inlineData?.data)?.inlineData;
+    if (!inline?.data) return { ok: false, status: 502, error: 'No image was returned' };
+    return {
+      ok: true,
+      data: `data:${inline.mimeType || 'image/png'};base64,${inline.data}`,
+    };
+  } catch (err) {
+    console.error('editGeminiImage failed', err);
+    return { ok: false, status: 502, error: 'Could not reach Google' };
+  }
+}
+
 
 /** Rewrite or A/B-variant a single copy field, held to the brand voice. The
  *  provider and model come from textConfig(); response parsing is per provider. */
@@ -380,9 +616,21 @@ export interface BatchOfferContext {
   tagline?: string;
   audience?: string;
   promise?: string;
+  /** Hero / problem scene that makes the pain concrete. */
+  scene?: string;
+  problemIntro?: string;
   problemPoints?: string[];
   cost?: string;
+  /** Why this works when planners and apps fail. */
+  mechanismLabel?: string;
+  mechanism?: string;
+  mechanismPoints?: string[];
+  /** What is inside, as outcome-forward lines. */
   insideOutcomes?: string[];
+  /** Method steps, compressed. */
+  methodSteps?: string[];
+  oldWay?: string[];
+  newWay?: string[];
   priceLabel?: string;
   /** The app-relative URL every CTA in the batch routes to. */
   url: string;
@@ -408,6 +656,8 @@ export interface BatchInput {
   sophistication?: Sophistication;
   /** Optional text model id from the selector. Empty/unknown means Auto. */
   model?: string;
+  /** Prompt style id from the Generate drawer. Empty/auto resolves server-side. */
+  style?: string;
 }
 
 /**
@@ -440,49 +690,104 @@ function buildBatchSystem(input: BatchInput): string {
     `Offer: ${o.name}${o.category ? ` (${o.category})` : ''}.`,
     o.tagline ? `Promise: ${o.tagline}` : '',
     o.priceLabel ? `Price: ${o.priceLabel}.` : '',
+    o.promise ? `Delivery promise: ${o.promise}` : '',
     o.audience ? `Who it is for: ${o.audience}` : '',
+    o.scene ? `Concrete scene from the offer page: ${o.scene}` : '',
+    o.problemIntro ? `Problem frame: ${o.problemIntro}` : '',
     o.problemPoints?.length
       ? `Pains it solves: ${o.problemPoints.join('; ')}.`
       : '',
     o.cost ? `What the problem costs her: ${o.cost}` : '',
+    o.mechanismLabel ? `Mechanism in one line: ${o.mechanismLabel}` : '',
+    o.mechanism ? `Why it works: ${o.mechanism}` : '',
+    o.mechanismPoints?.length
+      ? `Mechanism steps: ${o.mechanismPoints.join('; ')}.`
+      : '',
     o.insideOutcomes?.length
       ? `Outcomes she gets: ${o.insideOutcomes.join('; ')}.`
       : '',
+    o.methodSteps?.length
+      ? `How it works: ${o.methodSteps.join(' → ')}.`
+      : '',
+    o.oldWay?.length ? `The old way (contrast against): ${o.oldWay.join('; ')}.` : '',
+    o.newWay?.length ? `The MotherMode way: ${o.newWay.join('; ')}.` : '',
   ]
     .filter(Boolean)
     .join(' ');
   return [
-    'You are the MotherMode brand copywriter. MotherMode helps mothers reclaim time and offload the mental load.',
+    'You are the MotherMode brand copywriter writing sophisticated, modern, viral, ULTRA high-value content. Not generic social copy. Not thin captions. Conversational long-form that teaches, names, and reframes before it sells.',
+    'MotherMode is Mental Load Infrastructure. Not a productivity app. Not a wellness app. The operating system for modern motherhood.',
     VOICE_RULES,
-    'Write only about this offer, and keep every claim consistent with these facts:',
+    'Write only about this offer, and keep every claim consistent with these facts from the offer page:',
     facts,
+    'Quality bar (non-negotiable):',
+    '1. VALUE FIRST. Lead with insight, scene, reframe, or method. The offer is the soft last step, never the whole post.',
+    '2. ULTRA LONG-FORM for the format. Fill the full length ranges below. Short, thin, or listicle-lite posts fail.',
+    '3. SPECIFIC. Concrete times, objects, dialogues, and body-feel. No abstract pep talks.',
+    '4. STRUCTURE. Scene or hook → name the system → teach or reframe with real substance → permission → soft CTA.',
+    '5. HOOK VARIANTS. Every piece needs multiple distinct openers to A/B, not rewords of one line.',
+    '6. IMAGE PROMPT when the format is visual. A full photographic scene brief tied to the primary hook.',
+    'Every piece must feel like it could only be MotherMode. Never content-mill filler.',
     'Return ONLY a JSON object. No prose, no code fences.',
   ].join(' ');
 }
 
+/** Formats that need a full image generation prompt on the piece. */
+function needsImagePrompt(format: ContentFormat): boolean {
+  return (
+    format === 'feed' ||
+    format === 'carousel' ||
+    format === 'story' ||
+    format === 'reel' ||
+    format === 'video' ||
+    format === 'pin' ||
+    format === 'idea' ||
+    format === 'article'
+  );
+}
+
 /** The per-format field guide so the model fills the right copy fields. */
 function formatFieldGuide(format: ContentFormat, kind: ContentKind): string {
+  const shortFormScript =
+    'script (7-12 beats, each {at, onScreen, voiceover, visual}), caption (2-4 sentences of value, not a one-liner). ' +
+    'Script craft: Hook in 0-3s that works with sound off via onScreen. ' +
+    'Then relate with concrete open loops, reframe the system, teach one real micro-method or insight with substance, proof or what helped, soft bio CTA. ' +
+    'Voiceover is spoken and conversational, long enough to feel like a real talk-to-camera piece (roughly 45-90 seconds when read aloud), not caption-speak. ' +
+    'Visual notes are real light, unpolished, object-led. Soft bio CTA only on the last beat.';
   const base: Partial<Record<ContentFormat, string>> = {
-    feed: 'body (2-5 short paragraphs as an array of strings)',
-    article: 'body (4-8 paragraphs as an array of strings)',
-    blog: 'body (6-12 paragraphs), seo {metaTitle, metaDescription, keywords[]}',
+    feed:
+      'body (6-12 substantial paragraphs as an array of strings). Ultra long-form feed post: scene, name the load, reframe, teach, permission, soft CTA. Each paragraph 1-3 sentences. Dense value, not fluff.',
+    article:
+      'body (10-18 substantial paragraphs as an array of strings). Magazine-length narrative with clear arc and takeaways.',
+    blog:
+      'body (12-20 substantial paragraphs), seo {metaTitle, metaDescription, keywords[]}. Deep, scannable, value-forward long-form with subhead-worthy turns inside paragraphs.',
     answer:
-      'body (2-4 short paragraphs), seo {metaTitle, metaDescription, keywords[], questions:[{q,a}]}',
-    carousel: 'slides (4-8 items, each {text, sub, visual}), caption',
-    story: 'slides (3-6 frames, each {text, sub, visual}), caption',
-    idea: 'slides (4-8 pages, each {text, sub, visual}), caption',
-    reel: 'script (4-7 beats, each {at, onScreen, voiceover, visual}), caption',
-    video: 'script (5-8 beats, each {at, onScreen, voiceover, visual}), caption',
-    thread: 'tweets (4-8 posts as an array of strings)',
-    email: 'email {subject, preheader}, body (3-6 paragraphs)',
-    pin: 'caption, visual',
+      'body (5-10 substantial paragraphs), seo {metaTitle, metaDescription, keywords[], questions:[{q,a}] with 4-8 pairs}. Direct, citable, still human and specific.',
+    carousel:
+      'slides (8-12 items, each {text, sub, visual}), caption (long-form caption, 4-8 short paragraphs as one string with line breaks). Slide 1 stops the scroll; middle slides teach; final slide permission + soft CTA.',
+    story:
+      'slides (5-8 frames, each {text, sub, visual}), caption. Each frame advances a mini-arc; not decorative.',
+    idea:
+      'slides (8-12 pages, each {text, sub, visual}), caption. Idea-pin depth: teach a full micro-system across pages.',
+    reel: shortFormScript,
+    video: shortFormScript,
+    thread:
+      'tweets (8-15 posts as an array of strings). Numbered thread energy without sounding corporate. Each tweet advances the argument; last is soft CTA.',
+    email:
+      'email {subject, preheader}, body (8-14 substantial paragraphs). Confidante letter: story, insight, method, permission, one CTA.',
+    pin:
+      'caption (long keyword-rich but human caption, multiple short paragraphs), visual. Teach in the pin copy, not just label the image.',
   };
-  const fields = base[format] ?? 'body (array of short paragraphs)';
+  const fields = base[format] ?? 'body (array of substantial paragraphs)';
   const ad =
     kind === 'ad'
-      ? ' Also fill ad {primaryText, headline, description, button}.'
+      ? ' Also fill ad {primaryText (long primary text, multiple short paragraphs), headline, description, button}.'
       : '';
-  return `${fields}.${ad}`;
+  const image =
+    needsImagePrompt(format)
+      ? ' Also fill media: { type: "image" or "video", alt: string, prompt: string } where prompt is a full photographic scene brief (setting, objects, light, mood, lens feel) engineered so the viewer feels the primary hook before reading. No on-image text, no logos, faces soft or out of frame unless essential. Object-led, lived-in, editorial.'
+      : '';
+  return `${fields}.${ad}${image}`;
 }
 
 /** A compact text summary of a source piece for variations mode. */
@@ -516,15 +821,43 @@ function buildBatchUser(input: BatchInput, count: number): string {
     input.source && input.source.platform !== input.platform
       ? `Adapt this post from ${input.source.platform} to ${input.platform}. Keep the core message and the MotherMode voice, but reshape the style, cultural conventions, and structure to be native to the target. ${PLATFORM_NORMS[input.platform]} Remap the format to ${input.format}.`
       : '';
+  const platformNorm = PLATFORM_NORMS[input.platform] ?? '';
+  const styleLine = styleCraftLine(input.style, input.platform, input.format);
   const persp = perspectiveLine(input.perspective);
   const soph = sophisticationLine(input.sophistication);
+  const antiGeneric =
+    'Anti-generic bar: no "you have got this", no bath bombs, no planner pep talks, no corporate filler. Open on a felt moment. Name the system. Teach something real. Soft CTA only at the end.';
+  const valueForward =
+    'Value-forward mandate: at least 70% of each piece must be insight, scene, reframe, or usable method. Product mention is brief and earned. If a reader never clicked the CTA, she should still feel smarter and more seen.';
+  const lengthBar =
+    'Length mandate: hit the UPPER half of every length range in the format guide. Thin posts are failures. Prefer one deep piece over a shallow one.';
   const schema = [
     'Respond with this exact JSON shape:',
-    '{ "pieces": [ { "title": string, "theme": string, "hook": string, "hooks": [string, string, string], "cta": string, "hashtags": string[], "visual": string } ] }',
+    '{ "pieces": [ { "title": string, "theme": string, "hook": string, "hooks": [string, string, string, string, string], "cta": string, "hashtags": string[], "visual": string, "media": { "type": "image"|"video", "alt": string, "prompt": string } } ] }',
     `Each piece is for ${fmt}. Fill these format-specific fields: ${formatFieldGuide(input.format, input.kind)}`,
-    'Omit fields that do not apply. "title" is a short internal label. "hooks" are 3 openers to A/B, the first equal to "hook". "cta" moves her to the next step. Do not put any URL in the text; the link is added automatically.',
+    'Omit fields that do not apply.',
+    '"title" is a short internal label.',
+    '"hooks" MUST be exactly 5 distinct openers to A/B. Different angles, not rewords. The first equals "hook".',
+    '"cta" moves her to the next step without stuffing a URL; the link is added automatically.',
+    needsImagePrompt(input.format)
+      ? '"media.prompt" is required: a complete image-generation scene brief matched to the primary hook (and usable with hook variants). "visual" is a short creative note; "media.prompt" is the full prompt.'
+      : 'Skip media when the format is not visual.',
   ].join('\n');
-  return [intent, `Each post is ${fmt}.`, theme, adapt, persp, soph, guides, source, schema]
+  return [
+    intent,
+    `Each post is ${fmt}. ${platformNorm}`,
+    theme,
+    styleLine,
+    adapt,
+    persp,
+    soph,
+    valueForward,
+    lengthBar,
+    antiGeneric,
+    guides,
+    source,
+    schema,
+  ]
     .filter(Boolean)
     .join('\n\n');
 }
@@ -587,7 +920,8 @@ async function anthropicJson(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 8000,
+        // Long-form multi-piece batches need headroom (hooks + bodies + scripts + image prompts).
+        max_tokens: 16000,
         system,
         messages: [{ role: 'user', content: user }],
       }),
@@ -651,7 +985,7 @@ const toList = (v: unknown): string[] | undefined =>
     ? v.map(toText).filter((x): x is string => !!x)
     : undefined;
 
-/** Ensure the primary hook leads and the variant list is unique, max 3. */
+/** Ensure the primary hook leads and the variant list is unique, max 5. */
 function dedupeHooks(primary: string, hooks: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -662,7 +996,22 @@ function dedupeHooks(primary: string, hooks: string[]): string[] {
       out.push(h);
     }
   }
-  return out.slice(0, 3);
+  return out.slice(0, 5);
+}
+
+/** Aspect class hint for generated media by format. */
+function aspectForFormat(format: ContentFormat): string {
+  if (
+    format === 'story' ||
+    format === 'reel' ||
+    format === 'video' ||
+    format === 'idea'
+  )
+    return 'aspect-[9/16]';
+  if (format === 'pin') return 'aspect-[2/3]';
+  if (format === 'article' || format === 'blog' || format === 'answer')
+    return 'aspect-[16/9]';
+  return 'aspect-square';
 }
 
 function normalizeSlides(raw: unknown): ContentSlide[] | undefined {
@@ -731,7 +1080,8 @@ function normalizePiece(
     generated: true,
   };
 
-  if (hooks?.length) piece.hooks = dedupeHooks(hook, hooks);
+  // Always store hook variants (at least the primary) so the review UI can A/B.
+  piece.hooks = dedupeHooks(hook, hooks ?? []);
   const body = toList(raw.body);
   if (body?.length) piece.body = body;
   const caption = toText(raw.caption);
@@ -746,6 +1096,32 @@ function normalizePiece(
   if (slides?.length) piece.slides = slides;
   const script = normalizeScript(raw.script);
   if (script?.length) piece.script = script;
+
+  // Image / video generation brief for visual formats.
+  const mediaRaw =
+    raw.media && typeof raw.media === 'object' ? (raw.media as any) : null;
+  const mediaPrompt =
+    toText(mediaRaw?.prompt) ??
+    toText(raw.imagePrompt) ??
+    toText(raw.image_prompt);
+  if (mediaPrompt || needsImagePrompt(input.format)) {
+    const isVideo = input.format === 'video' || input.format === 'reel';
+    const type =
+      mediaRaw?.type === 'video' || mediaRaw?.type === 'image'
+        ? (mediaRaw.type as 'image' | 'video')
+        : isVideo
+          ? 'video'
+          : 'image';
+    piece.media = {
+      type,
+      alt:
+        toText(mediaRaw?.alt) ??
+        visual ??
+        `${piece.title} visual`,
+      aspect: aspectForFormat(input.format),
+      prompt: mediaPrompt ?? visual,
+    };
+  }
 
   if (raw.email && typeof raw.email === 'object') {
     const subject = toText(raw.email.subject);

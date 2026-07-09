@@ -27,7 +27,10 @@ export interface ImageModelOption {
   label: string;
   provider: ImageProvider;
   note?: string;
+  /** When true, the model can take a seed image (and optional refs) for edits. */
+  supportsEdit?: boolean;
 }
+
 
 /** Frontier copywriters offered for text generation and rewrites. */
 export const TEXT_MODELS: TextModelOption[] = [
@@ -42,15 +45,28 @@ export const TEXT_MODELS: TextModelOption[] = [
 
 /** Image models offered for post visuals. */
 export const IMAGE_MODELS: ImageModelOption[] = [
-  { id: 'gpt-image-2', label: 'GPT Image 2', provider: 'openai', note: 'Best quality' },
+  {
+    id: 'gpt-image-2',
+    label: 'GPT Image 2',
+    provider: 'openai',
+    note: 'Best quality',
+    supportsEdit: true,
+  },
   {
     id: 'gemini-2.5-flash-image',
     label: 'Nano Banana',
     provider: 'google',
     note: 'Google, fast',
+    supportsEdit: true,
   },
   { id: 'dall-e-3', label: 'DALL-E 3', provider: 'openai', note: 'Faster' },
 ];
+
+/** Image models that accept a seed (and optional reference images) for edits. */
+export const EDIT_IMAGE_MODELS: ImageModelOption[] = IMAGE_MODELS.filter(
+  (m) => m.supportsEdit,
+);
+
 
 /** The value used in the selectors for "let the server decide". */
 export const AUTO_MODEL = '';

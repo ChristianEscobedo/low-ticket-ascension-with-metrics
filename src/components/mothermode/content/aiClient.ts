@@ -58,6 +58,24 @@ export async function aiGenerateImage(
 }
 
 /**
+ * Edit a seed image (optionally with reference images for character/logo/etc.)
+ * and return a hosted public URL. Seed and references may be data URLs or
+ * public http(s) URLs; the server resolves them.
+ */
+export async function aiEditImage(args: {
+  prompt: string;
+  seed: string;
+  references?: string[];
+  format?: string;
+  model?: string;
+}): Promise<string> {
+  const json = await postAi({ action: 'imageEdit', ...args });
+  if (typeof json.image !== 'string') throw new Error('No image was returned');
+  return json.image;
+}
+
+
+/**
  * Stage one of the image pipeline: turn a version's hook (with optional
  * theme/format context and guides) into N distinct photographic scene prompts.
  * Each returned scene is fed to aiGenerateImage to render and host an image.

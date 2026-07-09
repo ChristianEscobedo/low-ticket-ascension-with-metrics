@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Sparkles, X as XIcon } from 'lucide-react';
+import { Download, Search, Sparkles, X as XIcon } from 'lucide-react';
 import { ContentCard } from './ContentCard';
 import { ContentSheet } from './ContentSheet';
 import { BatchPanel } from './BatchPanel';
+import { ExportPanel } from './ExportPanel';
 import { listGenerated, deleteGenerated } from './generatedClient';
 import { loadReviews } from './reviewClient';
+
 import { DEFAULT_OFFER_SLUG } from '@/lib/mothermode/offers';
 import { PlatformIcon, PLATFORM_BRAND } from './PlatformIcon';
 import {
@@ -138,6 +140,10 @@ export const ContentHub: React.FC<{
   const [openPiece, setOpenPiece] = useState<ContentPiece | null>(null);
   const [generated, setGenerated] = useState<ContentPiece[]>([]);
   const [showPanel, setShowPanel] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
 
   // Load the saved AI-generated pieces once, newest first, and merge them ahead
   // of the static catalog so they surface at the top of each channel.
@@ -254,14 +260,24 @@ export const ContentHub: React.FC<{
             <p className="text-xs uppercase tracking-[0.2em] text-brass">
               Internal content hub
             </p>
-            <button
-              onClick={() => setShowPanel(true)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-mode px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-mode-deep"
-            >
-              <Sparkles className="h-4 w-4" />
-              Generate
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                onClick={() => setShowExport(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/80 transition-colors hover:border-ink/30"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+              <button
+                onClick={() => setShowPanel(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-mode px-4 py-2 text-sm font-semibold text-bone transition-colors hover:bg-mode-deep"
+              >
+                <Sparkles className="h-4 w-4" />
+                Generate
+              </button>
+            </div>
           </div>
+
           <h1 className="mt-3 font-display text-4xl leading-tight text-ink">
             {offerName ? `${offerName} content` : 'MotherMode marketing copy'}
           </h1>
@@ -415,20 +431,37 @@ export const ContentHub: React.FC<{
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-between">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-ink/45">
             {filtered.length} {filtered.length === 1 ? 'piece' : 'pieces'}
+            {selectMode && selectedIds.length > 0
+              ? ` · ${selectedIds.length} selected`
+              : ''}
           </p>
-          {hasFilters && (
-            <button
-              onClick={clearAll}
-              className="inline-flex items-center gap-1 text-sm text-ink/55 hover:text-ink"
-            >
-              <XIcon className="h-3.5 w-3.5" />
-              Clear filters
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {selectMode && (
+              <button
+                onClick={() => {
+                  setSelectMode(false);
+                  setSelectedIds([]);
+                }}
+                className="text-sm text-ink/55 hover:text-ink"
+              >
+                Exit select
+              </button>
+            )}
+            {hasFilters && (
+              <button
+                onClick={clearAll}
+                className="inline-flex items-center gap-1 text-sm text-ink/55 hover:text-ink"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
+
 
         {groups.length === 0 ? (
           <div className="mt-12 rounded-2xl border border-dashed border-ink/15 bg-white/30 px-6 py-16 text-center">
@@ -467,8 +500,18 @@ export const ContentHub: React.FC<{
                     onDelete={
                       piece.generated ? () => onDelete(piece.id) : undefined
                     }
+                    selectable={selectMode || showExport}
+                    selected={selectedIds.includes(piece.id)}
+                    onToggleSelect={() =>
+                      setSelectedIds((ids) =>
+                        ids.includes(piece.id)
+                          ? ids.filter((x) => x !== piece.id)
+                          : [...ids, piece.id],
+                      )
+                    }
                   />
                 ))}
+
               </div>
             </section>
           ))
@@ -493,7 +536,20 @@ export const ContentHub: React.FC<{
             onGenerated={onGenerated}
           />
         )}
+
+        {showExport && (
+          <ExportPanel
+            allPieces={basePieces}
+            currentPieces={filtered}
+            selectedIds={selectedIds}
+            offerSlug={reviewSlug}
+            offerUrl={offerUrl}
+            onClose={() => setShowExport(false)}
+            onRequestSelectMode={() => setSelectMode(true)}
+          />
+        )}
       </div>
     </main>
   );
 };
+

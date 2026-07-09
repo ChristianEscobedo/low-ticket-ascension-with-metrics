@@ -31,7 +31,7 @@ export const brainDump: MotherModeOffer = {
   hero: {
     eyebrow: 'For Mothers \u00b7 The Mental Load Series',
     headline: 'Go to bed with',
-    headlineEmphasis: 'a quiet head',
+    headlineEmphasis: 'a calm mind',
     headlineSuffix: 'and wake up without the list already running.',
     subheadline:
       'No more lying awake running tomorrow. No more being the only one who knows where everything is. You answer a few quick questions, the AI builds your personalized system in minutes, and the people around you start carrying their share. Not another app to keep up with. Done before the coffee goes cold.',
@@ -45,16 +45,16 @@ export const brainDump: MotherModeOffer = {
     intro:
       'Not because you chose to be. Because the list lives in one place, and that place is your head. It does not switch off when you do.',
     scene:
-      'It is 11pm. The house is finally quiet, and your mind picks that exact moment to read the list back to you. The permission slip. The shoes that stopped fitting. The text you still have not answered. You are not awake because you are anxious. You are awake because you are the only backup copy.',
+      "It is 11pm. The house is finally quiet, and your mind picks that exact moment to read the list back to you. The permission slip. The shoes that don't fit anymore. The text you still have not answered. You are not awake because you are anxious. You are awake because you are the only backup copy.",
     points: [
-      'You lie awake running tomorrow. The form, the milk, the shoes that stopped fitting.',
+      "You lie awake running tomorrow. The form, the milk, the shoes that don't fit anymore.",
       'You open your phone to do one thing and forget it before the screen unlocks.',
       'You carry the dentist, the birthday gift, the prescription refill, the field-trip cash.',
       'You snap at the people you love, then carry the guilt of that too.',
       'You have tried the notes app, the planner, the sticky notes. The list still lives in your head.',
     ],
     cost:
-      'This is the part no one names. The load is not just tiring, it is expensive. It takes the 11pm hour, the patience you meant to keep, the version of you who used to have a thought of her own. You are allowed to want that back.',
+      "This is the part no one names. The load is not just tiring, it is expensive. It takes the 11pm hour, the patience you meant to keep, the version of you who used to have a thought of her own. It's ok to want that back.",
   },
 
   origin: {
@@ -82,8 +82,8 @@ export const brainDump: MotherModeOffer = {
     label: 'You cannot hand off what no one else can see.',
     paragraphs: [
       'A list that lives in your head has exactly one feature: only you can read it. That is the whole trap. It cannot be shared, split, or handed off, so it defaults to you, every time, by design. You are not failing the system. The system keeps no other copy.',
-      'The fix is not remembering harder. It is changing where the list lives. The moment it leaves your head and lands on one page, it becomes something other people can see, question, and carry. Visible work can be divided. Invisible work cannot.',
-      'That is the whole mechanism. Get it out so it is shareable. Decide each item once so it stops charging you nightly. Move what was never only yours. Then keep it light on 10 minutes a week.',
+      'The fix is not remembering better. It is changing where the list lives. The moment it leaves your head and lands on one page, it becomes something other people can see, question, and carry. Visible work can be divided. Invisible work cannot.',
+      'That is the whole mechanism. Get it out so it is shareable. Decide each item once. Move what should have been shared from the beggining. Then easily maintain it in less than 10 minutes a week.',
     ],
     points: [
       { title: 'Externalize', description: 'Out of your head, onto one page. The list stops being yours alone the second someone else can read it.' },
@@ -155,7 +155,7 @@ export const brainDump: MotherModeOffer = {
       'That weekend did not make me a better mother. I already was one. It made me a less buried one. I got the 11pm hour back. I got a thought of my own back. That is the only reason this exists, and the reason I built it into a tool that does the heavy part for you, so you do not have to spend a weekend figuring it out the way I did.',
       'I am not promising you a different life. I am promising you the same life with your head above the water line. You have carried the list long enough. Answer a few questions, let the AI do the heavy part, and put some of it down today.',
     ],
-    signoff: 'With you in it,',
+    signoff: 'With Love,',
     ps:
       'P.S. If you do one thing, do the first brain dump. If your head does not feel lighter within 14 days, email us and we refund every cent. The risk is mine. The quiet is yours.',
   },
@@ -176,8 +176,8 @@ export const brainDump: MotherModeOffer = {
   },
 
   proof: [
-    { name: 'Renee', role: 'mother of two \u00b7 individual result', quote: 'I did the dump on a Sunday morning. For the first night in a long time my brain was quiet at bedtime. The list was on the page, not in me.', real: false },
-    { name: 'Priya', role: 'mother of three', quote: 'The delegate scripts gave me the words. I had been carrying things for years because asking felt harder than doing. It was not, once someone wrote the sentence for me.', real: false },
+    { name: 'Renee', role: 'mother of two \u00b7 individual result', quote: 'I did the dump on a Sunday morning. For the first night in a long time my brain was quiet at bedtime. The list was finally out of my brain.', real: false },
+    { name: 'Priya', role: 'mother of three', quote: 'The delegate scripts helped alot. Asking always felt harderso I never asked, just did.', real: false },
     { name: 'Dana', role: 'mother of one', quote: 'I have bought every planner. This is the first one that asked me to take things off the list instead of just writing them down prettier.', real: false },
   ],
 
@@ -202,6 +202,6 @@ export const brainDump: MotherModeOffer = {
 
   finalCta: {
     heading: 'Put some of it down.',
-    body: 'You have carried the list long enough. Answer a few questions, let the AI lift the load off your head, and go to bed with it quiet. Start today.',
+    body: 'You have carried the list long enough. Answer a few questions, lighten the load and calm the chaos, and go to bed with it quiet. Start today.',
   },
 };

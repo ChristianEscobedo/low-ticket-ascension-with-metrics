@@ -61,6 +61,12 @@ export function getReview(offerSlug: string, id: string): PieceReview {
   return cache.get(offerSlug)?.[id] ?? {};
 }
 
+/** Snapshot of every cached review for an offer (for bulk export). */
+export function getAllReviews(offerSlug: string): Record<string, PieceReview> {
+  return { ...(cache.get(offerSlug) ?? {}) };
+}
+
+
 /** Persist a piece's merged review, upserting or deleting when it empties out.
  *  Best-effort: failures are logged, never thrown, mirroring the old store. */
 function persist(offerSlug: string, id: string, next: PieceReview): void {
