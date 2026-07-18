@@ -29,10 +29,16 @@ export interface AiContext {
 async function postAi(
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  // Drop empty Auto model so the server uses its key-aware default path.
+  // Sending model:"" is treated as a string and can confuse override logic.
+  const body: Record<string, unknown> = { ...payload };
+  if (typeof body.model === 'string' && !body.model.trim()) {
+    delete body.model;
+  }
   const res = await fetch('/api/mothermode/ai', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok || json.ok !== true) {
@@ -42,6 +48,7 @@ async function postAi(
   }
   return json;
 }
+
 
 /** Generate a post image, returning a hosted public URL (the server uploads the
  *  render to Storage so it is renderable and GoHighLevel-postable; it falls back

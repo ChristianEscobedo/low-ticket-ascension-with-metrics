@@ -25,8 +25,14 @@ import type { ContentPiece } from '@/lib/mothermode/content/types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/** Non-empty model id, or undefined for Auto (server picks a key-aware default). */
+function modelId(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
 /**
  * Content hub AI backend. Admin-only. The actions the sheet tabs call:
+
  *   action 'image'   -> generate a post visual with the GPT Image API, then host
  *                       it in Supabase Storage and return its public URL.
  *   action 'imageEdit' -> edit a seed image (optional reference images) with the
@@ -69,8 +75,9 @@ export async function POST(request: NextRequest) {
     }
     const format = typeof body.format === 'string' ? body.format : undefined;
     const size = imageSizeForFormat(format);
-    const model = typeof body.model === 'string' ? body.model : undefined;
+    const model = modelId(body.model);
     // Append the shared art direction so generations stay on-brand.
+
     const fullPrompt = `${prompt}. ${IMAGE_STYLE}`;
     const result = await generateContentImage(fullPrompt, size, model);
     if (!result.ok) {
@@ -107,8 +114,9 @@ export async function POST(request: NextRequest) {
       : [];
     const format = typeof body.format === 'string' ? body.format : undefined;
     const size = imageSizeForFormat(format);
-    const model = typeof body.model === 'string' ? body.model : undefined;
+    const model = modelId(body.model);
     // Softer style suffix so the seed composition leads; brand palette still applies.
+
     const fullPrompt = `${prompt}. Keep the seed composition as the base. ${IMAGE_STYLE}`;
     const result = await editContentImage(
       fullPrompt,
@@ -157,7 +165,8 @@ export async function POST(request: NextRequest) {
             format: str(ctx.format),
           }
         : undefined,
-      model: str(body.model),
+      model: modelId(body.model),
+
     });
     if (!result.ok) {
       return NextResponse.json(
@@ -194,9 +203,10 @@ export async function POST(request: NextRequest) {
             format: str(ctx.format),
           }
         : undefined,
-      model: str(body.model),
+      model: modelId(body.model),
     };
     const result = await rewriteContentText(input);
+
     if (!result.ok) {
       return NextResponse.json(
         { ok: false, error: result.error },
@@ -253,7 +263,7 @@ export async function POST(request: NextRequest) {
             format: str(ctx.format),
           }
         : undefined,
-      model: str(body.model),
+      model: modelId(body.model),
     });
     if (!result.ok) {
       return NextResponse.json(
@@ -262,6 +272,7 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json({ ok: true, parts: result.data.parts });
+
   }
 
   if (action === 'amplify') {
@@ -305,9 +316,10 @@ export async function POST(request: NextRequest) {
             format: str(ctx.format),
           }
         : undefined,
-      model: str(body.model),
+      model: modelId(body.model),
     };
     const result = await amplifyContent(input);
+
     if (!result.ok) {
       return NextResponse.json(
         { ok: false, error: result.error },
@@ -355,8 +367,9 @@ export async function POST(request: NextRequest) {
       },
       durationSec,
       guides: str(body.guides),
-      model: str(body.model),
+      model: modelId(body.model),
     });
+
     if (!result.ok) {
       return NextResponse.json(
         { ok: false, error: result.error },

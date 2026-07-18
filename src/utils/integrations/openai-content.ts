@@ -101,50 +101,91 @@ async function anthropicKey(): Promise<string | null> {
 }
 
 /**
- * The text provider and model that write the copy. Defaults to Claude Opus when
- * its key is present, otherwise OpenAI. Provider and model can be overridden
- * in-app (integrations) or via MOTHERMODE_AI_TEXT_PROVIDER / _TEXT_MODEL.
+ * Pick a text provider that actually has a key. Prefer Anthropic when both are
+ * present (matches the historical default), otherwise OpenAI. Never return a
+ * provider whose key is missing — that is the main Auto-mode failure mode when
+ * an integration override points at Anthropic without a key.
+ */
+async function availableTextProvider(
+  preferred?: string | null,
+): Promise<TextProvider> {
+  const [oa, an] = await Promise.all([apiKey(), anthropicKey()]);
+  const pref = preferred?.toLowerCase();
+  if (pref === 'anthropic' && an) return 'anthropic';
+  if (pref === 'openai' && oa) return 'openai';
+  if (an) return 'anthropic';
+  return 'openai';
+}
+
+/**
+ * The text provider and model that write the copy when the selector is Auto.
+ * Uses in-app / env overrides only when they resolve to a known catalog model
+ * (or a provider that has a key). Anything unknown falls back to the frontier
+ * default for the available provider so Auto never hard-fails.
  */
 async function textConfig(): Promise<{ provider: TextProvider; model: string }> {
-  const override = (await getTextProviderOverride())?.toLowerCase();
-  const provider: TextProvider =
-    override === 'openai' || override === 'anthropic'
-      ? override
-      : (await anthropicKey())
-        ? 'anthropic'
-        : 'openai';
+  const overrideProvider = await getTextProviderOverride();
+  const overrideModel = await getTextModelOverride();
+
+  // A known catalog model in the override wins and carries its provider — but
+  // only if that provider has a key. Otherwise keep walking.
+  const overridePick = getTextModel(overrideModel);
+  if (overridePick) {
+    const key =
+      overridePick.provider === 'anthropic'
+        ? await anthropicKey()
+        : await apiKey();
+    if (key) return { provider: overridePick.provider, model: overridePick.id };
+  }
+
+  const provider = await availableTextProvider(overrideProvider);
   const model =
-    (await getTextModelOverride()) ||
-    (provider === 'anthropic'
+    provider === 'anthropic'
       ? DEFAULT_ANTHROPIC_TEXT_MODEL
-      : DEFAULT_OPENAI_TEXT_MODEL);
+      : DEFAULT_OPENAI_TEXT_MODEL;
   return { provider, model };
 }
 
 /**
  * The text provider and model for one run. A valid requested model (from the
- * selector catalog) wins and carries its own provider. Anything else, including
- * an empty "Auto" selection, falls back to the configured textConfig().
+ * selector catalog) wins and carries its own provider when its key is present.
+ * Empty/"Auto"/unknown selections fall back to textConfig(). If the requested
+ * model’s provider has no key, fall back rather than erroring.
  */
 async function resolveTextModel(requested?: string): Promise<{
   provider: TextProvider;
   model: string;
 }> {
-  const picked = getTextModel(requested);
-  if (picked) return { provider: picked.provider, model: picked.id };
+  const picked = getTextModel(requested?.trim() || undefined);
+  if (picked) {
+    const key =
+      picked.provider === 'anthropic' ? await anthropicKey() : await apiKey();
+    if (key) return { provider: picked.provider, model: picked.id };
+  }
   return textConfig();
 }
 
 /** The image model and provider for one run: a known requested model wins and
- *  carries its own provider, else the configured default (assumed OpenAI). */
+ *  carries its own provider, else a known override, else the OpenAI default. */
 async function resolveImageModel(
   requested?: string,
 ): Promise<{ provider: ImageProvider; model: string }> {
-  const model = isImageModel(requested)
-    ? requested
-    : (await getImageModelOverride()) || DEFAULT_IMAGE_MODEL;
-  return { provider: getImageModel(model)?.provider ?? 'openai', model };
+  if (isImageModel(requested)) {
+    return {
+      provider: getImageModel(requested)!.provider,
+      model: requested,
+    };
+  }
+  const override = await getImageModelOverride();
+  if (isImageModel(override)) {
+    return {
+      provider: getImageModel(override)!.provider,
+      model: override,
+    };
+  }
+  return { provider: 'openai', model: DEFAULT_IMAGE_MODEL };
 }
+
 
 /**
  * Full MotherMode brand voice for generation. Drawn from the brand system:
