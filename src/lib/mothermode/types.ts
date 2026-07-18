@@ -16,7 +16,11 @@ export interface InsideItem {
   outcome?: string;
   /** Optional thumbnail. Path under /public, e.g. /mothermode/brain-dump/template.png */
   image?: string;
+  /** Stable key matching a DeliverableDoc in src/lib/mothermode/deliverables.
+   *  When set, this item links straight to /mothermode/resource/[slug]/[resourceKey]. */
+  resourceKey?: string;
 }
+
 
 /** A step in the "how it works" method. */
 export interface MethodStep {

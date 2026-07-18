@@ -8,6 +8,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/assets', label: 'Asset Hub' },
   { href: '/admin/brand', label: 'Brand' },
+  { href: '/admin/deliverables', label: 'Deliverables' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
   { href: '/admin/purchases', label: 'Purchases' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },

@@ -46,6 +46,9 @@ export const STORAGE = {
   purchases: 'mothermode_purchases',
   onboarding: 'mothermode_onboarding_done',
   contentReview: 'mothermode_content_review',
+  /** Self-reported email used to scope interactive resource-document data
+   *  (mothermode_resource_entries) when it differs from the checkout email. */
+  buyerEmail: 'mothermode_buyer_email',
 } as const;
 
 /** Route roots. Front-end offers live at /mothermode/[slug]. */

@@ -308,6 +308,7 @@ export function pieceToText(
     out.push('');
   }
 
+
   if (piece.caption) {
     out.push(`Caption: ${piece.caption}`);
     out.push('');

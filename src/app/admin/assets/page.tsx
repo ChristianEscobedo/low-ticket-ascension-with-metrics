@@ -1,10 +1,11 @@
-import { OFFERS } from '@/lib/mothermode/offers';
+import { OFFERS, getOffer } from '@/lib/mothermode/offers';
 import {
   mothermodeOS,
   osAnnualUpgrade,
   redesignVault,
   motherModeCoaching
 } from '@/lib/mothermode/ascension';
+import { DELIVERABLE_CATALOG } from '@/lib/mothermode/deliverables/index';
 import AssetHub, { type AssetGroup } from './AssetHub';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +110,17 @@ export default function AssetHubPage() {
         { label: 'Account', href: '/account' },
         { label: 'Sign in', href: '/signin' }
       ]
+    },
+    {
+      title: 'Deliverables',
+      description:
+        'Every long-form resource document a buyer receives after checkout, grouped by offer. Open the live page, or jump into /admin/deliverables to edit its copy.',
+      items: DELIVERABLE_CATALOG.map((doc) => ({
+        label: `${getOffer(doc.slug)?.name ?? doc.slug} — ${doc.title}`,
+        href: `/mothermode/resource/${doc.slug}/${doc.key}`,
+        content: `/admin/deliverables?slug=${doc.slug}`,
+        note: doc.slug === FLAGSHIP_SLUG ? 'Flagship' : undefined
+      }))
     },
     {
       title: 'Organic Content',

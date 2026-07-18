@@ -83,22 +83,42 @@ function SuccessContent() {
               What is now yours
             </h2>
             <ul className="space-y-2.5">
-              {offer.inside.items.map((item) => (
-                <li
-                  key={item.title}
-                  className="flex items-start gap-2.5 text-ink/75"
-                >
-                  <Check className="mt-1 h-4 w-4 flex-shrink-0 text-mode" />
-                  <span>{item.title}</span>
-                </li>
-              ))}
+              {offer.inside.items.map((item) =>
+                item.resourceKey ? (
+                  <li key={item.title}>
+                    <Link
+                      href={`/mothermode/resource/${offer.slug}/${item.resourceKey}`}
+                      className="group flex items-start justify-between gap-2.5 rounded-lg px-1 py-0.5 text-ink/75 transition-colors hover:bg-mode/[0.04] hover:text-ink"
+                    >
+                      <span className="flex items-start gap-2.5">
+                        <Check className="mt-1 h-4 w-4 flex-shrink-0 text-mode" />
+                        <span>{item.title}</span>
+                      </span>
+                      <ArrowRight className="mt-1 h-3.5 w-3.5 flex-shrink-0 text-mode/50 opacity-0 transition-opacity group-hover:opacity-100" />
+                    </Link>
+                  </li>
+                ) : (
+                  <li
+                    key={item.title}
+                    className="flex items-start gap-2.5 text-ink/75"
+                  >
+                    <Check className="mt-1 h-4 w-4 flex-shrink-0 text-mode" />
+                    <span>{item.title}</span>
+                  </li>
+                ),
+              )}
               {bumps.map((bump) => (
-                <li
-                  key={bump.id}
-                  className="flex items-start gap-2.5 text-ink/75"
-                >
-                  <Check className="mt-1 h-4 w-4 flex-shrink-0 text-brass" />
-                  <span>{bump.title}</span>
+                <li key={bump.id}>
+                  <Link
+                    href={`/mothermode/resource/${offer.slug}/${bump.id}`}
+                    className="group flex items-start justify-between gap-2.5 rounded-lg px-1 py-0.5 text-ink/75 transition-colors hover:bg-mode/[0.04] hover:text-ink"
+                  >
+                    <span className="flex items-start gap-2.5">
+                      <Check className="mt-1 h-4 w-4 flex-shrink-0 text-brass" />
+                      <span>{bump.title}</span>
+                    </span>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 flex-shrink-0 text-mode/50 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </Link>
                 </li>
               ))}
             </ul>
