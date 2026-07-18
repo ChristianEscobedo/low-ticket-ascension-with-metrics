@@ -32,7 +32,14 @@ useEffect(() => {
 
 Full Generate + image bridge port: `docs/CONTENT_GENERATE_SYSTEM_PORT.md`.
 
+Later features built on this studio (Board + Lab tabs, video scripts, preview fixes):
+
+- `docs/CONTENT_HUB_FEATURES_PORT.md` — master map + smoke tests
+- `docs/VIDEO_SCRIPT_SYSTEM_PORT.md` — production scripts + final-cut upload
+- `docs/STORYBOARD_VARIATION_LAB_PORT.md` — storyboard packs + Variation Lab + fal
+
 ---
+
 
 
 ## Files changed (6)

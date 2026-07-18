@@ -39,7 +39,14 @@ No DB migration. Drafts (and their images) are client-side until save. Saved row
 - `reviewClient` (`setReviewImages`, `loadReviews`) for attaching images on save
 - Amplify panel that calls `generateBatch` for full posts (optional; keep `persist: true`)
 
+After Generate + Image Edit are in place, port the next creative wave with:
+
+- `docs/CONTENT_HUB_FEATURES_PORT.md` — master map (previews, video script, storyboard, Variation Lab)
+- `docs/VIDEO_SCRIPT_SYSTEM_PORT.md`
+- `docs/STORYBOARD_VARIATION_LAB_PORT.md`
+
 ---
+
 
 ## Files changed (8)
 
