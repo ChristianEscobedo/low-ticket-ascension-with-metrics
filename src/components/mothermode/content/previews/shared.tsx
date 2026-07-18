@@ -98,6 +98,11 @@ interface PreviewMediaProps {
 /**
  * The post image, or a calm placeholder when no asset has been added yet. The
  * placeholder nudges the reviewer toward the Edit tab rather than looking broken.
+ *
+ * When used as an absolute fill (className includes `absolute` + `inset-0`),
+ * the aspect class is dropped so the media stretches to the parent frame.
+ * Pairing aspect-[9/16] with absolute inset-0 collapses or overflows the
+ * reel/story surfaces on Facebook, Instagram, and TikTok.
  */
 export const PreviewMedia: React.FC<PreviewMediaProps> = ({
   src,
@@ -106,9 +111,19 @@ export const PreviewMedia: React.FC<PreviewMediaProps> = ({
   tint = '#532B3C',
   className = '',
 }) => {
+  // Absolute-fill mode: parent owns the frame size; don't re-apply aspect.
+  const fills =
+    className.includes('absolute') && className.includes('inset-0');
+  const frame = fills
+    ? `h-full w-full overflow-hidden bg-black ${className}`
+    : `${aspect} w-full overflow-hidden bg-black ${className}`;
+  const emptyFrame = fills
+    ? `flex h-full w-full items-center justify-center ${className}`
+    : `${aspect} flex w-full items-center justify-center ${className}`;
+
   if (src) {
     return (
-      <div className={`${aspect} w-full overflow-hidden bg-black ${className}`}>
+      <div className={frame}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt} className="h-full w-full object-cover" />
       </div>
@@ -116,7 +131,7 @@ export const PreviewMedia: React.FC<PreviewMediaProps> = ({
   }
   return (
     <div
-      className={`${aspect} flex w-full items-center justify-center ${className}`}
+      className={emptyFrame}
       style={{
         background: `linear-gradient(135deg, ${tint}14, ${tint}33)`,
       }}
@@ -127,6 +142,7 @@ export const PreviewMedia: React.FC<PreviewMediaProps> = ({
     </div>
   );
 };
+
 
 /** A thin, muted divider used inside the white preview cards. */
 export const Hairline: React.FC = () => (
