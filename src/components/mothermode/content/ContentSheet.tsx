@@ -267,13 +267,16 @@ export const ContentSheet: React.FC<{
             <EditForm
               piece={piece}
               review={review}
+              offerSlug={offerSlug}
               onUploadImage={onUploadImage}
               onAddImages={addImages}
               onRemoveImage={removeImage}
               onSetImageIndex={setImageIndex}
               onEditPatch={applyEdits}
+              onReviewChange={setReview}
             />
           )}
+
           {tab === 'compliance' && (
             <CompliancePanel
               piece={piece}

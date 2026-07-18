@@ -56,3 +56,36 @@ export async function hostGeneratedImage(dataUrl: string): Promise<string> {
     return dataUrl;
   }
 }
+
+const VIDEO_EXT_BY_MIME: Record<string, string> = {
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'video/x-msvideo': 'avi',
+};
+
+/** Allowed video MIME types for final-cut uploads. */
+export const ALLOWED_VIDEO_MIMES = Object.keys(VIDEO_EXT_BY_MIME);
+
+/**
+ * Upload a raw video buffer to Storage and return its public URL. Used for
+ * final-cut reel/video uploads from the content hub. Throws on failure.
+ */
+export async function uploadVideoBuffer(
+  buffer: Buffer | Uint8Array,
+  mimeType: string,
+  folder = 'mothermode-video',
+): Promise<string> {
+  const mime = mimeType.split(';')[0]?.trim().toLowerCase() || 'video/mp4';
+  if (!ALLOWED_VIDEO_MIMES.includes(mime)) {
+    throw new Error(`Unsupported video type: ${mime}`);
+  }
+  const ext = VIDEO_EXT_BY_MIME[mime] || 'mp4';
+  const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 9)}.${ext}`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, buffer, { contentType: mime, cacheControl: '3600', upsert: false });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+

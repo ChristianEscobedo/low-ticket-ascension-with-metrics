@@ -39,6 +39,43 @@ export interface PieceMetrics {
   conversions?: number;
 }
 
+/**
+ * One second-by-second beat in a video production script: exact voiceover,
+ * shot direction, and (for cutaway beats) a ready-to-render b-roll prompt and
+ * still. Beats are contiguous and cover the full runtime with no gaps.
+ */
+export interface VideoScriptBeat {
+  /** Beat start, in seconds from 0. */
+  startSec: number;
+  /** Beat end, in seconds. Always > startSec. */
+  endSec: number;
+  /** Shot direction, e.g. "Talking head, direct to camera" or "B-roll insert". */
+  shot?: string;
+  /** On-screen text overlay for this beat. */
+  onScreen?: string;
+  /** The exact words to say during this beat, paced to its length. */
+  voiceover: string;
+  /** Physical direction: look, gesture, prop, movement. */
+  action?: string;
+  /** Plain description of the cutaway, present on b-roll beats. */
+  broll?: string;
+  /** Full AI image-generation scene prompt for the b-roll cutaway. */
+  brollPrompt?: string;
+  /** A generated or uploaded still for this beat's b-roll (hosted URL). */
+  brollImage?: string;
+}
+
+/** A full second-by-second shooting script for a reel/video piece. */
+export interface VideoScript {
+  /** Total runtime in seconds; beats cover 0..totalSeconds with no gaps. */
+  totalSeconds: number;
+  beats: VideoScriptBeat[];
+  /** The model that wrote this script, for reference. */
+  model?: string;
+  /** ISO timestamp of generation. */
+  generatedAt?: string;
+}
+
 /** Per-piece review state: images, notes, local copy edits, and metrics. */
 export interface PieceReview {
   /** Legacy single replacement image as a data URL. Still read; new uploads
@@ -55,7 +92,12 @@ export interface PieceReview {
   edits?: PieceEdits;
   /** Captured performance numbers for this piece. */
   metrics?: PieceMetrics;
+  /** Hosted URL of an uploaded final-cut video for this piece. */
+  video?: string;
+  /** The second-by-second production script for a reel/video piece. */
+  videoScript?: VideoScript;
 }
+
 
 /** True when a string carries visible content. */
 function hasText(v: unknown): boolean {
@@ -97,8 +139,21 @@ export function isEmptyReview(r: PieceReview): boolean {
   const hasMetrics =
     !!r.metrics &&
     Object.values(r.metrics).some((v) => typeof v === 'number');
-  return reviewImages(r).length === 0 && !r.notes && !hasEdits && !hasMetrics;
+  const hasVideo = hasText(r.video);
+  const hasScript =
+    !!r.videoScript &&
+    Array.isArray(r.videoScript.beats) &&
+    r.videoScript.beats.length > 0;
+  return (
+    reviewImages(r).length === 0 &&
+    !r.notes &&
+    !hasEdits &&
+    !hasMetrics &&
+    !hasVideo &&
+    !hasScript
+  );
 }
+
 
 /** Merge a partial patch into a review, deep-merging edits and metrics so a
  *  single-field change never clobbers the rest. Pure: returns a new object. */
@@ -136,5 +191,36 @@ export function withoutImages(prev: PieceReview): PieceReview {
   const { image: _img, images: _imgs, imageIndex: _idx, ...rest } = prev;
   return rest;
 }
+
+/** Set (or clear, with an empty string) the piece's uploaded final-cut video
+ *  URL. Pure: returns a new object. */
+export function withVideo(prev: PieceReview, url: string): PieceReview {
+  if (!url.trim()) {
+    const { video: _v, ...rest } = prev;
+    return rest;
+  }
+  return { ...prev, video: url };
+}
+
+/** Drop the uploaded video, keeping everything else. Pure. */
+export function withoutVideo(prev: PieceReview): PieceReview {
+  const { video: _v, ...rest } = prev;
+  return rest;
+}
+
+/** Set the piece's second-by-second production script. Pure. */
+export function withVideoScript(
+  prev: PieceReview,
+  script: VideoScript,
+): PieceReview {
+  return { ...prev, videoScript: script };
+}
+
+/** Drop the production script, keeping everything else. Pure. */
+export function withoutVideoScript(prev: PieceReview): PieceReview {
+  const { videoScript: _s, ...rest } = prev;
+  return rest;
+}
+
 
 

@@ -11,8 +11,14 @@ import {
   mergeReview,
   withImages,
   withoutImages,
+  withVideo,
+  withoutVideo,
+  withVideoScript,
+  withoutVideoScript,
   type PieceReview,
+  type VideoScript,
 } from '@/lib/mothermode/content/review';
+
 
 const ENDPOINT = '/api/mothermode/content/review';
 
@@ -121,3 +127,44 @@ export function clearReviewImage(offerSlug: string, id: string): PieceReview {
   persist(offerSlug, id, next);
   return next;
 }
+
+/** Set the piece's uploaded final-cut video URL. Returns the new review. */
+export function setReviewVideo(
+  offerSlug: string,
+  id: string,
+  url: string,
+): PieceReview {
+  const next = withVideo(getReview(offerSlug, id), url);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the uploaded video, keeping everything else. Returns the new review. */
+export function clearReviewVideo(offerSlug: string, id: string): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.video) return prev;
+  const next = withoutVideo(prev);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Set the piece's second-by-second production script. Returns the new review. */
+export function setReviewVideoScript(
+  offerSlug: string,
+  id: string,
+  script: VideoScript,
+): PieceReview {
+  const next = withVideoScript(getReview(offerSlug, id), script);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the production script, keeping everything else. Returns the new review. */
+export function clearReviewVideoScript(offerSlug: string, id: string): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.videoScript) return prev;
+  const next = withoutVideoScript(prev);
+  persist(offerSlug, id, next);
+  return next;
+}
+

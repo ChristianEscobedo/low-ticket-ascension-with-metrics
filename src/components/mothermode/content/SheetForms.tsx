@@ -23,6 +23,8 @@ import type { AiContext } from './aiClient';
 import { ImagesCard } from './ImagesCard';
 import { HookVariants } from './HookVariants';
 import { RewriteField } from './RewriteField';
+import { VideoScriptPanel } from './VideoScriptPanel';
+
 
 type MetricField = keyof NonNullable<PieceReview['metrics']>;
 
@@ -52,22 +54,28 @@ const fieldCls =
 export const EditForm: React.FC<{
   piece: ContentPiece;
   review: PieceReview;
+  offerSlug: string;
   onUploadImage: (file: File) => void;
   onAddImages: (urls: string[]) => void;
   onRemoveImage: (index: number) => void;
   onSetImageIndex: (index: number) => void;
   onEditPatch: (patch: Partial<PieceEdits>) => void;
+  onReviewChange: (next: PieceReview) => void;
 }> = ({
   piece,
   review,
+  offerSlug,
   onUploadImage,
   onAddImages,
   onRemoveImage,
   onSetImageIndex,
   onEditPatch,
+  onReviewChange,
 }) => {
   const edits = review.edits ?? {};
   const [model, setModel] = useState(AUTO_MODEL);
+  const isVideo =
+    piece.format === 'reel' || piece.format === 'video';
   // The brief the AI rewrites stay anchored to, in human labels.
   const context: AiContext = {
     theme: piece.theme,
@@ -94,6 +102,16 @@ export const EditForm: React.FC<{
           ))}
         </select>
       </label>
+
+      {isVideo && (
+        <VideoScriptPanel
+          piece={piece}
+          review={review}
+          offerSlug={offerSlug}
+          model={model}
+          onReviewChange={onReviewChange}
+        />
+      )}
 
       <ImagesCard
         piece={piece}
@@ -138,6 +156,7 @@ export const EditForm: React.FC<{
     </div>
   );
 };
+
 
 export const MetricsForm: React.FC<{
   piece: ContentPiece;

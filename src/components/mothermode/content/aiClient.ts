@@ -146,3 +146,56 @@ export async function aiAmplifyParts(args: {
     throw new Error('No variants were returned');
   return json.parts as Partial<Record<AmplifyTextDimension, string[]>>;
 }
+
+/** One second-by-second beat returned by a video-script run. */
+export interface AiVideoScriptBeat {
+  startSec: number;
+  endSec: number;
+  shot?: string;
+  onScreen?: string;
+  voiceover: string;
+  action?: string;
+  broll?: string;
+  brollPrompt?: string;
+}
+
+/**
+ * Generate a full second-by-second production script for a reel/video piece.
+ * Beats cover 0..totalSeconds with no gaps, with exact voiceover and optional
+ * b-roll prompts ready to render.
+ */
+export async function aiGenerateVideoScript(args: {
+  piece: {
+    hook: string;
+    hooks?: string[];
+    caption?: string;
+    body?: string[];
+    script?: ContentPiece['script'];
+    theme: string;
+    tone: string;
+    platform: string;
+    format: string;
+  };
+  durationSec: number;
+  guides?: string;
+  /** Optional text model id. Omit/empty for Auto. */
+  model?: string;
+}): Promise<{
+  beats: AiVideoScriptBeat[];
+  totalSeconds: number;
+  model?: string;
+}> {
+  const json = await postAi({ action: 'videoScript', ...args });
+  if (!Array.isArray(json.beats) || json.beats.length === 0) {
+    throw new Error('No script was returned');
+  }
+  return {
+    beats: json.beats as AiVideoScriptBeat[],
+    totalSeconds:
+      typeof json.totalSeconds === 'number'
+        ? json.totalSeconds
+        : args.durationSec,
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+

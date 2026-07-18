@@ -7,11 +7,13 @@ import {
   amplifyContent,
   amplifyParts,
   amplifyImagePrompts,
+  generateVideoScript,
   imageSizeForFormat,
   type RewriteInput,
   type AmplifyTextInput,
   type AmplifyPart,
 } from '@/utils/integrations/openai-content';
+
 import { IMAGE_STYLE } from '@/lib/mothermode/content/constants';
 import { hostGeneratedImage } from '@/utils/mothermode/storage';
 import {
@@ -36,8 +38,11 @@ export const dynamic = 'force-dynamic';
  *                       or body versions for the Amplify tab.
  *   action 'imagePrompts' -> stage one of the image pipeline: turn a version's
  *                       hook into N distinct photographic scene prompts.
+ *   action 'videoScript' -> second-by-second production script for reel/video
+ *                       pieces (exact VO, shot direction, b-roll prompts).
  * The provider calls live in src/utils/integrations/openai-content.ts.
  */
+
 export async function POST(request: NextRequest) {
   const guard = await requireAdminRoute();
   if (!guard.ok) return guard.response!;
@@ -312,8 +317,63 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, items: result.data.items });
   }
 
+  if (action === 'videoScript') {
+    if (!body.piece || typeof body.piece !== 'object') {
+      return NextResponse.json(
+        { ok: false, error: 'a piece is required' },
+        { status: 400 },
+      );
+    }
+    const p = body.piece as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const strList = (v: unknown): string[] | undefined =>
+      Array.isArray(v)
+        ? v.filter((s): s is string => typeof s === 'string' && !!s.trim())
+        : undefined;
+    const hook = str(p.hook);
+    if (!hook) {
+      return NextResponse.json(
+        { ok: false, error: 'piece.hook is required' },
+        { status: 400 },
+      );
+    }
+    const durationSec = Math.max(
+      6,
+      Math.min(180, Math.round(Number(body.durationSec) || 30)),
+    );
+    const result = await generateVideoScript({
+      piece: {
+        hook,
+        hooks: strList(p.hooks),
+        caption: str(p.caption),
+        body: strList(p.body),
+        script: Array.isArray(p.script) ? (p.script as any) : undefined,
+        theme: str(p.theme) ?? '',
+        tone: str(p.tone) ?? '',
+        platform: str(p.platform) ?? 'instagram',
+        format: str(p.format) ?? 'reel',
+      },
+      durationSec,
+      guides: str(body.guides),
+      model: str(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      beats: result.data.beats,
+      model: result.data.model,
+      totalSeconds: durationSec,
+    });
+  }
+
   return NextResponse.json(
     { ok: false, error: 'unknown action' },
     { status: 400 },
   );
 }
+

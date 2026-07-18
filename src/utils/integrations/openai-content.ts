@@ -1465,3 +1465,168 @@ function parseAmplifyItems(raw: string): string[] {
   }
   return out;
 }
+
+/** The controls one video script run is built from: the piece's existing copy,
+ *  the target runtime, and any freeform production guides. */
+export interface VideoScriptInput {
+  piece: {
+    hook: string;
+    hooks?: string[];
+    caption?: string;
+    body?: string[];
+    script?: ScriptBeat[];
+    theme: string;
+    tone: string;
+    platform: string;
+    format: string;
+  };
+  /** Target runtime in seconds, e.g. 15, 30, 45, 60, 90. */
+  durationSec: number;
+  guides?: string;
+  /** Optional text model id from the selector. Empty/unknown means Auto. */
+  model?: string;
+}
+
+/** One second-by-second beat of a shooting script, as returned by the model. */
+export interface VideoScriptBeatOut {
+  startSec: number;
+  endSec: number;
+  shot?: string;
+  onScreen?: string;
+  voiceover: string;
+  action?: string;
+  broll?: string;
+  brollPrompt?: string;
+}
+
+/** A compact summary of the source piece's existing copy for grounding. */
+function scriptSourceSummary(p: VideoScriptInput['piece']): string {
+  const lines: string[] = [];
+  lines.push(`Theme: ${p.theme}`);
+  lines.push(`Hook: ${p.hook}`);
+  if (p.hooks?.length) lines.push(`Alt hooks: ${p.hooks.join(' / ')}`);
+  if (p.caption) lines.push(`Caption: ${p.caption}`);
+  if (p.body?.length) lines.push(`Body: ${p.body.join(' / ')}`);
+  if (p.script?.length) {
+    lines.push('Existing beat notes:');
+    for (const b of p.script) {
+      lines.push(`  ${b.at}: ${b.voiceover ?? b.onScreen ?? b.visual ?? ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/** The user prompt for a video-script run: intent, pacing rules, source, shape. */
+function buildVideoScriptUser(input: VideoScriptInput): string {
+  const dur = Math.max(6, Math.round(input.durationSec));
+  const wordBudget = Math.round(dur * 2.4);
+  const intent = `Write a complete second-by-second shooting script for a ${dur}-second ${input.piece.platform} ${input.piece.format}. This script is a production guide: someone should be able to read it and shoot the video exactly, beat by beat, with no guesswork.`;
+  const pacing = [
+    `Beats MUST cover 0 to ${dur} seconds with NO gaps and NO overlaps. The first beat starts at 0. The last beat ends at exactly ${dur}.`,
+    'Beats are typically 2-6 seconds each. Use shorter beats for punchy hooks and cuts, longer beats for a sustained talking point.',
+    `Total spoken word count across all beats should land close to ${wordBudget} words (roughly 2.2-2.5 spoken words per second), so the voiceover naturally fills the runtime without rushing or padding.`,
+    'Alternate between "Talking head" beats (direct to camera) and "B-roll" beats (cutaway) where it serves the story. Not every beat needs b-roll: use it for emphasis, proof, or visual variety, not as decoration.',
+    'Every B-roll beat must include: broll (a plain description of the cutaway) and brollPrompt (a complete photographic/video-still scene prompt: setting, objects, light, mood, lens feel; no on-image text, no logos, faces soft or absent unless essential; object-led and lived-in, matching an editorial documentary style).',
+    'Every beat needs an exact voiceover line (the literal words to say), a shot direction, and when useful, an action (physical direction: look, gesture, prop, movement) and onScreen (a short caption overlay).',
+  ].join(' ');
+  const opening =
+    'The first beat (0-3s) must work as a scroll-stopping hook, with on-screen text that lands even with sound off.';
+  const source = `Ground the script in this existing post so the message matches:\n"""\n${scriptSourceSummary(input.piece)}\n"""`;
+  const guides = input.guides?.trim()
+    ? `Follow these production guides, but the rules above always win: ${input.guides.trim()}`
+    : '';
+  const shape = [
+    'Respond with this exact JSON shape:',
+    '{ "beats": [ { "startSec": number, "endSec": number, "shot": string, "onScreen": string, "voiceover": string, "action": string, "broll": string, "brollPrompt": string } ] }',
+    'Omit "broll" and "brollPrompt" on talking-head beats. Numbers are seconds from the start of the video, not timestamps.',
+  ].join('\n');
+  return [intent, pacing, opening, source, guides, shape]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** Clamp, sort, and fill gaps in a beat list so it covers 0..durationSec with
+ *  no gaps or overlaps, dropping beats too malformed to place. */
+function normalizeVideoBeats(
+  raw: unknown,
+  durationSec: number,
+): VideoScriptBeatOut[] {
+  if (!Array.isArray(raw)) return [];
+  const candidates: VideoScriptBeatOut[] = [];
+  for (const b of raw) {
+    if (!b || typeof b !== 'object') continue;
+    const rec = b as Record<string, unknown>;
+    const voiceover = toText(rec.voiceover);
+    if (!voiceover) continue;
+    let start = Number(rec.startSec);
+    let end = Number(rec.endSec);
+    if (!Number.isFinite(start)) start = 0;
+    if (!Number.isFinite(end) || end <= start) end = start + 3;
+    start = Math.max(0, Math.min(durationSec, start));
+    end = Math.max(start + 0.5, Math.min(durationSec, end));
+    candidates.push({
+      startSec: start,
+      endSec: end,
+      shot: toText(rec.shot),
+      onScreen: toText(rec.onScreen),
+      voiceover,
+      action: toText(rec.action),
+      broll: toText(rec.broll),
+      brollPrompt: toText(rec.brollPrompt),
+    });
+  }
+  candidates.sort((a, b) => a.startSec - b.startSec);
+  // Stitch beats end-to-end so the runtime has no gaps or overlaps: each beat's
+  // end becomes the next beat's start, and the last beat is pinned to the total.
+  const out: VideoScriptBeatOut[] = [];
+  let cursor = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const b = candidates[i];
+    const start = cursor;
+    const isLast = i === candidates.length - 1;
+    const end = isLast ? durationSec : Math.max(start + 0.5, b.endSec);
+    if (end <= start) continue;
+    out.push({ ...b, startSec: start, endSec: end });
+    cursor = end;
+  }
+  if (out.length > 0) out[out.length - 1].endSec = durationSec;
+  return out;
+}
+
+/**
+ * Generate a full second-by-second production script for a reel/video piece:
+ * exact voiceover paced to the runtime, shot direction, and (for cutaway
+ * beats) a ready-to-render b-roll prompt. Beats cover the whole runtime with
+ * no gaps, so the script can guide production directly.
+ */
+export async function generateVideoScript(
+  input: VideoScriptInput,
+): Promise<AiResult<{ beats: VideoScriptBeatOut[]; model: string }>> {
+  const durationSec = Math.max(
+    6,
+    Math.min(180, Math.round(input.durationSec || 30)),
+  );
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are the MotherMode video producer and director, writing exact shooting scripts for reels and short-form video.',
+    VOICE_RULES,
+    'You write like a real production call sheet: precise timing, exact words, concrete shots. Never vague ("talk about the problem"); always literal ("say: ...").',
+    'Return ONLY a JSON object. No prose, no code fences.',
+  ].join(' ');
+  const user = buildVideoScriptUser({ ...input, durationSec });
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const beats = normalizeVideoBeats(parsed?.beats, durationSec);
+  if (beats.length === 0) {
+    console.warn(
+      `generateVideoScript: no beats parsed (model ${model}). Raw:`,
+      raw.data.slice(0, 500),
+    );
+    return { ok: false, status: 502, error: 'No usable script was returned' };
+  }
+  return { ok: true, data: { beats, model } };
+}
