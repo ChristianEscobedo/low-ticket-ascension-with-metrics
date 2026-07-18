@@ -281,9 +281,19 @@ export const ContentSheet: React.FC<{
             <CompliancePanel
               piece={piece}
               review={review}
+              offerSlug={offerSlug}
               onEditPatch={applyEdits}
+              onReviewChange={(next) =>
+                setReview(
+                  saveReview(offerSlug, piece.id, {
+                    compliance: next.compliance,
+                  }),
+                )
+              }
             />
           )}
+
+
           {tab === 'notes' && (
             <label className="block">
               <span className="text-[11px] uppercase tracking-[0.16em] text-ink/45">

@@ -376,5 +376,133 @@ export async function aiSmartResize(args: {
   };
 }
 
+/** Payload for compliance agent score/fix. */
+export interface AiCompliancePiece {
+  hook?: string;
+  hooks?: string[];
+  caption?: string;
+  body?: string[];
+  cta?: string;
+  title?: string;
+  theme?: string;
+  tone?: string;
+  platform: string;
+  format: string;
+  kind: string;
+  adPrimaryText?: string;
+  adHeadline?: string;
+  adDescription?: string;
+  emailSubject?: string;
+  emailPreheader?: string;
+}
+
+export interface AiComplianceIssue {
+  id: string;
+  severity: 'block' | 'warn' | 'note';
+  source: string;
+  field: string;
+  message: string;
+  match?: string;
+  suggestion?: string;
+  fixable?: 'deterministic' | 'ai' | 'manual';
+}
+
+export interface AiComplianceScorecard {
+  score: number;
+  grade: 'pass' | 'review' | 'fail';
+  brandScore: number;
+  platformScore: number;
+  claimScore: number;
+  blockCount: number;
+  warnCount: number;
+  noteCount: number;
+  issues: AiComplianceIssue[];
+  summary: string;
+  platformPack: string;
+  isAd: boolean;
+  scoredAt?: string;
+  model?: string;
+}
+
+/** Run the AI compliance scorer (brand + platform policy). */
+export async function aiComplianceScore(args: {
+  piece: AiCompliancePiece;
+  model?: string;
+}): Promise<AiComplianceScorecard> {
+  const json = await postAi({ action: 'complianceScore', ...args });
+  if (typeof json.score !== 'number') {
+    throw new Error('No compliance score was returned');
+  }
+  return {
+    score: json.score as number,
+    grade: (json.grade as AiComplianceScorecard['grade']) || 'review',
+    brandScore: Number(json.brandScore) || 0,
+    platformScore: Number(json.platformScore) || 0,
+    claimScore: Number(json.claimScore) || 0,
+    blockCount: Number(json.blockCount) || 0,
+    warnCount: Number(json.warnCount) || 0,
+    noteCount: Number(json.noteCount) || 0,
+    issues: Array.isArray(json.issues)
+      ? (json.issues as AiComplianceIssue[])
+      : [],
+    summary: typeof json.summary === 'string' ? json.summary : '',
+    platformPack:
+      typeof json.platformPack === 'string' ? json.platformPack : 'general',
+    isAd: json.isAd === true,
+    scoredAt: typeof json.scoredAt === 'string' ? json.scoredAt : undefined,
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
+/** AI rewrite of non-compliant fields into an edits patch. */
+export async function aiComplianceFix(args: {
+  piece: AiCompliancePiece;
+  issues?: AiComplianceIssue[];
+  model?: string;
+}): Promise<{
+  patch: {
+    hooks?: string[];
+    caption?: string;
+    body?: string;
+    adPrimaryText?: string;
+    adHeadline?: string;
+    adDescription?: string;
+    emailSubject?: string;
+    emailPreheader?: string;
+  };
+  changelog: string[];
+  model?: string;
+}> {
+  const json = await postAi({ action: 'complianceFix', ...args });
+  if (!json.patch || typeof json.patch !== 'object') {
+    throw new Error('No compliance fix was returned');
+  }
+  const p = json.patch as Record<string, unknown>;
+  return {
+    patch: {
+      hooks: Array.isArray(p.hooks)
+        ? p.hooks.filter((h): h is string => typeof h === 'string')
+        : undefined,
+      caption: typeof p.caption === 'string' ? p.caption : undefined,
+      body: typeof p.body === 'string' ? p.body : undefined,
+      adPrimaryText:
+        typeof p.adPrimaryText === 'string' ? p.adPrimaryText : undefined,
+      adHeadline: typeof p.adHeadline === 'string' ? p.adHeadline : undefined,
+      adDescription:
+        typeof p.adDescription === 'string' ? p.adDescription : undefined,
+      emailSubject:
+        typeof p.emailSubject === 'string' ? p.emailSubject : undefined,
+      emailPreheader:
+        typeof p.emailPreheader === 'string' ? p.emailPreheader : undefined,
+    },
+    changelog: Array.isArray(json.changelog)
+      ? (json.changelog as unknown[]).filter(
+          (c): c is string => typeof c === 'string',
+        )
+      : [],
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
 
 

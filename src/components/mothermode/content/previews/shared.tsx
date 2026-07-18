@@ -34,8 +34,17 @@ export interface PreviewView {
   caption?: string;
   /** Body paragraphs (edited value wins). */
   body: string[];
+  /** Paid ad fields with edits applied (when kind is ad). */
+  adPrimaryText?: string;
+  adHeadline?: string;
+  adDescription?: string;
+  adButton?: string;
+  /** Email fields with edits applied. */
+  emailSubject?: string;
+  emailPreheader?: string;
   metrics: PieceMetrics;
 }
+
 
 export interface PreviewProps {
   view: PreviewView;

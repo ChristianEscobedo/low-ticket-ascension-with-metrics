@@ -18,7 +18,46 @@ export interface PieceEdits {
   caption?: string;
   /** Replacement body, newline-separated; the preview splits on blank lines. */
   body?: string;
+  /** Paid ad primary text override. */
+  adPrimaryText?: string;
+  /** Paid ad headline override. */
+  adHeadline?: string;
+  /** Paid ad description override. */
+  adDescription?: string;
+  /** Email subject override. */
+  emailSubject?: string;
+  /** Email preheader override. */
+  emailPreheader?: string;
 }
+
+/** Last compliance agent / local scorecard snapshot (optional). */
+export interface StoredComplianceReport {
+  score: number;
+  grade: 'pass' | 'review' | 'fail';
+  brandScore?: number;
+  platformScore?: number;
+  claimScore?: number;
+  blockCount?: number;
+  warnCount?: number;
+  noteCount?: number;
+  summary?: string;
+  platformPack?: string;
+  isAd?: boolean;
+  scoredAt?: string;
+  model?: string;
+  /** Compact issue list for re-display without a full re-run. */
+  issues?: Array<{
+    id: string;
+    severity: 'block' | 'warn' | 'note';
+    source: string;
+    field: string;
+    message: string;
+    match?: string;
+    suggestion?: string;
+    fixable?: 'deterministic' | 'ai' | 'manual';
+  }>;
+}
+
 
 /**
  * Captured performance for a published piece. Organic and paid fields live
@@ -153,7 +192,10 @@ export interface PieceReview {
   videoScript?: VideoScript;
   /** Connected cinematic storyboard pack (1–4 contact sheets). */
   storyboard?: StoryboardPack;
+  /** Last compliance scorecard (local + optional AI agent). */
+  compliance?: StoredComplianceReport;
 }
+
 
 
 
@@ -193,6 +235,11 @@ export function isEmptyReview(r: PieceReview): boolean {
     hasText(e.hook) ||
     hasText(e.caption) ||
     hasText(e.body) ||
+    hasText(e.adPrimaryText) ||
+    hasText(e.adHeadline) ||
+    hasText(e.adDescription) ||
+    hasText(e.emailSubject) ||
+    hasText(e.emailPreheader) ||
     (Array.isArray(e.hooks) && e.hooks.some(hasText));
   const hasMetrics =
     !!r.metrics &&
@@ -206,6 +253,8 @@ export function isEmptyReview(r: PieceReview): boolean {
     !!r.storyboard &&
     Array.isArray(r.storyboard.boards) &&
     r.storyboard.boards.length > 0;
+  const hasCompliance =
+    !!r.compliance && typeof r.compliance.score === 'number';
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
@@ -213,9 +262,11 @@ export function isEmptyReview(r: PieceReview): boolean {
     !hasMetrics &&
     !hasVideo &&
     !hasScript &&
-    !hasStoryboard
+    !hasStoryboard &&
+    !hasCompliance
   );
 }
+
 
 
 

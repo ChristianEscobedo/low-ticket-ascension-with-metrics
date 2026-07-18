@@ -19,6 +19,8 @@ Focused checklists for *this* wave:
 |-----|---------|
 | `docs/VIDEO_SCRIPT_SYSTEM_PORT.md` | Second-by-second scripts, b-roll, final-cut upload |
 | `docs/STORYBOARD_VARIATION_LAB_PORT.md` | Storyboard packs + Variation Lab + fal |
+| `docs/COMPLIANCE_AGENT_SYSTEM_PORT.md` | Brand + platform compliance score/fix agent |
+
 
 ---
 
@@ -31,6 +33,8 @@ Focused checklists for *this* wave:
 | 3 | Auto model key-aware | `b62812e` | No | — |
 | 4 | Storyboard packs | `1ab71dd` | No | — |
 | 5 | Variation Lab + fal smart-resize | `1ab71dd` | No | **`FAL_KEY`** |
+| 6 | Compliance agent (brand + platform) | (this wave) | No | — |
+
 
 All of these store extra state on **piece review** (localStorage via `reviewClient`), not in Postgres. No new Supabase migrations for this wave.
 
@@ -122,6 +126,9 @@ SUPABASE_MEDIA_BUCKET=media
 | **`variationBrief`** | Brief → master/alt prompts + frame pack |
 | **`variationPlan`** | Dimension matrix of edit instructions |
 | **`smartResize`** | fal-ai/smart-resize to exact WxH |
+| **`complianceScore`** | Brand + platform policy scorecard |
+| **`complianceFix`** | AI rewrite of non-compliant fields |
+
 
 Also:
 

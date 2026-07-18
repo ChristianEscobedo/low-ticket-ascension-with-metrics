@@ -33,6 +33,8 @@ export * from './amplify';
 export * from './promptStyles';
 export * from './compliance';
 export * from './compliancePass';
+export * from './platformCompliance';
+
 export * from './compose';
 export * from './versions';
 export * from './export';

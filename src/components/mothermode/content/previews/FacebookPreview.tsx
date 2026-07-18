@@ -71,14 +71,17 @@ const Engagement: React.FC<PreviewProps> = ({ view }) => {
 /** Standard feed post, also used for carousel and article surfaces. */
 const Feed: React.FC<PreviewProps> = ({ view }) => {
   const { piece } = view;
-  const caption = view.caption ?? view.hook;
+  const isAd = piece.kind === 'ad' || !!piece.ad;
+  const caption = isAd
+    ? (view.adPrimaryText ?? view.caption ?? view.hook)
+    : (view.caption ?? view.hook);
   return (
     <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
       <Head />
       <p className="whitespace-pre-line px-3 py-2.5 text-[14px] leading-snug text-[#050505]">
         {caption}
       </p>
-      {view.body.length > 0 && (
+      {!isAd && view.body.length > 0 && (
         <p className="whitespace-pre-line px-3 pb-2.5 text-[14px] leading-snug text-[#050505]">
           {view.body.join('\n\n')}
         </p>
@@ -89,18 +92,23 @@ const Feed: React.FC<PreviewProps> = ({ view }) => {
         aspect={piece.media?.aspect ?? 'aspect-[1.91/1]'}
         tint="#1877F2"
       />
-      {piece.ad && (
+      {(piece.ad || view.adHeadline) && (
         <div className="flex items-center justify-between bg-[#f0f2f5] px-3 py-2">
           <div className="min-w-0">
             <p className="truncate text-[11px] uppercase text-[#65676b]">
               mothermode.com
             </p>
             <p className="truncate text-[14px] font-semibold text-[#050505]">
-              {piece.ad.headline}
+              {view.adHeadline ?? piece.ad?.headline}
             </p>
+            {view.adDescription ? (
+              <p className="truncate text-[12px] text-[#65676b]">
+                {view.adDescription}
+              </p>
+            ) : null}
           </div>
           <span className="ml-3 shrink-0 rounded-md bg-[#e4e6eb] px-3 py-1.5 text-[13px] font-semibold text-[#050505]">
-            {piece.ad.button}
+            {view.adButton ?? piece.ad?.button ?? 'Learn more'}
           </span>
         </div>
       )}
@@ -109,6 +117,7 @@ const Feed: React.FC<PreviewProps> = ({ view }) => {
     </div>
   );
 };
+
 
 /** Vertical reel surface, dark with a minimal overlay. */
 const Vertical: React.FC<PreviewProps> = ({ view }) => (

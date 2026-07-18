@@ -17,6 +17,13 @@ import {
   type AmplifyPart,
 } from '@/utils/integrations/openai-content';
 import { runSmartResize } from '@/utils/integrations/fal-smart-resize';
+import {
+  scoreComplianceWithAgent,
+  fixComplianceWithAgent,
+  type ComplianceAgentPiece,
+} from '@/utils/integrations/openai-compliance';
+import { scoreLocalCompliance } from '@/lib/mothermode/content/platformCompliance';
+
 
 
 
@@ -58,8 +65,12 @@ function modelId(v: unknown): string | undefined {
  *                       carousel/story frame pack.
  *   action 'variationPlan' -> dimension matrix of image-edit instructions.
  *   action 'smartResize' -> fal-ai/smart-resize to exact platform sizes.
- * The provider calls live in src/utils/integrations/openai-content.ts.
+ *   action 'complianceScore' -> brand + platform policy scorecard (AI agent).
+ *   action 'complianceFix' -> rewrite non-compliant fields into an edits patch.
+ * The provider calls live in src/utils/integrations/openai-content.ts
+ * and openai-compliance.ts.
  */
+
 
 
 
@@ -669,11 +680,114 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (action === 'complianceScore' || action === 'complianceFix') {
+    const p =
+      body.piece && typeof body.piece === 'object'
+        ? (body.piece as Record<string, unknown>)
+        : null;
+    if (!p) {
+      return NextResponse.json(
+        { ok: false, error: 'piece is required' },
+        { status: 400 },
+      );
+    }
+    const str = (v: unknown) =>
+      typeof v === 'string' ? v : v == null ? undefined : String(v);
+    const strArr = (v: unknown) =>
+      Array.isArray(v)
+        ? v.filter((x) => typeof x === 'string').map(String)
+        : undefined;
+    const agentPiece: ComplianceAgentPiece = {
+      hook: str(p.hook),
+      hooks: strArr(p.hooks),
+      caption: str(p.caption),
+      body: strArr(p.body),
+      cta: str(p.cta),
+      title: str(p.title),
+      theme: str(p.theme),
+      tone: str(p.tone),
+      platform: str(p.platform) || 'instagram',
+      format: str(p.format) || 'feed',
+      kind: str(p.kind) || 'organic',
+      adPrimaryText: str(p.adPrimaryText),
+      adHeadline: str(p.adHeadline),
+      adDescription: str(p.adDescription),
+      emailSubject: str(p.emailSubject),
+      emailPreheader: str(p.emailPreheader),
+    };
+    const model = modelId(body.model);
+
+    if (action === 'complianceScore') {
+      // Always compute local first so the agent has a grounded baseline.
+      const local = scoreLocalCompliance({
+        id: 'tmp',
+        platform: agentPiece.platform as ContentPiece['platform'],
+        format: agentPiece.format as ContentPiece['format'],
+        kind: agentPiece.kind as ContentPiece['kind'],
+        tone: (agentPiece.tone as ContentPiece['tone']) || 'confidante',
+        theme: agentPiece.theme || '',
+        title: agentPiece.title || '',
+        hook: agentPiece.hook || agentPiece.hooks?.[0] || '',
+        hooks: agentPiece.hooks,
+        caption: agentPiece.caption,
+        body: agentPiece.body,
+        cta: agentPiece.cta || '',
+        ad:
+          agentPiece.adPrimaryText || agentPiece.adHeadline
+            ? {
+                primaryText: agentPiece.adPrimaryText || '',
+                headline: agentPiece.adHeadline || '',
+                description: agentPiece.adDescription,
+                button: 'LEARN_MORE',
+              }
+            : undefined,
+        email: agentPiece.emailSubject
+          ? {
+              subject: agentPiece.emailSubject,
+              preheader: agentPiece.emailPreheader,
+            }
+          : undefined,
+      });
+      const result = await scoreComplianceWithAgent({
+        piece: agentPiece,
+        local,
+        model,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { ok: false, error: result.error, local },
+          { status: result.status },
+        );
+      }
+      return NextResponse.json({ ok: true, ...result.data, local });
+    }
+
+    const issues = Array.isArray(body.issues) ? body.issues : undefined;
+    const result = await fixComplianceWithAgent({
+      piece: agentPiece,
+      issues: issues as never,
+      model,
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      patch: result.data.patch,
+      changelog: result.data.changelog,
+      model: result.data.model,
+    });
+  }
+
   return NextResponse.json(
     { ok: false, error: 'unknown action' },
     { status: 400 },
   );
 }
+
 
 
 

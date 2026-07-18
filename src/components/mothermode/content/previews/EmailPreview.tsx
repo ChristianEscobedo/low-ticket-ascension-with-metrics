@@ -13,13 +13,16 @@ export const EmailPreview: React.FC<PreviewProps> = ({ view }) => {
   const { piece } = view;
   const email = piece.email;
   const from = email?.from ?? `${DISPLAY_NAME} <hello@mothermode.com>`;
+  const subject = view.emailSubject ?? email?.subject ?? piece.title;
+  const preheader = view.emailPreheader ?? email?.preheader;
   return (
     <div className="mx-auto w-full max-w-md overflow-hidden rounded-xl border border-black/10 bg-white text-[#202124]">
       <div className="px-4 pt-4">
         <h1 className="text-[20px] font-normal leading-snug text-[#202124]">
-          {email?.subject ?? piece.title}
+          {subject}
         </h1>
       </div>
+
       <div className="flex items-center gap-3 px-4 py-3">
         <Avatar size="h-9 w-9" />
         <div className="min-w-0 flex-1 leading-tight">
@@ -41,11 +44,12 @@ export const EmailPreview: React.FC<PreviewProps> = ({ view }) => {
           <p className="text-center text-[13px] font-semibold uppercase tracking-[0.2em] text-[#532B3C]">
             {DISPLAY_NAME}
           </p>
-          {email?.preheader && (
+          {preheader && (
             <p className="mt-3 text-center text-[13px] italic text-[#6b6b6b]">
-              {email.preheader}
+              {preheader}
             </p>
           )}
+
           {view.image && (
             <div className="mt-4 overflow-hidden rounded-lg">
               <PreviewMedia

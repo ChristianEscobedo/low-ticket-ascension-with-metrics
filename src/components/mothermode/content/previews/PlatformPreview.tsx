@@ -87,9 +87,26 @@ export function buildView(piece: ContentPiece, review: PieceReview): PreviewView
     hook: hooks[hookIndex] ?? piece.hook,
     caption: edits.caption?.trim() ? edits.caption : piece.caption,
     body,
+    adPrimaryText: edits.adPrimaryText?.trim()
+      ? edits.adPrimaryText
+      : piece.ad?.primaryText,
+    adHeadline: edits.adHeadline?.trim()
+      ? edits.adHeadline
+      : piece.ad?.headline,
+    adDescription: edits.adDescription?.trim()
+      ? edits.adDescription
+      : piece.ad?.description,
+    adButton: piece.ad?.button,
+    emailSubject: edits.emailSubject?.trim()
+      ? edits.emailSubject
+      : piece.email?.subject,
+    emailPreheader: edits.emailPreheader?.trim()
+      ? edits.emailPreheader
+      : piece.email?.preheader,
     metrics: review.metrics ?? {},
   };
 }
+
 
 /** Pick the surface that matches the piece's platform. */
 function surfaceFor(piece: ContentPiece, view: PreviewView): React.ReactElement {

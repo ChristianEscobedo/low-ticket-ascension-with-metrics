@@ -166,9 +166,82 @@ export const EditForm: React.FC<{
         model={model}
         onChange={(value) => onEditPatch({ body: value })}
       />
+
+      {(piece.kind === 'ad' || piece.ad) && (
+        <div className="space-y-4 rounded-xl border border-ink/10 bg-white/40 p-3">
+          <div className={labelCls}>Paid ad fields</div>
+          <label className="block">
+            <span className={labelCls}>Primary text</span>
+            <textarea
+              rows={4}
+              value={edits.adPrimaryText ?? ''}
+              placeholder={piece.ad?.primaryText ?? ''}
+              onChange={(e) =>
+                onEditPatch({ adPrimaryText: e.target.value || undefined })
+              }
+              className={fieldCls}
+            />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Headline</span>
+            <input
+              type="text"
+              value={edits.adHeadline ?? ''}
+              placeholder={piece.ad?.headline ?? ''}
+              onChange={(e) =>
+                onEditPatch({ adHeadline: e.target.value || undefined })
+              }
+              className={fieldCls}
+            />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Description</span>
+            <input
+              type="text"
+              value={edits.adDescription ?? ''}
+              placeholder={piece.ad?.description ?? ''}
+              onChange={(e) =>
+                onEditPatch({ adDescription: e.target.value || undefined })
+              }
+              className={fieldCls}
+            />
+          </label>
+        </div>
+      )}
+
+      {(piece.platform === 'email' || piece.email) && (
+        <div className="space-y-4 rounded-xl border border-ink/10 bg-white/40 p-3">
+          <div className={labelCls}>Email fields</div>
+          <label className="block">
+            <span className={labelCls}>Subject</span>
+            <input
+              type="text"
+              value={edits.emailSubject ?? ''}
+              placeholder={piece.email?.subject ?? ''}
+              onChange={(e) =>
+                onEditPatch({ emailSubject: e.target.value || undefined })
+              }
+              className={fieldCls}
+            />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Preheader</span>
+            <input
+              type="text"
+              value={edits.emailPreheader ?? ''}
+              placeholder={piece.email?.preheader ?? ''}
+              onChange={(e) =>
+                onEditPatch({ emailPreheader: e.target.value || undefined })
+              }
+              className={fieldCls}
+            />
+          </label>
+        </div>
+      )}
     </div>
   );
 };
+
 
 
 export const MetricsForm: React.FC<{
