@@ -12,7 +12,9 @@ import {
   Images as ImagesIcon,
   Layers,
   Maximize2,
+  Type,
 } from 'lucide-react';
+
 import { type ContentPiece } from '@/lib/mothermode/content';
 import {
   clampIndex,
@@ -74,6 +76,14 @@ export const ImagesCard: React.FC<{
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button
             type="button"
+            onClick={() => openStudio('text')}
+            className={aiBtnGhost}
+            title="Text on image: burn hook/slide copy onto a still"
+          >
+            <Type className="h-3.5 w-3.5" /> Text
+          </button>
+          <button
+            type="button"
             onClick={() => openStudio('lab')}
             className={aiBtnGhost}
             title="Variation Lab: brief, creative tests, smart-resize"
@@ -87,6 +97,7 @@ export const ImagesCard: React.FC<{
           >
             <Maximize2 className="h-3.5 w-3.5" /> Open image studio
           </button>
+
         </div>
       </div>
 

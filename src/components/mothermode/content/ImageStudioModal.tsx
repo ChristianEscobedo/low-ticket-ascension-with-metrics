@@ -25,7 +25,9 @@ import {
   Wand2,
   LayoutGrid,
   Layers,
+  Type,
 } from 'lucide-react';
+
 
 import {
   IMAGE_MODELS,
@@ -47,13 +49,16 @@ import { PreviewMedia } from './previews/shared';
 import { aiGenerateImage, aiEditImage } from './aiClient';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid, useAiAction } from './AiControls';
 import { VariationLabPanel } from './VariationLabPanel';
+import { OverlayPanel } from './OverlayPanel';
+
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
 const tileBtn = 'rounded-full bg-white/90 p-1.5 text-ink hover:bg-white';
 const MULTI_FRAME = ['story', 'carousel', 'idea'];
 const MAX_VARIANTS = 4;
 
-export type StudioTab = 'generate' | 'edit' | 'storyboard' | 'lab';
+export type StudioTab = 'generate' | 'edit' | 'storyboard' | 'lab' | 'text';
+
 
 
 
@@ -91,7 +96,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Segmented Generate / Edit / Board / Lab switch. */
+/** Segmented Generate / Edit / Board / Lab / Text switch. */
 const StudioTabs: React.FC<{
   value: StudioTab;
   onChange: (v: StudioTab) => void;
@@ -101,10 +106,12 @@ const StudioTabs: React.FC<{
       [
         { v: 'generate' as const, label: 'Generate', Icon: Sparkles },
         { v: 'edit' as const, label: 'Edit', Icon: Wand2 },
+        { v: 'text' as const, label: 'Text', Icon: Type },
         { v: 'storyboard' as const, label: 'Board', Icon: LayoutGrid },
         { v: 'lab' as const, label: 'Lab', Icon: Layers },
       ] as const
     ).map(({ v, label, Icon }) => (
+
       <button
         key={v}
         type="button"
@@ -388,7 +395,19 @@ export const ImageStudioModal: React.FC<{
               onSeedChange={setSeed}
               onAddImages={onAddImages}
             />
+          ) : tab === 'text' ? (
+            <OverlayPanel
+              piece={piece}
+              review={review}
+              images={images}
+              activeImage={images[active] ?? null}
+              seed={seed}
+              onSeedChange={setSeed}
+              onAddImages={onAddImages}
+              onReviewChange={onReviewChange}
+            />
           ) : tab === 'storyboard' ? (
+
             <>
               <div>
                 <span className={labelCls}>Board</span>
@@ -864,13 +883,16 @@ export const ImageStudioModal: React.FC<{
                       Primary
                     </span>
                   )}
-                  {(tab === 'edit' || tab === 'lab') && seed === src && (
+                  {(tab === 'edit' || tab === 'lab' || tab === 'text') &&
+                    seed === src && (
                     <span className="pointer-events-none absolute left-2 top-8 rounded-full bg-ink/80 px-2 py-0.5 text-[10px] font-semibold text-bone">
                       Seed
                     </span>
                   )}
                   <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    {(tab === 'edit' || tab === 'lab') && seed !== src && (
+                    {(tab === 'edit' || tab === 'lab' || tab === 'text') &&
+                      seed !== src && (
+
                       <button
                         type="button"
                         onClick={() => setSeed(src)}

@@ -170,6 +170,25 @@ export interface StoryboardPack {
   generatedAt?: string;
 }
 
+/**
+ * Text-on-image overlay recipe (editable). Kept structural here so review stays
+ * free of canvas imports; full helpers live in imageOverlay.ts.
+ */
+export interface StoredImageOverlay {
+  text: string;
+  sub?: string;
+  fontId: string;
+  styleId: string;
+  size: string;
+  weight: string;
+  color: string;
+  vAlign: string;
+  hAlign: string;
+  baseImage?: string;
+  renderedUrl?: string;
+  updatedAt?: string;
+}
+
 /** Per-piece review state: images, notes, local copy edits, and metrics. */
 export interface PieceReview {
   /** Legacy single replacement image as a data URL. Still read; new uploads
@@ -194,7 +213,10 @@ export interface PieceReview {
   storyboard?: StoryboardPack;
   /** Last compliance scorecard (local + optional AI agent). */
   compliance?: StoredComplianceReport;
+  /** Last text-on-image overlay recipe (re-openable in Image Studio). */
+  overlay?: StoredImageOverlay;
 }
+
 
 
 
@@ -255,6 +277,11 @@ export function isEmptyReview(r: PieceReview): boolean {
     r.storyboard.boards.length > 0;
   const hasCompliance =
     !!r.compliance && typeof r.compliance.score === 'number';
+  const hasOverlay =
+    !!r.overlay &&
+    (hasText(r.overlay.text) ||
+      hasText(r.overlay.sub) ||
+      hasText(r.overlay.renderedUrl));
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
@@ -263,9 +290,11 @@ export function isEmptyReview(r: PieceReview): boolean {
     !hasVideo &&
     !hasScript &&
     !hasStoryboard &&
-    !hasCompliance
+    !hasCompliance &&
+    !hasOverlay
   );
 }
+
 
 
 

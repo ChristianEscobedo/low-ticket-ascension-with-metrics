@@ -40,6 +40,8 @@ export * from './versions';
 export * from './export';
 export * from './platformSizes';
 export * from './variationLab';
+export * from './imageOverlay';
+
 
 
 /** Every piece in the hub, organic and paid, in display order. */
