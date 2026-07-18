@@ -2,8 +2,9 @@
 
 Use this to bring a **behind** sibling codebase up to the current MotherMode content hub feature set: reel/story preview fixes, video production scripts, Auto model reliability, storyboard packs, and Variation Lab (including fal smart-resize).
 
-**Source of truth commit range (this repo):** `27687b9..1ab71dd`  
-**Tip commit:** `1ab71dd` — `feat(content): storyboard packs + Variation Lab with fal smart-resize`
+**Source of truth commit range (this repo):** `27687b9..8aa5477`  
+**Tip commit:** `8aa5477` — `feat(content): compliance agent with brand + platform score/fix`
+
 
 Related older ports (do these first if missing):
 
@@ -33,7 +34,8 @@ Focused checklists for *this* wave:
 | 3 | Auto model key-aware | `b62812e` | No | — |
 | 4 | Storyboard packs | `1ab71dd` | No | — |
 | 5 | Variation Lab + fal smart-resize | `1ab71dd` | No | **`FAL_KEY`** |
-| 6 | Compliance agent (brand + platform) | (this wave) | No | — |
+| 6 | Compliance agent (brand + platform) | `8aa5477` | No | — |
+
 
 
 All of these store extra state on **piece review** (localStorage via `reviewClient`), not in Postgres. No new Supabase migrations for this wave.
