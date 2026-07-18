@@ -36,6 +36,8 @@ export * from './compliancePass';
 export * from './compose';
 export * from './versions';
 export * from './export';
+export * from './platformSizes';
+export * from './variationLab';
 
 
 /** Every piece in the hub, organic and paid, in display order. */

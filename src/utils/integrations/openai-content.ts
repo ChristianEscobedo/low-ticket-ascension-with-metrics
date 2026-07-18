@@ -45,6 +45,14 @@ import {
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
+import {
+  VARIATION_BRIEF_SYSTEM,
+  VARIATION_PLAN_SYSTEM,
+  VARIATION_DIMENSIONS,
+  variationDimensionById,
+  type VariationDimensionId,
+} from '@/lib/mothermode/content/variationLab';
+
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
@@ -1671,3 +1679,394 @@ export async function generateVideoScript(
   }
   return { ok: true, data: { beats, model } };
 }
+
+// ---------------------------------------------------------------------------
+// Storyboard plan (1–4 connected cinematic contact sheets with lookback)
+// ---------------------------------------------------------------------------
+
+export interface StoryboardPlanPiece {
+  hook: string;
+  hooks?: string[];
+  caption?: string;
+  body?: string[];
+  script?: ScriptBeat[];
+  theme: string;
+  tone: string;
+  platform: string;
+  format: string;
+  /** Optional existing video-script b-roll notes to seed broll mode. */
+  brollSeeds?: string[];
+}
+
+export interface StoryboardPlanInput {
+  piece: StoryboardPlanPiece;
+  /** 1–4 connected boards. */
+  boardCount: number;
+  mode: 'narrative' | 'broll';
+  guides?: string;
+  /** Whether a character reference image will be attached at render time. */
+  hasCharacterRef?: boolean;
+  /** Whether product/environment refs will be attached at render time. */
+  hasReferenceImages?: boolean;
+  model?: string;
+}
+
+export interface StoryboardBoardOut {
+  index: number;
+  title: string;
+  scenes: string[];
+  imagePrompt: string;
+  videoPrompt?: string;
+  lookbackSummary: string;
+  brollNotes?: string;
+}
+
+function storyboardSourceSummary(p: StoryboardPlanPiece): string {
+  const lines: string[] = [];
+  lines.push(`Theme: ${p.theme}`);
+  lines.push(`Hook: ${p.hook}`);
+  if (p.hooks?.length) lines.push(`Alt hooks: ${p.hooks.join(' / ')}`);
+  if (p.caption) lines.push(`Caption: ${p.caption}`);
+  if (p.body?.length) lines.push(`Body: ${p.body.join(' / ')}`);
+  if (p.script?.length) {
+    lines.push('Existing script beats:');
+    for (const b of p.script) {
+      lines.push(`  ${b.at}: ${b.voiceover ?? b.onScreen ?? b.visual ?? ''}`);
+    }
+  }
+  if (p.brollSeeds?.length) {
+    lines.push('B-roll seeds:');
+    for (const s of p.brollSeeds) lines.push(`  - ${s}`);
+  }
+  return lines.join('\n');
+}
+
+function buildStoryboardPlanUser(input: StoryboardPlanInput, count: number): string {
+  const modeLine =
+    input.mode === 'broll'
+      ? `MODE: b-roll. Each board is a multi-panel contact sheet of object-led cutaways, inserts, and environmental storytelling that supports the post — not a talking-head arc. Still keep continuity of world, props, and light across boards.`
+      : `MODE: narrative. Each board advances the same character through a connected cinematic arc of the post's message. Board 1 opens; later boards escalate and resolve.`;
+  const intent = `Plan exactly ${count} connected cinematic multi-panel storyboard contact sheet(s) for a ${input.piece.platform} ${input.piece.format}. Someone should be able to feed each board's imagePrompt into an image model and get a premium production contact sheet.`;
+  const continuity = [
+    'LOOKBACK / CONTINUITY (STRICT):',
+    'Board 1 has no prior lookback; it establishes character, wardrobe, primary environment, and emotional baseline.',
+    'For board k (k>1), you MUST continue from board k-1. Read prior lookbackSummary values as locked facts. Do not reset wardrobe, face, or world. Evolve location, emotion, and action naturally.',
+    'Each board.lookbackSummary must state what THIS board locked for the next board (character state, environment, props, emotional beat) in 2-4 sentences.',
+  ].join('\n');
+  const refs = [
+    input.hasCharacterRef
+      ? 'A CHARACTER REFERENCE image will be attached at render time. Write imagePrompt assuming that exact person appears in every panel.'
+      : 'No character reference image. Invent one consistent real-world character and lock their description in board 1 lookback and every imagePrompt.',
+    input.hasReferenceImages
+      ? 'PRODUCT / ENVIRONMENT reference images will be attached at render time. Call for integrating those refs faithfully in every imagePrompt.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const promptRules = [
+    'imagePrompt rules:',
+    '- Write a COMPLETE board-specific direction block (scene titles, actions, environments, camera mix, emotional arc for THIS board only).',
+    '- Do NOT repeat the global cinematic system manifesto; a fixed system prompt is prepended at render time.',
+    '- Include 4-8 distinct panel ideas inside the prompt text.',
+    '- End imagePrompt with a short "VIDEO PROMPT FOR THIS STORYBOARD:" subsection (cinematography, movement, lighting, pacing, transitions).',
+    '- Also put that production block alone in videoPrompt.',
+    '- scenes[] is a short list of panel one-liners matching the prompt.',
+  ].join('\n');
+  const source = `Ground every board in this post:\n"""\n${storyboardSourceSummary(input.piece)}\n"""`;
+  const guides = input.guides?.trim()
+    ? `Production guides (voice and continuity still win): ${input.guides.trim()}`
+    : '';
+  const shape = [
+    'Respond with this exact JSON shape:',
+    `{ "boards": [ { "index": number, "title": string, "scenes": [string], "imagePrompt": string, "videoPrompt": string, "lookbackSummary": string, "brollNotes": string } ] }`,
+    `Return exactly ${count} boards with index 1..${count} in order. Omit brollNotes unless mode is broll.`,
+  ].join('\n');
+  return [intent, modeLine, continuity, refs, promptRules, source, guides, shape]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function normalizeStoryboardBoards(
+  raw: unknown,
+  count: number,
+): StoryboardBoardOut[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StoryboardBoardOut[] = [];
+  for (let i = 0; i < raw.length && out.length < count; i++) {
+    const b = raw[i];
+    if (!b || typeof b !== 'object') continue;
+    const rec = b as Record<string, unknown>;
+    const imagePrompt = toText(rec.imagePrompt);
+    const lookbackSummary = toText(rec.lookbackSummary);
+    if (!imagePrompt || !lookbackSummary) continue;
+    const scenes = toList(rec.scenes) ?? [];
+    const index = out.length + 1;
+    out.push({
+      index,
+      title: toText(rec.title) ?? `Board ${index}`,
+      scenes: scenes.length ? scenes : [imagePrompt.slice(0, 120)],
+      imagePrompt,
+      videoPrompt: toText(rec.videoPrompt),
+      lookbackSummary,
+      brollNotes: toText(rec.brollNotes),
+    });
+  }
+  return out;
+}
+
+/**
+ * Plan 1–4 connected cinematic storyboard contact sheets for a content piece.
+ * Board N is written with explicit lookback from boards 1..N-1 so the arc
+ * continues without resetting character or world.
+ */
+export async function generateStoryboardPlan(
+  input: StoryboardPlanInput,
+): Promise<AiResult<{ boards: StoryboardBoardOut[]; model: string }>> {
+  const count = Math.max(1, Math.min(4, Math.round(input.boardCount || 1)));
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are the MotherMode film director and storyboard artist planning premium cinematic multi-panel contact sheets for social and commercial production.',
+    VOICE_RULES,
+    'Expand minimal post copy into production-grade scene direction. Be concrete: props, light sources, lens feel, wardrobe, emotion.',
+    'Never generic stock poses. Never symmetrical boring grids in the written direction.',
+    'Return ONLY a JSON object. No prose, no code fences.',
+  ].join(' ');
+  const user = buildStoryboardPlanUser(input, count);
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const boards = normalizeStoryboardBoards(parsed?.boards, count);
+  if (boards.length === 0) {
+    console.warn(
+      `generateStoryboardPlan: no boards parsed (model ${model}). Raw:`,
+      raw.data.slice(0, 500),
+    );
+    return { ok: false, status: 502, error: 'No usable storyboard was returned' };
+  }
+  return { ok: true, data: { boards, model } };
+}
+
+// ---------------------------------------------------------------------------
+// Variation Lab: brief → prompts, and dimension-based edit plans
+// ---------------------------------------------------------------------------
+
+export interface VariationBriefInput {
+
+  brief: string;
+  platform?: string;
+  format?: string;
+  hook?: string;
+  theme?: string;
+  tone?: string;
+  /** Number of alternate single-image prompts (1–6). Default 3. */
+  altCount?: number;
+  /**
+   * When > 1, also return an ordered frame pack for carousel/story.
+   * 0 or 1 = single-image mode only.
+   */
+  frameCount?: number;
+  guides?: string;
+  model?: string;
+}
+
+export interface VariationFrameOut {
+  index: number;
+  role: string;
+  prompt: string;
+}
+
+export interface VariationBriefOut {
+  masterPrompt: string;
+  altPrompts: string[];
+  frames: VariationFrameOut[];
+  model: string;
+}
+
+export interface VariationPlanInput {
+  /** Selected dimension ids. */
+  dimensions: string[];
+  /** Variants to write per dimension (1–4). */
+  perDimension?: number;
+  /** Optional description of the seed / scene. */
+  seedDescription?: string;
+  platform?: string;
+  format?: string;
+  hook?: string;
+  theme?: string;
+  guides?: string;
+  model?: string;
+}
+
+export interface VariationPlanItemOut {
+  id: string;
+  dimension: VariationDimensionId | string;
+  label: string;
+  /** Imperative edit instruction for imageEdit. */
+  editPrompt: string;
+}
+
+export interface VariationPlanOut {
+  items: VariationPlanItemOut[];
+  model: string;
+}
+
+function buildVariationBriefUser(input: VariationBriefInput): string {
+  const altCount = Math.max(1, Math.min(6, Math.round(input.altCount ?? 3)));
+  const frameCount = Math.max(0, Math.min(10, Math.round(input.frameCount ?? 0)));
+  const multi = frameCount > 1;
+  const lines = [
+    `Convert this creative brief into image prompts for ${input.platform ?? 'instagram'} ${input.format ?? 'feed'}.`,
+    `Brief:\n"""\n${input.brief.trim()}\n"""`,
+  ];
+  if (input.hook?.trim()) lines.push(`Primary hook: ${input.hook.trim()}`);
+  if (input.theme?.trim()) lines.push(`Theme: ${input.theme.trim()}`);
+  if (input.tone?.trim()) lines.push(`Tone: ${input.tone.trim()}`);
+  if (input.guides?.trim()) lines.push(`Extra guides: ${input.guides.trim()}`);
+  lines.push(
+    `Return exactly 1 masterPrompt (best single render) and ${altCount} altPrompts (distinct scene alternatives for A/B).`,
+  );
+  if (multi) {
+    lines.push(
+      `Also return frames[] with exactly ${frameCount} ordered items for a ${input.format} set. Each frame has index 1..${frameCount}, role (e.g. cover, proof, reframe, cta), and prompt. Shared visual system across frames; each frame has one clear job.`,
+    );
+  } else {
+    lines.push('Set frames to an empty array.');
+  }
+  lines.push(
+    'JSON shape:',
+    '{ "masterPrompt": string, "altPrompts": [string], "frames": [ { "index": number, "role": string, "prompt": string } ] }',
+  );
+  return lines.join('\n\n');
+}
+
+/**
+ * Turn a short creative brief into a master image prompt, alt prompts, and
+ * optional carousel/story frame pack.
+ */
+export async function generateVariationBrief(
+  input: VariationBriefInput,
+): Promise<AiResult<VariationBriefOut>> {
+  const brief = input.brief?.trim();
+  if (!brief) return { ok: false, status: 400, error: 'A brief is required' };
+  const altCount = Math.max(1, Math.min(6, Math.round(input.altCount ?? 3)));
+  const frameCount = Math.max(0, Math.min(10, Math.round(input.frameCount ?? 0)));
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [VARIATION_BRIEF_SYSTEM, VOICE_RULES].join(' ');
+  const user = buildVariationBriefUser({ ...input, altCount, frameCount });
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const masterPrompt = toText(parsed?.masterPrompt) ?? toText(parsed?.prompt);
+  if (!masterPrompt) {
+    return { ok: false, status: 502, error: 'No master prompt was returned' };
+  }
+  const altRaw = Array.isArray(parsed?.altPrompts) ? parsed.altPrompts : [];
+  const altPrompts = altRaw
+    .map((s: unknown) => toText(s))
+    .filter((s: string | undefined): s is string => !!s)
+    .slice(0, altCount);
+  const frames: VariationFrameOut[] = [];
+  if (frameCount > 1 && Array.isArray(parsed?.frames)) {
+    for (const f of parsed.frames) {
+      if (!f || typeof f !== 'object') continue;
+      const rec = f as Record<string, unknown>;
+      const prompt = toText(rec.prompt);
+      if (!prompt) continue;
+      const index = frames.length + 1;
+      if (index > frameCount) break;
+      frames.push({
+        index,
+        role: toText(rec.role) ?? `frame-${index}`,
+        prompt,
+      });
+    }
+  }
+  return {
+    ok: true,
+    data: { masterPrompt, altPrompts, frames, model },
+  };
+}
+
+function buildVariationPlanUser(input: VariationPlanInput, perDim: number): string {
+  const dims = input.dimensions.map((id) => {
+    const known = variationDimensionById(id);
+    return {
+      id,
+      label: known?.label ?? id,
+      plannerHint: known?.plannerHint ?? `Vary along: ${id}`,
+    };
+  });
+  const dimBlock = dims
+    .map((d) => `- ${d.id} (${d.label}): ${d.plannerHint}`)
+    .join('\n');
+
+  const total = dims.length * perDim;
+  return [
+    `Write image-edit instructions for creative testing on ${input.platform ?? 'instagram'} ${input.format ?? 'feed'}.`,
+    input.seedDescription?.trim()
+      ? `Seed / scene context:\n"""\n${input.seedDescription.trim()}\n"""`
+      : 'Seed: use the attached image as the base (identity and main subject stay locked unless a dimension says otherwise).',
+    input.hook?.trim() ? `Hook: ${input.hook.trim()}` : '',
+    input.theme?.trim() ? `Theme: ${input.theme.trim()}` : '',
+    input.guides?.trim() ? `Guides: ${input.guides.trim()}` : '',
+    `Dimensions (write ${perDim} distinct variant(s) each):\n${dimBlock}`,
+    `Return exactly ${total} items (or fewer only if a dimension is impossible). Each item: one primary dimension, concrete editPrompt.`,
+    'JSON shape:',
+    '{ "items": [ { "id": string, "dimension": string, "label": string, "editPrompt": string } ] }',
+    'id should be like "color-1". label is short for UI (e.g. "Color · cool grade").',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/**
+ * Plan a matrix of image-edit instructions across selected variation dimensions.
+ */
+export async function generateVariationPlan(
+  input: VariationPlanInput,
+): Promise<AiResult<VariationPlanOut>> {
+  const dimensions = (input.dimensions ?? [])
+    .map((d) => String(d).trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  if (!dimensions.length) {
+    return { ok: false, status: 400, error: 'Select at least one dimension' };
+  }
+  const perDimension = Math.max(1, Math.min(4, Math.round(input.perDimension ?? 2)));
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [VARIATION_PLAN_SYSTEM, VOICE_RULES].join(' ');
+  const user = buildVariationPlanUser({ ...input, dimensions }, perDimension);
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const items: VariationPlanItemOut[] = [];
+  const list = Array.isArray(parsed?.items) ? parsed.items : [];
+  for (const it of list) {
+    if (!it || typeof it !== 'object') continue;
+    const rec = it as Record<string, unknown>;
+    const editPrompt = toText(rec.editPrompt);
+    if (!editPrompt) continue;
+    const dimension = toText(rec.dimension) ?? 'custom';
+    const known = VARIATION_DIMENSIONS.some((d) => d.id === dimension);
+    items.push({
+      id: toText(rec.id) ?? `${dimension}-${items.length + 1}`,
+      dimension: known ? (dimension as VariationDimensionId) : dimension,
+      label: toText(rec.label) ?? dimension,
+      editPrompt,
+    });
+  }
+  if (!items.length) {
+    return { ok: false, status: 502, error: 'No variation plan was returned' };
+  }
+  return { ok: true, data: { items, model } };
+}
+

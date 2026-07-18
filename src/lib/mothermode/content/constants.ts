@@ -52,8 +52,139 @@ export interface ImageEditPreset {
 /** Max reference images sent with a seed edit (character, logo, product, etc.). */
 export const MAX_EDIT_REFERENCES = 4;
 
-/** Preset prompt injections for seed-based image edits. */
+/**
+ * Cinematic multi-panel storyboard contact-sheet system prompt. Prepended to
+
+ * every board imagePrompt so renders stay production-grade. Lookback continuity
+ * and post-specific scene content are supplied per board by the planner.
+ */
+export const STORYBOARD_SYSTEM = `Create a cinematic multi-panel storyboard contact sheet featuring the SAME character consistently across every scene. The storyboard must feel like a premium film-production planning board created for directors, cinematographers, and commercial production teams.
+The system should intelligently interpret the provided scene ideas and visually expand them into believable cinematic moments with natural continuity.
+CORE DIRECTIVE:
+Do NOT create generic repeated panels.
+Do NOT create symmetrical layouts.
+Do NOT make every shot the same angle or composition.
+Every panel must feel:
+intentionally art directed
+visually distinct
+emotionally connected
+part of the same cinematic world
+like frames from a real movie or premium commercial
+STYLE:
+Ultra realistic cinematic photography
+Real-world environments
+Film-grade lighting
+Natural human imperfections
+Commercial-level cinematography
+Soft depth of field
+Atmospheric realism
+Realistic textures and materials
+Natural fabric folds and wear
+Realistic skin texture
+Cinematic color grading
+NOT AI-looking
+NOT cartoonish
+NOT overly polished CGI
+CHARACTER CONSISTENCY (STRICT):
+The SAME character must appear in every panel with:
+identical facial structure
+identical hairstyle
+identical body proportions
+consistent wardrobe logic
+believable emotional continuity
+Minor natural variations allowed:
+expression changes
+subtle wardrobe adjustments
+lighting changes
+realistic movement changes
+The character must feel like a real actor captured across multiple moments of a day or sequence.
+When a character reference image is attached, match that person exactly across every panel.
+When product or environment reference images are attached, integrate them faithfully.
+LAYOUT:
+Multi-panel storyboard/contact sheet layout
+Cinematic production-board aesthetic
+Black matte spacing between panels
+Clean numbering system
+Bold cinematic typography
+Slightly asymmetrical composition
+Premium studio pitch-board design
+Include a bottom "VIDEO PROMPT" production section
+SCENE GENERATION RULES:
+For each scene:
+Expand the idea cinematically
+Create realistic environmental storytelling
+Add believable actions and props
+Use varied camera framing
+Use different lens styles naturally
+Include environmental depth
+Add cinematic lighting motivation
+Create visual continuity between scenes
+CAMERA VARIETY:
+Use a natural mix of:
+close-ups
+medium shots
+wide shots
+over-the-shoulder shots
+cinematic profile shots
+environmental framing
+dynamic perspective shots
+LIGHTING:
+Use realistic motivated lighting:
+practical lights
+sunlight
+neon
+lamps
+window lighting
+atmospheric shadows
+cinematic contrast
+Prefer warm bone, deep aubergine, and aged brass tones when they fit the scene.
+ENVIRONMENT:
+The environment should evolve naturally with the scenes while maintaining continuity and realism.
+MATERIAL ACCURACY:
+Everything must feel physically believable:
+fabrics stretch naturally
+objects show wear
+lighting reacts correctly
+skin reflects soft realistic light
+environments feel lived in
+BOTTOM SECTION:
+Generate a cinematic production-style "VIDEO PROMPT FOR THIS STORYBOARD" section describing:
+cinematography style
+camera movement
+lighting approach
+emotional pacing
+environment continuity
+realism notes
+transition style
+overall visual direction
+FINAL RESULT:
+The output should feel like:
+a Netflix production board
+luxury commercial previsualization
+cinematic storyboard photography
+premium film pitch material
+real production planning art
+Ultra detailed.
+Cinematic realism.
+Production-ready fidelity.
+High emotional readability.
+Consistent character identity across all scenes.`;
+
+/**
+ * Compose the full image prompt for one storyboard contact sheet: system craft
+ * first, then the board-specific scene expansion from the planner.
+ */
+export function buildStoryboardImagePrompt(boardPrompt: string): string {
+  const body = boardPrompt.trim();
+  if (!body) return STORYBOARD_SYSTEM;
+  return `${STORYBOARD_SYSTEM}\n\nBOARD-SPECIFIC DIRECTION:\n${body}`;
+}
+
+/** Max product/environment refs on a storyboard pack (character is separate). */
+export const MAX_STORYBOARD_REFERENCES = 3;
+
 export const IMAGE_EDIT_PRESETS: ImageEditPreset[] = [
+
   {
     id: 'colors',
     label: 'Change colors',

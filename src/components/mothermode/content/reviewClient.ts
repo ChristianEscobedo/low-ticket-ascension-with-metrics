@@ -15,9 +15,15 @@ import {
   withoutVideo,
   withVideoScript,
   withoutVideoScript,
+  withStoryboard,
+  withoutStoryboard,
+  withStoryboardBoard,
   type PieceReview,
   type VideoScript,
+  type StoryboardPack,
+  type StoryboardBoard,
 } from '@/lib/mothermode/content/review';
+
 
 
 const ENDPOINT = '/api/mothermode/content/review';
@@ -167,4 +173,44 @@ export function clearReviewVideoScript(offerSlug: string, id: string): PieceRevi
   persist(offerSlug, id, next);
   return next;
 }
+
+/** Set the piece's connected storyboard pack. Returns the new review. */
+export function setReviewStoryboard(
+  offerSlug: string,
+  id: string,
+  pack: StoryboardPack,
+): PieceReview {
+  const next = withStoryboard(getReview(offerSlug, id), pack);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the storyboard pack, keeping everything else. Returns the new review. */
+export function clearReviewStoryboard(
+  offerSlug: string,
+  id: string,
+): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.storyboard) return prev;
+  const next = withoutStoryboard(prev);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Patch one board in the pack (e.g. after rendering). Returns the new review. */
+export function patchReviewStoryboardBoard(
+  offerSlug: string,
+  id: string,
+  boardIndex: number,
+  patch: Partial<StoryboardBoard>,
+): PieceReview {
+  const next = withStoryboardBoard(
+    getReview(offerSlug, id),
+    boardIndex,
+    patch,
+  );
+  persist(offerSlug, id, next);
+  return next;
+}
+
 

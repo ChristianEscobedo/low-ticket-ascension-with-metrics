@@ -76,6 +76,61 @@ export interface VideoScript {
   generatedAt?: string;
 }
 
+/** Narrative arc vs object-led cutaway boards. */
+export type StoryboardMode = 'narrative' | 'broll';
+
+/** How many connected contact sheets to plan (1–4). */
+export type StoryboardCount = 1 | 2 | 3 | 4;
+
+/**
+ * One cinematic multi-panel contact sheet in a connected pack. Board N is
+ * written with lookback from boards 1..N-1 so the arc continues without reset.
+ */
+export interface StoryboardBoard {
+  /** 1-based index within the pack. */
+  index: number;
+  /** Short internal title for this board. */
+  title: string;
+  /** Expanded scene beats / panel ideas for this contact sheet. */
+  scenes: string[];
+  /**
+   * Full image-generation prompt for the multi-panel contact sheet, including
+   * the bottom VIDEO PROMPT production section when present.
+   */
+  imagePrompt: string;
+  /** Standalone cinematography / movement / lighting production block. */
+  videoPrompt?: string;
+  /**
+   * What this board locked for continuity (character state, environment,
+   * emotional beat). Fed into the next board as lookback.
+   */
+  lookbackSummary: string;
+  /** Extra notes when mode is broll (insert purpose, prop focus). */
+  brollNotes?: string;
+  /** Hosted URL of the rendered contact-sheet image, when generated. */
+  imageUrl?: string;
+}
+
+/**
+ * A connected pack of 1–4 storyboard contact sheets for a piece, with shared
+ * character/product/environment references and lookback continuity.
+ */
+export interface StoryboardPack {
+  boardCount: StoryboardCount;
+  mode: StoryboardMode;
+  /** Freeform production guides the planner should honor. */
+  guides?: string;
+  /** Character reference image (data URL or hosted URL). */
+  characterRef?: string;
+  /** Product, environment, logo, or other reference images. */
+  referenceImages?: string[];
+  boards: StoryboardBoard[];
+  /** Text model that wrote the plan. */
+  model?: string;
+  /** ISO timestamp of plan generation. */
+  generatedAt?: string;
+}
+
 /** Per-piece review state: images, notes, local copy edits, and metrics. */
 export interface PieceReview {
   /** Legacy single replacement image as a data URL. Still read; new uploads
@@ -96,7 +151,10 @@ export interface PieceReview {
   video?: string;
   /** The second-by-second production script for a reel/video piece. */
   videoScript?: VideoScript;
+  /** Connected cinematic storyboard pack (1–4 contact sheets). */
+  storyboard?: StoryboardPack;
 }
+
 
 
 /** True when a string carries visible content. */
@@ -144,15 +202,21 @@ export function isEmptyReview(r: PieceReview): boolean {
     !!r.videoScript &&
     Array.isArray(r.videoScript.beats) &&
     r.videoScript.beats.length > 0;
+  const hasStoryboard =
+    !!r.storyboard &&
+    Array.isArray(r.storyboard.boards) &&
+    r.storyboard.boards.length > 0;
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
     !hasEdits &&
     !hasMetrics &&
     !hasVideo &&
-    !hasScript
+    !hasScript &&
+    !hasStoryboard
   );
 }
+
 
 
 /** Merge a partial patch into a review, deep-merging edits and metrics so a
@@ -221,6 +285,38 @@ export function withoutVideoScript(prev: PieceReview): PieceReview {
   const { videoScript: _s, ...rest } = prev;
   return rest;
 }
+
+/** Set the piece's connected storyboard pack. Pure. */
+export function withStoryboard(
+  prev: PieceReview,
+  pack: StoryboardPack,
+): PieceReview {
+  return { ...prev, storyboard: pack };
+}
+
+/** Drop the storyboard pack, keeping everything else. Pure. */
+export function withoutStoryboard(prev: PieceReview): PieceReview {
+  const { storyboard: _s, ...rest } = prev;
+  return rest;
+}
+
+/**
+ * Patch one board inside a pack (e.g. after rendering a contact sheet). Pure.
+ * Returns prev unchanged when the board index is missing.
+ */
+export function withStoryboardBoard(
+  prev: PieceReview,
+  boardIndex: number,
+  patch: Partial<StoryboardBoard>,
+): PieceReview {
+  const pack = prev.storyboard;
+  if (!pack?.boards?.length) return prev;
+  const boards = pack.boards.map((b) =>
+    b.index === boardIndex ? { ...b, ...patch } : b,
+  );
+  return { ...prev, storyboard: { ...pack, boards } };
+}
+
 
 
 

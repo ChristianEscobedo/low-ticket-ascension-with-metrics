@@ -24,6 +24,8 @@ import { ImagesCard } from './ImagesCard';
 import { HookVariants } from './HookVariants';
 import { RewriteField } from './RewriteField';
 import { VideoScriptPanel } from './VideoScriptPanel';
+import { StoryboardPanel } from './StoryboardPanel';
+
 
 
 type MetricField = keyof NonNullable<PieceReview['metrics']>;
@@ -113,6 +115,14 @@ export const EditForm: React.FC<{
         />
       )}
 
+      <StoryboardPanel
+        piece={piece}
+        review={review}
+        offerSlug={offerSlug}
+        model={model}
+        onReviewChange={onReviewChange}
+      />
+
       <ImagesCard
         piece={piece}
         review={review}
@@ -120,7 +130,10 @@ export const EditForm: React.FC<{
         onAddImages={onAddImages}
         onRemove={onRemoveImage}
         onSetIndex={onSetImageIndex}
+        offerSlug={offerSlug}
+        onReviewChange={onReviewChange}
       />
+
 
       <HookVariants
         piece={piece}

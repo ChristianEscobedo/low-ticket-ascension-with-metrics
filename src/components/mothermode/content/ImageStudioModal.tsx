@@ -2,12 +2,15 @@
 
 /**
  * The full-screen image studio. Launched from the Edit tab so image work gets
- * room: a left compose rail with Generate and Edit tabs, and a right gallery
- * canvas that shows every frame or variant at the post's true crop.
+ * room: a left compose rail with Generate, Edit, Storyboard, and Lab tabs, and a
+ * right gallery canvas that shows every frame or variant at the post's true crop.
  *
  * Generate: text-to-image with scene starters, variants, and model picker.
  * Edit: seed-based image edit with preset prompt injections and multi reference
  * images (character, logo, product, etc.) sent along with the seed.
+ * Storyboard: render planned contact sheets with character/product refs and
+ * lookback continuity from the Edit-tab storyboard pack.
+ * Lab: Variation Lab — brief → prompts, creative-test matrix, smart-resize.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,7 +23,10 @@ import {
   Minus,
   Plus,
   Wand2,
+  LayoutGrid,
+  Layers,
 } from 'lucide-react';
+
 import {
   IMAGE_MODELS,
   EDIT_IMAGE_MODELS,
@@ -28,6 +34,7 @@ import {
   FORMAT_LABEL,
   IMAGE_EDIT_PRESETS,
   MAX_EDIT_REFERENCES,
+  buildStoryboardImagePrompt,
   type ContentPiece,
 } from '@/lib/mothermode/content';
 import {
@@ -35,16 +42,20 @@ import {
   reviewImages,
   type PieceReview,
 } from '@/lib/mothermode/content/review';
+import { patchReviewStoryboardBoard } from './reviewClient';
 import { PreviewMedia } from './previews/shared';
 import { aiGenerateImage, aiEditImage } from './aiClient';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid, useAiAction } from './AiControls';
+import { VariationLabPanel } from './VariationLabPanel';
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
 const tileBtn = 'rounded-full bg-white/90 p-1.5 text-ink hover:bg-white';
 const MULTI_FRAME = ['story', 'carousel', 'idea'];
 const MAX_VARIANTS = 4;
 
-type StudioTab = 'generate' | 'edit';
+export type StudioTab = 'generate' | 'edit' | 'storyboard' | 'lab';
+
+
 
 /** The post's true crop, so the studio shows images at the shape they ship in. */
 export function formatAspect(format: string): string {
@@ -80,7 +91,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Segmented Generate / Edit switch. */
+/** Segmented Generate / Edit / Board / Lab switch. */
 const StudioTabs: React.FC<{
   value: StudioTab;
   onChange: (v: StudioTab) => void;
@@ -90,24 +101,27 @@ const StudioTabs: React.FC<{
       [
         { v: 'generate' as const, label: 'Generate', Icon: Sparkles },
         { v: 'edit' as const, label: 'Edit', Icon: Wand2 },
+        { v: 'storyboard' as const, label: 'Board', Icon: LayoutGrid },
+        { v: 'lab' as const, label: 'Lab', Icon: Layers },
       ] as const
     ).map(({ v, label, Icon }) => (
       <button
         key={v}
         type="button"
         onClick={() => onChange(v)}
-        className={`inline-flex flex-1 items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors ${
+        className={`inline-flex flex-1 items-center justify-center gap-1 px-1.5 py-1.5 text-[11px] transition-colors sm:gap-1.5 sm:px-2 sm:text-xs ${
           value === v
             ? 'bg-mode/10 font-semibold text-mode'
             : 'text-ink/55 hover:text-ink/80'
         }`}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon className="h-3.5 w-3.5 shrink-0" />
         {label}
       </button>
     ))}
   </div>
 );
+
 
 export const ImageStudioModal: React.FC<{
   open: boolean;
@@ -118,31 +132,56 @@ export const ImageStudioModal: React.FC<{
   onAddImages: (urls: string[]) => void;
   onRemove: (index: number) => void;
   onSetIndex: (index: number) => void;
-}> = ({ open, onClose, piece, review, onUpload, onAddImages, onRemove, onSetIndex }) => {
+  /** When set, storyboard renders can write imageUrl back onto the pack. */
+  offerSlug?: string;
+  onReviewChange?: (next: PieceReview) => void;
+  /** Open directly on the Storyboard tab (e.g. from StoryboardPanel). */
+  initialTab?: StudioTab;
+}> = ({
+  open,
+  onClose,
+  piece,
+  review,
+  onUpload,
+  onAddImages,
+  onRemove,
+  onSetIndex,
+  offerSlug,
+  onReviewChange,
+  initialTab,
+}) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const seedFileRef = useRef<HTMLInputElement>(null);
   const refFileRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<StudioTab>('generate');
+  const [tab, setTab] = useState<StudioTab>(initialTab ?? 'generate');
   const [prompt, setPrompt] = useState('');
   const [editPrompt, setEditPrompt] = useState('');
   const [model, setModel] = useState(AUTO_MODEL);
   const [editModel, setEditModel] = useState(AUTO_MODEL);
+  const [sbModel, setSbModel] = useState(AUTO_MODEL);
   const [count, setCount] = useState(1);
   const [editCount, setEditCount] = useState(1);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [seed, setSeed] = useState<string | null>(null);
   const [references, setReferences] = useState<string[]>([]);
   const [presetIds, setPresetIds] = useState<Set<string>>(new Set());
+  const [sbBoardIndex, setSbBoardIndex] = useState(1);
   const { busy, error, run } = useAiAction();
 
   const images = reviewImages(review);
   const active = clampIndex(review.imageIndex, images.length);
   const noun = MULTI_FRAME.includes(piece.format) ? 'Frame' : 'Image';
   const aspect = formatAspect(piece.format);
-  const modelOptions = tab === 'edit' ? EDIT_IMAGE_MODELS : IMAGE_MODELS;
-  const activeModel = tab === 'edit' ? editModel : model;
+  const pack = review.storyboard;
+  const sbBoard =
+    pack?.boards?.find((b) => b.index === sbBoardIndex) ?? pack?.boards?.[0];
+  const modelOptions =
+    tab === 'edit' || tab === 'storyboard' ? EDIT_IMAGE_MODELS : IMAGE_MODELS;
+  const activeModel =
+    tab === 'edit' ? editModel : tab === 'storyboard' ? sbModel : model;
   const modelLabel =
     modelOptions.find((m) => m.id === activeModel)?.label ?? 'Auto';
+
 
   // Seed the generate prompt from the piece's art direction when the studio opens
   // or the focused piece changes (e.g. review drafts). Reset on piece change so
@@ -151,7 +190,17 @@ export const ImageStudioModal: React.FC<{
     if (!open) return;
     const scene = piece.media?.prompt ?? piece.visual ?? '';
     setPrompt(scene);
+    if (initialTab) setTab(initialTab);
   }, [open, piece.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep storyboard board picker valid when the pack changes.
+  useEffect(() => {
+    if (!pack?.boards?.length) return;
+    if (!pack.boards.some((b) => b.index === sbBoardIndex)) {
+      setSbBoardIndex(pack.boards[0].index);
+    }
+  }, [pack, sbBoardIndex]);
+
 
   // Default the edit seed to the primary gallery image when Edit opens / gallery changes.
   useEffect(() => {
@@ -225,6 +274,63 @@ export const ImageStudioModal: React.FC<{
       onAddImages(urls.filter(Boolean));
     });
 
+  /** Render one storyboard contact sheet with shared character/product refs. */
+  const renderStoryboard = () =>
+    run(async () => {
+      if (!sbBoard?.imagePrompt?.trim())
+        throw new Error('No storyboard plan yet. Generate one on the Edit tab.');
+      const full = buildStoryboardImagePrompt(sbBoard.imagePrompt);
+      const char = pack?.characterRef?.trim();
+      const extra = (pack?.referenceImages ?? []).filter(Boolean);
+      // Prefer prior board image as soft continuity seed when available.
+      const prior =
+        sbBoard.index > 1
+          ? pack?.boards?.find((b) => b.index === sbBoard.index - 1)?.imageUrl
+          : undefined;
+      const seedImg = prior || char || extra[0];
+      const refs = [
+        ...(char && seedImg !== char ? [char] : []),
+        ...extra.filter((u) => u !== seedImg),
+      ].slice(0, MAX_EDIT_REFERENCES);
+
+      let url: string;
+      if (seedImg) {
+        url = await aiEditImage({
+          prompt: [
+            full,
+            'Create a multi-panel cinematic storyboard contact sheet as directed.',
+            char
+              ? 'Match the character reference identity exactly across every panel.'
+              : '',
+            extra.length
+              ? 'Integrate product/environment reference images faithfully.'
+              : '',
+            prior
+              ? 'Continue visual continuity from the seed (previous board) without resetting wardrobe or world.'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+          seed: seedImg,
+          references: refs.length ? refs : undefined,
+          format: piece.format,
+          model: sbModel || undefined,
+        });
+      } else {
+        url = await aiGenerateImage(full, piece.format, sbModel || undefined);
+      }
+      if (!url) throw new Error('No storyboard image was returned');
+      onAddImages([url]);
+      if (offerSlug && onReviewChange) {
+        onReviewChange(
+          patchReviewStoryboardBoard(offerSlug, piece.id, sbBoard.index, {
+            imageUrl: url,
+          }),
+        );
+      }
+    });
+
+
   const onSeedFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -273,10 +379,135 @@ export const ImageStudioModal: React.FC<{
 
           <StudioTabs value={tab} onChange={setTab} />
 
-          {tab === 'generate' ? (
+          {tab === 'lab' ? (
+            <VariationLabPanel
+              piece={piece}
+              images={images}
+              activeImage={images[active] ?? null}
+              seed={seed}
+              onSeedChange={setSeed}
+              onAddImages={onAddImages}
+            />
+          ) : tab === 'storyboard' ? (
+            <>
+              <div>
+                <span className={labelCls}>Board</span>
+                {pack?.boards?.length ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {pack.boards.map((b) => (
+                      <button
+                        key={b.index}
+                        type="button"
+                        onClick={() => setSbBoardIndex(b.index)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                          sbBoard?.index === b.index
+                            ? 'bg-mode/15 text-mode ring-1 ring-mode/30'
+                            : 'border border-ink/15 text-ink/60 hover:border-ink/30'
+                        }`}
+                      >
+                        {b.index}
+                        {b.imageUrl ? ' ·' : ''}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-xs text-ink/50">
+                    No pack yet. Open Edit on the piece and generate a
+                    storyboard plan first.
+                  </p>
+                )}
+              </div>
+              {sbBoard ? (
+                <>
+                  <div>
+                    <span className={labelCls}>
+                      Board {sbBoard.index}: {sbBoard.title}
+                    </span>
+                    <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap text-[11px] text-ink/55">
+                      {(sbBoard.scenes ?? []).join('\n') ||
+                        sbBoard.imagePrompt.slice(0, 280)}
+                    </p>
+                  </div>
+                  {pack?.characterRef ||
+                  (pack?.referenceImages && pack.referenceImages.length > 0) ? (
+                    <div>
+                      <span className={labelCls}>Refs from pack</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {pack.characterRef ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={pack.characterRef}
+                            alt="Character"
+                            className="h-12 w-12 rounded-lg border border-mode object-cover"
+                            title="Character"
+                          />
+                        ) : null}
+                        {(pack.referenceImages ?? []).map((src, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={i}
+                            src={src}
+                            alt={`Ref ${i + 1}`}
+                            className="h-12 w-12 rounded-lg border border-ink/15 object-cover"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-ink/45">
+                      No character/product refs on the pack. Render still works;
+                      add refs on Edit for identity lock.
+                    </p>
+                  )}
+                  {sbBoard.imageUrl ? (
+                    <div className="overflow-hidden rounded-xl border border-ink/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={sbBoard.imageUrl}
+                        alt={sbBoard.title}
+                        className="max-h-40 w-full object-contain bg-ink/5"
+                      />
+                    </div>
+                  ) : null}
+                  <label className="flex items-center justify-between gap-2">
+                    <span className={labelCls}>Model</span>
+                    <select
+                      value={sbModel}
+                      onChange={(e) => setSbModel(e.target.value)}
+                      className="rounded-md border border-ink/15 bg-white/70 px-2 py-1 text-xs text-ink focus:border-mode focus:outline-none"
+                    >
+                      <option value={AUTO_MODEL}>Auto</option>
+                      {EDIT_IMAGE_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={renderStoryboard}
+                    disabled={busy || !sbBoard.imagePrompt?.trim()}
+                    className={`${aiBtnSolid} justify-center`}
+                  >
+                    {busy ? <Spinner /> : <LayoutGrid className="h-3.5 w-3.5" />}
+                    {busy
+                      ? 'Rendering…'
+                      : sbBoard.imageUrl
+                        ? 'Re-render board'
+                        : 'Render contact sheet'}
+                  </button>
+                  <p className="-mt-2 text-[11px] text-ink/40">
+                    {modelLabel} · cinematic system + lookback continuity
+                  </p>
+                </>
+              ) : null}
+            </>
+          ) : tab === 'generate' ? (
             <>
               <div>
                 <span className={labelCls}>Describe the scene</span>
+
                 <textarea
                   rows={5}
                   value={prompt}
@@ -633,13 +864,13 @@ export const ImageStudioModal: React.FC<{
                       Primary
                     </span>
                   )}
-                  {tab === 'edit' && seed === src && (
+                  {(tab === 'edit' || tab === 'lab') && seed === src && (
                     <span className="pointer-events-none absolute left-2 top-8 rounded-full bg-ink/80 px-2 py-0.5 text-[10px] font-semibold text-bone">
                       Seed
                     </span>
                   )}
                   <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    {tab === 'edit' && seed !== src && (
+                    {(tab === 'edit' || tab === 'lab') && seed !== src && (
                       <button
                         type="button"
                         onClick={() => setSeed(src)}
@@ -649,6 +880,7 @@ export const ImageStudioModal: React.FC<{
                         <Wand2 className="h-3.5 w-3.5" />
                       </button>
                     )}
+
                     {i !== active && (
                       <button
                         type="button"

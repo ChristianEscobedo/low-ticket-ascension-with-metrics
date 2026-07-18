@@ -206,3 +206,175 @@ export async function aiGenerateVideoScript(args: {
   };
 }
 
+/** One board returned by a storyboard plan run. */
+export interface AiStoryboardBoard {
+  index: number;
+  title: string;
+  scenes: string[];
+  imagePrompt: string;
+  videoPrompt?: string;
+  lookbackSummary: string;
+  brollNotes?: string;
+}
+
+/**
+ * Plan 1–4 connected cinematic storyboard contact sheets for a piece.
+ * Board N continues from board N-1 via lookback summaries.
+ */
+export async function aiGenerateStoryboardPlan(args: {
+  piece: {
+    hook: string;
+    hooks?: string[];
+    caption?: string;
+    body?: string[];
+    script?: ContentPiece['script'];
+    theme: string;
+    tone: string;
+    platform: string;
+    format: string;
+    brollSeeds?: string[];
+  };
+  boardCount: number;
+  mode: 'narrative' | 'broll';
+  guides?: string;
+  hasCharacterRef?: boolean;
+  hasReferenceImages?: boolean;
+  model?: string;
+}): Promise<{
+  boards: AiStoryboardBoard[];
+  boardCount: number;
+  mode: 'narrative' | 'broll';
+  model?: string;
+}> {
+  const json = await postAi({ action: 'storyboardPlan', ...args });
+  if (!Array.isArray(json.boards) || json.boards.length === 0) {
+    throw new Error('No storyboard was returned');
+  }
+  return {
+    boards: json.boards as AiStoryboardBoard[],
+    boardCount:
+      typeof json.boardCount === 'number' ? json.boardCount : args.boardCount,
+    mode: json.mode === 'broll' ? 'broll' : 'narrative',
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
+/** One frame in a carousel/story pack from a variation brief. */
+export interface AiVariationFrame {
+  index: number;
+  role: string;
+  prompt: string;
+}
+
+/**
+ * Convert a creative brief into a master image prompt, alt prompts, and
+ * optional multi-frame pack for carousel/story.
+ */
+export async function aiVariationBrief(args: {
+  brief: string;
+  platform?: string;
+  format?: string;
+  hook?: string;
+  theme?: string;
+  tone?: string;
+  altCount?: number;
+  frameCount?: number;
+  guides?: string;
+  model?: string;
+}): Promise<{
+  masterPrompt: string;
+  altPrompts: string[];
+  frames: AiVariationFrame[];
+  model?: string;
+}> {
+  const json = await postAi({ action: 'variationBrief', ...args });
+  if (typeof json.masterPrompt !== 'string' || !json.masterPrompt.trim()) {
+    throw new Error('No master prompt was returned');
+  }
+  return {
+    masterPrompt: json.masterPrompt,
+    altPrompts: Array.isArray(json.altPrompts)
+      ? (json.altPrompts as string[]).filter((s) => typeof s === 'string')
+      : [],
+    frames: Array.isArray(json.frames)
+      ? (json.frames as AiVariationFrame[])
+      : [],
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
+export interface AiVariationPlanItem {
+  id: string;
+  dimension: string;
+  label: string;
+  editPrompt: string;
+}
+
+/** Plan edit instructions across selected creative-test dimensions. */
+export async function aiVariationPlan(args: {
+  dimensions: string[];
+  perDimension?: number;
+  seedDescription?: string;
+  platform?: string;
+  format?: string;
+  hook?: string;
+  theme?: string;
+  guides?: string;
+  model?: string;
+}): Promise<{ items: AiVariationPlanItem[]; model?: string }> {
+  const json = await postAi({ action: 'variationPlan', ...args });
+  if (!Array.isArray(json.items) || json.items.length === 0) {
+    throw new Error('No variation plan was returned');
+  }
+  return {
+    items: json.items as AiVariationPlanItem[],
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
+/**
+ * Smart-resize one image to exact platform sizes via fal-ai/smart-resize.
+ * Accepts data URLs (server hosts first) or public http(s) URLs.
+ */
+export async function aiSmartResize(args: {
+  imageUrl: string;
+  targetSizes: string[];
+  prompt?: string;
+  numImagesPerSize?: number;
+  resolution?: '1K' | '2K' | '4K';
+  outputFormat?: 'jpeg' | 'png' | 'webp';
+  safetyTolerance?: '1' | '2' | '3' | '4' | '5' | '6';
+  seed?: number | null;
+  syncMode?: boolean;
+}): Promise<{
+  images: string[];
+  description?: string;
+  results?: unknown;
+  sourceUrl?: string;
+}> {
+  const json = await postAi({
+    action: 'smartResize',
+    image_url: args.imageUrl,
+    target_sizes: args.targetSizes,
+    prompt: args.prompt,
+    num_images_per_size: args.numImagesPerSize,
+    resolution: args.resolution,
+    output_format: args.outputFormat,
+    safety_tolerance: args.safetyTolerance,
+    seed: args.seed,
+    sync_mode: args.syncMode,
+  });
+  if (!Array.isArray(json.images) || json.images.length === 0) {
+    throw new Error('No resized images were returned');
+  }
+  return {
+    images: (json.images as string[]).filter((s) => typeof s === 'string'),
+    description:
+      typeof json.description === 'string' ? json.description : undefined,
+    results: json.results,
+    sourceUrl: typeof json.sourceUrl === 'string' ? json.sourceUrl : undefined,
+  };
+}
+
+
+
