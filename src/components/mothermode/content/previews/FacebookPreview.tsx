@@ -112,7 +112,10 @@ const Feed: React.FC<PreviewProps> = ({ view }) => {
 
 /** Vertical reel surface, dark with a minimal overlay. */
 const Vertical: React.FC<PreviewProps> = ({ view }) => (
-  <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-xl bg-black text-white">
+  // Fixed width (not w-full): absolute children give no intrinsic size, so a
+  // percentage width inside a shrink-wrapped flex parent collapses to 0×0.
+  <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+
     <PreviewMedia
       src={view.image}
       alt={view.piece.title}
@@ -139,7 +142,8 @@ const Vertical: React.FC<PreviewProps> = ({ view }) => (
  * reaction and share affordances along the bottom.
  */
 const Story: React.FC<PreviewProps> = ({ view }) => (
-  <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-xl bg-black text-white">
+  <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+
     <PreviewMedia
       src={view.image}
       alt={view.piece.title}

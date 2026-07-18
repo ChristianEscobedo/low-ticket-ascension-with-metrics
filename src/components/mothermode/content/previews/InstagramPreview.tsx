@@ -79,7 +79,7 @@ const Reel: React.FC<PreviewProps> = ({ view }) => {
   const { piece, metrics } = view;
   const caption = view.caption ?? view.hook;
   return (
-    <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-xl bg-black text-white">
+    <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
       <PreviewMedia
         src={view.image}
         alt={piece.title}
@@ -87,6 +87,7 @@ const Reel: React.FC<PreviewProps> = ({ view }) => {
         tint="#E1306C"
         className="absolute inset-0"
       />
+
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
       <div className="absolute bottom-3 left-3 right-14">
         <p className="text-sm font-semibold">{HANDLE}</p>
@@ -125,7 +126,8 @@ const Rail: React.FC<{ icon: React.ReactNode; label: string }> = ({
 
 /** Full-bleed story frame with a per-frame progress bar and centered hook. */
 const Story: React.FC<PreviewProps> = ({ view }) => (
-  <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-xl bg-black text-white">
+  <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+
     <PreviewMedia
       src={view.image}
       alt={view.piece.title}

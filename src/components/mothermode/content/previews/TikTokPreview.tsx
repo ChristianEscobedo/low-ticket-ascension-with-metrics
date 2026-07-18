@@ -28,7 +28,8 @@ export const TikTokPreview: React.FC<PreviewProps> = ({ view }) => {
   const { piece, metrics } = view;
   const caption = view.caption ?? view.hook;
   return (
-    <div className="relative mx-auto aspect-[9/16] w-full max-w-[280px] overflow-hidden rounded-xl bg-black text-white">
+    <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+
       <PreviewMedia
         src={view.image}
         alt={piece.title}
