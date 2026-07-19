@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyOverlayTransform,
   canvasSizeForFormat,
   defaultOverlay,
+  getOverlayColor,
+  snapPosition,
   suggestOverlayText,
 } from '@/lib/mothermode/content/imageOverlay';
 import type { ContentPiece } from '@/lib/mothermode/content/types';
@@ -20,13 +23,16 @@ const basePiece = {
 } as ContentPiece;
 
 describe('imageOverlay helpers', () => {
-  it('defaults to bottom-center bold white shadow', () => {
+  it('defaults to bottom-center bold white shadow with v2 scales', () => {
     const o = defaultOverlay();
     expect(o.vAlign).toBe('bottom');
     expect(o.hAlign).toBe('center');
     expect(o.weight).toBe('bold');
     expect(o.color).toBe('white');
     expect(o.styleId).toBe('shadow');
+    expect(o.fontScale).toBe(1);
+    expect(o.maxWidthPct).toBe(0.88);
+    expect(o.transform).toBe('none');
   });
 
   it('sizes story/reel as 9:16', () => {
@@ -73,5 +79,26 @@ describe('imageOverlay helpers', () => {
 
   it('falls back to hook for feed', () => {
     expect(suggestOverlayText(basePiece, {}).text).toBe('the tabs never close');
+  });
+
+  it('snapPosition sets freeform coords', () => {
+    const s = snapPosition('top', 'left');
+    expect(s.x).toBeLessThan(0.2);
+    expect(s.y).toBeLessThan(0.2);
+    expect(s.vAlign).toBe('top');
+    expect(s.hAlign).toBe('left');
+  });
+
+  it('applies text transform', () => {
+    expect(applyOverlayTransform('Hi There', 'uppercase')).toBe('HI THERE');
+    expect(applyOverlayTransform('Hi There', 'lowercase')).toBe('hi there');
+    expect(applyOverlayTransform('Hi', 'none')).toBe('Hi');
+  });
+
+  it('resolves custom hex color', () => {
+    expect(getOverlayColor({ color: 'custom', customHex: '#abCDef' })).toBe(
+      '#abCDef',
+    );
+    expect(getOverlayColor({ color: 'brass' })).toBe('#B08D57');
   });
 });

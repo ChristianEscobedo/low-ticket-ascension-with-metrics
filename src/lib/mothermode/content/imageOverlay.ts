@@ -1,25 +1,52 @@
 /**
  * Text-on-image overlay recipes + canvas burn-in for stories, reels, and feed
  * stills. Pure layout helpers are unit-testable; render runs in the browser.
+ *
+ * v2: freeform x/y, fontScale, tracking, leading, maxWidthPct, transform,
+ * custom hex, expanded fonts/weights/styles, shadow/bg opacity toggles.
  */
 import { PLATFORM_SIZE_PRESETS } from './platformSizes';
 import type { ContentPiece } from './types';
 import { reviewHooks, type PieceReview } from './review';
 
-/** Vertical band for the text block. */
+/** Vertical band for the text block (snap presets + scrim direction). */
 export type OverlayVAlign = 'top' | 'middle' | 'bottom';
-/** Horizontal alignment inside the safe area. */
+/** Horizontal alignment of glyphs inside the text block. */
 export type OverlayHAlign = 'left' | 'center' | 'right';
 export type OverlaySize = 's' | 'm' | 'l' | 'xl';
-export type OverlayWeight = 'regular' | 'bold';
-export type OverlayColor = 'white' | 'bone' | 'ink' | 'brass';
+export type OverlayWeight = 'regular' | 'medium' | 'bold' | 'black';
+/** Named swatches; use customHex when color === 'custom'. */
+export type OverlayColor =
+  | 'white'
+  | 'soft-white'
+  | 'bone'
+  | 'ink'
+  | 'charcoal'
+  | 'brass'
+  | 'rose'
+  | 'sage'
+  | 'custom';
 
-export type OverlayFontId = 'sans' | 'serif' | 'mono';
+export type OverlayFontId =
+  | 'sans'
+  | 'serif'
+  | 'mono'
+  | 'display'
+  | 'condensed'
+  | 'rounded';
+
 export type OverlayStyleId =
+  | 'none'
   | 'shadow'
   | 'pill'
+  | 'box'
   | 'scrim'
-  | 'brass-line';
+  | 'brass-line'
+  | 'outline'
+  | 'bar'
+  | 'glow';
+
+export type OverlayTransform = 'none' | 'uppercase' | 'lowercase';
 
 /** Editable recipe stored on the piece review (re-openable). */
 export interface ImageOverlay {
@@ -31,8 +58,31 @@ export interface ImageOverlay {
   size: OverlaySize;
   weight: OverlayWeight;
   color: OverlayColor;
+  /** When color is custom, #RRGGBB. */
+  customHex?: string;
   vAlign: OverlayVAlign;
   hAlign: OverlayHAlign;
+  /**
+   * Freeform top-left of the text block as 0–1 of frame.
+   * When set, overrides vAlign/hAlign for placement (align still affects glyphs).
+   */
+  x?: number;
+  y?: number;
+  /** Multiplier on size tier font (0.7–1.4). */
+  fontScale?: number;
+  /** Letter-spacing as em fraction (−0.05–0.2). */
+  tracking?: number;
+  /** Line-height multiplier (1.0–1.6). */
+  leading?: number;
+  /** Max text block width as fraction of frame (0.4–0.94). */
+  maxWidthPct?: number;
+  transform?: OverlayTransform;
+  /** Drop shadow strength 0–1 (also used by glow). */
+  shadowStrength?: number;
+  /** Background fill opacity for pill/box (0–1). */
+  bgOpacity?: number;
+  /** Overall text fill opacity (0–1). */
+  textOpacity?: number;
   /** Gallery image used as the base when last rendered. */
   baseImage?: string;
   /** Last burned-in PNG (data URL or hosted). */
@@ -66,6 +116,24 @@ export const OVERLAY_FONTS: OverlayFontOption[] = [
     family: 'ui-serif, Georgia, "Times New Roman", Times, serif',
   },
   {
+    id: 'display',
+    label: 'Display',
+    family:
+      'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, "Times New Roman", serif',
+  },
+  {
+    id: 'condensed',
+    label: 'Condensed',
+    family:
+      '"Arial Narrow", "Helvetica Condensed", "Roboto Condensed", Impact, Haettenschweiler, sans-serif',
+  },
+  {
+    id: 'rounded',
+    label: 'Rounded',
+    family:
+      '"Segoe UI Rounded", "SF Pro Rounded", "Nunito", "Varela Round", ui-rounded, system-ui, sans-serif',
+  },
+  {
     id: 'mono',
     label: 'Mono',
     family:
@@ -74,15 +142,31 @@ export const OVERLAY_FONTS: OverlayFontOption[] = [
 ];
 
 export const OVERLAY_STYLES: OverlayStyleOption[] = [
+  { id: 'none', label: 'None', hint: 'Flat type, no effect' },
   {
     id: 'shadow',
     label: 'Shadow',
-    hint: 'Bold type with soft drop shadow',
+    hint: 'Soft drop shadow under glyphs',
+  },
+  {
+    id: 'glow',
+    label: 'Glow',
+    hint: 'Soft light halo around type',
+  },
+  {
+    id: 'outline',
+    label: 'Outline',
+    hint: 'Stroked glyphs for busy backgrounds',
   },
   {
     id: 'pill',
     label: 'Pill',
-    hint: 'Bone rounded box behind the lines',
+    hint: 'Rounded bone box behind the lines',
+  },
+  {
+    id: 'box',
+    label: 'Box',
+    hint: 'Solid rectangle behind the block',
   },
   {
     id: 'scrim',
@@ -94,6 +178,11 @@ export const OVERLAY_STYLES: OverlayStyleOption[] = [
     label: 'Brass line',
     hint: 'Accent rule under the primary line',
   },
+  {
+    id: 'bar',
+    label: 'Bar',
+    hint: 'Solid left accent bar',
+  },
 ];
 
 export const OVERLAY_SIZES: { id: OverlaySize; label: string }[] = [
@@ -103,13 +192,38 @@ export const OVERLAY_SIZES: { id: OverlaySize; label: string }[] = [
   { id: 'xl', label: 'XL' },
 ];
 
-export const OVERLAY_COLORS: { id: OverlayColor; label: string; hex: string }[] =
+export const OVERLAY_WEIGHTS: { id: OverlayWeight; label: string; css: string }[] =
   [
-    { id: 'white', label: 'White', hex: '#FFFFFF' },
-    { id: 'bone', label: 'Bone', hex: '#F4F0E8' },
-    { id: 'ink', label: 'Ink', hex: '#1C1917' },
-    { id: 'brass', label: 'Brass', hex: '#B08D57' },
+    { id: 'regular', label: 'Regular', css: '400' },
+    { id: 'medium', label: 'Medium', css: '500' },
+    { id: 'bold', label: 'Bold', css: '700' },
+    { id: 'black', label: 'Black', css: '900' },
   ];
+
+export const OVERLAY_COLORS: {
+  id: OverlayColor;
+  label: string;
+  hex: string;
+}[] = [
+  { id: 'white', label: 'White', hex: '#FFFFFF' },
+  { id: 'soft-white', label: 'Soft', hex: '#F5F5F4' },
+  { id: 'bone', label: 'Bone', hex: '#F4F0E8' },
+  { id: 'ink', label: 'Ink', hex: '#1C1917' },
+  { id: 'charcoal', label: 'Charcoal', hex: '#44403C' },
+  { id: 'brass', label: 'Brass', hex: '#B08D57' },
+  { id: 'rose', label: 'Rose', hex: '#E8B4B8' },
+  { id: 'sage', label: 'Sage', hex: '#A3B18A' },
+  { id: 'custom', label: 'Custom', hex: '#FFFFFF' },
+];
+
+export const OVERLAY_TRANSFORMS: {
+  id: OverlayTransform;
+  label: string;
+}[] = [
+  { id: 'none', label: 'Aa' },
+  { id: 'uppercase', label: 'AA' },
+  { id: 'lowercase', label: 'aa' },
+];
 
 /** Fraction of frame height used as primary font size. */
 const SIZE_FRAC: Record<OverlaySize, number> = {
@@ -120,6 +234,23 @@ const SIZE_FRAC: Record<OverlaySize, number> = {
 };
 
 const SAFE = 0.06; // 6% padding from edges
+
+const WEIGHT_CSS: Record<OverlayWeight, string> = {
+  regular: '400',
+  medium: '500',
+  bold: '700',
+  black: '900',
+};
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo;
+  return Math.min(hi, Math.max(lo, n));
+}
 
 export function defaultOverlay(partial?: Partial<ImageOverlay>): ImageOverlay {
   return {
@@ -132,6 +263,14 @@ export function defaultOverlay(partial?: Partial<ImageOverlay>): ImageOverlay {
     color: 'white',
     vAlign: 'bottom',
     hAlign: 'center',
+    fontScale: 1,
+    tracking: 0,
+    leading: 1.2,
+    maxWidthPct: 0.88,
+    transform: 'none',
+    shadowStrength: 0.55,
+    bgOpacity: 0.92,
+    textOpacity: 1,
     ...partial,
   };
 }
@@ -140,8 +279,38 @@ export function getOverlayFont(id: OverlayFontId): OverlayFontOption {
   return OVERLAY_FONTS.find((f) => f.id === id) ?? OVERLAY_FONTS[0];
 }
 
-export function getOverlayColor(id: OverlayColor): string {
-  return OVERLAY_COLORS.find((c) => c.id === id)?.hex ?? '#FFFFFF';
+export function getOverlayWeightCss(w: OverlayWeight): string {
+  return WEIGHT_CSS[w] ?? '700';
+}
+
+/** Resolve fill hex from named color or customHex. */
+export function getOverlayColor(overlay: Pick<ImageOverlay, 'color' | 'customHex'>): string {
+  if (overlay.color === 'custom' && overlay.customHex?.trim()) {
+    const h = overlay.customHex.trim();
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(h)) return h;
+  }
+  return OVERLAY_COLORS.find((c) => c.id === overlay.color)?.hex ?? '#FFFFFF';
+}
+
+/** Apply text transform for measure + draw. */
+export function applyOverlayTransform(
+  text: string,
+  transform: OverlayTransform | undefined,
+): string {
+  if (!text) return '';
+  if (transform === 'uppercase') return text.toUpperCase();
+  if (transform === 'lowercase') return text.toLowerCase();
+  return text;
+}
+
+/** Snap preset → normalized freeform coords (block top-left approx). */
+export function snapPosition(
+  v: OverlayVAlign,
+  h: OverlayHAlign,
+): { x: number; y: number; vAlign: OverlayVAlign; hAlign: OverlayHAlign } {
+  const x = h === 'left' ? 0.06 : h === 'right' ? 0.55 : 0.2;
+  const y = v === 'top' ? 0.06 : v === 'middle' ? 0.4 : 0.72;
+  return { x, y, vAlign: v, hAlign: h };
 }
 
 /** Pixel size for the piece format (export canvas). */
@@ -221,34 +390,40 @@ export function wrapLines(
   text: string,
   maxWidth: number,
 ): string[] {
-  const raw = text.replace(/\s+/g, ' ').trim();
-  if (!raw) return [];
-  const words = raw.split(' ');
+  // Preserve intentional newlines as hard breaks.
+  const paragraphs = text.replace(/\r\n/g, '\n').split('\n');
   const lines: string[] = [];
-  let cur = '';
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w;
-    if (ctx.measureText(next).width <= maxWidth) {
-      cur = next;
-    } else {
-      if (cur) lines.push(cur);
-      // Hard-break very long tokens
-      if (ctx.measureText(w).width > maxWidth) {
-        let chunk = '';
-        for (const ch of w) {
-          const t = chunk + ch;
-          if (ctx.measureText(t).width > maxWidth && chunk) {
-            lines.push(chunk);
-            chunk = ch;
-          } else chunk = t;
-        }
-        cur = chunk;
+  for (const para of paragraphs) {
+    const raw = para.replace(/[ \t]+/g, ' ').trim();
+    if (!raw) {
+      if (paragraphs.length > 1) lines.push('');
+      continue;
+    }
+    const words = raw.split(' ');
+    let cur = '';
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (ctx.measureText(next).width <= maxWidth) {
+        cur = next;
       } else {
-        cur = w;
+        if (cur) lines.push(cur);
+        if (ctx.measureText(w).width > maxWidth) {
+          let chunk = '';
+          for (const ch of w) {
+            const t = chunk + ch;
+            if (ctx.measureText(t).width > maxWidth && chunk) {
+              lines.push(chunk);
+              chunk = ch;
+            } else chunk = t;
+          }
+          cur = chunk;
+        } else {
+          cur = w;
+        }
       }
     }
+    if (cur) lines.push(cur);
   }
-  if (cur) lines.push(cur);
   return lines;
 }
 
@@ -263,10 +438,36 @@ export interface OverlayLayout {
   subLineHeight: number;
   textX: number;
   blockTop: number;
+  blockLeft: number;
+  blockWidth: number;
   primaryLines: string[];
   subLines: string[];
   blockHeight: number;
   align: CanvasTextAlign;
+  trackingPx: number;
+  usesFreeform: boolean;
+}
+
+function measureBlockWidth(
+  ctx: CanvasRenderingContext2D,
+  primaryLines: string[],
+  subLines: string[],
+  primaryPx: number,
+  subPx: number,
+  weight: string,
+  family: string,
+  trackingPx: number,
+): number {
+  let maxW = 0;
+  ctx.font = `${weight} ${primaryPx}px ${family}`;
+  for (const line of primaryLines) {
+    maxW = Math.max(maxW, ctx.measureText(line).width + trackingPx * Math.max(0, line.length - 1));
+  }
+  ctx.font = `400 ${subPx}px ${family}`;
+  for (const line of subLines) {
+    maxW = Math.max(maxW, ctx.measureText(line).width + trackingPx * 0.6 * Math.max(0, line.length - 1));
+  }
+  return maxW;
 }
 
 /** Compute text block geometry for a canvas size + overlay recipe. */
@@ -277,43 +478,118 @@ export function layoutOverlay(
   height: number,
 ): OverlayLayout {
   const pad = Math.round(Math.min(width, height) * SAFE);
-  const maxTextWidth = width - pad * 2;
-  const primaryPx = Math.max(18, Math.round(height * SIZE_FRAC[overlay.size]));
-  const subPx = Math.max(14, Math.round(primaryPx * 0.55));
-  const lineHeight = Math.round(primaryPx * 1.2);
-  const subLineHeight = Math.round(subPx * 1.25);
+  const maxWidthPct = clamp(overlay.maxWidthPct ?? 0.88, 0.4, 0.94);
+  const maxTextWidth = Math.round(width * maxWidthPct);
+  const scale = clamp(overlay.fontScale ?? 1, 0.7, 1.4);
+  const primaryPx = Math.max(
+    14,
+    Math.round(height * SIZE_FRAC[overlay.size] * scale),
+  );
+  const subPx = Math.max(12, Math.round(primaryPx * 0.55));
+  const leading = clamp(overlay.leading ?? 1.2, 1.0, 1.6);
+  const lineHeight = Math.round(primaryPx * leading);
+  const subLineHeight = Math.round(subPx * Math.max(1.15, leading));
   const font = getOverlayFont(overlay.fontId);
-  const weight = overlay.weight === 'bold' ? '700' : '400';
+  const weight = getOverlayWeightCss(overlay.weight);
+  const trackingEm = clamp(overlay.tracking ?? 0, -0.05, 0.2);
+  const trackingPx = primaryPx * trackingEm;
+  const transform = overlay.transform ?? 'none';
+
+  const primarySrc = applyOverlayTransform(overlay.text || '', transform);
+  const subSrc = applyOverlayTransform(overlay.sub || '', transform);
 
   ctx.font = `${weight} ${primaryPx}px ${font.family}`;
-  const primaryLines = wrapLines(ctx, overlay.text || '', maxTextWidth);
+  const primaryLines = wrapLines(ctx, primarySrc, maxTextWidth);
   ctx.font = `400 ${subPx}px ${font.family}`;
-  const subLines = wrapLines(ctx, overlay.sub || '', maxTextWidth);
+  const subLines = wrapLines(ctx, subSrc, maxTextWidth);
 
-  const gap = primaryLines.length && subLines.length ? Math.round(primaryPx * 0.35) : 0;
+  const gap =
+    primaryLines.length && subLines.length ? Math.round(primaryPx * 0.35) : 0;
+  const styleExtra =
+    overlay.styleId === 'pill' || overlay.styleId === 'box'
+      ? Math.round(primaryPx * 0.7)
+      : overlay.styleId === 'brass-line' && primaryLines.length
+        ? Math.round(primaryPx * 0.45)
+        : overlay.styleId === 'bar'
+          ? Math.round(primaryPx * 0.15)
+          : 0;
   const blockHeight =
     primaryLines.length * lineHeight +
     gap +
     subLines.length * subLineHeight +
-    (overlay.styleId === 'pill' ? Math.round(primaryPx * 0.7) : 0) +
-    (overlay.styleId === 'brass-line' && primaryLines.length
-      ? Math.round(primaryPx * 0.45)
-      : 0);
+    styleExtra;
 
+  const contentW = measureBlockWidth(
+    ctx,
+    primaryLines,
+    subLines,
+    primaryPx,
+    subPx,
+    weight,
+    font.family,
+    trackingPx,
+  );
+  const boxPadX =
+    overlay.styleId === 'pill' || overlay.styleId === 'box'
+      ? Math.round(primaryPx * 0.55)
+      : overlay.styleId === 'bar'
+        ? Math.round(primaryPx * 0.45)
+        : 0;
+  const blockWidth = Math.min(
+    maxTextWidth + boxPadX * 2,
+    Math.max(contentW + boxPadX * 2, primaryPx * 2),
+  );
+
+  const usesFreeform =
+    typeof overlay.x === 'number' &&
+    Number.isFinite(overlay.x) &&
+    typeof overlay.y === 'number' &&
+    Number.isFinite(overlay.y);
+
+  let blockLeft: number;
   let blockTop: number;
-  if (overlay.vAlign === 'top') blockTop = pad;
-  else if (overlay.vAlign === 'middle')
-    blockTop = Math.round((height - blockHeight) / 2);
-  else blockTop = height - pad - blockHeight;
-
-  const align: CanvasTextAlign =
+  let align: CanvasTextAlign =
     overlay.hAlign === 'left'
       ? 'left'
       : overlay.hAlign === 'right'
         ? 'right'
         : 'center';
+
+  if (usesFreeform) {
+    blockLeft = clamp(
+      Math.round(clamp01(overlay.x as number) * width),
+      pad * 0.25,
+      width - pad * 0.25 - 8,
+    );
+    blockTop = clamp(
+      Math.round(clamp01(overlay.y as number) * height),
+      pad * 0.25,
+      height - pad * 0.25 - 8,
+    );
+    // Keep block on-canvas as much as possible
+    if (blockLeft + blockWidth > width - pad * 0.25) {
+      blockLeft = Math.max(pad * 0.25, width - pad * 0.25 - blockWidth);
+    }
+    if (blockTop + blockHeight > height - pad * 0.25) {
+      blockTop = Math.max(pad * 0.25, height - pad * 0.25 - blockHeight);
+    }
+  } else {
+    if (overlay.vAlign === 'top') blockTop = pad;
+    else if (overlay.vAlign === 'middle')
+      blockTop = Math.round((height - blockHeight) / 2);
+    else blockTop = height - pad - blockHeight;
+
+    if (align === 'left') blockLeft = pad;
+    else if (align === 'right') blockLeft = width - pad - blockWidth;
+    else blockLeft = Math.round((width - blockWidth) / 2);
+  }
+
   const textX =
-    align === 'left' ? pad : align === 'right' ? width - pad : width / 2;
+    align === 'left'
+      ? blockLeft + boxPadX
+      : align === 'right'
+        ? blockLeft + blockWidth - boxPadX
+        : blockLeft + blockWidth / 2;
 
   return {
     width,
@@ -326,10 +602,14 @@ export function layoutOverlay(
     subLineHeight,
     textX,
     blockTop,
+    blockLeft,
+    blockWidth,
     primaryLines,
     subLines,
     blockHeight,
     align,
+    trackingPx,
+    usesFreeform,
   };
 }
 
@@ -361,6 +641,105 @@ function loadImage(src: string): Promise<HTMLImageElement> {
       reject(new Error('Could not load base image for overlay'));
     img.src = src;
   });
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3) {
+    h = h
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
+  const n = parseInt(h, 16);
+  if (!Number.isFinite(n)) return `rgba(255,255,255,${alpha})`;
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${clamp01(alpha)})`;
+}
+
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function fillTextLine(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  x: number,
+  y: number,
+  trackingPx: number,
+  align: CanvasTextAlign,
+): void {
+  if (!trackingPx) {
+    ctx.fillText(line, x, y);
+    return;
+  }
+  // Manual tracking
+  const chars = line.split('');
+  const widths = chars.map((ch) => ctx.measureText(ch).width);
+  const total =
+    widths.reduce((a, b) => a + b, 0) +
+    trackingPx * Math.max(0, chars.length - 1);
+  let cx =
+    align === 'left'
+      ? x
+      : align === 'right'
+        ? x - total
+        : x - total / 2;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i], cx, y);
+    cx += widths[i] + trackingPx;
+  }
+  ctx.textAlign = prev;
+}
+
+function strokeTextLine(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  x: number,
+  y: number,
+  trackingPx: number,
+  align: CanvasTextAlign,
+): void {
+  if (!trackingPx) {
+    ctx.strokeText(line, x, y);
+    return;
+  }
+  const chars = line.split('');
+  const widths = chars.map((ch) => ctx.measureText(ch).width);
+  const total =
+    widths.reduce((a, b) => a + b, 0) +
+    trackingPx * Math.max(0, chars.length - 1);
+  let cx =
+    align === 'left'
+      ? x
+      : align === 'right'
+        ? x - total
+        : x - total / 2;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < chars.length; i++) {
+    ctx.strokeText(chars[i], cx, y);
+    cx += widths[i] + trackingPx;
+  }
+  ctx.textAlign = prev;
 }
 
 /**
@@ -410,10 +789,15 @@ export async function renderOverlayToDataUrl(args: {
 
   const layout = layoutOverlay(ctx, overlay, width, height);
   const font = getOverlayFont(overlay.fontId);
-  const weight = overlay.weight === 'bold' ? '700' : '400';
-  const fill = getOverlayColor(overlay.color);
+  const weight = getOverlayWeightCss(overlay.weight);
+  const fillHex = getOverlayColor(overlay);
+  const textOpacity = clamp(overlay.textOpacity ?? 1, 0.15, 1);
+  const bgOpacity = clamp(overlay.bgOpacity ?? 0.92, 0.1, 1);
+  const shadowStrength = clamp(overlay.shadowStrength ?? 0.55, 0, 1);
   const pillPadX = Math.round(layout.primaryPx * 0.55);
   const pillPadY = Math.round(layout.primaryPx * 0.35);
+  const boxed =
+    overlay.styleId === 'pill' || overlay.styleId === 'box';
 
   // Scrim band behind text
   if (overlay.styleId === 'scrim') {
@@ -424,77 +808,117 @@ export async function renderOverlayToDataUrl(args: {
       layout.blockTop + layout.blockHeight + bandPad,
     );
     const grd = ctx.createLinearGradient(0, top, 0, bot);
-    if (overlay.vAlign === 'top') {
+    const bandCenter =
+      (layout.blockTop + layout.blockHeight / 2) / height;
+    if (bandCenter < 0.35) {
       grd.addColorStop(0, 'rgba(0,0,0,0.72)');
       grd.addColorStop(1, 'rgba(0,0,0,0)');
-    } else if (overlay.vAlign === 'middle') {
+    } else if (bandCenter > 0.65) {
+      grd.addColorStop(0, 'rgba(0,0,0,0)');
+      grd.addColorStop(1, 'rgba(0,0,0,0.75)');
+    } else {
       grd.addColorStop(0, 'rgba(0,0,0,0)');
       grd.addColorStop(0.5, 'rgba(0,0,0,0.65)');
       grd.addColorStop(1, 'rgba(0,0,0,0)');
-    } else {
-      grd.addColorStop(0, 'rgba(0,0,0,0)');
-      grd.addColorStop(1, 'rgba(0,0,0,0.75)');
     }
     ctx.fillStyle = grd;
     ctx.fillRect(0, top, width, bot - top);
   }
 
-  // Pill background
-  if (overlay.styleId === 'pill' && (layout.primaryLines.length || layout.subLines.length)) {
-    ctx.font = `${weight} ${layout.primaryPx}px ${font.family}`;
-    let maxW = 0;
-    for (const line of layout.primaryLines) {
-      maxW = Math.max(maxW, ctx.measureText(line).width);
-    }
-    ctx.font = `400 ${layout.subPx}px ${font.family}`;
-    for (const line of layout.subLines) {
-      maxW = Math.max(maxW, ctx.measureText(line).width);
-    }
-    const boxW = maxW + pillPadX * 2;
+  // Pill / box background
+  if (boxed && (layout.primaryLines.length || layout.subLines.length)) {
+    const boxW = layout.blockWidth;
     const boxH = layout.blockHeight;
-    let boxX =
-      layout.align === 'left'
-        ? layout.pad
-        : layout.align === 'right'
-          ? width - layout.pad - boxW
-          : (width - boxW) / 2;
+    const boxX = layout.blockLeft;
     const boxY = layout.blockTop;
-    const r = Math.min(24, Math.round(layout.primaryPx * 0.45));
-    ctx.fillStyle = 'rgba(244, 240, 232, 0.92)';
-    ctx.beginPath();
-    ctx.moveTo(boxX + r, boxY);
-    ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, r);
-    ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, r);
-    ctx.arcTo(boxX, boxY + boxH, boxX, boxY, r);
-    ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
-    ctx.closePath();
+    const r =
+      overlay.styleId === 'pill'
+        ? Math.min(24, Math.round(layout.primaryPx * 0.45))
+        : Math.min(8, Math.round(layout.primaryPx * 0.12));
+    ctx.fillStyle = hexToRgba('#F4F0E8', bgOpacity);
+    roundedRect(ctx, boxX, boxY, boxW, boxH, r);
     ctx.fill();
+  }
+
+  // Left accent bar
+  if (overlay.styleId === 'bar' && (layout.primaryLines.length || layout.subLines.length)) {
+    const barW = Math.max(4, Math.round(layout.primaryPx * 0.12));
+    ctx.fillStyle = '#B08D57';
+    ctx.fillRect(
+      layout.blockLeft,
+      layout.blockTop,
+      barW,
+      layout.blockHeight,
+    );
   }
 
   ctx.textAlign = layout.align;
   ctx.textBaseline = 'top';
 
-  let y = layout.blockTop + (overlay.styleId === 'pill' ? pillPadY : 0);
+  let y = layout.blockTop + (boxed ? pillPadY : 0);
+  const forceInkOnBox =
+    boxed &&
+    (overlay.color === 'white' ||
+      overlay.color === 'soft-white' ||
+      overlay.color === 'bone');
+  const primaryFill = forceInkOnBox ? '#1C1917' : fillHex;
+  const useShadow =
+    overlay.styleId === 'shadow' ||
+    (overlay.styleId !== 'none' &&
+      overlay.styleId !== 'outline' &&
+      shadowStrength > 0 &&
+      overlay.styleId === 'glow');
 
   // Primary lines
   ctx.font = `${weight} ${layout.primaryPx}px ${font.family}`;
-  ctx.fillStyle =
-    overlay.styleId === 'pill' && overlay.color === 'white'
-      ? '#1C1917'
-      : fill;
+  ctx.fillStyle = hexToRgba(primaryFill, textOpacity);
 
-  if (overlay.styleId === 'shadow') {
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = Math.round(layout.primaryPx * 0.35);
+  if (overlay.styleId === 'shadow' || overlay.styleId === 'glow') {
+    const blur =
+      overlay.styleId === 'glow'
+        ? Math.round(layout.primaryPx * 0.55 * shadowStrength)
+        : Math.round(layout.primaryPx * 0.35 * shadowStrength);
+    ctx.shadowColor =
+      overlay.styleId === 'glow'
+        ? hexToRgba(fillHex, 0.65 * shadowStrength)
+        : `rgba(0,0,0,${0.55 * shadowStrength})`;
+    ctx.shadowBlur = blur;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = Math.round(layout.primaryPx * 0.08);
+    ctx.shadowOffsetY =
+      overlay.styleId === 'glow'
+        ? 0
+        : Math.round(layout.primaryPx * 0.08);
   } else {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
   }
 
+  if (overlay.styleId === 'outline') {
+    ctx.lineWidth = Math.max(2, Math.round(layout.primaryPx * 0.08));
+    ctx.strokeStyle = hexToRgba('#0a0a0a', Math.min(1, textOpacity + 0.1));
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+  }
+
   for (const line of layout.primaryLines) {
-    ctx.fillText(line, layout.textX, y);
+    if (overlay.styleId === 'outline') {
+      strokeTextLine(
+        ctx,
+        line,
+        layout.textX,
+        y,
+        layout.trackingPx,
+        layout.align,
+      );
+    }
+    fillTextLine(
+      ctx,
+      line,
+      layout.textX,
+      y,
+      layout.trackingPx,
+      layout.align,
+    );
     y += layout.lineHeight;
   }
 
@@ -520,25 +944,94 @@ export async function renderOverlayToDataUrl(args: {
 
   // Sub lines
   if (layout.subLines.length) {
-    ctx.shadowColor =
-      overlay.styleId === 'shadow' ? 'rgba(0,0,0,0.45)' : 'transparent';
-    ctx.shadowBlur =
-      overlay.styleId === 'shadow' ? Math.round(layout.subPx * 0.3) : 0;
+    if (overlay.styleId === 'shadow' || overlay.styleId === 'glow') {
+      ctx.shadowColor =
+        overlay.styleId === 'glow'
+          ? hexToRgba(fillHex, 0.5 * shadowStrength)
+          : `rgba(0,0,0,${0.45 * shadowStrength})`;
+      ctx.shadowBlur =
+        overlay.styleId === 'glow'
+          ? Math.round(layout.subPx * 0.45 * shadowStrength)
+          : Math.round(layout.subPx * 0.3 * shadowStrength);
+    } else {
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+    }
     ctx.font = `400 ${layout.subPx}px ${font.family}`;
-    ctx.fillStyle =
-      overlay.styleId === 'pill'
-        ? 'rgba(28, 25, 23, 0.75)'
-        : overlay.color === 'white'
-          ? 'rgba(255,255,255,0.88)'
-          : fill;
+    const subFill = boxed
+      ? 'rgba(28, 25, 23, 0.75)'
+      : overlay.color === 'white' || overlay.color === 'soft-white'
+        ? hexToRgba(fillHex, textOpacity * 0.88)
+        : hexToRgba(fillHex, textOpacity);
+    ctx.fillStyle = subFill;
+    const subTrack = layout.trackingPx * 0.6;
     for (const line of layout.subLines) {
-      ctx.fillText(line, layout.textX, y);
+      if (overlay.styleId === 'outline') {
+        ctx.lineWidth = Math.max(1, Math.round(layout.subPx * 0.08));
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        strokeTextLine(ctx, line, layout.textX, y, subTrack, layout.align);
+      }
+      fillTextLine(ctx, line, layout.textX, y, subTrack, layout.align);
       y += layout.subLineHeight;
     }
   }
 
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
+  void useShadow;
 
   return canvas.toDataURL('image/png');
+}
+
+/** Serialize recipe for PieceReview.overlay persistence. */
+export function toStoredOverlay(o: ImageOverlay): {
+  text: string;
+  sub?: string;
+  fontId: string;
+  styleId: string;
+  size: string;
+  weight: string;
+  color: string;
+  customHex?: string;
+  vAlign: string;
+  hAlign: string;
+  x?: number;
+  y?: number;
+  fontScale?: number;
+  tracking?: number;
+  leading?: number;
+  maxWidthPct?: number;
+  transform?: string;
+  shadowStrength?: number;
+  bgOpacity?: number;
+  textOpacity?: number;
+  baseImage?: string;
+  renderedUrl?: string;
+  updatedAt?: string;
+} {
+  return {
+    text: o.text,
+    sub: o.sub,
+    fontId: o.fontId,
+    styleId: o.styleId,
+    size: o.size,
+    weight: o.weight,
+    color: o.color,
+    customHex: o.customHex,
+    vAlign: o.vAlign,
+    hAlign: o.hAlign,
+    x: o.x,
+    y: o.y,
+    fontScale: o.fontScale,
+    tracking: o.tracking,
+    leading: o.leading,
+    maxWidthPct: o.maxWidthPct,
+    transform: o.transform,
+    shadowStrength: o.shadowStrength,
+    bgOpacity: o.bgOpacity,
+    textOpacity: o.textOpacity,
+    baseImage: o.baseImage,
+    renderedUrl: o.renderedUrl,
+    updatedAt: o.updatedAt,
+  };
 }

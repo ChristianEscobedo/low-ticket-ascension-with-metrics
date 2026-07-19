@@ -182,8 +182,20 @@ export interface StoredImageOverlay {
   size: string;
   weight: string;
   color: string;
+  customHex?: string;
   vAlign: string;
   hAlign: string;
+  /** Freeform top-left of text block (0–1 of frame). */
+  x?: number;
+  y?: number;
+  fontScale?: number;
+  tracking?: number;
+  leading?: number;
+  maxWidthPct?: number;
+  transform?: string;
+  shadowStrength?: number;
+  bgOpacity?: number;
+  textOpacity?: number;
   baseImage?: string;
   renderedUrl?: string;
   updatedAt?: string;
