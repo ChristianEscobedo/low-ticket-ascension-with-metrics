@@ -166,15 +166,30 @@ export const OverlayPanel: React.FC<{
   const previewRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-    moved: boolean;
-  } | null>(null);
+/** Active pointer gesture: move block, or resize font/width via handles. */
+  type Gesture =
+    | {
+        kind: 'move';
+        pointerId: number;
+        startX: number;
+        startY: number;
+        origX: number;
+        origY: number;
+        moved: boolean;
+      }
+    | {
+        kind: 'resize';
+        mode: 'se' | 'sw' | 'ne' | 'nw' | 'e' | 'w';
+        pointerId: number;
+        startX: number;
+        startY: number;
+        origScale: number;
+        origMaxW: number;
+      };
+  const dragRef = useRef<Gesture | null>(null);
   const rafRef = useRef(0);
+  const blockElRef = useRef<HTMLDivElement | null>(null);
+
 
 
   const base =
@@ -423,20 +438,28 @@ if (hasFreeform) {
 
 
 
-const onPointerDownBlock = (e: React.PointerEvent) => {
-    if (editing) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setSelected(true);
+const seedFreeform = () => {
     const o = overlayRef.current;
-    // Seed freeform from true anchor coords (matches snapPosition / canvas).
     const snap = snapPosition(o.vAlign, o.hAlign);
     const curX = typeof o.x === 'number' ? o.x : snap.x;
     const curY = typeof o.y === 'number' ? o.y : snap.y;
     if (typeof o.x !== 'number' || typeof o.y !== 'number') {
       setOverlay((prev) => ({ ...prev, x: curX, y: curY }));
     }
+    return { curX, curY };
+  };
+
+  const onPointerDownBlock = (e: React.PointerEvent) => {
+    if (editing) return;
+    // Don't start move when interacting with inputs/handles (handles stopPropagation).
+    if ((e.target as HTMLElement)?.closest?.('[data-overlay-handle]')) return;
+    if ((e.target as HTMLElement)?.closest?.('textarea,input')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSelected(true);
+    const { curX, curY } = seedFreeform();
     dragRef.current = {
+      kind: 'move',
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
@@ -451,6 +474,31 @@ const onPointerDownBlock = (e: React.PointerEvent) => {
     }
   };
 
+  const onPointerDownResize = (
+    e: React.PointerEvent,
+    mode: 'se' | 'sw' | 'ne' | 'nw' | 'e' | 'w',
+  ) => {
+    if (editing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setSelected(true);
+    seedFreeform();
+    const o = overlayRef.current;
+    dragRef.current = {
+      kind: 'resize',
+      mode,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origScale: o.fontScale ?? 1,
+      origMaxW: o.maxWidthPct ?? 0.88,
+    };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const onPointerMoveBlock = (e: React.PointerEvent) => {
     const d = dragRef.current;
@@ -459,17 +507,52 @@ const onPointerDownBlock = (e: React.PointerEvent) => {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
-    const dx = (e.clientX - d.startX) / rect.width;
-    const dy = (e.clientY - d.startY) / rect.height;
-    if (!d.moved && Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return;
-    d.moved = true;
-    const nx = Math.min(0.9, Math.max(0.02, d.origX + dx));
-    const ny = Math.min(0.9, Math.max(0.02, d.origY + dy));
-    // rAF-throttle so React doesn't thrash mid-drag
+
+    if (d.kind === 'move') {
+      const dx = (e.clientX - d.startX) / rect.width;
+      const dy = (e.clientY - d.startY) / rect.height;
+      if (!d.moved && Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return;
+      d.moved = true;
+      const nx = Math.min(0.9, Math.max(0.02, d.origX + dx));
+      const ny = Math.min(0.9, Math.max(0.02, d.origY + dy));
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setOverlay((prev) =>
+          prev.x === nx && prev.y === ny ? prev : { ...prev, x: nx, y: ny },
+        );
+      });
+      return;
+    }
+
+    // Resize: corners → fontScale; left/right edges → maxWidthPct
+    const dxPx = e.clientX - d.startX;
+    const dyPx = e.clientY - d.startY;
+    if (d.mode === 'e' || d.mode === 'w') {
+      // Width: drag outward grows maxWidthPct
+      const sign = d.mode === 'e' ? 1 : -1;
+      const delta = (sign * dxPx) / rect.width;
+      const next = Math.min(0.94, Math.max(0.4, d.origMaxW + delta));
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setOverlay((prev) =>
+          prev.maxWidthPct === next ? prev : { ...prev, maxWidthPct: next },
+        );
+      });
+      return;
+    }
+    // Corner: average of outward growth in x/y → font scale
+    const sx =
+      d.mode === 'se' || d.mode === 'ne' ? 1 : -1;
+    const sy =
+      d.mode === 'se' || d.mode === 'sw' ? 1 : -1;
+    // ~120px drag ≈ +0.4 scale at typical preview size
+    const delta =
+      ((sx * dxPx) / rect.width + (sy * dyPx) / rect.height) * 0.55;
+    const next = Math.min(1.4, Math.max(0.7, d.origScale + delta));
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       setOverlay((prev) =>
-        prev.x === nx && prev.y === ny ? prev : { ...prev, x: nx, y: ny },
+        prev.fontScale === next ? prev : { ...prev, fontScale: next },
       );
     });
   };
@@ -490,7 +573,8 @@ const onPointerDownBlock = (e: React.PointerEvent) => {
   };
 
 
-  // Arrow-key nudge when selected
+
+// Arrow-key nudge / scale when selected (not while typing)
   useEffect(() => {
     if (!selected || editing) return;
     const onKey = (ev: KeyboardEvent) => {
@@ -501,7 +585,7 @@ const onPointerDownBlock = (e: React.PointerEvent) => {
       ) {
         return;
       }
-const step = ev.shiftKey ? 0.04 : 0.01;
+      const step = ev.shiftKey ? 0.04 : 0.01;
       const snap = snapPosition(overlay.vAlign, overlay.hAlign);
       const x = typeof overlay.x === 'number' ? overlay.x : snap.x;
       const y = typeof overlay.y === 'number' ? overlay.y : snap.y;
@@ -518,13 +602,37 @@ const step = ev.shiftKey ? 0.04 : 0.01;
       } else if (ev.key === 'ArrowDown') {
         ev.preventDefault();
         patch({ x, y: Math.min(0.92, y + step) });
+      } else if (ev.key === '=' || ev.key === '+') {
+        ev.preventDefault();
+        patch({
+          fontScale: Math.min(1.4, (overlay.fontScale ?? 1) + 0.05),
+        });
+      } else if (ev.key === '-' || ev.key === '_') {
+        ev.preventDefault();
+        patch({
+          fontScale: Math.max(0.7, (overlay.fontScale ?? 1) - 0.05),
+        });
+      } else if (ev.key === 'Enter' || ev.key === 'F2') {
+        ev.preventDefault();
+        setEditing('text');
       } else if (ev.key === 'Escape') {
         setEditing(null);
+        setSelected(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, editing, overlay.x, overlay.y, overlay.hAlign, overlay.vAlign, patch]);
+  }, [
+    selected,
+    editing,
+    overlay.x,
+    overlay.y,
+    overlay.hAlign,
+    overlay.vAlign,
+    overlay.fontScale,
+    patch,
+  ]);
+
 
   const snapTo = (v: OverlayVAlign, h: OverlayHAlign) => {
     const s = snapPosition(v, h);
@@ -592,9 +700,10 @@ return (
               )}
               {overlayOn ? 'Text on' : 'Text off'}
             </button>
-            <span className="inline-flex items-center gap-1 text-[10px] text-ink/40">
-              <Move className="h-3 w-3" /> dbl-click edit
+<span className="inline-flex items-center gap-1 text-[10px] text-ink/40">
+              <Move className="h-3 w-3" /> drag · handles size · dbl-click type
             </span>
+
           </div>
         </div>
 
@@ -673,18 +782,20 @@ return (
                         : 'center',
                 }}
               >
-                <TextBlock
+<TextBlock
                   style={blockStyle}
                   overlay={overlay}
                   displayPrimary={displayPrimary}
                   displaySub={displaySub}
                   previewColor={previewColor}
                   editing={editing}
+                  selected={selected}
                   setEditing={setEditing}
                   patch={patch}
                   onPointerDown={onPointerDownBlock}
                   onPointerMove={onPointerMoveBlock}
                   onPointerUp={onPointerUpBlock}
+                  onPointerDownResize={onPointerDownResize}
                 />
               </div>
             ) : (
@@ -695,13 +806,16 @@ return (
                 displaySub={displaySub}
                 previewColor={previewColor}
                 editing={editing}
+                selected={selected}
                 setEditing={setEditing}
                 patch={patch}
                 onPointerDown={onPointerDownBlock}
                 onPointerMove={onPointerMoveBlock}
                 onPointerUp={onPointerUpBlock}
+                onPointerDownResize={onPointerDownResize}
               />
             )
+
           ) : (
             <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
               <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] text-bone/80">
@@ -710,13 +824,16 @@ return (
             </div>
           )}
 </div>
-        <p className="text-[10px] text-ink/40">
+<p className="text-[10px] text-ink/40">
           Export {exportSize.width}×{exportSize.height}
           {hasFreeform
-            ? ` · anchor ${Math.round((overlay.x as number) * 100)}%, ${Math.round((overlay.y as number) * 100)}%`
-            : ' · snap layout'}
-          {overlayOn ? ' · arrows nudge' : ' · text hidden'}
+            ? ` · ${Math.round((overlay.x as number) * 100)}%, ${Math.round((overlay.y as number) * 100)}%`
+            : ' · snap'}
+          {overlayOn
+            ? ` · ${Math.round((overlay.fontScale ?? 1) * 100)}% type · ${Math.round((overlay.maxWidthPct ?? 0.88) * 100)}% wide · Enter edit · ± size`
+            : ' · text hidden'}
         </p>
+
       </div>
 
       <div>
@@ -1125,6 +1242,9 @@ return (
   );
 };
 
+const HANDLE_BASE =
+  'absolute z-10 h-2.5 w-2.5 rounded-sm border border-white bg-mode shadow-sm touch-none';
+
 const TextBlock: React.FC<{
   style: React.CSSProperties;
   overlay: ImageOverlay;
@@ -1132,11 +1252,16 @@ const TextBlock: React.FC<{
   displaySub: string;
   previewColor: string;
   editing: EditField;
+  selected: boolean;
   setEditing: (f: EditField) => void;
   patch: (p: Partial<ImageOverlay>) => void;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
+  onPointerDownResize: (
+    e: React.PointerEvent,
+    mode: 'se' | 'sw' | 'ne' | 'nw' | 'e' | 'w',
+  ) => void;
 }> = ({
   style,
   overlay,
@@ -1144,17 +1269,50 @@ const TextBlock: React.FC<{
   displaySub,
   previewColor,
   editing,
+  selected,
   setEditing,
   patch,
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerDownResize,
 }) => {
+  const primaryRef = useRef<HTMLTextAreaElement>(null);
+  const subRef = useRef<HTMLInputElement>(null);
+
+  // Focus + select all when entering edit mode (true in-place edit).
+  useEffect(() => {
+    if (editing === 'text' && primaryRef.current) {
+      const el = primaryRef.current;
+      el.focus();
+      const len = el.value.length;
+      try {
+        el.setSelectionRange(len, len);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (editing === 'sub' && subRef.current) {
+      subRef.current.focus();
+      subRef.current.select();
+    }
+  }, [editing]);
+
+  // Auto-grow primary textarea height to match content.
+  useEffect(() => {
+    const el = primaryRef.current;
+    if (!el || editing !== 'text') return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+  }, [editing, overlay.text, style.fontSize]);
+
+  const showHandles = selected && !editing;
+
   return (
     <div
       role="group"
-      aria-label="Overlay text — drag to move, double-click to edit"
-      className="max-w-full touch-none"
+      aria-label="Overlay text — drag to move, handles to resize, double-click to edit"
+      className="relative max-w-full touch-none"
       style={style}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1167,34 +1325,71 @@ const TextBlock: React.FC<{
     >
       {editing === 'text' ? (
         <textarea
-          autoFocus
-          rows={Math.min(4, Math.max(2, (overlay.text || '').split('\n').length))}
+          ref={primaryRef}
+          rows={1}
           value={overlay.text}
           onChange={(e) => patch({ text: e.target.value })}
-          onBlur={() => setEditing(null)}
+          onBlur={(e) => {
+            // Keep editing if focus moved to sub field
+            const next = e.relatedTarget as HTMLElement | null;
+            if (next?.dataset?.overlayField === 'sub') return;
+            setEditing(null);
+          }}
           onKeyDown={(e) => {
+            e.stopPropagation();
             if (e.key === 'Escape') {
               e.preventDefault();
               setEditing(null);
             }
-            e.stopPropagation();
+            // Cmd/Ctrl+Enter commits
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              setEditing(null);
+            }
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="w-full resize-none rounded border border-white/40 bg-black/40 p-1 text-inherit outline-none"
+          data-overlay-field="text"
+          spellCheck
+          className="w-full resize-none border-0 bg-transparent p-0 text-inherit caret-white outline-none ring-0"
           style={{
             font: 'inherit',
+            fontSize: 'inherit',
+            fontWeight: 'inherit',
+            fontFamily: 'inherit',
             color: 'inherit',
             letterSpacing: 'inherit',
             lineHeight: 'inherit',
             textAlign: 'inherit',
+            textShadow: 'inherit',
+            WebkitTextStroke: 'inherit',
+            overflow: 'hidden',
+            minHeight: '1.2em',
           }}
+          placeholder="Type overlay…"
         />
       ) : displayPrimary ? (
-        <div className="whitespace-pre-wrap break-words leading-[inherit]">
+        <div
+          className="cursor-text whitespace-pre-wrap break-words leading-[inherit]"
+          onClick={(e) => {
+            // Single click when already selected → edit (Figma-like)
+            if (selected) {
+              e.stopPropagation();
+              setEditing('text');
+            }
+          }}
+        >
           {displayPrimary}
         </div>
       ) : (
-        <div className="text-[11px] opacity-50">Double-click to type…</div>
+        <div
+          className="cursor-text text-[11px] opacity-50"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditing('text');
+          }}
+        >
+          Click to type…
+        </div>
       )}
       {overlay.styleId === 'brass-line' && (displayPrimary || editing) ? (
         <div
@@ -1218,26 +1413,35 @@ const TextBlock: React.FC<{
       ) : null}
       {editing === 'sub' ? (
         <input
-          autoFocus
+          ref={subRef}
           value={overlay.sub ?? ''}
           onChange={(e) => patch({ sub: e.target.value })}
           onBlur={() => setEditing(null)}
           onKeyDown={(e) => {
+            e.stopPropagation();
             if (e.key === 'Escape' || e.key === 'Enter') {
               e.preventDefault();
               setEditing(null);
             }
-            e.stopPropagation();
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          className="mt-1 w-full rounded border border-white/40 bg-black/40 p-1 text-[0.75em] outline-none"
-          style={{ font: 'inherit', color: 'inherit', textAlign: 'inherit' }}
-        />
-      ) : displaySub ? (
-        <div
-          className="mt-1 break-words opacity-90"
+          data-overlay-field="sub"
+          className="mt-1 w-full border-0 bg-transparent p-0 outline-none"
           style={{
-            // Match canvas sub ratio (0.55 of primary) via CSS var from blockStyle
+            font: 'inherit',
+            fontSize: 'var(--overlay-sub-px, 0.55em)',
+            fontWeight: 400,
+            color: 'inherit',
+            textAlign: 'inherit',
+            letterSpacing: 'inherit',
+            lineHeight: Math.max(1.15, overlay.leading ?? 1.2),
+          }}
+          placeholder="Sub line…"
+        />
+      ) : displaySub || selected ? (
+        <div
+          className={`mt-1 break-words ${displaySub ? 'opacity-90' : 'opacity-40'}`}
+          style={{
             fontSize: 'var(--overlay-sub-px, 0.55em)',
             fontWeight: 400,
             lineHeight: Math.max(1.15, overlay.leading ?? 1.2),
@@ -1245,16 +1449,73 @@ const TextBlock: React.FC<{
               overlay.styleId === 'pill' || overlay.styleId === 'box'
                 ? 'rgba(28,25,23,0.75)'
                 : previewColor,
+            cursor: 'text',
+            minHeight: '1em',
+          }}
+          onClick={(e) => {
+            if (selected) {
+              e.stopPropagation();
+              setEditing('sub');
+            }
           }}
           onDoubleClick={(e) => {
             e.stopPropagation();
             setEditing('sub');
           }}
         >
-          {displaySub}
+          {displaySub || (selected ? 'Add sub…' : null)}
         </div>
       ) : null}
 
+      {/* Resize handles — corners = type size, sides = max width */}
+      {showHandles ? (
+        <>
+          {(
+            [
+              { m: 'nw' as const, cls: '-left-1 -top-1 cursor-nwse-resize' },
+              { m: 'ne' as const, cls: '-right-1 -top-1 cursor-nesw-resize' },
+              { m: 'sw' as const, cls: '-left-1 -bottom-1 cursor-nesw-resize' },
+              { m: 'se' as const, cls: '-right-1 -bottom-1 cursor-nwse-resize' },
+            ] as const
+          ).map(({ m, cls }) => (
+            <span
+              key={m}
+              data-overlay-handle={m}
+              title="Drag to resize type"
+              className={`${HANDLE_BASE} ${cls}`}
+              onPointerDown={(e) => onPointerDownResize(e, m)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            />
+          ))}
+          {(
+            [
+              {
+                m: 'w' as const,
+                cls: '-left-1 top-1/2 -translate-y-1/2 cursor-ew-resize',
+              },
+              {
+                m: 'e' as const,
+                cls: '-right-1 top-1/2 -translate-y-1/2 cursor-ew-resize',
+              },
+            ] as const
+          ).map(({ m, cls }) => (
+            <span
+              key={m}
+              data-overlay-handle={m}
+              title="Drag to change text width"
+              className={`${HANDLE_BASE} ${cls}`}
+              onPointerDown={(e) => onPointerDownResize(e, m)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            />
+          ))}
+        </>
+      ) : null}
     </div>
   );
 };
+
+
