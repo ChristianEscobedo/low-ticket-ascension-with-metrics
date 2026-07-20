@@ -90,8 +90,31 @@ export async function POST(request: NextRequest) {
 
   const action = body.action;
 
+  // Host a client-side data URL (overlay burn-in, local upload) to Storage.
+  if (action === 'hostImage') {
+    const dataUrl =
+      typeof body.dataUrl === 'string'
+        ? body.dataUrl
+        : typeof body.image === 'string'
+          ? body.image
+          : '';
+    if (!dataUrl.startsWith('data:')) {
+      // Already hosted — pass through.
+      if (/^https?:\/\//i.test(dataUrl)) {
+        return NextResponse.json({ ok: true, image: dataUrl });
+      }
+      return NextResponse.json(
+        { ok: false, error: 'A data URL image is required' },
+        { status: 400 },
+      );
+    }
+    const image = await hostGeneratedImage(dataUrl);
+    return NextResponse.json({ ok: true, image });
+  }
+
   if (action === 'image') {
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+
     if (!prompt) {
       return NextResponse.json(
         { ok: false, error: 'A prompt is required' },

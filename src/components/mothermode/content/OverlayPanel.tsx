@@ -12,7 +12,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Type, Sparkles, Download, Move } from 'lucide-react';
+import { Type, Sparkles, Download, Move, Check } from 'lucide-react';
 import {
   OVERLAY_COLORS,
   OVERLAY_FONTS,
@@ -43,6 +43,8 @@ import {
 } from '@/lib/mothermode/content';
 import type { PieceReview, StoredImageOverlay } from '@/lib/mothermode/content/review';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid } from './AiControls';
+import { aiHostImage } from './aiClient';
+
 
 /** Match Image Studio crop classes without importing the modal (cycle). */
 function formatAspect(format: string): string {
@@ -151,16 +153,22 @@ export const OverlayPanel: React.FC<{
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
   const [selected, setSelected] = useState(true);
   const [editing, setEditing] = useState<EditField>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
     startY: number;
     origX: number;
     origY: number;
+    moved: boolean;
   } | null>(null);
+  const rafRef = useRef(0);
+
 
   const base =
     seed || activeImage || images[0] || overlay.baseImage || null;
@@ -208,15 +216,19 @@ export const OverlayPanel: React.FC<{
     patch({ text: sug.text, sub: sug.sub });
   }
 
+  /** Persist recipe only — never spread full review (avoids clobbering gallery). */
   function persistRecipe(next: ImageOverlay) {
     if (!onReviewChange) return;
     onReviewChange({
-      ...review,
       overlay: toStoredOverlay(next) as StoredImageOverlay,
-    });
+    } as PieceReview);
   }
 
-  async function render() {
+  /**
+   * Save: burn text onto base, host PNG, append to gallery as active image,
+   * and store the editable recipe. Live preview already shows the compose.
+   */
+  async function save() {
     if (!base) {
       setError('Pick a base image from the gallery first');
       return;
@@ -234,21 +246,30 @@ export const OverlayPanel: React.FC<{
         width: exportSize.width,
         height: exportSize.height,
       });
+      let finalUrl = dataUrl;
+      try {
+        finalUrl = await aiHostImage(dataUrl);
+      } catch {
+        /* keep data URL if host fails */
+      }
       const next: ImageOverlay = {
         ...overlay,
         baseImage: base,
-        renderedUrl: dataUrl,
+        renderedUrl: finalUrl,
         updatedAt: new Date().toISOString(),
       };
       setOverlay(next);
-      onAddImages([dataUrl]);
+      onAddImages([finalUrl]);
       persistRecipe(next);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1800);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Render failed');
+      setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setBusy(false);
     }
   }
+
 
   const fillHex = getOverlayColor(overlay);
   const boxed = overlay.styleId === 'pill' || overlay.styleId === 'box';
@@ -347,25 +368,26 @@ export const OverlayPanel: React.FC<{
     e.preventDefault();
     e.stopPropagation();
     setSelected(true);
+    const o = overlayRef.current;
     const curX =
-      typeof overlay.x === 'number'
-        ? overlay.x
-        : overlay.hAlign === 'left'
+      typeof o.x === 'number'
+        ? o.x
+        : o.hAlign === 'left'
           ? 0.06
-          : overlay.hAlign === 'right'
+          : o.hAlign === 'right'
             ? 0.55
             : 0.2;
     const curY =
-      typeof overlay.y === 'number'
-        ? overlay.y
-        : overlay.vAlign === 'top'
+      typeof o.y === 'number'
+        ? o.y
+        : o.vAlign === 'top'
           ? 0.06
-          : overlay.vAlign === 'middle'
+          : o.vAlign === 'middle'
             ? 0.4
             : 0.72;
-    // Seed freeform if missing so drag sticks
-    if (typeof overlay.x !== 'number' || typeof overlay.y !== 'number') {
-      patch({ x: curX, y: curY });
+    // Seed freeform immediately so first drag frame is absolute-positioned
+    if (typeof o.x !== 'number' || typeof o.y !== 'number') {
+      setOverlay((prev) => ({ ...prev, x: curX, y: curY }));
     }
     dragRef.current = {
       pointerId: e.pointerId,
@@ -373,8 +395,13 @@ export const OverlayPanel: React.FC<{
       startY: e.clientY,
       origX: curX,
       origY: curY,
+      moved: false,
     };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
   };
 
   const onPointerMoveBlock = (e: React.PointerEvent) => {
@@ -386,13 +413,25 @@ export const OverlayPanel: React.FC<{
     if (rect.width < 1 || rect.height < 1) return;
     const dx = (e.clientX - d.startX) / rect.width;
     const dy = (e.clientY - d.startY) / rect.height;
-    const nx = Math.min(0.92, Math.max(0.02, d.origX + dx));
-    const ny = Math.min(0.92, Math.max(0.02, d.origY + dy));
-    patch({ x: nx, y: ny });
+    if (!d.moved && Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return;
+    d.moved = true;
+    const nx = Math.min(0.9, Math.max(0.02, d.origX + dx));
+    const ny = Math.min(0.9, Math.max(0.02, d.origY + dy));
+    // rAF-throttle so React doesn't thrash mid-drag
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setOverlay((prev) =>
+        prev.x === nx && prev.y === ny ? prev : { ...prev, x: nx, y: ny },
+      );
+    });
   };
 
   const onPointerUpBlock = (e: React.PointerEvent) => {
     if (dragRef.current?.pointerId === e.pointerId) {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
       dragRef.current = null;
       try {
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -401,6 +440,7 @@ export const OverlayPanel: React.FC<{
       }
     }
   };
+
 
   // Arrow-key nudge when selected
   useEffect(() => {
@@ -778,68 +818,70 @@ export const OverlayPanel: React.FC<{
 
       <div>
         <span className={labelCls}>Color</span>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {OVERLAY_COLORS.filter((c) => c.id !== 'custom').map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => patch({ color: c.id })}
-              className={`flex items-center gap-1.5 ${chipBase} ${
-                overlay.color === c.id ? chipOn : chipOff
+              title={c.label}
+              className={`h-7 w-7 rounded-full border-2 transition-transform ${
+                overlay.color === c.id
+                  ? 'border-mode scale-110'
+                  : 'border-ink/20 hover:border-ink/40'
               }`}
-            >
-              <span
-                className="h-3 w-3 rounded-full border border-ink/20"
-                style={{ background: c.hex }}
-              />
-              {c.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() =>
-              patch({
-                color: 'custom',
-                customHex: overlay.customHex || '#FFFFFF',
-              })
-            }
-            className={`flex items-center gap-1.5 ${chipBase} ${
-              overlay.color === 'custom' ? chipOn : chipOff
-            }`}
-          >
-            <span
-              className="h-3 w-3 rounded-full border border-ink/20"
-              style={{ background: overlay.customHex || '#fff' }}
+              style={{ background: c.hex }}
             />
-            Custom
-          </button>
-        </div>
-        {overlay.color === 'custom' && (
-          <div className="mt-2 flex items-center gap-2">
+          ))}
+          <label
+            className={`relative flex h-7 w-7 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 ${
+              overlay.color === 'custom'
+                ? 'border-mode scale-110'
+                : 'border-ink/20'
+            }`}
+            style={{
+              background:
+                overlay.color === 'custom' && overlay.customHex
+                  ? overlay.customHex
+                  : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)',
+            }}
+            title="Any color"
+          >
             <input
               type="color"
               value={
-                /^#([0-9a-fA-F]{6})$/.test(overlay.customHex || '')
-                  ? (overlay.customHex as string)
+                /^#([0-9a-fA-F]{6})$/.test(overlay.customHex || fillHex)
+                  ? (overlay.customHex || fillHex)
                   : '#FFFFFF'
               }
               onChange={(e) =>
                 patch({ color: 'custom', customHex: e.target.value })
               }
-              className="h-8 w-10 cursor-pointer rounded border border-ink/15 bg-transparent"
+              className="absolute inset-0 cursor-pointer opacity-0"
             />
-            <input
-              type="text"
-              value={overlay.customHex || ''}
-              onChange={(e) =>
-                patch({ color: 'custom', customHex: e.target.value })
-              }
-              placeholder="#RRGGBB"
-              className="w-28 rounded-lg border border-ink/15 bg-white/70 px-2 py-1.5 font-mono text-xs text-ink focus:border-mode focus:outline-none"
-            />
-          </div>
-        )}
+          </label>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="text"
+            value={
+              overlay.color === 'custom'
+                ? overlay.customHex || ''
+                : fillHex
+            }
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              patch({ color: 'custom', customHex: v });
+            }}
+            placeholder="#RRGGBB"
+            className="w-28 rounded-lg border border-ink/15 bg-white/70 px-2 py-1.5 font-mono text-xs text-ink focus:border-mode focus:outline-none"
+          />
+          <span className="text-[10px] text-ink/40">
+            presets or any hex / picker
+          </span>
+        </div>
       </div>
+
 
       <div>
         <span className={labelCls}>Transform</span>
@@ -959,20 +1001,18 @@ export const OverlayPanel: React.FC<{
 
       <button
         type="button"
-        onClick={() => void render()}
+        onClick={() => void save()}
         disabled={busy || !base}
         className={`${aiBtnSolid} justify-center`}
       >
-        {busy ? <Spinner /> : <Type className="h-3.5 w-3.5" />}
-        {busy ? 'Rendering…' : 'Render to gallery'}
-      </button>
-      <button
-        type="button"
-        onClick={() => persistRecipe(overlay)}
-        disabled={!onReviewChange}
-        className={`${aiBtnGhost} justify-center`}
-      >
-        Save recipe
+        {busy ? (
+          <Spinner />
+        ) : savedFlash ? (
+          <Check className="h-3.5 w-3.5" />
+        ) : (
+          <Type className="h-3.5 w-3.5" />
+        )}
+        {busy ? 'Saving…' : savedFlash ? 'Saved to gallery' : 'Save'}
       </button>
       {overlay.renderedUrl ? (
         <a
@@ -980,14 +1020,15 @@ export const OverlayPanel: React.FC<{
           download="overlay.png"
           className={`${aiBtnGhost} justify-center`}
         >
-          <Download className="h-3.5 w-3.5" /> Download last render
+          <Download className="h-3.5 w-3.5" /> Download last save
         </a>
       ) : null}
       <p className="-mt-1 text-[11px] text-ink/40">
-        Burns text onto the image as PNG. Recipe stays editable — drag on
-        preview or use snap grid.
+        Preview is live on the image. Save burns the text into a PNG, adds it
+        to the gallery, and keeps the recipe editable.
       </p>
       <AiError message={error} />
+
     </div>
   );
 };

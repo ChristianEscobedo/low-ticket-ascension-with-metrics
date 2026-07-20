@@ -128,9 +128,47 @@ export const ContentSheet: React.FC<{
   // generated in parallel never clobber one another.
   const addImages = (urls: string[]) => {
     if (urls.length === 0) return;
+    // Host any data URLs in the background so gallery stays small + shareable,
+    // but optimistically show them immediately.
     const cur = reviewImages(getReview(offerSlug, piece.id));
-    setReview(setReviewImages(offerSlug, piece.id, [...cur, ...urls], cur.length));
+    const merged = [...cur, ...urls];
+    setReview(
+      setReviewImages(offerSlug, piece.id, merged, cur.length),
+    );
+    void (async () => {
+      try {
+        const { aiHostImage } = await import('./aiClient');
+        const hosted = await Promise.all(
+          urls.map(async (u) => {
+            if (!u.startsWith('data:')) return u;
+            try {
+              return await aiHostImage(u);
+            } catch {
+              return u;
+            }
+          }),
+        );
+        if (hosted.every((h, i) => h === urls[i])) return;
+        const latest = reviewImages(getReview(offerSlug, piece.id));
+        let next = [...latest];
+        for (let i = 0; i < urls.length; i++) {
+          const from = urls[i];
+          const to = hosted[i];
+          if (from === to) continue;
+          const idx = next.indexOf(from);
+          if (idx >= 0) next[idx] = to;
+        }
+        const activeIdx = clampIndex(
+          getReview(offerSlug, piece.id).imageIndex,
+          next.length,
+        );
+        setReview(setReviewImages(offerSlug, piece.id, next, activeIdx));
+      } catch {
+        /* keep data URLs */
+      }
+    })();
   };
+
   const removeImage = (index: number) => {
     const cur = reviewImages(review);
     const next = cur.filter((_, i) => i !== index);
@@ -273,9 +311,21 @@ export const ContentSheet: React.FC<{
               onRemoveImage={removeImage}
               onSetImageIndex={setImageIndex}
               onEditPatch={applyEdits}
-              onReviewChange={setReview}
+              onReviewChange={(next) => {
+                // Helpers like setReviewVideoScript already persisted; overlay
+                // and compliance may pass a full next object — merge via save.
+                const cached = getReview(offerSlug, piece.id);
+                if (next === cached) {
+                  setReview(next);
+                  return;
+                }
+                // Prefer fields that differ from cache so we don't clobber
+                // concurrent image gallery writes with a stale review prop.
+                setReview(saveReview(offerSlug, piece.id, next));
+              }}
             />
           )}
+
 
           {tab === 'compliance' && (
             <CompliancePanel

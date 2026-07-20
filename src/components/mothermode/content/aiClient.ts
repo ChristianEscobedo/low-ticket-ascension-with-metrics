@@ -50,11 +50,25 @@ async function postAi(
 }
 
 
+/**
+ * Host a client-produced data URL (overlay burn-in, file upload) in Storage and
+ * return a public http(s) URL. Pass-through if already hosted. Falls back to the
+ * original data URL when hosting is unavailable.
+ */
+export async function aiHostImage(dataUrl: string): Promise<string> {
+  if (!dataUrl?.trim()) throw new Error('No image to host');
+  if (/^https?:\/\//i.test(dataUrl.trim())) return dataUrl.trim();
+  const json = await postAi({ action: 'hostImage', dataUrl });
+  if (typeof json.image !== 'string') throw new Error('Hosting returned no URL');
+  return json.image;
+}
+
 /** Generate a post image, returning a hosted public URL (the server uploads the
  *  render to Storage so it is renderable and GoHighLevel-postable; it falls back
  *  to a data URL only if hosting is unavailable). An optional model id overrides
  *  the server default; omit it (or pass empty) for Auto. */
 export async function aiGenerateImage(
+
   prompt: string,
   format?: string,
   model?: string,
