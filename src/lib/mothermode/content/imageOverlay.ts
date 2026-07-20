@@ -67,12 +67,15 @@ export interface ImageOverlay {
   customHex?: string;
   vAlign: OverlayVAlign;
   hAlign: OverlayHAlign;
-  /**
-   * Freeform top-left of the text block as 0–1 of frame.
-   * When set, overrides vAlign/hAlign for placement (align still affects glyphs).
+/**
+   * Freeform anchor of the text block as 0–1 of frame (not top-left).
+   * Placement uses hAlign/vAlign as the anchor side:
+   * center+middle → point is the block center; left+top → point is top-left; etc.
+   * When set, overrides snap band placement (align still affects glyph alignment).
    */
   x?: number;
   y?: number;
+
   /** Multiplier on size tier font (0.7–1.4). */
   fontScale?: number;
   /** Letter-spacing as em fraction (−0.05–0.2). */
@@ -88,12 +91,18 @@ export interface ImageOverlay {
   bgOpacity?: number;
   /** Overall text fill opacity (0–1). */
   textOpacity?: number;
+  /**
+   * When false, live preview hides the type block and Save will not burn text
+   * (use when the base image already has type baked in). Default true.
+   */
+  enabled?: boolean;
   /** Gallery image used as the base when last rendered. */
   baseImage?: string;
   /** Last burned-in PNG (data URL or hosted). */
   renderedUrl?: string;
   updatedAt?: string;
 }
+
 
 export interface OverlayFontOption {
   id: OverlayFontId;
@@ -231,12 +240,13 @@ export const OVERLAY_TRANSFORMS: {
 ];
 
 /** Fraction of frame height used as primary font size. */
-const SIZE_FRAC: Record<OverlaySize, number> = {
+export const OVERLAY_SIZE_FRAC: Record<OverlaySize, number> = {
   s: 0.035,
   m: 0.048,
   l: 0.062,
   xl: 0.078,
 };
+
 
 const SAFE = 0.06; // 6% padding from edges
 
@@ -276,9 +286,30 @@ export function defaultOverlay(partial?: Partial<ImageOverlay>): ImageOverlay {
     shadowStrength: 0.55,
     bgOpacity: 0.92,
     textOpacity: 1,
+    enabled: true,
     ...partial,
   };
 }
+
+/**
+ * Primary font size in px for a frame of the given height — shared by canvas
+ * burn-in and the live CSS preview so they stay visually matched.
+ */
+export function overlayPrimaryPx(
+  frameHeight: number,
+  size: OverlaySize,
+  fontScale = 1,
+): number {
+  const scale = clamp(fontScale, 0.7, 1.4);
+  const frac = OVERLAY_SIZE_FRAC[size] ?? OVERLAY_SIZE_FRAC.l;
+  return Math.max(14, Math.round(frameHeight * frac * scale));
+}
+
+/** Sub line size derived from primary (same ratio as canvas). */
+export function overlaySubPx(primaryPx: number): number {
+  return Math.max(12, Math.round(primaryPx * 0.55));
+}
+
 
 export function getOverlayFont(id: OverlayFontId): OverlayFontOption {
   return OVERLAY_FONTS.find((f) => f.id === id) ?? OVERLAY_FONTS[0];
@@ -308,15 +339,34 @@ export function applyOverlayTransform(
   return text;
 }
 
-/** Snap preset → normalized freeform coords (block top-left approx). */
+/**
+ * Snap preset → normalized freeform anchor coords.
+ * x/y are the anchor point (center of frame for center/middle), not block top-left.
+ */
 export function snapPosition(
   v: OverlayVAlign,
   h: OverlayHAlign,
 ): { x: number; y: number; vAlign: OverlayVAlign; hAlign: OverlayHAlign } {
-  const x = h === 'left' ? 0.06 : h === 'right' ? 0.55 : 0.2;
-  const y = v === 'top' ? 0.06 : v === 'middle' ? 0.4 : 0.72;
+  const x = h === 'left' ? SAFE : h === 'right' ? 1 - SAFE : 0.5;
+  const y = v === 'top' ? SAFE : v === 'middle' ? 0.5 : 1 - SAFE;
   return { x, y, vAlign: v, hAlign: h };
 }
+
+/**
+ * CSS translate for freeform anchor so preview matches canvas burn-in.
+ * Anchor (x,y) + hAlign/vAlign → same box placement as layoutOverlay.
+ */
+export function freeformCssTransform(
+  hAlign: OverlayHAlign,
+  vAlign: OverlayVAlign,
+): string {
+  const tx =
+    hAlign === 'left' ? '0%' : hAlign === 'right' ? '-100%' : '-50%';
+  const ty =
+    vAlign === 'top' ? '0%' : vAlign === 'bottom' ? '-100%' : '-50%';
+  return `translate(${tx}, ${ty})`;
+}
+
 
 /** Pixel size for the piece format (export canvas). */
 export function canvasSizeForFormat(format?: string): {
@@ -498,12 +548,13 @@ export function layoutOverlay(
   const pad = Math.round(Math.min(width, height) * SAFE);
   const maxWidthPct = clamp(overlay.maxWidthPct ?? 0.88, 0.4, 0.94);
   const maxTextWidth = Math.round(width * maxWidthPct);
-  const scale = clamp(overlay.fontScale ?? 1, 0.7, 1.4);
-  const primaryPx = Math.max(
-    14,
-    Math.round(height * SIZE_FRAC[overlay.size] * scale),
+  const primaryPx = overlayPrimaryPx(
+    height,
+    overlay.size,
+    overlay.fontScale ?? 1,
   );
-  const subPx = Math.max(12, Math.round(primaryPx * 0.55));
+  const subPx = overlaySubPx(primaryPx);
+
   const leading = clamp(overlay.leading ?? 1.2, 1.0, 1.6);
   const lineHeight = Math.round(primaryPx * leading);
   const subLineHeight = Math.round(subPx * Math.max(1.15, leading));
@@ -573,25 +624,28 @@ export function layoutOverlay(
         ? 'right'
         : 'center';
 
-  if (usesFreeform) {
-    blockLeft = clamp(
-      Math.round(clamp01(overlay.x as number) * width),
-      pad * 0.25,
-      width - pad * 0.25 - 8,
-    );
-    blockTop = clamp(
-      Math.round(clamp01(overlay.y as number) * height),
-      pad * 0.25,
-      height - pad * 0.25 - 8,
-    );
-    // Keep block on-canvas as much as possible
-    if (blockLeft + blockWidth > width - pad * 0.25) {
-      blockLeft = Math.max(pad * 0.25, width - pad * 0.25 - blockWidth);
-    }
-    if (blockTop + blockHeight > height - pad * 0.25) {
-      blockTop = Math.max(pad * 0.25, height - pad * 0.25 - blockHeight);
-    }
+if (usesFreeform) {
+    // x/y are the anchor point; hAlign/vAlign choose which edge/center sits on it.
+    const ax = clamp01(overlay.x as number) * width;
+    const ay = clamp01(overlay.y as number) * height;
+    if (align === 'left') blockLeft = Math.round(ax);
+    else if (align === 'right') blockLeft = Math.round(ax - blockWidth);
+    else blockLeft = Math.round(ax - blockWidth / 2);
+
+    if (overlay.vAlign === 'top') blockTop = Math.round(ay);
+    else if (overlay.vAlign === 'bottom')
+      blockTop = Math.round(ay - blockHeight);
+    else blockTop = Math.round(ay - blockHeight / 2);
+
+    // Soft clamp — keep as much of the block on-canvas without shifting anchor bias.
+    const minL = pad * 0.15;
+    const maxL = width - pad * 0.15 - blockWidth;
+    const minT = pad * 0.15;
+    const maxT = height - pad * 0.15 - blockHeight;
+    if (maxL >= minL) blockLeft = clamp(blockLeft, minL, maxL);
+    if (maxT >= minT) blockTop = clamp(blockTop, minT, maxT);
   } else {
+
     if (overlay.vAlign === 'top') blockTop = pad;
     else if (overlay.vAlign === 'middle')
       blockTop = Math.round((height - blockHeight) / 2);
@@ -1023,6 +1077,7 @@ export function toStoredOverlay(o: ImageOverlay): {
   shadowStrength?: number;
   bgOpacity?: number;
   textOpacity?: number;
+  enabled?: boolean;
   baseImage?: string;
   renderedUrl?: string;
   updatedAt?: string;
@@ -1048,8 +1103,11 @@ export function toStoredOverlay(o: ImageOverlay): {
     shadowStrength: o.shadowStrength,
     bgOpacity: o.bgOpacity,
     textOpacity: o.textOpacity,
+    enabled: o.enabled !== false,
     baseImage: o.baseImage,
     renderedUrl: o.renderedUrl,
     updatedAt: o.updatedAt,
   };
 }
+
+

@@ -96,12 +96,18 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** Segmented Generate / Edit / Board / Lab / Text switch. */
+/** Segmented Generate / Edit / Text / Board / Lab switch.
+ *  Stacked icon+label grid so all five tabs stay visible in the narrow rail
+ *  (a single horizontal row was clipping Lab behind overflow-hidden). */
 const StudioTabs: React.FC<{
   value: StudioTab;
   onChange: (v: StudioTab) => void;
 }> = ({ value, onChange }) => (
-  <div className="inline-flex w-full overflow-hidden rounded-lg border border-ink/15">
+  <div
+    role="tablist"
+    aria-label="Image studio mode"
+    className="grid w-full grid-cols-5 gap-px overflow-hidden rounded-lg border border-ink/15 bg-ink/10"
+  >
     {(
       [
         { v: 'generate' as const, label: 'Generate', Icon: Sparkles },
@@ -111,23 +117,26 @@ const StudioTabs: React.FC<{
         { v: 'lab' as const, label: 'Lab', Icon: Layers },
       ] as const
     ).map(({ v, label, Icon }) => (
-
       <button
         key={v}
         type="button"
+        role="tab"
+        aria-selected={value === v}
+        title={label}
         onClick={() => onChange(v)}
-        className={`inline-flex flex-1 items-center justify-center gap-1 px-1.5 py-1.5 text-[11px] transition-colors sm:gap-1.5 sm:px-2 sm:text-xs ${
+        className={`flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] leading-tight transition-colors ${
           value === v
-            ? 'bg-mode/10 font-semibold text-mode'
-            : 'text-ink/55 hover:text-ink/80'
+            ? 'bg-mode/15 font-semibold text-mode'
+            : 'bg-white/80 text-ink/55 hover:bg-white hover:text-ink/80'
         }`}
       >
-        <Icon className="h-3.5 w-3.5 shrink-0" />
-        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="max-w-full truncate">{label}</span>
       </button>
     ))}
   </div>
 );
+
 
 
 export const ImageStudioModal: React.FC<{
@@ -376,7 +385,8 @@ export const ImageStudioModal: React.FC<{
     <div className="fixed inset-0 z-[70] flex">
       <div className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative m-auto flex h-[92vh] w-[min(1100px,94vw)] overflow-hidden rounded-2xl border border-ink/15 bg-bone shadow-2xl">
-        <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-r border-ink/10 bg-white/50 p-5">
+        <aside className="flex w-[22rem] shrink-0 flex-col gap-4 overflow-y-auto border-r border-ink/10 bg-white/50 p-5">
+
           <div>
             <div className="font-display text-lg text-ink">Image studio</div>
             <div className="text-xs text-ink/45">

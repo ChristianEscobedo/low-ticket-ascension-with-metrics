@@ -3,10 +3,15 @@ import {
   applyOverlayTransform,
   canvasSizeForFormat,
   defaultOverlay,
+  freeformCssTransform,
   getOverlayColor,
+  overlayPrimaryPx,
+  overlaySubPx,
   snapPosition,
   suggestOverlayText,
 } from '@/lib/mothermode/content/imageOverlay';
+
+
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import type { PieceReview } from '@/lib/mothermode/content/review';
 
@@ -33,7 +38,20 @@ describe('imageOverlay helpers', () => {
     expect(o.fontScale).toBe(1);
     expect(o.maxWidthPct).toBe(0.88);
     expect(o.transform).toBe('none');
+    expect(o.enabled).toBe(true);
   });
+
+  it('scales primary font from frame height (preview matches burn-in)', () => {
+    // L tier = 6.2% of height at scale 1
+    expect(overlayPrimaryPx(1920, 'l', 1)).toBe(Math.round(1920 * 0.062));
+    expect(overlayPrimaryPx(400, 'l', 1)).toBe(Math.round(400 * 0.062));
+    // Half-height preview should be half the export primary size
+    const exportPx = overlayPrimaryPx(1920, 'l', 1);
+    const previewPx = overlayPrimaryPx(960, 'l', 1);
+    expect(previewPx).toBe(Math.round(exportPx / 2));
+    expect(overlaySubPx(100)).toBe(55);
+  });
+
 
   it('sizes story/reel as 9:16', () => {
     expect(canvasSizeForFormat('story')).toEqual({ width: 1080, height: 1920 });
@@ -81,13 +99,32 @@ describe('imageOverlay helpers', () => {
     expect(suggestOverlayText(basePiece, {}).text).toBe('the tabs never close');
   });
 
-  it('snapPosition sets freeform coords', () => {
-    const s = snapPosition('top', 'left');
-    expect(s.x).toBeLessThan(0.2);
-    expect(s.y).toBeLessThan(0.2);
-    expect(s.vAlign).toBe('top');
-    expect(s.hAlign).toBe('left');
+it('snapPosition sets freeform anchor coords (center = 0.5, not top-left)', () => {
+    const tl = snapPosition('top', 'left');
+    expect(tl.x).toBeLessThan(0.1);
+    expect(tl.y).toBeLessThan(0.1);
+    expect(tl.vAlign).toBe('top');
+    expect(tl.hAlign).toBe('left');
+
+    const mid = snapPosition('middle', 'center');
+    expect(mid.x).toBe(0.5);
+    expect(mid.y).toBe(0.5);
+
+    const br = snapPosition('bottom', 'right');
+    expect(br.x).toBeGreaterThan(0.9);
+    expect(br.y).toBeGreaterThan(0.9);
   });
+
+  it('freeformCssTransform centers the block on the anchor', () => {
+    expect(freeformCssTransform('center', 'middle')).toBe(
+      'translate(-50%, -50%)',
+    );
+    expect(freeformCssTransform('left', 'top')).toBe('translate(0%, 0%)');
+    expect(freeformCssTransform('right', 'bottom')).toBe(
+      'translate(-100%, -100%)',
+    );
+  });
+
 
   it('applies text transform', () => {
     expect(applyOverlayTransform('Hi There', 'uppercase')).toBe('HI THERE');
