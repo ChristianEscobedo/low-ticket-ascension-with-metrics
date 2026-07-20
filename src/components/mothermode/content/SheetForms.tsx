@@ -25,6 +25,8 @@ import { HookVariants } from './HookVariants';
 import { RewriteField } from './RewriteField';
 import { VideoScriptPanel } from './VideoScriptPanel';
 import { StoryboardPanel } from './StoryboardPanel';
+import { FramePackPanel } from './FramePackPanel';
+
 
 
 
@@ -123,7 +125,16 @@ export const EditForm: React.FC<{
         onReviewChange={onReviewChange}
       />
 
+      <FramePackPanel
+        piece={piece}
+        review={review}
+        offerSlug={offerSlug}
+        model={model}
+        onReviewChange={onReviewChange}
+      />
+
       <ImagesCard
+
         piece={piece}
         review={review}
         onUpload={onUploadImage}

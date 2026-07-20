@@ -18,11 +18,14 @@ import {
   withStoryboard,
   withoutStoryboard,
   withStoryboardBoard,
+  withFramePack,
+  withoutFramePack,
   type PieceReview,
   type VideoScript,
   type StoryboardPack,
   type StoryboardBoard,
 } from '@/lib/mothermode/content/review';
+import type { FramePack } from '@/lib/mothermode/content/framePack';
 
 
 
@@ -209,6 +212,29 @@ export function patchReviewStoryboardBoard(
     boardIndex,
     patch,
   );
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Set the piece's multi-frame pack. Returns the new review. */
+export function setReviewFramePack(
+  offerSlug: string,
+  id: string,
+  pack: FramePack,
+): PieceReview {
+  const next = withFramePack(getReview(offerSlug, id), pack);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the frame pack, keeping everything else. Returns the new review. */
+export function clearReviewFramePack(
+  offerSlug: string,
+  id: string,
+): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.framePack) return prev;
+  const next = withoutFramePack(prev);
   persist(offerSlug, id, next);
   return next;
 }

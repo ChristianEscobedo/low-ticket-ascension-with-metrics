@@ -9,6 +9,7 @@ import {
   amplifyImagePrompts,
   generateVideoScript,
   generateStoryboardPlan,
+  generateFramePackPlan,
   generateVariationBrief,
   generateVariationPlan,
   imageSizeForFormat,
@@ -16,6 +17,7 @@ import {
   type AmplifyTextInput,
   type AmplifyPart,
 } from '@/utils/integrations/openai-content';
+
 import { runSmartResize } from '@/utils/integrations/fal-smart-resize';
 import {
   scoreComplianceWithAgent,
@@ -61,8 +63,11 @@ function modelId(v: unknown): string | undefined {
  *                       pieces (exact VO, shot direction, b-roll prompts).
  *   action 'storyboardPlan' -> 1–4 connected cinematic contact-sheet boards
  *                       with lookback continuity for a content piece.
+ *   action 'framePackPlan' -> ordered carousel/story/idea slide pack with
+ *                       roles, copy, prompts, and lookback continuity.
  *   action 'variationBrief' -> brief → master/alt image prompts + optional
  *                       carousel/story frame pack.
+
  *   action 'variationPlan' -> dimension matrix of image-edit instructions.
  *   action 'smartResize' -> fal-ai/smart-resize to exact platform sizes.
  *   action 'complianceScore' -> brand + platform policy scorecard (AI agent).
@@ -492,7 +497,82 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (action === 'framePackPlan') {
+    if (!body.piece || typeof body.piece !== 'object') {
+      return NextResponse.json(
+        { ok: false, error: 'a piece is required' },
+        { status: 400 },
+      );
+    }
+    const p = body.piece as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const strList = (v: unknown): string[] | undefined =>
+      Array.isArray(v)
+        ? v.filter((s): s is string => typeof s === 'string' && !!s.trim())
+        : undefined;
+    const hook = str(p.hook);
+    if (!hook) {
+      return NextResponse.json(
+        { ok: false, error: 'piece.hook is required' },
+        { status: 400 },
+      );
+    }
+    const slides = Array.isArray(p.slides)
+      ? (p.slides as Array<Record<string, unknown>>)
+          .map((s) => ({
+            text: str(s.text),
+            sub: str(s.sub),
+            visual: str(s.visual),
+          }))
+          .filter((s) => s.text || s.sub || s.visual)
+      : undefined;
+    const slideCount = Math.max(
+      2,
+      Math.min(10, Math.round(Number(body.slideCount) || 5)),
+    );
+    const mode = body.mode === 'strip' ? 'strip' : 'frames';
+    const aspectRaw = str(body.aspect);
+    const aspect =
+      aspectRaw === '4:5' || aspectRaw === '9:16' || aspectRaw === '1:1'
+        ? aspectRaw
+        : undefined;
+    const result = await generateFramePackPlan({
+      piece: {
+        hook,
+        hooks: strList(p.hooks),
+        caption: str(p.caption),
+        body: strList(p.body),
+        theme: str(p.theme) ?? '',
+        tone: str(p.tone) ?? '',
+        platform: str(p.platform) ?? 'instagram',
+        format: str(p.format) ?? 'carousel',
+        slides,
+      },
+      slideCount,
+      mode,
+      aspect,
+      guides: str(body.guides),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      frames: result.data.frames,
+      systemNotes: result.data.systemNotes,
+      model: result.data.model,
+      slideCount,
+      mode,
+      aspect,
+    });
+  }
+
   if (action === 'variationBrief') {
+
     const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
     if (!brief) {
       return NextResponse.json(

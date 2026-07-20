@@ -21,6 +21,9 @@ Focused checklists for *this* wave:
 | `docs/VIDEO_SCRIPT_SYSTEM_PORT.md` | Second-by-second scripts, b-roll, final-cut upload |
 | `docs/STORYBOARD_VARIATION_LAB_PORT.md` | Storyboard packs + Variation Lab + fal |
 | `docs/COMPLIANCE_AGENT_SYSTEM_PORT.md` | Brand + platform compliance score/fix agent |
+| `docs/FRAME_PACK_SYSTEM_PORT.md` | Carousel/story/idea multi-frame packs (plan + Mode A/B render) |
+| `docs/IMAGE_OVERLAY_SYSTEM_PORT.md` | Text-on-image overlay burn-in |
+
 
 
 ---
@@ -35,6 +38,8 @@ Focused checklists for *this* wave:
 | 4 | Storyboard packs | `1ab71dd` | No | — |
 | 5 | Variation Lab + fal smart-resize | `1ab71dd` | No | **`FAL_KEY`** |
 | 6 | Compliance agent (brand + platform) | `8aa5477` | No | — |
+| 7 | Frame packs (carousel/story/idea) | (see FRAME_PACK doc) | No | — |
+
 
 
 

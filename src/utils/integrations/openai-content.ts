@@ -1850,6 +1850,189 @@ export async function generateStoryboardPlan(
 }
 
 // ---------------------------------------------------------------------------
+// Frame pack plan (carousel / story / idea ordered slides)
+// ---------------------------------------------------------------------------
+
+export interface FramePackPlanPiece {
+  hook: string;
+  hooks?: string[];
+  caption?: string;
+  body?: string[];
+  theme: string;
+  tone: string;
+  platform: string;
+  format: string;
+  /** Existing catalog slides when present. */
+  slides?: Array<{ text?: string; sub?: string; visual?: string }>;
+}
+
+export interface FramePackPlanInput {
+  piece: FramePackPlanPiece;
+  /** 2–10 frames. */
+  slideCount: number;
+  /** frames = N separate images; strip = one multi-panel board to split. */
+  mode: 'frames' | 'strip';
+  aspect?: '1:1' | '4:5' | '9:16';
+  guides?: string;
+  model?: string;
+}
+
+export interface FramePackFrameOut {
+  index: number;
+  role: string;
+  text?: string;
+  sub?: string;
+  visual?: string;
+  prompt: string;
+  lookbackSummary: string;
+}
+
+function framePackSourceSummary(p: FramePackPlanPiece): string {
+  const lines: string[] = [];
+  lines.push(`Theme: ${p.theme}`);
+  lines.push(`Tone: ${p.tone}`);
+  lines.push(`Hook: ${p.hook}`);
+  if (p.hooks?.length) lines.push(`Alt hooks: ${p.hooks.join(' / ')}`);
+  if (p.caption) lines.push(`Caption: ${p.caption}`);
+  if (p.body?.length) lines.push(`Body: ${p.body.join(' / ')}`);
+  if (p.slides?.length) {
+    lines.push('Existing slides:');
+    p.slides.forEach((s, i) => {
+      lines.push(
+        `  ${i + 1}. ${s.text ?? ''}${s.sub ? ` | ${s.sub}` : ''}${s.visual ? ` [${s.visual}]` : ''}`,
+      );
+    });
+  }
+  return lines.join('\n');
+}
+
+function buildFramePackPlanUser(
+  input: FramePackPlanInput,
+  count: number,
+): string {
+  const aspect =
+    input.aspect ??
+    (input.piece.format === 'story' || input.piece.format === 'idea'
+      ? '9:16'
+      : '1:1');
+  const format = input.piece.format;
+  const isStory = format === 'story' || format === 'idea';
+  const isCarousel = format === 'carousel';
+  const modeLine =
+    input.mode === 'strip'
+      ? `MODE: strip. You are designing ONE multi-panel contact strip that will be split into ${count} equal panels. Each frame.prompt still describes its panel, and systemNotes must describe the shared strip layout (gutters, shared baseline, panel order left-to-right).`
+      : `MODE: frames. You are designing ${count} SEPARATE postable images that share one visual system. Frame 1 establishes; later frames continue via lookback.`;
+  const arc = isStory
+    ? 'STORY / IDEA arc: Frame 1 = scroll-stop hook (safe zones top and bottom for UI). Middle = proof or reframe. Last = permission + soft CTA. One clear beat per frame. Vertical 9:16.'
+    : isCarousel
+      ? 'CAROUSEL arc: Frame 1 = cover/scroll-stop. Middle slides stack truth one beat at a time (short enough to read in under 3 seconds). Final = permission + soft CTA. Shared margins, type zone, and accent language across all slides.'
+      : 'Multi-frame arc: open strong, develop, close with a soft next step.';
+  const intent = `Plan exactly ${count} ordered frames for a ${input.piece.platform} ${format} (${aspect}). Someone should feed each frame.prompt into an image model and get a postable still that matches the slide job.`;
+  const continuity = [
+    'LOOKBACK / CONTINUITY (STRICT):',
+    'Frame 1 establishes palette, light direction, subject/world, margins, and type-safe zone. lookbackSummary locks those facts.',
+    'Frame k (k>1) MUST continue from prior lookbackSummary values. Same visual system; only the narrative beat and focal composition change.',
+    'Each lookbackSummary is 1-3 sentences of what THIS frame locked for the next.',
+  ].join('\n');
+  const promptRules = [
+    'prompt rules (each frame.prompt):',
+    `- Complete scene direction for a single ${aspect} still: subject, setting, light, lens/mood, negative space for type, what to avoid.`,
+    '- Prefer object-led, lived-in editorial photography. No logos. No tiny illegible text baked in (leave clean headline space).',
+    '- Mention shared system: consistent margins, type zone, color grade.',
+    '- text/sub are the on-slide words the designer may burn later; keep them short.',
+    '- role is one of: cover, hook, proof, reframe, cta, other.',
+  ].join('\n');
+  const source = `Ground every frame in this post:\n"""\n${framePackSourceSummary(input.piece)}\n"""`;
+  const guides = input.guides?.trim()
+    ? `Production guides (voice and continuity still win): ${input.guides.trim()}`
+    : '';
+  const shape = [
+    'Respond with this exact JSON shape:',
+    `{ "systemNotes": string, "frames": [ { "index": number, "role": string, "text": string, "sub": string, "visual": string, "prompt": string, "lookbackSummary": string } ] }`,
+    `Return exactly ${count} frames with index 1..${count} in order. systemNotes is shared design system (margins, palette, type zone).`,
+  ].join('\n');
+  return [intent, modeLine, arc, continuity, promptRules, source, guides, shape]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function normalizeFramePackFrames(
+  raw: unknown,
+  count: number,
+): FramePackFrameOut[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FramePackFrameOut[] = [];
+  for (let i = 0; i < raw.length && out.length < count; i++) {
+    const b = raw[i];
+    if (!b || typeof b !== 'object') continue;
+    const rec = b as Record<string, unknown>;
+    const prompt = toText(rec.prompt);
+    const lookbackSummary = toText(rec.lookbackSummary) ?? '';
+    if (!prompt) continue;
+    const index = out.length + 1;
+    out.push({
+      index,
+      role: toText(rec.role) ?? (index === 1 ? 'cover' : index === count ? 'cta' : 'proof'),
+      text: toText(rec.text),
+      sub: toText(rec.sub),
+      visual: toText(rec.visual),
+      prompt,
+      lookbackSummary:
+        lookbackSummary ||
+        `Frame ${index} established the beat and visual system for continuity.`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Plan an ordered multi-slide pack for carousel, story, or idea pins.
+ * Frames include role, on-slide copy, image prompts, and lookback continuity.
+ */
+export async function generateFramePackPlan(
+  input: FramePackPlanInput,
+): Promise<
+  AiResult<{
+    frames: FramePackFrameOut[];
+    systemNotes?: string;
+    model: string;
+  }>
+> {
+  const count = Math.max(2, Math.min(10, Math.round(input.slideCount || 5)));
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are the MotherMode multi-slide art director planning carousel slides and story frames for social.',
+    VOICE_RULES,
+    'Design ordered frame packs with shared visual systems and clear narrative jobs per slide.',
+    'Be concrete: props, light, negative space for type, continuity across frames.',
+    'Return ONLY a JSON object. No prose, no code fences.',
+  ].join(' ');
+  const user = buildFramePackPlanUser(input, count);
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const frames = normalizeFramePackFrames(parsed?.frames, count);
+  if (frames.length === 0) {
+    console.warn(
+      `generateFramePackPlan: no frames parsed (model ${model}). Raw:`,
+      raw.data.slice(0, 500),
+    );
+    return { ok: false, status: 502, error: 'No usable frame pack was returned' };
+  }
+  return {
+    ok: true,
+    data: {
+      frames,
+      systemNotes: toText(parsed?.systemNotes),
+      model,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Variation Lab: brief → prompts, and dimension-based edit plans
 // ---------------------------------------------------------------------------
 

@@ -273,12 +273,68 @@ export async function aiGenerateStoryboardPlan(args: {
   };
 }
 
+/** One frame from a dedicated frame-pack plan. */
+export interface AiFramePackFrame {
+  index: number;
+  role: string;
+  text?: string;
+  sub?: string;
+  visual?: string;
+  prompt: string;
+  lookbackSummary: string;
+}
+
+/**
+ * Plan an ordered multi-slide pack for carousel / story / idea.
+ */
+export async function aiGenerateFramePackPlan(args: {
+  piece: {
+    hook: string;
+    hooks?: string[];
+    caption?: string;
+    body?: string[];
+    theme: string;
+    tone: string;
+    platform: string;
+    format: string;
+    slides?: Array<{ text?: string; sub?: string; visual?: string }>;
+  };
+  slideCount: number;
+  mode: 'frames' | 'strip';
+  aspect?: '1:1' | '4:5' | '9:16';
+  guides?: string;
+  model?: string;
+}): Promise<{
+  frames: AiFramePackFrame[];
+  systemNotes?: string;
+  slideCount: number;
+  mode: 'frames' | 'strip';
+  aspect?: string;
+  model?: string;
+}> {
+  const json = await postAi({ action: 'framePackPlan', ...args });
+  if (!Array.isArray(json.frames) || json.frames.length === 0) {
+    throw new Error('No frame pack was returned');
+  }
+  return {
+    frames: json.frames as AiFramePackFrame[],
+    systemNotes:
+      typeof json.systemNotes === 'string' ? json.systemNotes : undefined,
+    slideCount:
+      typeof json.slideCount === 'number' ? json.slideCount : args.slideCount,
+    mode: json.mode === 'strip' ? 'strip' : 'frames',
+    aspect: typeof json.aspect === 'string' ? json.aspect : args.aspect,
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
 /** One frame in a carousel/story pack from a variation brief. */
 export interface AiVariationFrame {
   index: number;
   role: string;
   prompt: string;
 }
+
 
 /**
  * Convert a creative brief into a master image prompt, alt prompts, and

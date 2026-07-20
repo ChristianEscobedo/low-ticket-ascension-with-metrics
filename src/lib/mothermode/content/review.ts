@@ -227,6 +227,8 @@ export interface PieceReview {
   compliance?: StoredComplianceReport;
   /** Last text-on-image overlay recipe (re-openable in Image Studio). */
   overlay?: StoredImageOverlay;
+  /** Ordered multi-slide pack for carousel / story / idea (plan + renders). */
+  framePack?: import('./framePack').FramePack;
 }
 
 
@@ -294,6 +296,10 @@ export function isEmptyReview(r: PieceReview): boolean {
     (hasText(r.overlay.text) ||
       hasText(r.overlay.sub) ||
       hasText(r.overlay.renderedUrl));
+  const hasFramePack =
+    !!r.framePack &&
+    Array.isArray(r.framePack.frames) &&
+    r.framePack.frames.length > 0;
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
@@ -303,7 +309,8 @@ export function isEmptyReview(r: PieceReview): boolean {
     !hasScript &&
     !hasStoryboard &&
     !hasCompliance &&
-    !hasOverlay
+    !hasOverlay &&
+    !hasFramePack
   );
 }
 
@@ -412,6 +419,20 @@ export function withStoryboardBoard(
     b.index === boardIndex ? { ...b, ...patch } : b,
   );
   return { ...prev, storyboard: { ...pack, boards } };
+}
+
+/** Set the piece's multi-frame pack (carousel/story/idea). Pure. */
+export function withFramePack(
+  prev: PieceReview,
+  pack: import('./framePack').FramePack,
+): PieceReview {
+  return { ...prev, framePack: pack };
+}
+
+/** Drop the frame pack, keeping everything else. Pure. */
+export function withoutFramePack(prev: PieceReview): PieceReview {
+  const { framePack: _f, ...rest } = prev;
+  return rest;
 }
 
 

@@ -7,7 +7,12 @@
  */
 import { PLATFORM_SIZE_PRESETS } from './platformSizes';
 import type { ContentPiece } from './types';
-import { reviewHooks, type PieceReview } from './review';
+import {
+  clampIndex,
+  reviewHooks,
+  reviewImages,
+  type PieceReview,
+} from './review';
 
 /** Vertical band for the text block (snap presets + scrim direction). */
 export type OverlayVAlign = 'top' | 'middle' | 'bottom';
@@ -361,16 +366,29 @@ export function suggestOverlayText(
     piece.hook ||
     '';
 
-  const slide = piece.slides?.[0];
+  const activeIdx = clampIndex(
+    review.imageIndex,
+    Math.max(
+      reviewImages(review).length,
+      piece.slides?.length ?? 0,
+      review.framePack?.frames?.length ?? 0,
+      1,
+    ),
+  );
+  const packFrame = review.framePack?.frames?.[activeIdx];
+  const slide = piece.slides?.[activeIdx] ?? piece.slides?.[0];
   const beatOn =
     review.videoScript?.beats?.find((b) => b.onScreen?.trim())?.onScreen ||
     piece.script?.find((b) => b.onScreen?.trim())?.onScreen ||
     '';
 
-  if (['story', 'carousel', 'idea'].includes(piece.format) && slide?.text) {
+  if (
+    ['story', 'carousel', 'idea'].includes(piece.format) &&
+    (packFrame?.text?.trim() || slide?.text)
+  ) {
     return {
-      text: slide.text.trim(),
-      sub: (slide.sub ?? '').trim(),
+      text: (packFrame?.text ?? slide?.text ?? '').trim(),
+      sub: (packFrame?.sub ?? slide?.sub ?? '').trim(),
     };
   }
   if (['reel', 'video', 'short'].includes(piece.format) && beatOn) {
