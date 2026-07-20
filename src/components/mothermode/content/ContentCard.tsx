@@ -42,7 +42,14 @@ import {
   getReview,
   saveReview,
   clearReviewImage,
+  setReviewImages,
 } from './reviewClient';
+import {
+  clampIndex,
+  reviewImages,
+} from '@/lib/mothermode/content/review';
+
+
 
 /** Lucide glyph per native format, for a quick visual read on each card. */
 const FORMAT_ICON: Record<ContentFormat, React.ElementType> = {
@@ -95,20 +102,24 @@ export const ContentCard: React.FC<{
   const [notesSaved, setNotesSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the shared review state (uploaded image + change notes) from the cache,
-  // hydrating it once per offer if needed.
+  // Load the shared review state (gallery + notes) from the cache.
+  // Prefer active gallery frame so cards match sheet/preview.
   useEffect(() => {
     let active = true;
     void loadReviews(offerSlug).then(() => {
       if (!active) return;
       const review = getReview(offerSlug, piece.id);
-      setImage(review.image);
+      const gallery = reviewImages(review);
+      const idx = clampIndex(review.imageIndex, gallery.length);
+      setImage(gallery[idx] ?? review.image);
       setNotes(review.notes ?? '');
     });
     return () => {
       active = false;
     };
   }, [offerSlug, piece.id]);
+
+
 
   const hooks =
     piece.hooks && piece.hooks.length > 0 ? piece.hooks : [piece.hook];
@@ -126,7 +137,9 @@ export const ContentCard: React.FC<{
     reader.onload = () => {
       const dataUrl = String(reader.result);
       setImage(dataUrl);
-      saveReview(offerSlug, piece.id, { image: dataUrl });
+      // Append into gallery (same path as Image Studio) so sheet/preview match.
+      const cur = reviewImages(getReview(offerSlug, piece.id));
+      setReviewImages(offerSlug, piece.id, [...cur, dataUrl], cur.length);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -136,6 +149,7 @@ export const ContentCard: React.FC<{
     setImage(undefined);
     clearReviewImage(offerSlug, piece.id);
   };
+
 
   const saveNotes = () => {
     saveReview(offerSlug, piece.id, { notes: notes.trim() || undefined });

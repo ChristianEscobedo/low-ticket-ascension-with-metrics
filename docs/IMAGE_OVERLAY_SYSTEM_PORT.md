@@ -34,9 +34,16 @@ Client-side burn-in of on-screen copy onto stills for stories, reels covers, fee
 - Look: `styleId`, `color`, `customHex`, `shadowStrength`, `bgOpacity`, `textOpacity`
 - Output: `baseImage`, `renderedUrl`, `updatedAt`
 
+## Gallery sync
+
+- `withImages` mirrors the **active** gallery frame onto legacy `review.image` so ContentCard thumbnails match the sheet/preview.
+- ContentCard loads `reviewImages(review)[imageIndex]` (not always index 0) and card uploads go through `setReviewImages` (append + select), same path as Image Studio.
+
 ## Notes
 
 - Browser-only canvas render (no server round-trip).
 - Hosted base images need CORS for canvas; data URLs and same-origin storage URLs work.
 - Pill/box force ink text when color is white/soft/bone for contrast on bone fill.
 - Old v1 recipes (no x/y) still open via snap layout until the user drags.
+
+

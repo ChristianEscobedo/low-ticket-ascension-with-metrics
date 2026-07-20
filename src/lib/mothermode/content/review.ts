@@ -336,10 +336,15 @@ export function withImages(
   imageIndex: number,
 ): PieceReview {
   const { image: _legacy, ...rest } = prev;
-  return images.length > 0
-    ? { ...rest, images, imageIndex: clampIndex(imageIndex, images.length) }
-    : { ...rest, images: undefined, imageIndex: undefined };
+  if (images.length === 0) {
+    return { ...rest, images: undefined, imageIndex: undefined };
+  }
+  const idx = clampIndex(imageIndex, images.length);
+  // Keep legacy `image` mirrored to the active frame so older surfaces
+  // (ContentCard thumbnail) stay in sync without reading the gallery.
+  return { ...rest, images, imageIndex: idx, image: images[idx] };
 }
+
 
 /** Drop every uploaded/generated image from a review, keeping notes, edits, and
  *  metrics. Clears both the gallery and the legacy single image. Pure. */
