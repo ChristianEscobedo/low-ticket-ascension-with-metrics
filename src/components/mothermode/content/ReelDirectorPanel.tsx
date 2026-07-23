@@ -14,7 +14,7 @@
  * Rendering is slow (minutes per clip) and costs credits, so the UI is explicit
  * about both: a standing time/cost banner, a live per-board status + elapsed
  * timer while a clip renders, and an estimated per-clip cost that tracks the
- * chosen model and duration.
+ * chosen model.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -55,15 +55,19 @@ const DURATIONS = [3, 5, 8, 10];
  * leave it as one of the slugs MUAPI lists in its model catalog. "" means
  * "use the server default" (MUAPI_SEEDANCE_MODEL).
  *
- * `perSecondUsd` is a rough, editable estimate used only to preview cost in the
- * UI — MUAPI bills the real amount. Update these if MUAPI changes pricing. The
- * VIP Omni Reference tier is the cheapest and is the default.
+ * `estUsd` is a rough, editable estimate of the MUAPI charge **per rendered
+ * clip** (MUAPI bills a flat amount per generation, not per second) used only
+ * to preview cost in the UI — MUAPI bills the real amount. Update these if MUAPI
+ * changes pricing. This is a curated shortlist (best quality vs. cost) of the
+ * Seedance 2 image-to-video / omni-reference tiers; the VIP Omni Reference
+ * 1080p tier is the default because it carries the storyboard still + reference
+ * stills for character/prop consistency.
  */
 interface SeedanceModel {
   id: string;
   label: string;
-  /** Estimated USD per second of output; used only for the UI preview. */
-  perSecondUsd: number;
+  /** Estimated flat USD charge per rendered clip; used only for the UI preview. */
+  estUsd: number;
   /** Short note shown next to the option. */
   note?: string;
 }
@@ -71,17 +75,41 @@ interface SeedanceModel {
 const SEEDANCE_MODELS: SeedanceModel[] = [
   {
     id: 'seedance-2-vip-omni-reference-1080p',
-    label: 'Seedance 2 · VIP Omni Reference · 1080p',
-    perSecondUsd: 0.03,
-    note: 'Recommended · lowest cost · omni-reference',
+    label: 'SD2 · VIP Omni Reference · 1080p',
+    estUsd: 3.38,
+    note: 'Recommended · omni-reference',
   },
   {
-    id: 'seedance-1.0',
-    label: 'Seedance 1.0',
-    perSecondUsd: 0.06,
-    note: 'Legacy',
+    id: 'seedance-2-vip-omni-reference-4k',
+    label: 'SD2 · VIP Omni Reference · 4K',
+    estUsd: 6.75,
+    note: 'Premium · omni-reference · 4K',
   },
-  { id: '', label: 'Server default', perSecondUsd: 0.03 },
+  {
+    id: 'seedance-2-omni-reference-no-video-fast',
+    label: 'SD2 · Omni Reference · Fast',
+    estUsd: 0.75,
+    note: 'Low cost · omni-reference',
+  },
+  {
+    id: 'seedance-2.5-image-to-video',
+    label: 'SD2.5 · Image-to-Video · 4K',
+    estUsd: 0.6,
+    note: 'Best quality · 4K',
+  },
+  {
+    id: 'seedance-2.1-image-to-video',
+    label: 'SD2.1 · Image-to-Video · 1080p',
+    estUsd: 0.4,
+    note: 'Great value',
+  },
+  {
+    id: 'seedance-2-mini-image-to-video',
+    label: 'SD2 Mini · Image-to-Video · 720p',
+    estUsd: 0.2,
+    note: 'Fastest · cheapest',
+  },
+  { id: '', label: 'Server default', estUsd: 3.38 },
 ];
 
 /** Look up the selected model's metadata (falls back to the first entry). */
@@ -89,10 +117,9 @@ function modelMeta(id: string): SeedanceModel {
   return SEEDANCE_MODELS.find((m) => m.id === id) ?? SEEDANCE_MODELS[0];
 }
 
-/** Estimated per-clip cost string, e.g. "≈ $0.15". */
-function estCost(modelId: string, durationSec: number): string {
-  const usd = modelMeta(modelId).perSecondUsd * durationSec;
-  return `≈ $${usd.toFixed(2)}`;
+/** Estimated flat per-clip cost string, e.g. "≈ $0.60". */
+function estCost(modelId: string): string {
+  return `≈ $${modelMeta(modelId).estUsd.toFixed(2)}`;
 }
 
 /** Format elapsed milliseconds as m:ss. */
@@ -341,28 +368,29 @@ export default function ReelDirectorPanel({
             ))}
           </select>
         </label>
-        <label className="flex flex-col text-[11px] uppercase tracking-wide text-ink/60">
+        <label className="flex min-w-0 flex-col text-[11px] uppercase tracking-wide text-ink/60">
           Model
           <select
-            className="mt-1 rounded border border-ink/20 bg-white px-2 py-1 text-sm text-ink"
+            className="mt-1 w-full max-w-[16rem] truncate rounded border border-ink/20 bg-white px-2 py-1 text-sm text-ink"
             value={model}
             onChange={(e) => setModel(e.target.value)}
+            title={selected.note ? `${selected.label} — ${selected.note}` : selected.label}
           >
             {SEEDANCE_MODELS.map((m) => (
               <option key={m.id || 'default'} value={m.id}>
                 {m.label}
-                {m.note ? ` — ${m.note}` : ''}
+                {m.note ? ` — ${m.note}` : ''} · {estCost(m.id)}
               </option>
             ))}
           </select>
         </label>
 
-        {/* Estimated cost per clip for the current model + duration */}
+        {/* Estimated cost per clip for the current model */}
         <div className="flex flex-col text-[11px] uppercase tracking-wide text-ink/60">
           Est. cost / clip
           <span className="mt-1 inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-sm font-medium text-emerald-700">
             <Wallet className="h-3.5 w-3.5" />
-            {estCost(model, durationSec)}
+            {estCost(model)}
           </span>
         </div>
 
@@ -379,8 +407,8 @@ export default function ReelDirectorPanel({
       {/* Cost + recompose confirmation line */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-ink/50">
         <span>
-          {selected.label} · {estCost(model, durationSec)} per {durationSec}s
-          clip (estimate — MUAPI bills the actual amount).
+          {selected.label} · {estCost(model)} per clip (flat estimate — MUAPI
+          bills the actual amount).
         </span>
         {recomposedCount > 0 ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-mode/10 px-2 py-0.5 font-medium text-mode">
@@ -468,7 +496,7 @@ export default function ReelDirectorPanel({
                         ? `${liveLabel(live)} ${fmtElapsed(elapsed)}`
                         : board.videoUrl
                         ? 'Re-render clip'
-                        : `Render clip · ${estCost(model, durationSec)}`}
+                        : `Render clip · ${estCost(model)}`}
                     </button>
                     {rendering ? (
                       <span className="text-[11px] text-ink/50">

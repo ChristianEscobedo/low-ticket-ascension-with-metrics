@@ -77,16 +77,49 @@ easy to diagnose. `MUAPI_BASE_URL` still overrides the host for staging.
   other client changes required.
 
 ### 4. UI — `src/components/mothermode/content/ReelDirectorPanel.tsx`
-- New `SEEDANCE_MODELS` constant listing selectable models:
-  - `seedance-2-vip-omni-reference-1080p` — "Seedance 2 · VIP Omni Reference · 1080p" (default)
-  - `seedance-1.0` — "Seedance 1.0"
-  - `''` — "Server default" (uses `MUAPI_SEEDANCE_MODEL`)
-- New `model` state, initialized to `SEEDANCE_MODELS[0].id`.
-- New "Model" `<select>` in the global render-controls row (alongside Audio
-  wrapper / Aspect ratio / Duration).
-- `handleRender` passes `model: model || undefined` into
-  `renderSeedanceClip(...)`, so the "Server default" empty value cleanly omits
-  the field.
+- `SEEDANCE_MODELS` is a **curated shortlist** (best quality vs. cost) of the
+  Seedance 2 image-to-video / omni-reference tiers rather than the full MUAPI
+  catalog. The still is always the source of truth, so only image-driven tiers
+  are offered (text-to-video, extend, watermark, training, and "spicy"
+  reduced-moderation variants are intentionally excluded):
+
+  | Slug | Label | Est. / clip | Note |
+  | --- | --- | --- | --- |
+  | `seedance-2-vip-omni-reference-1080p` | SD2 · VIP Omni Reference · 1080p | ≈ $3.38 | **Default** · omni-reference |
+  | `seedance-2-vip-omni-reference-4k` | SD2 · VIP Omni Reference · 4K | ≈ $6.75 | Premium · omni-reference · 4K |
+  | `seedance-2-omni-reference-no-video-fast` | SD2 · Omni Reference · Fast | ≈ $0.75 | Low cost · omni-reference |
+  | `seedance-2.5-image-to-video` | SD2.5 · Image-to-Video · 4K | ≈ $0.60 | Best quality · 4K |
+  | `seedance-2.1-image-to-video` | SD2.1 · Image-to-Video · 1080p | ≈ $0.40 | Great value |
+  | `seedance-2-mini-image-to-video` | SD2 Mini · Image-to-Video · 720p | ≈ $0.20 | Fastest · cheapest |
+  | `''` | Server default | ≈ $3.38 | uses `MUAPI_SEEDANCE_MODEL` |
+
+  The VIP Omni Reference 1080p tier stays the default (per request) because it
+  carries the storyboard still **plus** reference stills for character/prop
+  consistency across a multi-board reel.
+- `model` state is initialized to `SEEDANCE_MODELS[0].id`.
+- `handleRender` passes `model: model || undefined` into `renderSeedanceClip(...)`,
+  so the "Server default" empty value cleanly omits the field.
+
+## Pricing correction — flat per-clip, not per-second
+
+The initial selector estimated cost as `perSecondUsd × durationSec`, which was
+wrong: **MUAPI bills a flat amount per generation (per clip)**, independent of
+clip length. The model now carries a single `estUsd` (flat per-clip estimate)
+and `estCost(modelId)` returns `≈ $<estUsd>` with no duration multiplier. The
+standing cost line and the per-board "Render clip · ≈ $x.xx" button both read
+the flat figure, and the copy now says "per clip (flat estimate — MUAPI bills
+the actual amount)." These figures mirror MUAPI's published discounted per-clip
+prices and are UI-only hints; MUAPI always bills the real charge.
+
+## Dropdown overflow fix
+
+The Model `<select>` labels are long enough that the closed control overflowed
+its flex column and clipped ("…om"). Fixes in the panel:
+- Labels shortened to a compact `SD2 · … · <res>` form.
+- The `<label>` wrapper is `min-w-0` (so it can shrink inside the flex row).
+- The `<select>` is `w-full max-w-[16rem] truncate` (fixed max width; the closed
+  value truncates with an ellipsis instead of pushing the layout wider).
+- A native `title` on the select shows the full selected label + note on hover.
 
 ## Configuration
 
@@ -94,7 +127,7 @@ No new env vars. The existing `MUAPI_SEEDANCE_MODEL` continues to define the
 server default and is the value used when the "Server default" option is
 chosen (or when the field is omitted). To offer additional models in the
 dropdown, extend `SEEDANCE_MODELS` in `ReelDirectorPanel.tsx` with the model
-slugs from the MUAPI catalog.
+slugs from the MUAPI catalog (and give each a rough `estUsd`).
 
 ## Backward compatibility
 
@@ -106,13 +139,11 @@ slugs from the MUAPI catalog.
 ## Verification
 
 - `tsc --noEmit` — clean (exit 0).
-- `vitest run` for `reel-director`, `film-bible`, `brand-bible` — 26/26 passing.
-- The pure libs carry no model logic (model is an infrastructure/transport
-  concern), so no test changes were required.
+- `vitest run` for `reel-director`, `film-bible`, `brand-bible` — passing. The
+  pure libs carry no model/pricing logic (both are UI/transport concerns), so no
+  test changes were required.
 
 ## Files touched
 
-- `src/utils/integrations/muapi-seedance.ts`
-- `src/app/api/mothermode/content/seedance/route.ts`
-- `src/components/mothermode/content/seedanceClient.ts`
-- `src/components/mothermode/content/ReelDirectorPanel.tsx`
+- `src/components/mothermode/content/ReelDirectorPanel.tsx` (curated model list,
+  flat `estUsd` pricing, overflow-safe Model select)
