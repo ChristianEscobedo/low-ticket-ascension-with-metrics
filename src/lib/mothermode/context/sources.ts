@@ -16,6 +16,8 @@ import { listKitsForAdmin as listCommunityKits } from '@/lib/mothermode/communit
 import { listKitsForAdmin as listHighTicketKits } from '@/lib/mothermode/highticket/store';
 import { listKitsForAdmin as listLeadGenKits } from '@/lib/mothermode/leadgen/store';
 import { listKitsForAdmin as listEmailKits } from '@/lib/mothermode/email/store';
+import { listBiblesForAdmin } from '@/lib/mothermode/brandbible/store';
+
 
 function money(cents: unknown): string {
   return typeof cents === 'number' && cents > 0
@@ -106,5 +108,22 @@ export async function buildContextSourceOptions(): Promise<
     /* ignore */
   }
 
+  // Brand Bibles reskin the Reel Director / Seedance pipeline. No status/slug —
+  // scope (when set) is the only meaningful hint.
+  try {
+    const bibles = await listBiblesForAdmin();
+    for (const b of bibles) {
+      out.push({
+        kind: 'brand-bible',
+        id: b.id,
+        label: b.name || b.id,
+        hint: b.scope || undefined,
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+
   return out;
+
 }

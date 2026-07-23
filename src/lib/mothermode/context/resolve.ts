@@ -22,12 +22,15 @@ import {
   fromEmailKit,
 } from './fromKits';
 import { fromLink, fromText } from './fromInline';
+import { fromBrandBible } from './fromBrandBible';
 
 import { getOffer } from '@/lib/mothermode/offers';
 import { getKitById as getCommunityById } from '@/lib/mothermode/community/store';
 import { getKitById as getHighTicketById } from '@/lib/mothermode/highticket/store';
 import { getKitById as getLeadGenById } from '@/lib/mothermode/leadgen/store';
 import { getKitById as getEmailById } from '@/lib/mothermode/email/store';
+import { getBibleById } from '@/lib/mothermode/brandbible/store';
+
 
 /** Resolve one ref to a pack, or null when the source no longer exists. */
 async function resolveOne(ref: ContextRef): Promise<ContextPack | null> {
@@ -57,7 +60,12 @@ async function resolveOne(ref: ContextRef): Promise<ContextPack | null> {
         const rec = await getEmailById(ref.id);
         return rec ? fromEmailKit(rec as never) : null;
       }
+      case 'brand-bible': {
+        const rec = await getBibleById(ref.id);
+        return rec ? fromBrandBible(rec) : null;
+      }
       case 'link':
+
         return fromLink(ref);
       case 'text':
         return fromText(ref);
