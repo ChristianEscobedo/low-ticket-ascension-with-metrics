@@ -37,6 +37,21 @@ const ASPECT_RATIOS: { id: string; label: string }[] = [
 /** Clip durations Seedance accepts, in seconds. */
 const DURATIONS = [3, 5, 8, 10];
 
+/**
+ * Seedance models selectable at render time. The value is sent as-is to MUAPI;
+ * leave it as one of the slugs MUAPI lists in its model catalog. "" means
+ * "use the server default" (MUAPI_SEEDANCE_MODEL / seedance-1.0).
+ */
+const SEEDANCE_MODELS: { id: string; label: string }[] = [
+  {
+    id: 'seedance-2-vip-omni-reference-1080p',
+    label: 'Seedance 2 · VIP Omni Reference · 1080p',
+  },
+  { id: 'seedance-1.0', label: 'Seedance 1.0' },
+  { id: '', label: 'Server default' },
+];
+
+
 interface ReelDirectorPanelProps {
   offerSlug: string;
   pieceId: string;
@@ -73,6 +88,8 @@ export default function ReelDirectorPanel({
   const [wrapper, setWrapper] = useState<ReelWrapper>('silent');
   const [aspectRatio, setAspectRatio] = useState<string>('9:16');
   const [durationSec, setDurationSec] = useState<number>(5);
+  const [model, setModel] = useState<string>(SEEDANCE_MODELS[0].id);
+
   // Per-board draft prompts (index -> composed/edited prompt text).
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   // Per-board transient error, keyed by board index.
@@ -133,7 +150,7 @@ export default function ReelDirectorPanel({
 
     try {
       const videoUrl = await renderSeedanceClip(
-        { prompt, imageUrl, aspectRatio, durationSec },
+        { prompt, imageUrl, aspectRatio, durationSec, model: model || undefined },
         {
           onStatus: (s: SeedanceTaskStatus) => {
             if (s === 'succeeded' || s === 'failed') return;
@@ -206,6 +223,20 @@ export default function ReelDirectorPanel({
             {DURATIONS.map((d) => (
               <option key={d} value={d}>
                 {d}s
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col text-[11px] uppercase tracking-wide text-ink/60">
+          Model
+          <select
+            className="mt-1 rounded border border-ink/20 bg-white px-2 py-1 text-sm text-ink"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          >
+            {SEEDANCE_MODELS.map((m) => (
+              <option key={m.id || 'default'} value={m.id}>
+                {m.label}
               </option>
             ))}
           </select>

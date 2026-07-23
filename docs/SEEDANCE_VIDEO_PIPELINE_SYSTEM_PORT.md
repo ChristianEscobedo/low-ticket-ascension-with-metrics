@@ -321,4 +321,55 @@ the code over the plan where they disagree:
 - `23dcfa6` — Reel Director UI wired into `StoryboardPanel` + `PieceReview`
   emission.
 
+---
+
+## Post-launch updates
+
+### Per-render model selector
+The Reel Director panel gained a per-render **Model** `<select>` so an admin can
+choose the Seedance model at render time (default
+`seedance-2-vip-omni-reference-1080p`, plus a "Server default" option that falls
+back to `MUAPI_SEEDANCE_MODEL`). The `model` field is optional and threads
+`ReelDirectorPanel → seedanceClient → /api/mothermode/content/seedance →
+muapi-seedance`. Fully additive; omitting it preserves the env-pinned behavior.
+See `docs/SEEDANCE_MODEL_SELECTOR_PORT.md` for the layer-by-layer detail.
+
+### MUAPI contract correction (404 fix)
+The first live render returned `MUAPI submit failed (404)` — our route was
+faithfully propagating a 404 that MUAPI itself returned, which surfaced in the
+browser as a 404 on `POST /api/mothermode/content/seedance`. Root cause: the
+integration had been written against an OpenAI-style single endpoint
+(`POST /v1/video/generations`, model in the JSON body), but MUAPI (muapi.ai)
+uses a **model-slug-in-path** contract. Corrected in
+`src/utils/integrations/muapi-seedance.ts`:
+
+| Concern | Before (404) | After (MUAPI native) |
+| --- | --- | --- |
+| Submit | `POST {base}/v1/video/generations`, model in body | `POST {base}/api/v1/{model}`, model is the path segment |
+| Poll | `GET {base}/v1/video/generations/{id}` | `GET {base}/api/v1/predictions/{id}/result` |
+| Task id | `task_id` / `id` | also reads `request_id` (MUAPI's field) |
+| Output | `outputs[0].url` (object) | also reads string `outputs[]` / `data.outputs[]` |
+
+Auth still sends both `x-api-key` and `Bearer`. The model selector's behavior is
+unchanged — the chosen slug simply becomes the URL path segment. A bad slug now
+surfaces MUAPI's own error message verbatim (instead of a bare 404), making
+catalog mismatches easy to diagnose. `MUAPI_BASE_URL` still overrides the host.
+`tsc --noEmit` clean; `film-bible` + `reel-director` + `brand-bible` 26/26 green.
+
+### Validation-error surfacing (422 diagnosis)
+After the path fix, a live render returned **422 Unprocessable Content** — the
+URL was now correct but MUAPI rejected the request body. Our error extractor
+only read `error.message` / `message`, so the panel showed a useless "MUAPI
+submit failed (422)". MUAPI is FastAPI-based and returns validation failures as
+a `detail[]` array of `{ loc, msg, type }` objects. Added a shared
+`readErrorMessage(json, status)` in `muapi-seedance.ts` that flattens `detail`
+(array → `body.field: message; …`, or a plain string) before falling back to the
+`error.message` / `error` / `message` string fields, and wired it into **both**
+the submit and poll non-OK paths. The 422 now surfaces the exact offending
+field(s) end-to-end (integration → route → panel), so the request-body shape can
+be aligned to whatever the chosen model's schema actually requires. `tsc
+--noEmit` clean; 26/26 Seedance tests still green.
+
+
+
 

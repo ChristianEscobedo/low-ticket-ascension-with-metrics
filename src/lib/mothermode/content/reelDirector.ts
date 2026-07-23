@@ -128,6 +128,65 @@ function cleanStr(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/**
+ * MUAPI rejects any `prompt` longer than 4000 characters (422
+ * "String should have at most 4000 characters"). We compose well under that in
+ * the common case, but a richly-described board plus brand + audio layers can
+ * exceed it, so `buildSeedancePrompt` clamps its output to this cap.
+ */
+export const MAX_SEEDANCE_PROMPT_CHARS = 4000;
+
+/**
+ * A composed prompt section with a drop priority. Sections with a finite
+ * `priority` are shed (lowest first) when the assembled prompt exceeds the cap;
+ * `Infinity` marks the load-bearing sections (master engine, storyboard,
+ * negatives) that are never dropped — the storyboard is only ever truncated as a
+ * final resort.
+ */
+interface PromptSection {
+  text: string;
+  priority: number;
+}
+
+const SEP = '\n\n';
+
+function assembleSections(sections: PromptSection[]): string {
+  return sections
+    .map((s) => s.text)
+    .filter(Boolean)
+    .join(SEP);
+}
+
+/**
+ * Fit the composed sections under `MAX_SEEDANCE_PROMPT_CHARS`. First drops the
+ * optional layers in ascending priority (music → camera → scene notes → voice →
+ * brand → film bible), then, only if the load-bearing sections alone still
+ * overflow, truncates the storyboard section's tail with an ellipsis so the
+ * negatives at the end are preserved.
+ */
+function clampSections(sections: PromptSection[], story: PromptSection): string {
+  let out = assembleSections(sections);
+  if (out.length <= MAX_SEEDANCE_PROMPT_CHARS) return out;
+
+  const droppable = sections
+    .filter((s) => Number.isFinite(s.priority) && s.text)
+    .sort((a, b) => a.priority - b.priority);
+  for (const section of droppable) {
+    if (out.length <= MAX_SEEDANCE_PROMPT_CHARS) break;
+    section.text = '';
+    out = assembleSections(sections);
+  }
+  if (out.length <= MAX_SEEDANCE_PROMPT_CHARS) return out;
+
+  // Load-bearing sections alone still overflow — trim the storyboard tail.
+  const otherLen = out.length - story.text.length;
+  const available = MAX_SEEDANCE_PROMPT_CHARS - otherLen - 1; // 1 for the ellipsis
+  story.text =
+    available > 0 ? `${story.text.slice(0, available).trimEnd()}…` : '…';
+  return assembleSections(sections);
+}
+
+
 /** Arguments for composing one clip's final Seedance prompt. */
 export interface BuildSeedancePromptArgs {
   /** Master meta prompt override. Defaults to MASTER_VIDEO_META_PROMPT. */
@@ -163,19 +222,23 @@ export function buildSeedancePrompt(args: BuildSeedancePromptArgs): string {
   const includeVoice = wrapper ? wrapper.voice : true;
   const includeMusic = wrapper ? wrapper.music : true;
 
-  const sections: string[] = [];
+  const sections: PromptSection[] = [];
 
-  // 1. System / master meta prompt.
-  sections.push(cleanStr(args.meta) || MASTER_VIDEO_META_PROMPT);
+  // 1. System / master meta prompt (never dropped — the cinematic engine).
+  sections.push({
+    text: cleanStr(args.meta) || MASTER_VIDEO_META_PROMPT,
+    priority: Infinity,
+  });
 
-  // 2. Film Bible continuity.
+  // 2. Film Bible continuity (dropped last of the optional layers).
   if (args.filmBible) {
     const block = filmBibleToPromptBlock(args.filmBible);
-    if (block) sections.push(block);
+    if (block) sections.push({ text: block, priority: 6 });
   }
 
   // 3. Storyboard — the source of truth. Placed before brand and flagged so it
-  //    wins any conflict with brand/scene/camera direction below.
+  //    wins any conflict with brand/scene/camera direction below. Never dropped;
+  //    truncated only as a final resort when it alone exceeds the cap.
   const board = args.board;
   const storyLines: string[] = [
     'STORYBOARD (source of truth — this wins any conflict below):',
@@ -189,40 +252,52 @@ export function buildSeedancePrompt(args: BuildSeedancePromptArgs): string {
   if (board.scenes?.length) {
     storyLines.push(`Beats: ${board.scenes.filter(Boolean).join(' | ')}`);
   }
-  sections.push(storyLines.join('\n'));
+  const story: PromptSection = {
+    text: storyLines.join('\n'),
+    priority: Infinity,
+  };
+  sections.push(story);
 
   // 4. Brand Bible.
   if (args.brandBible) {
     const block = brandBibleToPromptBlock(args.brandBible);
-    if (block) sections.push(block);
+    if (block) sections.push({ text: block, priority: 5 });
   }
 
   // 5. Voice layer.
   if (includeVoice && cleanStr(args.voice)) {
-    sections.push(`NARRATION (pacing/timing only, do not render as on-screen text):\n${cleanStr(args.voice)}`);
+    sections.push({
+      text: `NARRATION (pacing/timing only, do not render as on-screen text):\n${cleanStr(args.voice)}`,
+      priority: 4,
+    });
   }
 
   // 6. Scene notes (board production block / b-roll notes).
   const sceneNotes = [cleanStr(board.videoPrompt), cleanStr(board.brollNotes)]
     .filter(Boolean)
     .join('\n');
-  if (sceneNotes) sections.push(`SCENE NOTES:\n${sceneNotes}`);
+  if (sceneNotes) sections.push({ text: `SCENE NOTES:\n${sceneNotes}`, priority: 3 });
 
   // 7. Camera direction.
   if (cleanStr(args.camera)) {
-    sections.push(`CAMERA:\n${cleanStr(args.camera)}`);
+    sections.push({ text: `CAMERA:\n${cleanStr(args.camera)}`, priority: 2 });
   }
 
-  // 8. Music layer.
+  // 8. Music layer (dropped first of the optional layers).
   if (includeMusic && cleanStr(args.music)) {
-    sections.push(`MUSIC DIRECTION (for scoring, not visible):\n${cleanStr(args.music)}`);
+    sections.push({
+      text: `MUSIC DIRECTION (for scoring, not visible):\n${cleanStr(args.music)}`,
+      priority: 1,
+    });
   }
 
-  // 9. Negatives — always present, brand negatives appended.
+  // 9. Negatives — always present (never dropped), brand negatives appended.
   const negatives = args.brandBible?.negatives?.length
     ? `${NEGATIVE_PROMPT}, ${args.brandBible.negatives.map(cleanStr).filter(Boolean).join(', ')}`
     : NEGATIVE_PROMPT;
-  sections.push(`NEGATIVE: ${negatives}`);
+  sections.push({ text: `NEGATIVE: ${negatives}`, priority: Infinity });
 
-  return sections.join('\n\n');
+  return clampSections(sections, story);
 }
+
+

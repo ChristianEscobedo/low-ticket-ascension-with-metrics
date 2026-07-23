@@ -6,8 +6,10 @@ import {
   NEGATIVE_PROMPT,
   REEL_WRAPPERS,
   REEL_WRAPPER_LIST,
+  MAX_SEEDANCE_PROMPT_CHARS,
   type BrandBible,
 } from '@/lib/mothermode/content/reelDirector';
+
 import { emptyFilmBible, mergeContinuity } from '@/lib/mothermode/content/filmBible';
 import type { StoryboardBoard } from '@/lib/mothermode/content/review';
 
@@ -143,4 +145,50 @@ describe('buildSeedancePrompt', () => {
     expect(p).toContain('CAMERA:');
     expect(p).toContain('35mm');
   });
+
+  it('clamps the prompt to MUAPI\'s 4000-char cap', () => {
+    const p = buildSeedancePrompt({
+      board: board({ imagePrompt: 'x'.repeat(6000) }),
+      brandBible: brand,
+      voice: 'a'.repeat(500),
+      music: 'b'.repeat(500),
+      camera: 'c'.repeat(500),
+    });
+    expect(p.length).toBeLessThanOrEqual(MAX_SEEDANCE_PROMPT_CHARS);
+  });
+
+  it('drops optional layers before touching the storyboard when over the cap', () => {
+    // Storyboard alone is comfortably under the cap; the overflow comes from
+    // the optional layers, so those should be shed and the storyboard kept.
+    const p = buildSeedancePrompt({
+      board: board({ imagePrompt: 'y'.repeat(2000) }),
+      brandBible: brand,
+      voice: 'a'.repeat(1500),
+      music: 'b'.repeat(1500),
+      camera: 'c'.repeat(1500),
+    });
+    expect(p.length).toBeLessThanOrEqual(MAX_SEEDANCE_PROMPT_CHARS);
+    // Load-bearing sections survive.
+    expect(p).toContain(MASTER_VIDEO_META_PROMPT);
+    expect(p).toContain('STORYBOARD (source of truth');
+    expect(p).toContain('NEGATIVE:');
+    expect(p).toContain('y'.repeat(2000));
+
+    // Lowest-priority optional layers are shed first.
+    expect(p).not.toContain('MUSIC DIRECTION');
+    expect(p).not.toContain('CAMERA:');
+  });
+
+  it('keeps the negatives even when the storyboard itself must be truncated', () => {
+    const p = buildSeedancePrompt({
+      board: board({ imagePrompt: 'z'.repeat(6000) }),
+    });
+    expect(p.length).toBeLessThanOrEqual(MAX_SEEDANCE_PROMPT_CHARS);
+    expect(p).toContain(MASTER_VIDEO_META_PROMPT);
+    expect(p).toContain('NEGATIVE:');
+    expect(p).toContain(NEGATIVE_PROMPT);
+    expect(p).toContain('…');
+  });
 });
+
+

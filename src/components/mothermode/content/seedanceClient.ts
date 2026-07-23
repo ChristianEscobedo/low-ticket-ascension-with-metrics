@@ -36,6 +36,8 @@ export interface SeedanceSubmitInput {
   durationSec?: number;
   /** Optional deterministic seed. */
   seed?: number;
+  /** Optional model override; empty falls back to the server default. */
+  model?: string;
 }
 
 async function post(body: Record<string, unknown>): Promise<SeedanceResponse> {

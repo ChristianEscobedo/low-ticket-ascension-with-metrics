@@ -40,6 +40,26 @@ function readNumber(v: unknown): number | undefined {
 }
 
 /**
+ * Read the optional omni-reference image list. Accepts an array of URL strings
+ * or an array of `{ url }` objects (the shape the panel sends), keeping only
+ * public http(s) URLs. Returns undefined when nothing usable is present so the
+ * integration omits the field entirely for non-reference renders.
+ */
+function readReferenceImages(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const urls = v
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object' && typeof (item as any).url === 'string')
+        return (item as any).url.trim();
+      return '';
+    })
+    .filter((u) => /^https?:\/\//i.test(u));
+  return urls.length ? urls : undefined;
+}
+
+
+/**
  * Poll a Seedance render task. Admin-only.
  *
  * Query: ?taskId=... . Returns the normalized lifecycle state. Once the task
@@ -144,7 +164,13 @@ export async function POST(request: NextRequest) {
       typeof body.aspectRatio === 'string' ? body.aspectRatio : undefined,
     durationSec: readNumber(body.durationSec),
     seed: readNumber(body.seed),
+    model:
+      typeof body.model === 'string' && body.model.trim()
+        ? body.model.trim()
+        : undefined,
+    referenceImages: readReferenceImages(body.referenceImages),
   };
+
 
   try {
     // Blocking: render fully and hand back a hosted URL in one request.

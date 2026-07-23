@@ -4,18 +4,34 @@
  * into a cinematic clip. MUAPI runs the render asynchronously: we submit a task,
  * then poll until it completes, fails, or the timeout elapses.
  *
+ * MUAPI's contract (muapi.ai) is model-slug-in-path, not an OpenAI-style single
+ * endpoint:
+ *   submit  POST {base}/api/v1/{model}                 -> { request_id }
+ *   poll    GET  {base}/api/v1/predictions/{id}/result -> { status, outputs }
+ * Auth is the `x-api-key` header. The model slug (e.g.
+ * "seedance-2-vip-omni-reference-1080p") is the path segment.
+ *
  * All config is env-driven so a model bump needs no code change:
  *   MUAPI_API_KEY          required — the pipeline is a clear "not configured"
  *                          state without it.
  *   MUAPI_BASE_URL         defaults to https://api.muapi.ai
- *   MUAPI_SEEDANCE_MODEL   defaults to seedance-1.0
+ *   MUAPI_SEEDANCE_MODEL   defaults to seedance-1.0 (used as the path segment)
  *   MUAPI_POLL_TIMEOUT_MS  defaults to 180000 (3 min)
  *   MUAPI_POLL_INTERVAL_MS defaults to 3000
+ *   MUAPI_SEEDANCE_REF_FIELD
+ *                          request-body key for the omni-reference image array
+ *                          (defaults to "reference_images"). Omni-reference
+ *                          models accept extra character/prop stills the prompt
+ *                          addresses as @image1, @image2, @character, etc. The
+ *                          field name lives in env so a schema revision needs no
+ *                          code change — flip the var, not the source.
+
  *
  * The response parsing is intentionally defensive: MUAPI's task/status/output
  * field names are read from a few common shapes so a minor API revision does not
  * break rendering. Never import this from a browser bundle.
  */
+
 
 export type SeedanceResult<T> =
   | { ok: true; data: T }
@@ -49,7 +65,23 @@ export interface SeedanceRenderInput {
   durationSec?: number;
   /** Optional deterministic seed. */
   seed?: number;
+  /**
+   * Optional per-render model override. Falls back to MUAPI_SEEDANCE_MODEL /
+   * the built-in default when empty, so the UI selector can pick a model
+   * without touching env.
+   */
+  model?: string;
+  /**
+   * Optional ordered list of public http(s) reference-image URLs for
+   * omni-reference models (character sheets, prop stills, wardrobe). The prompt
+   * addresses these by position — `@image1` is the first entry, `@image2` the
+   * second, and so on; a `@character` alias can point at whichever slot holds
+   * the character sheet. Sent under the MUAPI_SEEDANCE_REF_FIELD key. Ignored
+   * (harmlessly) by models that do not support references.
+   */
+  referenceImages?: string[];
 }
+
 
 function baseUrl(): string {
   return (process.env.MUAPI_BASE_URL || 'https://api.muapi.ai').replace(/\/+$/, '');
@@ -69,6 +101,25 @@ function pollIntervalMs(): number {
   return Number.isFinite(n) && n > 0 ? n : 3000;
 }
 
+function refField(): string {
+  return process.env.MUAPI_SEEDANCE_REF_FIELD?.trim() || 'reference_images';
+}
+
+/** Keep only well-formed public http(s) URLs, de-duplicated, order preserved. */
+function cleanReferenceImages(urls?: string[]): string[] {
+  if (!Array.isArray(urls)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    const url = typeof u === 'string' ? u.trim() : '';
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
+
 /** True when a key is present so callers can render a "not configured" state. */
 export function isSeedanceConfigured(): boolean {
   return !!process.env.MUAPI_API_KEY?.trim();
@@ -87,13 +138,16 @@ function readTaskId(json: unknown): string {
   if (!json || typeof json !== 'object') return '';
   const j = json as Record<string, any>;
   return (
+    (typeof j.request_id === 'string' && j.request_id) ||
     (typeof j.task_id === 'string' && j.task_id) ||
     (typeof j.taskId === 'string' && j.taskId) ||
     (typeof j.id === 'string' && j.id) ||
+    (typeof j.data?.request_id === 'string' && j.data.request_id) ||
     (typeof j.data?.task_id === 'string' && j.data.task_id) ||
     (typeof j.data?.id === 'string' && j.data.id) ||
     ''
   );
+
 }
 
 /** Normalize the many possible status strings into our four states. */
@@ -122,14 +176,62 @@ function readVideoUrl(json: unknown): string {
     j.output?.url,
     j.data?.video_url,
     j.data?.url,
-    Array.isArray(j.output) ? j.output[0]?.url : undefined,
-    Array.isArray(j.outputs) ? j.outputs[0]?.url : undefined,
+    Array.isArray(j.output)
+      ? typeof j.output[0] === 'string'
+        ? j.output[0]
+        : j.output[0]?.url
+      : undefined,
+    Array.isArray(j.outputs)
+      ? typeof j.outputs[0] === 'string'
+        ? j.outputs[0]
+        : j.outputs[0]?.url
+      : undefined,
+    Array.isArray(j.data?.outputs)
+      ? typeof j.data.outputs[0] === 'string'
+        ? j.data.outputs[0]
+        : j.data.outputs[0]?.url
+      : undefined,
   ];
+
   for (const c of candidates) {
     if (typeof c === 'string' && /^https?:\/\//i.test(c)) return c;
   }
   return '';
 }
+
+/**
+ * Extract a human-readable error out of MUAPI's several failure shapes. MUAPI is
+ * FastAPI-based, so validation failures (422) arrive as a `detail` array of
+ * `{ loc, msg, type }` objects — not the `error.message` / `message` an
+ * OpenAI-style client expects. We flatten `detail` (array or string) first, then
+ * fall back to the common string fields, so a bad field surfaces its actual name
+ * (e.g. "body.duration: input should be a valid string") instead of a bare
+ * status code.
+ */
+function readErrorMessage(json: unknown, status: number): string {
+  const j = (json ?? {}) as Record<string, any>;
+  const detail = j.detail ?? j.error?.detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d) => {
+        if (!d || typeof d !== 'object') return String(d);
+        const loc = Array.isArray(d.loc) ? d.loc.join('.') : d.loc;
+        return [loc, d.msg].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+    if (parts.length) return `MUAPI (${status}): ${parts.join('; ')}`;
+  }
+  if (typeof detail === 'string' && detail.trim())
+    return `MUAPI (${status}): ${detail}`;
+  const msg =
+    (typeof j.error?.message === 'string' && j.error.message) ||
+    (typeof j.error === 'string' && j.error) ||
+    (typeof j.message === 'string' && j.message) ||
+    '';
+  if (msg) return `MUAPI (${status}): ${msg}`;
+  return `MUAPI request failed (${status})`;
+}
+
 
 /**
  * Submit a Seedance image-to-video render. Returns a task id to poll. Does not
@@ -146,28 +248,36 @@ export async function submitSeedanceRender(
   if (!/^https?:\/\//i.test(input.imageUrl || ''))
     return { ok: false, status: 400, error: 'A public image URL is required' };
 
+  const slug = input.model?.trim() || model();
+  const references = cleanReferenceImages(input.referenceImages);
   try {
-    const res = await fetch(`${baseUrl()}/v1/video/generations`, {
+    const res = await fetch(`${baseUrl()}/api/v1/${encodeURIComponent(slug)}`, {
       method: 'POST',
       headers: authHeaders(key),
       body: JSON.stringify({
-        model: model(),
         prompt: input.prompt,
         image_url: input.imageUrl,
         aspect_ratio: input.aspectRatio || '9:16',
         duration: input.durationSec ?? 5,
         ...(typeof input.seed === 'number' ? { seed: Math.round(input.seed) } : {}),
+        // Only attach the reference array when the caller supplied usable URLs,
+        // so non-omni models never see an unexpected (possibly 422-triggering)
+        // field. The key is env-configurable via MUAPI_SEEDANCE_REF_FIELD.
+        ...(references.length ? { [refField()]: references } : {}),
       }),
     });
+
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg =
-        (json as any)?.error?.message ||
-        (json as any)?.message ||
-        `MUAPI submit failed (${res.status})`;
-      return { ok: false, status: res.status, error: msg };
+      return {
+        ok: false,
+        status: res.status,
+        error: readErrorMessage(json, res.status),
+      };
     }
     const taskId = readTaskId(json);
+
     if (!taskId)
       return { ok: false, status: 502, error: 'MUAPI returned no task id' };
     return { ok: true, data: { taskId } };
@@ -187,18 +297,20 @@ export async function getSeedanceStatus(
     return { ok: false, status: 400, error: 'A task id is required' };
   try {
     const res = await fetch(
-      `${baseUrl()}/v1/video/generations/${encodeURIComponent(taskId)}`,
+      `${baseUrl()}/api/v1/predictions/${encodeURIComponent(taskId)}/result`,
       { method: 'GET', headers: authHeaders(key) },
     );
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg =
-        (json as any)?.error?.message ||
-        (json as any)?.message ||
-        `MUAPI status failed (${res.status})`;
-      return { ok: false, status: res.status, error: msg };
+      return {
+        ok: false,
+        status: res.status,
+        error: readErrorMessage(json, res.status),
+      };
     }
     const status = readStatus(json);
+
     return {
       ok: true,
       data: {
