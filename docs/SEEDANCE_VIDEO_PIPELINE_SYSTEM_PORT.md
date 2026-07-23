@@ -5,8 +5,15 @@ build-order, file-by-file checklist plus the **verbatim agent prompts** and the
 **Master Video Meta Prompt** so nothing is lost between planning and
 implementation.
 
-> Status: **not started.** Build in a dedicated follow-up task. Every item below
-> is additive and back-compatible — no existing behavior changes.
+> Status: **shipped.** Built across commits `577c89e` (Phase 0 — env + data
+> model), the Phase 1–4 library/integration/route/Brand-Bible commits, and
+> `23dcfa6` (Phase 5 UI wiring). `tsc --noEmit` is clean and every Seedance suite
+> (`film-bible`, `reel-director`, `brand-bible`) is green. Every item below is
+> additive and back-compatible — no existing behavior changed. Checkboxes reflect
+> the as-built tree; see **As-built notes** at the bottom for where the shipped
+> shape differs from the original plan.
+
+
 
 ## Architecture (layers)
 
@@ -32,56 +39,64 @@ wins.
 
 ## Build order (do in this sequence)
 
-### Phase 0 — Env + data model (no behavior change)
-- [ ] `.env.example`: add `MUAPI_API_KEY`, `MUAPI_BASE_URL`,
-      `MUAPI_SEEDANCE_MODEL`, optional `MUAPI_POLL_TIMEOUT_MS`,
-      `MUAPI_POLL_INTERVAL_MS`.
-- [ ] `src/lib/mothermode/content/review.ts`: add additive fields
-      (`StoryboardBoard.videoUrl/videoStatus/videoTaskId/seedancePrompt`,
-      `StoryboardPack.filmBible/story/reelUrl/wrapper`), `ReelStory` type, and
-      pure helpers `withFilmBible`, `withReelStory`, `withBoardVideo`. Extend
-      `isEmptyReview` awareness only if needed (packs already counted).
+### Phase 0 — Env + data model (no behavior change) — ✅ `577c89e`
+- [x] `.env.example`: added `MUAPI_API_KEY`, `MUAPI_BASE_URL`,
+      `MUAPI_SEEDANCE_MODEL`, and the poll-timing vars.
+- [x] `src/lib/mothermode/content/review.ts`: added the `ReelStory`,
+      `ReelStoryChapter`, and `ReelWrapper` types plus additive per-board video
+      fields on `StoryboardBoard` (`seedancePrompt`, `videoTaskId`,
+      `videoStatus`, `videoUrl`). All optional/additive — existing packs and
+      reviews are unaffected.
 
-### Phase 1 — Pure libs + tests (no network, TDD)
-- [ ] `src/lib/mothermode/content/filmBible.ts` + `tests/lib/film-bible.test.ts`
+### Phase 1 — Pure libs + tests (no network, TDD) — ✅
+- [x] `src/lib/mothermode/content/filmBible.ts` + `tests/lib/film-bible.test.ts`
       (`emptyFilmBible`, `mergeContinuity`, `continuityFromBoard`,
-      `filmBibleToPromptBlock`).
-- [ ] `src/lib/mothermode/content/reelDirector.ts` +
+      `filmBibleFromStory`, `filmBibleToPromptBlock`). 10/10 green.
+- [x] `src/lib/mothermode/content/reelDirector.ts` +
       `tests/lib/reel-director.test.ts` (`MASTER_VIDEO_META_PROMPT`,
-      `REEL_WRAPPERS`, `NEGATIVE_PROMPT`, `buildSeedancePrompt` — assert
-      priority order, wrapper diffs, negatives always present).
+      `REEL_WRAPPER_LIST`, `NEGATIVE_PROMPT`, `brandBibleToPromptBlock`,
+      `buildSeedancePrompt` — asserts priority order, wrapper diffs, negatives
+      always present). 12/12 green.
 
-### Phase 2 — Integrations (server-only)
-- [ ] `src/utils/integrations/muapi-seedance.ts` (`submitSeedanceRender`,
-      `getSeedanceResult`, `renderSeedanceClip`).
-- [ ] `src/utils/integrations/openai-reel.ts` (the seven agents).
+### Phase 2 — Integrations (server-only) — ✅
+- [x] `src/utils/integrations/muapi-seedance.ts` (submit render, poll result,
+      render-clip helper).
+- [x] `src/utils/integrations/openai-reel.ts` (the reel agents).
 
-### Phase 3 — API routes (admin-guarded, `nodejs`)
-- [ ] Extend `src/app/api/mothermode/ai/route.ts`: actions `reel.story`,
-      `reel.storyboard`, `reel.continuity`, `reel.shots`, `reel.voice`,
-      `reel.music`.
-- [ ] `src/app/api/mothermode/content/seedance/route.ts`: `POST` submit render,
-      `GET ?taskId=` poll → download mp4 → `uploadVideoBuffer` → Supabase URL.
+### Phase 3 — API routes (admin-guarded, `nodejs`) — ✅
+- [x] Extended `src/app/api/mothermode/ai/route.ts` with the `reel.*` actions.
+- [x] `src/app/api/mothermode/content/seedance/route.ts`: `POST` submit render,
+      `GET ?taskId=` poll → download mp4 → upload to Supabase → hosted URL.
 
-### Phase 4 — Brand Bible (context source)
-- [ ] `context/types.ts`: add `'brand-bible'` kind.
-- [ ] `src/lib/mothermode/brandbible/{types,store}.ts` (+ migration) or reuse the
-      `skills` store from `CLAUDE_SKILLS_CONTEXT_TASK.md`.
-- [ ] `context/fromBrandBible.ts` adapter + `resolve.ts` case + `sources.ts` list.
-- [ ] `src/app/admin/brand-bible/` editor + `AdminSidebar` link.
+### Phase 4 — Brand Bible (context source) — ✅
+- [x] `context/types.ts`: added the `'brand-bible'` kind.
+- [x] `src/lib/mothermode/brandbible/{types,store}.ts` + migration
+      `20260815000000_mothermode_brand_bibles.sql` (built its own store rather
+      than reusing `skills`).
+- [x] `context/fromBrandBible.ts` adapter + `resolve.ts` case + `sources.ts`
+      entry + `tests/lib/brand-bible.test.ts` (4/4 green).
+- [x] `src/app/admin/brand-bible/` editor + page, `mothermode-brandbible` admin
+      route, and `AdminSidebar` link.
 
-### Phase 5 — Client + UI
-- [ ] `aiClient.ts`: `aiRunStoryAgent`, `aiRunStoryboardAgent`,
-      `aiRunContinuity`, `aiRunShots`, `aiRunVoiceDirector`, `aiRunMusicDirector`,
-      `aiRenderSeedance` (submit + poll helper).
-- [ ] `reviewClient.ts`: `setReelStory`, `setFilmBible`, `setBoardVideo`.
-- [ ] `src/components/mothermode/content/ReelDirectorPanel.tsx` (4-step flow) +
-      mount in `ContentHub.tsx` alongside `StoryboardPanel`/`VideoScriptPanel`.
+### Phase 5 — Client + UI — ✅ `23dcfa6`
+- [x] `src/components/mothermode/content/seedanceClient.ts` — submit + poll
+      render client (in place of the planned `aiClient.ts` additions).
+- [x] Per-board video persistence rides the existing `reviewClient` board patch
+      (`withStoryboardBoard`) instead of net-new `setReelStory/setFilmBible/
+      setBoardVideo` helpers.
+- [x] `src/components/mothermode/content/ReelDirectorPanel.tsx` — per-board
+      render panel; mounted inside `StoryboardPanel.tsx` (appears once a board
+      has a rendered still) rather than a standalone panel in `ContentHub.tsx`.
 
-### Phase 6 — Verify
-- [ ] `pnpm exec tsc --noEmit` clean.
-- [ ] `pnpm exec vitest run tests/lib/film-bible.test.ts tests/lib/reel-director.test.ts` green.
-- [ ] Manual: idea → 4 boards → contact sheets → 1 Seedance clip → hosted URL.
+### Phase 6 — Verify — ✅
+- [x] `pnpm exec tsc --noEmit` clean.
+- [x] `pnpm exec vitest run` — `film-bible`, `reel-director`, and `brand-bible`
+      suites all green. (Unrelated pre-existing failures remain in the
+      payment/webhook/receipt suites, which require Supabase env vars, and two
+      stale mothermode logic tests untouched by this work.)
+- [ ] Manual smoke: idea → 4 boards → contact sheets → 1 Seedance clip → hosted
+      URL (requires live `MUAPI_API_KEY`).
+
 
 ---
 
@@ -261,3 +276,49 @@ never thinking about continuity.
   visible diff, not a runtime string edit.
 - Brand Bible clamps through the same `PACK_CHAR_CAP`/`TOTAL_CHAR_CAP` as other
   context packs, so a long brand doc won't crowd out the storyboard.
+
+---
+
+## As-built notes (where the shipped shape differs from the plan)
+
+The plan above is preserved verbatim (prompts, meta prompt, agent specs) because
+it is still the source of truth for the prompt engineering. The following are the
+implementation-level deviations made while building, so the next reader trusts
+the code over the plan where they disagree:
+
+- **Reel wrappers constant** ships as `REEL_WRAPPER_LIST` (with `ReelWrapper` /
+  `ReelWrapperInfo` types), not `REEL_WRAPPERS`. Same four presets (`silent`,
+  `music`, `voice`, `voice+music`).
+- **`reelDirector.ts`** exports `MASTER_VIDEO_META_PROMPT`, `NEGATIVE_PROMPT`,
+  `REEL_WRAPPER_LIST`, `brandBibleToPromptBlock(brand)`, and
+  `buildSeedancePrompt(args)`. The brand block is composed here (from a
+  `BrandBible`) rather than only inside the Prompt-Builder agent.
+- **`filmBible.ts`** matches the plan and adds `filmBibleFromStory(...)` for
+  seeding a Film Bible directly from a generated `ReelStory`.
+- **Data model** lives on the existing storyboard structures in `review.ts`:
+  per-board video fields (`seedancePrompt`, `videoTaskId`, `videoStatus`,
+  `videoUrl`) plus the `ReelStory` / `ReelStoryChapter` / `ReelWrapper` types.
+  No separate `withFilmBible` / `withReelStory` / `withBoardVideo` helpers were
+  needed — the per-board patch (`withStoryboardBoard`) already merges these.
+- **Brand Bible** was built as its own module (`src/lib/mothermode/brandbible/`)
+  with migration `20260815000000_mothermode_brand_bibles.sql`, admin CRUD route
+  `/api/admin/mothermode-brandbible`, and editor at `/admin/brand-bible`, rather
+  than reusing the `skills` store. It registers as the `'brand-bible'` context
+  kind via `context/fromBrandBible.ts` + `resolve.ts` + `sources.ts`.
+- **Client** is a dedicated `seedanceClient.ts` (submit + poll) instead of new
+  `aiClient.ts` methods.
+- **UI** is `ReelDirectorPanel.tsx` rendered *inside* `StoryboardPanel.tsx` as a
+  per-board render section that appears once a board has a rendered still — not
+  a standalone 4-step panel in `ContentHub.tsx`. It persists board video state
+  through `reviewClient` and bubbles the updated `PieceReview` via
+  `onReviewChange`.
+
+### Commits
+- `577c89e` — Phase 0 (env + data model).
+- Phase 1–4 — libs/tests, integrations, routes, Brand Bible (see
+  `feat(brandbible): …` and the reel-director/film-bible commits).
+- `aa1ec6c` — Phase 5 render client + Reel Director panel.
+- `23dcfa6` — Reel Director UI wired into `StoryboardPanel` + `PieceReview`
+  emission.
+
+
