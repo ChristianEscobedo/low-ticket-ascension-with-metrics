@@ -82,9 +82,16 @@ function modelId(v: unknown): string | undefined {
 
 
 
+import {
+  generateReelStory,
+  directReelShots,
+} from '@/utils/integrations/openai-reel';
+import type { ReelStory } from '@/lib/mothermode/content/review';
+
 export async function POST(request: NextRequest) {
   const guard = await requireAdminRoute();
   if (!guard.ok) return guard.response!;
+
 
   let body: Record<string, unknown>;
   try {
@@ -118,6 +125,61 @@ export async function POST(request: NextRequest) {
     }
     const image = await hostGeneratedImage(dataUrl);
     return NextResponse.json({ ok: true, image });
+  }
+
+  // Reel Director — Story Agent: one idea -> a four-chapter ReelStory.
+  if (action === 'reel.story') {
+    const idea = typeof body.idea === 'string' ? body.idea.trim() : '';
+    if (!idea) {
+      return NextResponse.json(
+        { ok: false, error: 'An idea is required' },
+        { status: 400 },
+      );
+    }
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const result = await generateReelStory({
+      idea,
+      cta: str(body.cta),
+      brandVoice: str(body.brandVoice),
+      context: str(body.context),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, story: result.data });
+  }
+
+  // Reel Director — Shot Director: per-board camera + scene direction.
+  if (action === 'reel.shots') {
+    if (!body.story || typeof body.story !== 'object') {
+      return NextResponse.json(
+        { ok: false, error: 'A story is required' },
+        { status: 400 },
+      );
+    }
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const boardSummaries = Array.isArray(body.boardSummaries)
+      ? (body.boardSummaries as unknown[])
+          .map((b) => (typeof b === 'string' ? b : ''))
+          .filter((b): b is string => b.length > 0)
+      : undefined;
+    const result = await directReelShots({
+      story: body.story as ReelStory,
+      boardSummaries,
+      brandVoice: str(body.brandVoice),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, shots: result.data });
   }
 
   if (action === 'image') {
