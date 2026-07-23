@@ -24,12 +24,19 @@ import {
   Loader2,
   Play,
   RefreshCw,
+  Scissors,
   Wallet,
 } from 'lucide-react';
 import {
   buildSeedancePrompt,
   REEL_WRAPPER_LIST,
 } from '@/lib/mothermode/content/reelDirector';
+import {
+  buildReelAssemblyPlan,
+  boardsReadyForAssembly,
+  boardsRemaining,
+  describeWrapper,
+} from '@/lib/mothermode/content/reelAssembly';
 import type {
   PieceReview,
   StoryboardBoard,
@@ -37,8 +44,10 @@ import type {
   ReelWrapper,
 } from '@/lib/mothermode/content/review';
 
-import { patchReviewStoryboardBoard } from './reviewClient';
+import { patchReviewStoryboardBoard, patchReviewReelCut } from './reviewClient';
 import { renderSeedanceClip, type SeedanceTaskStatus } from './seedanceClient';
+import { assembleReelCut } from './reelCutClient';
+
 
 /** Aspect ratios the pipeline supports, vertical-first for reels. */
 const ASPECT_RATIOS: { id: string; label: string }[] = [
@@ -197,6 +206,14 @@ export default function ReelDirectorPanel({
   // Count of boards whose prompt was just recomposed, for a brief confirmation.
   const [recomposedCount, setRecomposedCount] = useState<number>(0);
 
+  // Final-reel assembly state.
+  const [assembling, setAssembling] = useState<boolean>(false);
+  const [assembleErr, setAssembleErr] = useState<string>('');
+  // Locally tracked assembled reel (mirrors what we persist onto the review).
+  const [reelUrl, setReelUrl] = useState<string>('');
+  const [reelDuration, setReelDuration] = useState<number>(0);
+
+
   const anyBusy = useMemo(
     () => Object.values(busy).some(Boolean),
     [busy],
@@ -294,8 +311,58 @@ export default function ReelDirectorPanel({
     }
   }
 
+  /** Assemble every rendered board clip into one stitched reel and persist it. */
+  async function handleAssemble() {
+    setAssembleErr('');
+    // The panel is driven by the pack; wrap it as a review for the planner. A
+    // voice wrapper needs a combined voiceover on the script, which is surfaced
+    // by the planner's own error when it is missing.
+    const reviewForPlan: PieceReview = { storyboard: pack };
+    const built = buildReelAssemblyPlan(reviewForPlan, wrapper);
+    if (!built.ok) {
+      setAssembleErr(built.error);
+      return;
+    }
+    setAssembling(true);
+    patchReviewReelCut(offerSlug, pieceId, {
+      wrapper,
+      boardOrder: built.plan.boardOrder,
+      status: 'assembling',
+    });
+
+    try {
+      const result = await assembleReelCut({
+        clips: built.plan.clips,
+        audioUrl: built.plan.audioUrl,
+      });
+      setReelUrl(result.videoUrl);
+      setReelDuration(result.durationSec || built.plan.durationSec);
+      const review = patchReviewReelCut(offerSlug, pieceId, {
+        videoUrl: result.videoUrl,
+        durationSec: result.durationSec || built.plan.durationSec,
+        status: 'done',
+      });
+      onReviewChange?.(review);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Assembly failed';
+      setAssembleErr(msg);
+      patchReviewReelCut(offerSlug, pieceId, { status: 'failed' });
+    } finally {
+      setAssembling(false);
+    }
+  }
+
+  // Assembly readiness, derived from the pack (wrapped as a review).
+  const reviewForPlan: PieceReview = useMemo(
+    () => ({ storyboard: pack }),
+    [pack],
+  );
+  const allReady = boardsReadyForAssembly(reviewForPlan);
+  const remaining = boardsRemaining(reviewForPlan);
+
   if (boards.length === 0) {
     return (
+
       <div className="rounded-lg border border-dashed border-ink/20 bg-white/50 px-4 py-8 text-center text-sm text-ink/60">
         <Film className="mx-auto mb-2 h-6 w-6 opacity-50" />
         Generate a storyboard first — the Reel Director animates its frames into
@@ -513,6 +580,67 @@ export default function ReelDirectorPanel({
           );
         })}
       </div>
+
+      {/* Final reel assembly */}
+      <div className="rounded-lg border border-ink/10 bg-white/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-mode">
+            <Scissors className="h-4 w-4" />
+            <span className="text-sm font-medium">Assemble final reel</span>
+          </div>
+          <span className="text-[11px] text-ink/50">
+            {describeWrapper(wrapper)}
+          </span>
+        </div>
+
+        <p className="mt-1 text-xs text-ink/60">
+          Stitches every rendered board clip together in order
+          {allReady
+            ? ' — all boards are ready.'
+            : ` — ${remaining} clip${remaining === 1 ? '' : 's'} still ${
+                remaining === 1 ? 'needs' : 'need'
+              } a render.`}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={assembling || anyBusy || !allReady}
+            onClick={handleAssemble}
+            className="inline-flex items-center gap-1 rounded bg-mode px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {assembling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Film className="h-3.5 w-3.5" />
+            )}
+            {assembling ? 'Assembling…' : 'Assemble reel'}
+          </button>
+          {assembling ? (
+            <span className="text-[11px] text-ink/50">
+              Stitching clips — this can take a minute.
+            </span>
+          ) : null}
+          {assembleErr ? (
+            <span className="text-xs text-rose-600">{assembleErr}</span>
+          ) : null}
+        </div>
+
+        {reelUrl ? (
+          <div className="mt-3 space-y-1">
+            <video
+              src={reelUrl}
+              controls
+              className="w-full max-w-sm rounded border border-mode/30"
+            />
+            <p className="text-[11px] text-ink/50">
+              Assembled reel{reelDuration ? ` · ${reelDuration}s` : ''}.
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
+
+

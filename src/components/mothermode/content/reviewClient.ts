@@ -21,6 +21,9 @@ import {
 
   withoutStoryboard,
   withStoryboardBoard,
+  patchReelCut,
+  type ReelCut,
+
   withFramePack,
   withoutFramePack,
   withYouTubeKit,
@@ -353,6 +356,19 @@ export function clearReviewYouTubeKit(
   persist(offerSlug, id, next);
   return next;
 }
+
+/** Merge a patch into the piece's assembled reel cut (status, request id, or
+ *  final URL as an assembly progresses). Returns the new review. */
+export function patchReviewReelCut(
+  offerSlug: string,
+  id: string,
+  patch: Partial<ReelCut>,
+): PieceReview {
+  const next = patchReelCut(getReview(offerSlug, id), patch);
+  persist(offerSlug, id, next);
+  return next;
+}
+
 
 
 

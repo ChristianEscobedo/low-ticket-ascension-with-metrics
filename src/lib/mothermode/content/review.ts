@@ -297,6 +297,37 @@ export interface ReelStoryChapter {
 /** Audio treatment preset for a finished reel. */
 export type ReelWrapper = 'silent' | 'music' | 'voice' | 'voice+music';
 
+/** Assembly lifecycle for the final stitched reel. */
+export type ReelCutStatus = 'idle' | 'assembling' | 'done' | 'failed';
+
+/**
+ * A finished reel: the storyboard board clips stitched together in order with an
+ * optional voiceover laid over the top (no captions in this round). Additive —
+ * older reviews simply omit it, and the assembler only lights up once every
+ * board carries a rendered Seedance clip.
+ */
+export interface ReelCut {
+  /** Public (re-hosted to Supabase) URL of the assembled reel MP4. */
+  videoUrl?: string;
+  /** Audio treatment applied to this cut. */
+  wrapper: ReelWrapper;
+  /** Board indices in the exact order they were stitched. */
+  boardOrder: number[];
+  /** Total runtime in seconds (sum of the source clip durations). */
+  durationSec?: number;
+  /** Voiceover track laid over the cut, for voice wrappers (hosted URL). */
+  voiceoverUrl?: string;
+  /** Assembly lifecycle. */
+  status: ReelCutStatus;
+  /** fal request id for an in-flight/last assembly. */
+  taskId?: string;
+  /** Provider/host error message when status is 'failed'. */
+  error?: string;
+  /** ISO timestamp of the finished assembly. */
+  generatedAt?: string;
+}
+
+
 
 
 /**
@@ -383,7 +414,10 @@ export interface PieceReview {
   framePack?: import('./framePack').FramePack;
   /** YouTube publishing kit: titles, SEO description, tags, chapters, thumbnails. */
   youtube?: YouTubeKit;
+  /** The final assembled reel (board clips stitched in order + voiceover). */
+  reel?: ReelCut;
 }
+
 
 
 
@@ -462,6 +496,9 @@ export function isEmptyReview(r: PieceReview): boolean {
       (Array.isArray(r.youtube.thumbnails) &&
         r.youtube.thumbnails.length > 0) ||
       (Array.isArray(r.youtube.chapters) && r.youtube.chapters.length > 0));
+  const hasReel =
+    !!r.reel &&
+    (hasText(r.reel.videoUrl) || r.reel.status === 'assembling');
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
@@ -473,9 +510,11 @@ export function isEmptyReview(r: PieceReview): boolean {
     !hasCompliance &&
     !hasOverlay &&
     !hasFramePack &&
-    !hasYouTube
+    !hasYouTube &&
+    !hasReel
   );
 }
+
 
 
 
@@ -648,6 +687,35 @@ export function withoutYouTubeKit(prev: PieceReview): PieceReview {
   const { youtube: _y, ...rest } = prev;
   return rest;
 }
+
+/** Set (or replace) the piece's assembled reel cut. Pure. */
+export function withReelCut(prev: PieceReview, reel: ReelCut): PieceReview {
+  return { ...prev, reel };
+}
+
+/**
+ * Merge a partial patch into the reel cut (e.g. flip status to 'assembling',
+ * then stash the hosted videoUrl on success), seeding a minimal idle cut when
+ * none exists. Pure: returns a new object.
+ */
+export function patchReelCut(
+  prev: PieceReview,
+  patch: Partial<ReelCut>,
+): PieceReview {
+  const base: ReelCut = prev.reel ?? {
+    wrapper: 'silent',
+    boardOrder: [],
+    status: 'idle',
+  };
+  return { ...prev, reel: { ...base, ...patch } };
+}
+
+/** Drop the assembled reel cut, keeping everything else. Pure. */
+export function withoutReelCut(prev: PieceReview): PieceReview {
+  const { reel: _r, ...rest } = prev;
+  return rest;
+}
+
 
 /** Render a chapter list as a YouTube-ready timestamp block ("0:00 Intro"). */
 export function chaptersToText(chapters: YouTubeChapter[] | undefined): string {
