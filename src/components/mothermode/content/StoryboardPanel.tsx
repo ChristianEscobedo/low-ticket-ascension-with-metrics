@@ -37,6 +37,8 @@ import {
   clearReviewStoryboard,
 } from './reviewClient';
 import { aiGenerateStoryboardPlan } from './aiClient';
+import ReelDirectorPanel from './ReelDirectorPanel';
+
 import {
   useAiAction,
   aiBtnSolid,
@@ -551,6 +553,28 @@ export const StoryboardPanel: React.FC<{
           })}
         </div>
       ) : null}
+
+      {pack?.boards?.some((b) => b.imageUrl) ? (
+        <div className="space-y-3 border-t border-ink/10 pt-4">
+          <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brass">
+            <Clapperboard className="h-3.5 w-3.5" />
+            Reel Director
+          </p>
+          <p className="text-xs text-ink/55">
+            Animate each rendered board into a Seedance video clip. The
+            storyboard still is the source of truth — we animate the frame, we
+            never regenerate composition.
+          </p>
+          <ReelDirectorPanel
+            offerSlug={offerSlug}
+            pieceId={piece.id}
+            pack={pack}
+            onReviewChange={onReviewChange}
+          />
+        </div>
+      ) : null}
     </div>
   );
 };
+
+

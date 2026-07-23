@@ -18,10 +18,12 @@ import {
   REEL_WRAPPER_LIST,
 } from '@/lib/mothermode/content/reelDirector';
 import type {
+  PieceReview,
   StoryboardBoard,
   StoryboardPack,
   ReelWrapper,
 } from '@/lib/mothermode/content/review';
+
 import { patchReviewStoryboardBoard } from './reviewClient';
 import { renderSeedanceClip, type SeedanceTaskStatus } from './seedanceClient';
 
@@ -39,9 +41,10 @@ interface ReelDirectorPanelProps {
   offerSlug: string;
   pieceId: string;
   pack: StoryboardPack;
-  /** Notified with the updated pack after a board changes, so parents refresh. */
-  onPackChange?: (pack: StoryboardPack) => void;
+  /** Notified with the updated review after a board changes, so parents refresh. */
+  onReviewChange?: (review: PieceReview) => void;
 }
+
 
 /** Human label + tone for a board's render status chip. */
 function statusChip(status: StoryboardBoard['videoStatus']): {
@@ -64,8 +67,9 @@ export default function ReelDirectorPanel({
   offerSlug,
   pieceId,
   pack,
-  onPackChange,
+  onReviewChange,
 }: ReelDirectorPanelProps) {
+
   const [wrapper, setWrapper] = useState<ReelWrapper>('silent');
   const [aspectRatio, setAspectRatio] = useState<string>('9:16');
   const [durationSec, setDurationSec] = useState<number>(5);
@@ -98,11 +102,12 @@ export default function ReelDirectorPanel({
     setDrafts(next);
   }
 
-  /** Persist a board patch and bubble the fresh pack to the parent. */
+  /** Persist a board patch and bubble the fresh review to the parent. */
   function patchBoard(index: number, patch: Partial<StoryboardBoard>) {
     const review = patchReviewStoryboardBoard(offerSlug, pieceId, index, patch);
-    if (review.storyboard && onPackChange) onPackChange(review.storyboard);
+    onReviewChange?.(review);
   }
+
 
   async function handleRender(board: StoryboardBoard) {
     const imageUrl = board.imageUrl?.trim();
