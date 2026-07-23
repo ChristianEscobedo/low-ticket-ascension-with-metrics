@@ -13,7 +13,10 @@ import {
   deleteGeneratedBatch,
 } from '@/utils/mothermode/generated-content';
 import { getOffer } from '@/lib/mothermode/offers';
+import { resolveContextRefs } from '@/lib/mothermode/context/resolve';
+import { contextPacksToPromptBlock } from '@/lib/mothermode/context/prompt';
 import { ROUTES } from '@/lib/mothermode/brand';
+
 import {
   isPerspective,
   isSophistication,
@@ -158,6 +161,14 @@ export async function POST(request: NextRequest) {
   // Amplify (and any caller that wants the old path) passes persist: true.
   const persist = body.persist === true;
 
+  // Resolve any attached context refs (offers / kits the owner chose to promote)
+  // into a grounded prompt block, then fold it into `guides` so the existing
+  // generator injection carries it — no changes to the generator internals.
+  const contextPacks = await resolveContextRefs(body.contextRefs);
+  const contextBlock = contextPacksToPromptBlock(contextPacks, 'content');
+  const baseGuides = str(body.guides);
+  const guides = [baseGuides, contextBlock].filter(Boolean).join('\n\n') || undefined;
+
   const input: BatchInput = {
     mode,
     count: clamp(Number(body.count) || 0, 1, 10),
@@ -166,7 +177,8 @@ export async function POST(request: NextRequest) {
     kind,
     tone: tone as ToneRegister,
     theme: str(body.theme),
-    guides: str(body.guides),
+    guides,
+
     offer: offerContext(offer),
     source,
     perspective: isPerspective(body.perspective) ? body.perspective : undefined,

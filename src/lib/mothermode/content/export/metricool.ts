@@ -109,12 +109,14 @@ const PLATFORM_COL: Record<
 > = {
   Facebook: 'facebook',
   'Twitter/X': 'x',
-  LinkedIn: null,
+  LinkedIn: 'linkedin',
   GBP: null,
+
   Instagram: 'instagram',
   Pinterest: 'pinterest',
   TikTok: 'tiktok',
-  Youtube: null,
+  Youtube: 'youtube',
+
   Threads: null,
   Bluesky: null,
 };

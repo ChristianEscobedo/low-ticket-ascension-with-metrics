@@ -5,11 +5,27 @@ import {
   defaultOverlay,
   freeformCssTransform,
   getOverlayColor,
+  layoutOverlay,
   overlayPrimaryPx,
   overlaySubPx,
   snapPosition,
   suggestOverlayText,
+  wrapLines,
 } from '@/lib/mothermode/content/imageOverlay';
+
+/**
+ * Minimal fake 2D context: `layoutOverlay`/`wrapLines` only ever set `.font`
+ * and call `measureText`, so a per-character width is enough to exercise the
+ * wrap + block-width math deterministically (no real canvas/DOM needed).
+ */
+function fakeCtx(perChar = 10): CanvasRenderingContext2D {
+  return {
+    font: '',
+    measureText: (s: string) => ({ width: s.length * perChar }),
+  } as unknown as CanvasRenderingContext2D;
+}
+
+
 
 
 import type { ContentPiece } from '@/lib/mothermode/content/types';
@@ -99,10 +115,11 @@ describe('imageOverlay helpers', () => {
     expect(suggestOverlayText(basePiece, {}).text).toBe('the tabs never close');
   });
 
-it('snapPosition sets freeform anchor coords (center = 0.5, not top-left)', () => {
+it('snapPosition sets freeform CENTER coords (inset so block stays on-frame)', () => {
     const tl = snapPosition('top', 'left');
-    expect(tl.x).toBeLessThan(0.1);
-    expect(tl.y).toBeLessThan(0.1);
+    // Center of a top-left block — not the edge (0.06), so translate(-50%) stays on-canvas.
+    expect(tl.x).toBe(0.22);
+    expect(tl.y).toBe(0.16);
     expect(tl.vAlign).toBe('top');
     expect(tl.hAlign).toBe('left');
 
@@ -111,18 +128,20 @@ it('snapPosition sets freeform anchor coords (center = 0.5, not top-left)', () =
     expect(mid.y).toBe(0.5);
 
     const br = snapPosition('bottom', 'right');
-    expect(br.x).toBeGreaterThan(0.9);
-    expect(br.y).toBeGreaterThan(0.9);
+    expect(br.x).toBe(0.78);
+    expect(br.y).toBe(0.84);
   });
 
-  it('freeformCssTransform centers the block on the anchor', () => {
+  it('freeformCssTransform always centers the block on (x,y)', () => {
+    // Align args are ignored — center-only so drag never parks text off-frame.
     expect(freeformCssTransform('center', 'middle')).toBe(
       'translate(-50%, -50%)',
     );
-    expect(freeformCssTransform('left', 'top')).toBe('translate(0%, 0%)');
+    expect(freeformCssTransform('left', 'top')).toBe('translate(-50%, -50%)');
     expect(freeformCssTransform('right', 'bottom')).toBe(
-      'translate(-100%, -100%)',
+      'translate(-50%, -50%)',
     );
+    expect(freeformCssTransform()).toBe('translate(-50%, -50%)');
   });
 
 
@@ -138,4 +157,59 @@ it('snapPosition sets freeform anchor coords (center = 0.5, not top-left)', () =
     );
     expect(getOverlayColor({ color: 'brass' })).toBe('#B08D57');
   });
+
+  it('wrapLines accounts for letter-spacing so canvas breaks match the DOM', () => {
+    // Fake ctx: each character measures 10px wide (spaces included).
+    const ctx = {
+      font: '',
+      measureText: (s: string) => ({ width: s.length * 10 }),
+    } as unknown as CanvasRenderingContext2D;
+
+    // "aaaa aaaa" = 9 glyphs → 90px natural width. maxWidth 95 fits it on one
+    // line with no tracking...
+    expect(wrapLines(ctx, 'aaaa aaaa', 95, 0)).toEqual(['aaaa aaaa']);
+
+    // ...but with tracking the DOM (and now the canvas) wraps to two lines,
+    // because the tracked advance (90 + 10*8 = 170) exceeds maxWidth. This is
+    // the fix that stops the burn-in from packing more per line than the
+    // preview and rendering slightly narrower.
+    expect(wrapLines(ctx, 'aaaa aaaa', 95, 10)).toEqual(['aaaa', 'aaaa']);
+  });
+
+  it('layout block content width tracks the preview max-content ratio', () => {
+    // The CSS preview uses `width: max-content` + `letter-spacing`, so a single
+    // fitting line's box width == natural glyph width + tracking between glyphs.
+    // The canvas layout must produce the SAME fraction of the frame or the
+    // burn-in reads narrower/wider than the live preview.
+    const ctx = fakeCtx(10);
+    const width = 1000;
+    const height = 1000;
+    const overlay = defaultOverlay({
+      text: 'AAAAAAAAAA', // 10 glyphs → 100px natural width at 10px/char
+      sub: '',
+      styleId: 'none', // no box padding, so blockWidth == pure content width
+      size: 's', // 3.5% of height → primaryPx 35
+      fontScale: 1,
+      tracking: 0.1, // 0.1em → trackingPx 3.5
+      maxWidthPct: 0.88,
+    });
+
+    const layout = layoutOverlay(ctx, overlay, width, height);
+
+    const primaryPx = overlayPrimaryPx(height, 's', 1); // 35
+    const trackingPx = primaryPx * 0.1; // 3.5
+    const glyphs = 10;
+    const naturalWidth = glyphs * 10; // 100
+    // DOM max-content folds tracking between the glyphs (n-1), same model the
+    // canvas wrap/measure now uses.
+    const expectedContent = naturalWidth + trackingPx * (glyphs - 1);
+
+    expect(layout.primaryLines).toEqual(['AAAAAAAAAA']); // fits one line
+    expect(layout.blockWidth).toBeCloseTo(expectedContent, 5);
+    // Same fraction of the frame that the CSS preview reproduces.
+    expect(layout.blockWidth / width).toBeCloseTo(expectedContent / width, 5);
+  });
 });
+
+
+

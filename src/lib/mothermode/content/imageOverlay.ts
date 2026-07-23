@@ -68,10 +68,10 @@ export interface ImageOverlay {
   vAlign: OverlayVAlign;
   hAlign: OverlayHAlign;
 /**
-   * Freeform anchor of the text block as 0–1 of frame (not top-left).
-   * Placement uses hAlign/vAlign as the anchor side:
-   * center+middle → point is the block center; left+top → point is top-left; etc.
-   * When set, overrides snap band placement (align still affects glyph alignment).
+   * Freeform CENTER of the text block as 0–1 of frame width/height.
+   * Always paired with CSS/canvas translate(-50%,-50%). hAlign only affects
+   * glyph alignment inside the box; vAlign is snap/scrim metadata only.
+   * When set, overrides snap-band placement.
    */
   x?: number;
   y?: number;
@@ -341,30 +341,29 @@ export function applyOverlayTransform(
 
 /**
  * Snap preset → normalized freeform anchor coords.
- * x/y are the anchor point (center of frame for center/middle), not block top-left.
+ * x/y are always the CENTER of the text block (0–1). vAlign/hAlign are kept
+ * for text-align + snap labels only — they must NOT shift the box via
+ * translate, or drag (which only writes x/y) can park the block off-canvas.
  */
 export function snapPosition(
   v: OverlayVAlign,
   h: OverlayHAlign,
 ): { x: number; y: number; vAlign: OverlayVAlign; hAlign: OverlayHAlign } {
-  const x = h === 'left' ? SAFE : h === 'right' ? 1 - SAFE : 0.5;
-  const y = v === 'top' ? SAFE : v === 'middle' ? 0.5 : 1 - SAFE;
+  // Inset centers so a typical block stays fully on-frame after translate(-50%,-50%).
+  const x = h === 'left' ? 0.22 : h === 'right' ? 0.78 : 0.5;
+  const y = v === 'top' ? 0.16 : v === 'middle' ? 0.5 : 0.84;
   return { x, y, vAlign: v, hAlign: h };
 }
 
 /**
- * CSS translate for freeform anchor so preview matches canvas burn-in.
- * Anchor (x,y) + hAlign/vAlign → same box placement as layoutOverlay.
+ * CSS translate for freeform anchor — always centers the block on (x,y).
+ * hAlign/vAlign args kept for call-site compat; ignored on purpose.
  */
 export function freeformCssTransform(
-  hAlign: OverlayHAlign,
-  vAlign: OverlayVAlign,
+  _hAlign?: OverlayHAlign,
+  _vAlign?: OverlayVAlign,
 ): string {
-  const tx =
-    hAlign === 'left' ? '0%' : hAlign === 'right' ? '-100%' : '-50%';
-  const ty =
-    vAlign === 'top' ? '0%' : vAlign === 'bottom' ? '-100%' : '-50%';
-  return `translate(${tx}, ${ty})`;
+  return 'translate(-50%, -50%)';
 }
 
 
@@ -457,10 +456,18 @@ export function wrapLines(
   ctx: CanvasRenderingContext2D,
   text: string,
   maxWidth: number,
+  trackingPx = 0,
 ): string[] {
   // Preserve intentional newlines as hard breaks.
   const paragraphs = text.replace(/\r\n/g, '\n').split('\n');
   const lines: string[] = [];
+  // Include letter-spacing (tracking) in the fit test so canvas line breaks
+  // match the DOM preview's `max-content` + `letter-spacing` behaviour. Without
+  // this the canvas packs more characters per line and the burned-in block
+  // renders slightly narrower than the live preview.
+  const advance = (s: string): number =>
+    ctx.measureText(s).width + trackingPx * Math.max(0, s.length - 1);
+
   for (const para of paragraphs) {
     const raw = para.replace(/[ \t]+/g, ' ').trim();
     if (!raw) {
@@ -471,15 +478,16 @@ export function wrapLines(
     let cur = '';
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w;
-      if (ctx.measureText(next).width <= maxWidth) {
+      if (advance(next) <= maxWidth) {
         cur = next;
       } else {
         if (cur) lines.push(cur);
-        if (ctx.measureText(w).width > maxWidth) {
+        if (advance(w) > maxWidth) {
           let chunk = '';
           for (const ch of w) {
             const t = chunk + ch;
-            if (ctx.measureText(t).width > maxWidth && chunk) {
+            if (advance(t) > maxWidth && chunk) {
+
               lines.push(chunk);
               chunk = ch;
             } else chunk = t;
@@ -568,9 +576,10 @@ export function layoutOverlay(
   const subSrc = applyOverlayTransform(overlay.sub || '', transform);
 
   ctx.font = `${weight} ${primaryPx}px ${font.family}`;
-  const primaryLines = wrapLines(ctx, primarySrc, maxTextWidth);
+  const primaryLines = wrapLines(ctx, primarySrc, maxTextWidth, trackingPx);
   ctx.font = `400 ${subPx}px ${font.family}`;
-  const subLines = wrapLines(ctx, subSrc, maxTextWidth);
+  const subLines = wrapLines(ctx, subSrc, maxTextWidth, trackingPx * 0.6);
+
 
   const gap =
     primaryLines.length && subLines.length ? Math.round(primaryPx * 0.35) : 0;
@@ -625,19 +634,15 @@ export function layoutOverlay(
         : 'center';
 
 if (usesFreeform) {
-    // x/y are the anchor point; hAlign/vAlign choose which edge/center sits on it.
+    // x/y are the CENTER of the block (matches CSS translate(-50%,-50%)).
+    // hAlign only affects text drawing inside the box, not box placement —
+    // otherwise drag (x/y only) + bottom vAlign parks text above the frame.
     const ax = clamp01(overlay.x as number) * width;
     const ay = clamp01(overlay.y as number) * height;
-    if (align === 'left') blockLeft = Math.round(ax);
-    else if (align === 'right') blockLeft = Math.round(ax - blockWidth);
-    else blockLeft = Math.round(ax - blockWidth / 2);
+    blockLeft = Math.round(ax - blockWidth / 2);
+    blockTop = Math.round(ay - blockHeight / 2);
 
-    if (overlay.vAlign === 'top') blockTop = Math.round(ay);
-    else if (overlay.vAlign === 'bottom')
-      blockTop = Math.round(ay - blockHeight);
-    else blockTop = Math.round(ay - blockHeight / 2);
-
-    // Soft clamp — keep as much of the block on-canvas without shifting anchor bias.
+    // Soft clamp — keep as much of the block on-canvas.
     const minL = pad * 0.15;
     const maxL = width - pad * 0.15 - blockWidth;
     const minT = pad * 0.15;

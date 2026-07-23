@@ -45,3 +45,8 @@ certificates
 *.tsbuildinfo
 build*.log
 *.log
+
+# local diagnostic scratch output (tsc / vitest run logs)
+tsc-*.txt
+tsc-out*.txt
+vitest-*.txt

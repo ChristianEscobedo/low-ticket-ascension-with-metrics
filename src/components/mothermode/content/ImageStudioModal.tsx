@@ -50,6 +50,7 @@ import { aiGenerateImage, aiEditImage } from './aiClient';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid, useAiAction } from './AiControls';
 import { VariationLabPanel } from './VariationLabPanel';
 import { OverlayPanel } from './OverlayPanel';
+import { downloadUrl } from '@/utils/mothermode/download';
 
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
@@ -62,13 +63,19 @@ export type StudioTab = 'generate' | 'edit' | 'storyboard' | 'lab' | 'text';
 
 
 
-/** The post's true crop, so the studio shows images at the shape they ship in. */
+/** The post's true crop, so the studio shows images at the shape they ship in.
+ *  Must match canvasSizeForFormat / export burn-in aspect. */
 export function formatAspect(format: string): string {
-  if (['story', 'reel', 'idea', 'short'].includes(format)) return 'aspect-[9/16]';
+  if (['story', 'reel', 'idea', 'short', 'video'].includes(format))
+    return 'aspect-[9/16]';
   if (format === 'pin') return 'aspect-[2/3]';
-  if (['blog', 'article', 'answer'].includes(format)) return 'aspect-[16/9]';
-  return 'aspect-square';
+  if (['blog', 'article', 'answer', 'thread'].includes(format))
+    return 'aspect-[16/9]';
+  if (format === 'carousel') return 'aspect-square';
+  // feed / default → IG 4:5 (matches canvasSizeForFormat 1080×1350)
+  return 'aspect-[4/5]';
 }
+
 
 /** Scene starters in the brand's quiet, object-led imagery. */
 const SCENE_CHIPS = [
@@ -78,12 +85,9 @@ const SCENE_CHIPS = [
   'A quiet living room at night, one lamp on, the toys put away',
 ];
 
-/** Trigger a browser download of a data-URL image. */
+/** Trigger a real file download for a data-URL or remote image. */
 function download(src: string, name: string) {
-  const a = document.createElement('a');
-  a.href = src;
-  a.download = name;
-  a.click();
+  void downloadUrl(src, name);
 }
 
 /** Read a File as a data URL. */
@@ -385,18 +389,25 @@ export const ImageStudioModal: React.FC<{
     <div className="fixed inset-0 z-[70] flex">
       <div className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative m-auto flex h-[92vh] w-[min(1100px,94vw)] overflow-hidden rounded-2xl border border-ink/15 bg-bone shadow-2xl">
-        <aside className="flex w-[22rem] shrink-0 flex-col gap-4 overflow-y-auto border-r border-ink/10 bg-white/50 p-5">
-
-          <div>
-            <div className="font-display text-lg text-ink">Image studio</div>
-            <div className="text-xs text-ink/45">
-              {FORMAT_LABEL[piece.format]} {'\u00b7'} {piece.theme}
+        {/*
+          Left rail: sticky header (title + tabs always reachable) + scroll body.
+          Previously the whole aside scrolled and Text/Lab sticky previews covered
+          the tab strip so you couldn't get back to Generate.
+        */}
+        <aside className="flex w-[22rem] shrink-0 flex-col border-r border-ink/10 bg-white/50">
+          <div className="sticky top-0 z-30 shrink-0 space-y-3 border-b border-ink/10 bg-bone/95 px-5 pb-3 pt-5 backdrop-blur-md">
+            <div>
+              <div className="font-display text-lg text-ink">Image studio</div>
+              <div className="text-xs text-ink/45">
+                {FORMAT_LABEL[piece.format]} {'\u00b7'} {piece.theme}
+              </div>
             </div>
+            <StudioTabs value={tab} onChange={setTab} />
           </div>
 
-          <StudioTabs value={tab} onChange={setTab} />
-
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
           {tab === 'lab' ? (
+
             <VariationLabPanel
               piece={piece}
               images={images}
@@ -850,7 +861,9 @@ export const ImageStudioModal: React.FC<{
             <ImagePlus className="h-3.5 w-3.5" /> Upload {noun.toLowerCase()}
           </button>
           <AiError message={error} />
+          </div>
         </aside>
+
 
         <section className="flex-1 overflow-y-auto p-5">
           <div className="mb-3 flex items-baseline justify-between">

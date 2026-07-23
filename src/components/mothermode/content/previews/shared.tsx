@@ -24,6 +24,13 @@ export interface PreviewView {
   images: string[];
   /** Index of the active image within `images`. */
   imageIndex: number;
+  /**
+   * Resolved per-slide copy for carousels/stories/idea pins, in order. Each
+   * frame carries its own on-image line (`text`) and optional supporting line
+   * (`sub`). Empty for single-media formats. The active frame is `imageIndex`.
+   */
+  slides: { text: string; sub?: string }[];
+
   /** Primary hook/opener (the active variant). */
   hook: string;
   /** Every resolved hook variant, in order. */
@@ -43,7 +50,23 @@ export interface PreviewView {
   emailSubject?: string;
   emailPreheader?: string;
   metrics: PieceMetrics;
+  /**
+   * When false, surfaces that paint the hook/caption *on top of the image*
+   * (story/reel/tiktok) skip that overlay so it doesn't stack on burned-in
+   * type. Undefined/true keeps the default behavior. UI-only — not persisted.
+   */
+  showHookText?: boolean;
+  /**
+   * When true, the preview is auto-advancing through frames, so the story
+   * progress bar animates its active segment like a live timer. UI-only — not
+   * persisted.
+   */
+  autoplay?: boolean;
+  /** Per-frame duration (ms) for autoplay + the progress sweep. UI-only. */
+  frameDurationMs?: number;
 }
+
+
 
 
 export interface PreviewProps {
@@ -162,25 +185,63 @@ export const Hairline: React.FC = () => (
  * The segmented progress bar at the top of a story, one segment per frame.
  * Segments before the active one read as watched, the active one part-filled,
  * later ones empty, mirroring how stories advance natively.
+ *
+ * When `animate` is set, the active segment sweeps from empty to full over
+ * `durationMs`, reading like a real story timer that fills for the frame's
+ * duration before the preview auto-advances. Re-keyed on `active` so each
+ * frame restarts the sweep. When not animating, the active segment shows a
+ * static part-fill so the static preview still reads as "mid-story".
  */
-export const StoryProgress: React.FC<{ count: number; active: number }> = ({
-  count,
-  active,
-}) => (
-  <div className="absolute inset-x-3 top-2.5 z-10 flex gap-1">
-    {Array.from({ length: Math.max(1, count) }).map((_, i) => (
-      <span
-        key={i}
-        className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/35"
-      >
-        <span
-          className="block h-full rounded-full bg-white"
-          style={{ width: i < active ? '100%' : i === active ? '40%' : '0%' }}
-        />
-      </span>
-    ))}
-  </div>
-);
+export const StoryProgress: React.FC<{
+  count: number;
+  active: number;
+  animate?: boolean;
+  durationMs?: number;
+}> = ({ count, active, animate = false, durationMs = 3500 }) => {
+  const [fill, setFill] = React.useState(0);
+  React.useEffect(() => {
+    if (!animate) return;
+    setFill(0);
+    let raf2 = 0;
+    // Two frames so the browser paints width:0 before transitioning to full.
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setFill(100));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [active, animate, durationMs]);
+
+  return (
+    <div className="absolute inset-x-3 top-2.5 z-10 flex gap-1">
+      {Array.from({ length: Math.max(1, count) }).map((_, i) => {
+        const width =
+          i < active
+            ? '100%'
+            : i > active
+              ? '0%'
+              : animate
+                ? `${fill}%`
+                : '40%';
+        const transition =
+          animate && i === active ? `width ${durationMs}ms linear` : undefined;
+        return (
+          <span
+            key={i}
+            className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/35"
+          >
+            <span
+              className="block h-full rounded-full bg-white"
+              style={{ width, transition }}
+            />
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
 
 /** A row of carousel dots, the active slide highlighted. */
 export const CarouselDots: React.FC<{ count: number; active: number }> = ({

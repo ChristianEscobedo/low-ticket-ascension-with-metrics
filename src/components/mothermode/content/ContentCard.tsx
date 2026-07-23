@@ -43,11 +43,14 @@ import {
   saveReview,
   clearReviewImage,
   setReviewImages,
+  subscribeReviews,
 } from './reviewClient';
 import {
   clampIndex,
   reviewImages,
+  type PieceReview,
 } from '@/lib/mothermode/content/review';
+
 
 
 
@@ -60,7 +63,9 @@ const FORMAT_ICON: Record<ContentFormat, React.ElementType> = {
   thread: ListOrdered,
   article: FileText,
   video: Video,
+  long: Video,
   email: Mail,
+
   pin: Pin,
   idea: Sparkles,
   blog: Newspaper,
@@ -102,22 +107,28 @@ export const ContentCard: React.FC<{
   const [notesSaved, setNotesSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the shared review state (gallery + notes) from the cache.
-  // Prefer active gallery frame so cards match sheet/preview.
+  // Load + live-subscribe so primary image updates without a full refresh.
   useEffect(() => {
     let active = true;
-    void loadReviews(offerSlug).then(() => {
+    const applyReview = (review: PieceReview) => {
       if (!active) return;
-      const review = getReview(offerSlug, piece.id);
       const gallery = reviewImages(review);
       const idx = clampIndex(review.imageIndex, gallery.length);
       setImage(gallery[idx] ?? review.image);
       setNotes(review.notes ?? '');
+    };
+    void loadReviews(offerSlug).then(() => {
+      applyReview(getReview(offerSlug, piece.id));
+    });
+    const unsub = subscribeReviews((slug, id, review) => {
+      if (slug === offerSlug && id === piece.id) applyReview(review);
     });
     return () => {
       active = false;
+      unsub();
     };
   }, [offerSlug, piece.id]);
+
 
 
 

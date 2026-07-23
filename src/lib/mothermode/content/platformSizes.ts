@@ -100,7 +100,75 @@ export const PLATFORM_SIZE_PRESETS: PlatformSizePreset[] = [
     group: 'longform',
   },
   {
+    id: 'yt-long-169',
+    label: 'YouTube 16:9',
+    size: '1920x1080',
+    width: 1920,
+    height: 1080,
+    platforms: ['youtube'],
+    formats: ['long'],
+    aspect: '16:9',
+    group: 'longform',
+  },
+  {
+    id: 'yt-thumb',
+    label: 'YouTube thumbnail',
+    size: '1280x720',
+    width: 1280,
+    height: 720,
+    platforms: ['youtube'],
+    formats: ['long'],
+    aspect: '16:9',
+    group: 'longform',
+  },
+  {
+    id: 'yt-shorts',
+    label: 'YouTube Shorts 9:16',
+    size: '1080x1920',
+    width: 1080,
+    height: 1920,
+    platforms: ['youtube'],
+    formats: ['reel'],
+    aspect: '9:16',
+    group: 'story',
+  },
+  {
+    id: 'li-feed-landscape',
+    label: 'LinkedIn landscape 1.91:1',
+    size: '1200x627',
+    width: 1200,
+    height: 627,
+    platforms: ['linkedin'],
+    formats: ['feed', 'article'],
+    aspect: '1.91:1',
+    group: 'feed',
+  },
+  {
+    id: 'li-feed-square',
+    label: 'LinkedIn square 1:1',
+    size: '1200x1200',
+    width: 1200,
+    height: 1200,
+    platforms: ['linkedin'],
+    formats: ['feed', 'carousel'],
+    aspect: '1:1',
+    group: 'feed',
+  },
+  {
+    id: 'li-carousel',
+    label: 'LinkedIn doc / carousel 4:5',
+    size: '1080x1350',
+    width: 1080,
+    height: 1350,
+    platforms: ['linkedin'],
+    formats: ['carousel'],
+    aspect: '4:5',
+    group: 'carousel',
+  },
+  {
     id: 'pinterest-pin',
+
+
     label: 'Pinterest pin 2:3',
     size: '1000x1500',
     width: 1000,
@@ -214,11 +282,25 @@ export const PLATFORM_SIZE_PACKS: PlatformSizePack[] = [
     presetIds: ['x-blog-aeo', 'email-header'],
   },
   {
+    id: 'youtube',
+    label: 'YouTube',
+    description: '16:9 frame, thumbnail, Shorts 9:16',
+    presetIds: ['yt-long-169', 'yt-thumb', 'yt-shorts'],
+  },
+  {
     id: 'pinterest',
     label: 'Pinterest',
     description: 'Pin 2:3 + idea 9:16',
     presetIds: ['pinterest-pin', 'pinterest-idea'],
   },
+  {
+    id: 'linkedin',
+    label: 'LinkedIn',
+    description: 'Landscape 1.91:1, square, doc/carousel 4:5',
+    presetIds: ['li-feed-landscape', 'li-feed-square', 'li-carousel'],
+  },
+
+
   {
     id: 'all-social',
     label: 'All social',
@@ -283,11 +365,14 @@ export function defaultPresetIdsForFormat(format?: string): string[] {
       return ['ig-carousel-square', 'ig-carousel-45'];
     case 'pin':
       return ['pinterest-pin'];
+    case 'long':
+      return ['yt-long-169', 'yt-thumb'];
     case 'blog':
     case 'article':
     case 'answer':
     case 'thread':
       return ['x-blog-aeo'];
+
     case 'email':
       return ['email-header'];
     case 'feed':

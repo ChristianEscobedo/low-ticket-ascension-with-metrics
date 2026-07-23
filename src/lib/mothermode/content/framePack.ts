@@ -23,6 +23,18 @@ export type FrameRole =
   | 'cta'
   | 'other';
 
+/**
+ * How a slide's on-frame words get onto the image:
+ * - `editor`   → the Text-editor copy is overlaid (burned in) on the render;
+ *               the model leaves clean space and draws no type. (Default.)
+ * - `ai-prompt`→ the AI writes the words directly into the image prompt so the
+ *               render bakes the type in; nothing is overlaid afterward.
+ */
+export type FrameTextSource = 'editor' | 'ai-prompt';
+
+/** Default text source when a frame doesn't specify one. */
+export const DEFAULT_FRAME_TEXT_SOURCE: FrameTextSource = 'editor';
+
 /** One planned / rendered frame in a pack. */
 export interface FramePackFrame {
   /** 1-based index matching gallery order. */
@@ -36,11 +48,19 @@ export interface FramePackFrame {
   visual?: string;
   /** Full image-model prompt for this frame (or strip panel). */
   prompt?: string;
+  /** Where this slide's words come from. Defaults to `editor` (overlay). */
+  textSource?: FrameTextSource;
   /** What this frame locked for the next (continuity). */
   lookbackSummary?: string;
   /** Hosted URL once rendered (mirrors gallery[i] when set). */
   imageUrl?: string;
 }
+
+/** The effective text source for a frame (never undefined). */
+export function frameTextSource(frame: FramePackFrame): FrameTextSource {
+  return frame.textSource === 'ai-prompt' ? 'ai-prompt' : 'editor';
+}
+
 
 /** Connected multi-slide pack stored on PieceReview. */
 export interface FramePack {
@@ -175,9 +195,11 @@ export function withPlannedFrames(
       sub: f.sub?.trim() || undefined,
       visual: f.visual?.trim() || undefined,
       prompt: f.prompt?.trim() || undefined,
+      textSource: f.textSource === 'ai-prompt' ? ('ai-prompt' as const) : undefined,
       lookbackSummary: f.lookbackSummary?.trim() || undefined,
       imageUrl: f.imageUrl?.trim() || undefined,
     }));
+
   const slideCount = Math.max(
     MIN_FRAME_PACK,
     normalized.length || pack.slideCount,
@@ -226,6 +248,31 @@ export function withFrameImages(
   };
 }
 
+/**
+ * On-frame image-model prompt for a single frame's first render.
+ * - `editor` (default): keep the current prompt as-is; the editor copy is burned
+ *   in later as an overlay, so we don't ask the model to draw the type.
+ * - `ai-prompt`: fold the slide's words into the prompt so the model renders
+ *   legible type directly into the image (nothing gets overlaid afterward).
+ */
+export function frameImagePrompt(frame: FramePackFrame): string {
+  const base = (frame.prompt ?? '').trim();
+  if (frameTextSource(frame) !== 'ai-prompt') return base;
+  const text = (frame.text ?? '').trim();
+  const sub = (frame.sub ?? '').trim();
+  if (!text && !sub) return base;
+  return [
+    base,
+    text
+      ? `Render this headline as clean, legible, well-composed typography directly in the image: "${text}".`
+      : '',
+    sub ? `Supporting line beneath it: "${sub}".` : '',
+    'Keep the lettering on-brand, editorial, and perfectly readable — no gibberish or garbled text.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 /** Text/sub for overlay at a 0-based gallery index. */
 export function slideCopyAt(
   piece: ContentPiece,
@@ -234,12 +281,17 @@ export function slideCopyAt(
 ): { text: string; sub: string } {
   const i = Math.max(0, Math.floor(imageIndex));
   const fromPack = pack?.frames?.[i];
+  // AI baked the words into the render for this frame — nothing to overlay.
+  if (fromPack && frameTextSource(fromPack) === 'ai-prompt') {
+    return { text: '', sub: '' };
+  }
   if (fromPack?.text?.trim()) {
     return {
       text: fromPack.text.trim(),
       sub: (fromPack.sub ?? '').trim(),
     };
   }
+
   const slide = piece.slides?.[i] ?? piece.slides?.[0];
   if (slide?.text?.trim()) {
     return {
@@ -280,8 +332,13 @@ export function continuityEditPrompt(frame: FramePackFrame, pack: FramePack): st
     'Keep the same visual system: margins, type-safe zone, palette, light direction, and subject identity from the seed.',
     'Only the narrative beat and focal composition change.',
     frame.role ? `This frame's job: ${frame.role}.` : '',
-    frame.text ? `On-slide words (leave clean negative space if not rendering type): "${frame.text}"` : '',
+    frame.text
+      ? frameTextSource(frame) === 'ai-prompt'
+        ? `Render these on-slide words as clean, legible typography in the image: "${frame.text}"`
+        : `On-slide words (leave clean negative space for an overlay; render no type): "${frame.text}"`
+      : '',
     frame.sub ? `Supporting line: "${frame.sub}"` : '',
+
     frame.visual ? `Direction: ${frame.visual}` : '',
     frame.prompt ? `Scene prompt: ${frame.prompt}` : '',
     prior ? `Prior frames locked:\n${prior}` : '',

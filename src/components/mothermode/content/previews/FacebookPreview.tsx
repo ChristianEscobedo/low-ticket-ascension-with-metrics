@@ -137,11 +137,14 @@ const Vertical: React.FC<PreviewProps> = ({ view }) => (
       <Avatar size="h-7 w-7" />
       <span className="text-xs font-semibold">{DISPLAY_NAME}</span>
     </div>
-    <div className="absolute bottom-3 left-3 right-3">
-      <p className="text-sm leading-snug text-white/95 line-clamp-4">
-        {view.caption ?? view.hook}
-      </p>
-    </div>
+    {view.showHookText !== false && (
+      <div className="absolute bottom-3 left-3 right-3">
+        <p className="text-sm leading-snug text-white/95 line-clamp-4">
+          {view.caption ?? view.hook}
+        </p>
+      </div>
+    )}
+
   </div>
 );
 
@@ -150,7 +153,11 @@ const Vertical: React.FC<PreviewProps> = ({ view }) => (
  * blue ring and a close control, a centered hook, and the native reply bar with
  * reaction and share affordances along the bottom.
  */
-const Story: React.FC<PreviewProps> = ({ view }) => (
+const Story: React.FC<PreviewProps> = ({ view }) => {
+  const frames = Math.max(1, view.images.length, view.slides.length);
+  const activeSlide = view.slides[view.imageIndex];
+  const headline = activeSlide?.text ?? view.hook;
+  return (
   <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
 
     <PreviewMedia
@@ -162,9 +169,12 @@ const Story: React.FC<PreviewProps> = ({ view }) => (
     />
     <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/55" />
     <StoryProgress
-      count={Math.max(1, view.images.length)}
+      count={frames}
       active={view.imageIndex}
+      animate={view.autoplay}
+      durationMs={view.frameDurationMs}
     />
+
     <div className="absolute inset-x-3 top-5 flex items-center gap-2">
       <span
         className="rounded-full p-[1.5px]"
@@ -181,11 +191,20 @@ const Story: React.FC<PreviewProps> = ({ view }) => (
       <MoreHorizontal className="ml-auto h-5 w-5 text-white/90" />
       <XIcon className="h-5 w-5 text-white/90" />
     </div>
-    <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 text-center">
-      <p className="text-lg font-semibold leading-snug drop-shadow">
-        {view.hook}
-      </p>
-    </div>
+    {view.showHookText !== false && (
+      <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 text-center">
+        <p className="text-lg font-semibold leading-snug drop-shadow">
+          {headline}
+        </p>
+        {activeSlide?.sub && (
+          <p className="mt-2 text-sm leading-snug text-white/90 drop-shadow">
+            {activeSlide.sub}
+          </p>
+        )}
+      </div>
+    )}
+
+
     <div className="absolute inset-x-3 bottom-3 flex items-center gap-2">
       <span className="flex flex-1 items-center gap-2 rounded-full border border-white/55 px-3 py-2 text-[12px] text-white/85">
         <Camera className="h-4 w-4" /> Send message
@@ -194,9 +213,11 @@ const Story: React.FC<PreviewProps> = ({ view }) => (
       <Send className="h-6 w-6" />
     </div>
   </div>
-);
+  );
+};
 
 export const FacebookPreview: React.FC<PreviewProps> = (props) => {
+
   const f = props.view.piece.format;
   if (f === 'story') return <Story {...props} />;
   if (f === 'reel') return <Vertical {...props} />;

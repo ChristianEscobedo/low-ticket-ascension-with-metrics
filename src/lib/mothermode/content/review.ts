@@ -102,6 +102,33 @@ export interface VideoScriptBeat {
   brollPrompt?: string;
   /** A generated or uploaded still for this beat's b-roll (hosted URL). */
   brollImage?: string;
+  /** Hosted URL of this beat's per-section ElevenLabs voiceover clip. */
+  voiceoverAudio?: string;
+  /** Actual spoken length of this beat's clip, in seconds (from alignment). */
+  voiceoverDurationSec?: number;
+}
+
+/**
+ * A generated ElevenLabs voiceover for a script. `combined` is one track for
+ * the whole script (with per-beat time marks resolved from the alignment so the
+ * UI can show where each beat lands and flag drift); `sections` means each beat
+ * carries its own clip on `VideoScriptBeat.voiceoverAudio` instead.
+ */
+export interface VideoScriptVoiceover {
+  /** Hosted URL of the combined mp3 track (combined mode only). */
+  audioUrl?: string;
+  /** Total spoken length of the track, in seconds. */
+  durationSec: number;
+  /** Which generation path produced this voiceover. */
+  mode: 'combined' | 'sections';
+  /** Per-beat time windows within the combined track (combined mode only). */
+  beatMarks?: Array<{ index: number; startSec: number; endSec: number }>;
+  /** ElevenLabs voice id used, for reference / regeneration. */
+  voiceId?: string;
+  /** ElevenLabs model id used, for reference. */
+  model?: string;
+  /** ISO timestamp of generation. */
+  generatedAt?: string;
 }
 
 /** A full second-by-second shooting script for a reel/video piece. */
@@ -113,13 +140,74 @@ export interface VideoScript {
   model?: string;
   /** ISO timestamp of generation. */
   generatedAt?: string;
+  /** Generated ElevenLabs voiceover (combined track). Per-section clips live on
+   *  each beat's `voiceoverAudio` instead. */
+  voiceover?: VideoScriptVoiceover;
+}
+
+
+
+
+/**
+ * One thumbnail concept for a YouTube piece: a short concept label, a full
+ * image-generation prompt, an optional big on-thumbnail text idea, and the
+ * rendered/hosted image once generated.
+ */
+export interface YouTubeThumbnail {
+  /** Short internal label for this concept, e.g. "Shocked reaction + big number". */
+  concept: string;
+  /** Full landscape (16:9) image-generation prompt. */
+  prompt: string;
+  /** Big, bold on-thumbnail text idea (3-5 words), if any. */
+  overlayText?: string;
+  /** Rendered/hosted thumbnail image (hosted URL), when generated. */
+  imageUrl?: string;
+}
+
+/** One chapter marker in a long-form video description (YouTube chapters). */
+export interface YouTubeChapter {
+  /** Chapter start, in seconds from 0. The first chapter must be 0. */
+  startSec: number;
+  /** Short chapter title. */
+  title: string;
+}
+
+/**
+ * The full YouTube publishing kit for a piece: A/B title options, an
+ * SEO-optimized description (with an intro, body, and CTA), search tags,
+ * chapter markers, and thumbnail concepts. Persisted on the piece review so it
+ * exports alongside the rest of the content.
+ */
+export interface YouTubeKit {
+  /** A/B title options (most compelling first). */
+  titles: string[];
+  /** Index of the active/primary title within `titles`. Defaults to 0. */
+  titleIndex?: number;
+  /** SEO description body (multi-paragraph; chapters are appended on export). */
+  description: string;
+  /** Search tags / keywords. */
+  tags: string[];
+  /** Chapter markers for a long-form video. */
+  chapters?: YouTubeChapter[];
+  /** Thumbnail concepts (prompt + optional render). */
+  thumbnails?: YouTubeThumbnail[];
+  /** The model that wrote the kit, for reference. */
+  model?: string;
+  /** ISO timestamp of generation. */
+  generatedAt?: string;
 }
 
 /** Narrative arc vs object-led cutaway boards. */
 export type StoryboardMode = 'narrative' | 'broll';
 
-/** How many connected contact sheets to plan (1–4). */
-export type StoryboardCount = 1 | 2 | 3 | 4;
+
+/**
+ * How many connected contact sheets to plan. 1–4 for the manual post-driven
+ * flow; script-driven packs may reach 6 (one board per 15s clip of a 90s
+ * script).
+ */
+export type StoryboardCount = 1 | 2 | 3 | 4 | 5 | 6;
+
 
 /**
  * One cinematic multi-panel contact sheet in a connected pack. Board N is
@@ -146,9 +234,20 @@ export interface StoryboardBoard {
   lookbackSummary: string;
   /** Extra notes when mode is broll (insert purpose, prop focus). */
   brollNotes?: string;
+  /**
+   * Script-driven clip window this board renders (one video generation).
+   * Present only for storyboards built from a video script; omitted for the
+   * manual post-driven flow. All optional → existing packs unchanged.
+   */
+  startSec?: number;
+  /** Clip window end in seconds (exclusive). */
+  endSec?: number;
+  /** Clip window length in seconds (endSec - startSec), i.e. 15 or 18. */
+  segmentDuration?: number;
   /** Hosted URL of the rendered contact-sheet image, when generated. */
   imageUrl?: string;
 }
+
 
 /**
  * A connected pack of 1–4 storyboard contact sheets for a piece, with shared
@@ -196,10 +295,13 @@ export interface StoredImageOverlay {
   shadowStrength?: number;
   bgOpacity?: number;
   textOpacity?: number;
+  /** false = hide overlay type (image already has text). Default true. */
+  enabled?: boolean;
   baseImage?: string;
   renderedUrl?: string;
   updatedAt?: string;
 }
+
 
 /** Per-piece review state: images, notes, local copy edits, and metrics. */
 export interface PieceReview {
@@ -229,6 +331,8 @@ export interface PieceReview {
   overlay?: StoredImageOverlay;
   /** Ordered multi-slide pack for carousel / story / idea (plan + renders). */
   framePack?: import('./framePack').FramePack;
+  /** YouTube publishing kit: titles, SEO description, tags, chapters, thumbnails. */
+  youtube?: YouTubeKit;
 }
 
 
@@ -300,6 +404,14 @@ export function isEmptyReview(r: PieceReview): boolean {
     !!r.framePack &&
     Array.isArray(r.framePack.frames) &&
     r.framePack.frames.length > 0;
+  const hasYouTube =
+    !!r.youtube &&
+    ((Array.isArray(r.youtube.titles) && r.youtube.titles.some(hasText)) ||
+      hasText(r.youtube.description) ||
+      (Array.isArray(r.youtube.tags) && r.youtube.tags.some(hasText)) ||
+      (Array.isArray(r.youtube.thumbnails) &&
+        r.youtube.thumbnails.length > 0) ||
+      (Array.isArray(r.youtube.chapters) && r.youtube.chapters.length > 0));
   return (
     reviewImages(r).length === 0 &&
     !r.notes &&
@@ -310,7 +422,8 @@ export function isEmptyReview(r: PieceReview): boolean {
     !hasStoryboard &&
     !hasCompliance &&
     !hasOverlay &&
-    !hasFramePack
+    !hasFramePack &&
+    !hasYouTube
   );
 }
 
@@ -390,6 +503,30 @@ export function withoutVideoScript(prev: PieceReview): PieceReview {
   return rest;
 }
 
+/**
+ * Attach a combined-track voiceover to the piece's script. Returns prev
+ * unchanged when there is no script to attach it to (a voiceover always belongs
+ * to a script). Pure: returns a new object.
+ */
+export function withVoiceover(
+  prev: PieceReview,
+  voiceover: VideoScriptVoiceover,
+): PieceReview {
+  if (!prev.videoScript) return prev;
+  return { ...prev, videoScript: { ...prev.videoScript, voiceover } };
+}
+
+/**
+ * Drop the combined-track voiceover from the script, leaving per-beat clips and
+ * everything else intact. Pure. Returns prev unchanged when there is no script.
+ */
+export function withoutVoiceover(prev: PieceReview): PieceReview {
+  if (!prev.videoScript) return prev;
+  const { voiceover: _v, ...script } = prev.videoScript;
+  return { ...prev, videoScript: script };
+}
+
+
 /** Set the piece's connected storyboard pack. Pure. */
 export function withStoryboard(
   prev: PieceReview,
@@ -433,6 +570,63 @@ export function withFramePack(
 export function withoutFramePack(prev: PieceReview): PieceReview {
   const { framePack: _f, ...rest } = prev;
   return rest;
+}
+
+/** Set the piece's YouTube publishing kit. Pure. */
+export function withYouTubeKit(
+  prev: PieceReview,
+  kit: YouTubeKit,
+): PieceReview {
+  return { ...prev, youtube: kit };
+}
+
+/**
+ * Merge a partial patch into the piece's YouTube kit (e.g. after rendering one
+ * thumbnail or editing the description), preserving the rest. Returns prev
+ * unchanged when there is no kit to patch. Pure.
+ */
+export function patchYouTubeKit(
+  prev: PieceReview,
+  patch: Partial<YouTubeKit>,
+): PieceReview {
+  if (!prev.youtube) return prev;
+  return { ...prev, youtube: { ...prev.youtube, ...patch } };
+}
+
+/** Drop the YouTube kit, keeping everything else. Pure. */
+export function withoutYouTubeKit(prev: PieceReview): PieceReview {
+  const { youtube: _y, ...rest } = prev;
+  return rest;
+}
+
+/** Render a chapter list as a YouTube-ready timestamp block ("0:00 Intro"). */
+export function chaptersToText(chapters: YouTubeChapter[] | undefined): string {
+  if (!chapters?.length) return '';
+  return chapters
+    .slice()
+    .sort((a, b) => a.startSec - b.startSec)
+    .map((c) => {
+      const s = Math.max(0, Math.round(c.startSec));
+      const m = Math.floor(s / 60);
+      const sec = String(s % 60).padStart(2, '0');
+      const h = Math.floor(m / 60);
+      const stamp =
+        h > 0
+          ? `${h}:${String(m % 60).padStart(2, '0')}:${sec}`
+          : `${m}:${sec}`;
+      return `${stamp} ${c.title}`.trim();
+    })
+    .join('\n');
+}
+
+/** The full description text a creator pastes into YouTube: body + chapters. */
+export function youtubeDescriptionText(kit: YouTubeKit | undefined): string {
+  if (!kit) return '';
+  const parts: string[] = [];
+  if (kit.description?.trim()) parts.push(kit.description.trim());
+  const chapters = chaptersToText(kit.chapters);
+  if (chapters) parts.push(`Chapters:\n${chapters}`);
+  return parts.join('\n\n');
 }
 
 

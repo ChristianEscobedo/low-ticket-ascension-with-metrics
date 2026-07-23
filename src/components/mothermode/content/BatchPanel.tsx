@@ -31,7 +31,10 @@ import { setReviewImages, loadReviews } from './reviewClient';
 import { type PieceReview } from '@/lib/mothermode/content/review';
 
 import { PlatformPreview } from './previews/PlatformPreview';
+import { PlatformIcon, PLATFORM_BRAND } from './PlatformIcon';
+import { PlatformSelect } from './PlatformSelect';
 import { ImageStudioModal } from './ImageStudioModal';
+
 import { aiGenerateImage } from './aiClient';
 import { OFFERS } from '@/lib/mothermode/offers';
 import {
@@ -370,10 +373,22 @@ export const BatchPanel: React.FC<{
         }`}
       >
         <div className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
-          <h2 className="flex items-center gap-2 font-display text-2xl text-ink">
-            <Sparkles className="h-5 w-5 text-brass" />
-            {reviewing ? 'Review drafts' : 'Generate content'}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="flex items-center gap-2 font-display text-2xl text-ink">
+              <Sparkles className="h-5 w-5 text-brass" />
+              {reviewing ? 'Review drafts' : 'Generate content'}
+            </h2>
+            {!reviewing ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white/70 px-2.5 py-1 text-xs font-semibold"
+                style={{ color: PLATFORM_BRAND[platform] }}
+                title={`Target channel: ${PLATFORM_LABEL[platform]}`}
+              >
+                <PlatformIcon platform={platform} className="h-4 w-4" />
+                {PLATFORM_LABEL[platform]}
+              </span>
+            ) : null}
+          </div>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -381,6 +396,7 @@ export const BatchPanel: React.FC<{
           >
             <XIcon className="h-5 w-5" />
           </button>
+
         </div>
 
         {!reviewing ? (
@@ -440,17 +456,12 @@ export const BatchPanel: React.FC<{
                   </Select>
                 </div>
               )}
-              <Select
+              <PlatformSelect
                 label="Channel"
                 value={platform}
+                options={PLATFORMS}
                 onChange={changePlatform}
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p} value={p}>
-                    {PLATFORM_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
+              />
               <Select
                 label="Format"
                 value={format}

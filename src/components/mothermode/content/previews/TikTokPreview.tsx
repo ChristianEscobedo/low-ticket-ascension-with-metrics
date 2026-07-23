@@ -46,14 +46,19 @@ export const TikTokPreview: React.FC<PreviewProps> = ({ view }) => {
 
       <div className="absolute bottom-4 left-3 right-16">
         <p className="text-[15px] font-semibold">@{HANDLE}</p>
-        <p className="mt-1 text-[13px] leading-snug text-white/95 line-clamp-3">
-          {caption}
-        </p>
-        {piece.hashtags && piece.hashtags.length > 0 && (
-          <p className="mt-1 text-[13px] font-semibold">
-            {piece.hashtags.map((h) => `#${h}`).join(' ')}
+        {view.showHookText !== false && (
+          <p className="mt-1 text-[13px] leading-snug text-white/95 line-clamp-3">
+            {caption}
           </p>
         )}
+        {view.showHookText !== false &&
+          piece.hashtags &&
+          piece.hashtags.length > 0 && (
+            <p className="mt-1 text-[13px] font-semibold">
+              {piece.hashtags.map((h) => `#${h}`).join(' ')}
+            </p>
+          )}
+
         <p className="mt-2 flex items-center gap-1.5 text-[12px]">
           <Music2 className="h-3.5 w-3.5" /> original sound - {HANDLE}
         </p>

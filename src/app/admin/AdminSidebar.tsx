@@ -9,7 +9,13 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/assets', label: 'Asset Hub' },
   { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/deliverables', label: 'Deliverables' },
+  { href: '/admin/help', label: 'Help Center' },
+  { href: '/admin/community', label: 'Community Kit' },
+  { href: '/admin/high-ticket', label: 'High Ticket Kit' },
+  { href: '/admin/lead-gen', label: 'Lead Gen Kit' },
+  { href: '/admin/email-marketing', label: 'Email Marketing Kit' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
+
   { href: '/admin/purchases', label: 'Purchases' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },
   { href: '/admin/customers', label: 'Customers' },

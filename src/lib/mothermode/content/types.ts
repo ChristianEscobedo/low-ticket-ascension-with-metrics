@@ -5,16 +5,20 @@
  * no em dashes, no NO-list words, numerals for time. See design-guide.txt.
  */
 
-/** The channels the hub covers. LinkedIn is intentionally excluded. */
+/** The channels the hub covers. */
 export type ContentPlatform =
   | 'facebook'
   | 'instagram'
   | 'x'
   | 'tiktok'
+  | 'youtube'
+  | 'linkedin'
   | 'email'
   | 'pinterest'
   | 'blog'
   | 'aeo';
+
+
 
 /** Organic reach vs paid placement. */
 export type ContentKind = 'organic' | 'ad';
@@ -28,7 +32,9 @@ export type ContentFormat =
   | 'thread' // multi-post thread (X)
   | 'article' // long-form (X article, FB note)
   | 'video' // TikTok video
+  | 'long' // long-form landscape video (YouTube 16:9)
   | 'email' // broadcast or sequence email
+
   | 'pin' // standard Pinterest pin
   | 'idea' // Pinterest idea pin (multi-page)
   | 'blog' // long-form SEO/AEO blog post

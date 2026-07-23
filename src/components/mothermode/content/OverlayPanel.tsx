@@ -8,10 +8,12 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+
 import { Type, Sparkles, Download, Move, Check, Eye, EyeOff } from 'lucide-react';
 import {
   OVERLAY_COLORS,
@@ -48,18 +50,14 @@ import {
 
 import type { PieceReview, StoredImageOverlay } from '@/lib/mothermode/content/review';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid } from './AiControls';
-import { aiHostImage } from './aiClient';
+import { aiHostImage, aiTextVariations, type AiTextVariation } from './aiClient';
 
 
-/** Match Image Studio crop classes without importing the modal (cycle). */
-function formatAspect(format: string): string {
-  if (['story', 'reel', 'idea', 'short'].includes(format)) return 'aspect-[9/16]';
-  if (format === 'pin') return 'aspect-[2/3]';
-  if (['blog', 'article', 'answer'].includes(format)) return 'aspect-[16/9]';
-  return 'aspect-square';
-}
+import { downloadUrl } from '@/utils/mothermode/download';
+
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
+
 const chipBase =
   'rounded-full border px-2.5 py-1 text-[11px] transition-colors';
 const chipOn = 'border-mode/40 bg-mode/10 font-semibold text-mode';
@@ -163,9 +161,29 @@ export const OverlayPanel: React.FC<{
   const [savedFlash, setSavedFlash] = useState(false);
   const [selected, setSelected] = useState(true);
   const [editing, setEditing] = useState<EditField>(null);
+  // Primary-text "Variations": plain-text alternatives of overlay.text, shown as
+  // clickable chips. This never touches the image — clicking a chip only loads
+  // that text into the editor.
+  const [varItems, setVarItems] = useState<AiTextVariation[]>([]);
+
+  const [varCount, setVarCount] = useState(3);
+  const [varBusy, setVarBusy] = useState(false);
+  const [varError, setVarError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+
+  /** The draggable text block DOM node (for measuring + clamping on-frame). */
+  const blockRef = useRef<HTMLDivElement>(null);
+  /**
+   * Block half-size as a fraction of the frame (hw = half width, hh = half
+   * height). Updated after every render so drag + auto-repair can keep the
+   * center anchor inside [hw, 1-hw] × [hh, 1-hh] — i.e. fully on-canvas.
+   */
+  const blockFracRef = useRef({ hw: 0.1, hh: 0.05 });
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
+
+
+
 /** Active pointer gesture: move block, or resize font/width via handles. */
   type Gesture =
     | {
@@ -176,6 +194,7 @@ export const OverlayPanel: React.FC<{
         origX: number;
         origY: number;
         moved: boolean;
+        el: HTMLElement | null;
       }
     | {
         kind: 'resize';
@@ -188,37 +207,48 @@ export const OverlayPanel: React.FC<{
       };
   const dragRef = useRef<Gesture | null>(null);
   const rafRef = useRef(0);
-  const blockElRef = useRef<HTMLDivElement | null>(null);
+  /** Skip next click→edit if the last gesture was a real drag. */
+  const suppressEditClickRef = useRef(false);
+
 
 
 
   const base =
     seed || activeImage || images[0] || overlay.baseImage || null;
-  const aspect = formatAspect(piece.format);
   const exportSize = useMemo(
+
     () => canvasSizeForFormat(piece.format),
     [piece.format],
   );
   const font = getOverlayFont(overlay.fontId);
 
   // Hydrate from saved recipe when piece/review changes; prefill text if empty.
+  // Always seed freeform x/y so the editor never jumps layout on first grab.
   useEffect(() => {
     const saved = asOverlay(review.overlay);
+    const withXY = (o: ImageOverlay): ImageOverlay => {
+      if (typeof o.x === 'number' && typeof o.y === 'number') return o;
+      const s = snapPosition(o.vAlign, o.hAlign);
+      return { ...o, x: s.x, y: s.y };
+    };
     if (saved.text.trim() || saved.sub?.trim()) {
-      setOverlay(saved);
+      setOverlay(withXY(saved));
       if (saved.baseImage) onSeedChange(saved.baseImage);
       return;
     }
     const sug = suggestOverlayText(piece, review);
     setOverlay(
-      defaultOverlay({
-        ...saved,
-        text: sug.text,
-        sub: sug.sub,
-      }),
+      withXY(
+        defaultOverlay({
+          ...saved,
+          text: sug.text,
+          sub: sug.sub,
+        }),
+      ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [piece.id]);
+
 
   // Default seed to active gallery image when opening Text tab.
   useEffect(() => {
@@ -237,6 +267,44 @@ export const OverlayPanel: React.FC<{
     const sug = suggestOverlayText(piece, review);
     patch({ text: sug.text, sub: sug.sub });
   }
+
+  /**
+   * Rewrite the current editor `overlay.text` into `varCount` plain-text
+   * alternatives, shown as clickable chips. This is text-only — it never
+   * renders or touches the image. Clicking a chip loads it into the editor.
+   */
+  async function makeVariations() {
+    const text = overlay.text.trim();
+    if (!text) {
+      setVarError('Add primary text first');
+      return;
+    }
+    setVarBusy(true);
+    setVarError(null);
+    try {
+      const items = await aiTextVariations({
+        text,
+        // Rewrite the current sub line to pair with each new primary.
+        sub: overlay.sub?.trim() || undefined,
+        count: varCount,
+        context: {
+          theme: piece.theme,
+          tone: piece.tone,
+          platform: piece.platform,
+          format: piece.format,
+        },
+        // Steer away from what's already on screen and any prior set.
+        avoid: [text, ...varItems.map((v) => v.text)],
+      });
+
+      setVarItems(items);
+    } catch (e) {
+      setVarError(e instanceof Error ? e.message : 'Could not make variations');
+    } finally {
+      setVarBusy(false);
+    }
+  }
+
 
   /** Persist recipe only — never spread full review (avoids clobbering gallery). */
   function persistRecipe(next: ImageOverlay) {
@@ -329,32 +397,135 @@ export const OverlayPanel: React.FC<{
 
   const overlayOn = overlay.enabled !== false;
 
-  // Measure live preview height so CSS type scales like the export canvas.
-  const [previewH, setPreviewH] = useState(0);
-  useEffect(() => {
-    const el = previewRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => {
-      const h = entries[0]?.contentRect?.height ?? 0;
-      setPreviewH(h);
-    });
-    ro.observe(el);
-    setPreviewH(el.getBoundingClientRect().height);
-    return () => ro.disconnect();
-  }, [aspect, base]);
+  // Fit preview box to exact export aspect inside the rail (fixes type looking
+  // wider than burn-in when CSS aspect + max-height broke the ratio).
+  // useLayoutEffect so the first paint already has the final size — no
+  // full-width fallback → measured shrink on mount.
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [previewBox, setPreviewBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const fit = () => {
+      const maxW = shell.clientWidth;
+      const maxH = Math.min(
+        typeof window !== 'undefined' ? window.innerHeight * 0.42 : 360,
+        360,
+      );
+      if (maxW < 8) return;
+      const ar = exportSize.width / exportSize.height;
+      let w = maxW;
+      let h = w / ar;
+      if (h > maxH) {
+        h = maxH;
+        w = h * ar;
+      }
+      setPreviewBox((prev) =>
+        Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5
+          ? prev
+          : { w, h },
+      );
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fit);
+      return () => window.removeEventListener('resize', fit);
+    }
+    const ro = new ResizeObserver(fit);
+    ro.observe(shell);
+    window.addEventListener('resize', fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, [exportSize.width, exportSize.height, base]);
 
-  // CSS placement: freeform % or flex snap.
-  // Font size is proportional to preview height using the same fraction as
-  // canvas burn-in (overlayPrimaryPx), so editor ≈ saved PNG.
+
+  const previewH = previewBox.h;
+  const previewW = previewBox.w;
+
+  // Only paint text after the preview frame is measured so font/width never
+  // jump from a fallback → real size on first mount.
+  const frameReady = previewW > 8 && previewH > 8;
+
+  /**
+   * After every render, measure the block vs. the frame and:
+   *  1. cache its half-size (fraction of frame) for drag clamping, and
+   *  2. auto-repair the center anchor if the block is hanging off any edge
+   *     (e.g. an old saved recipe, or a long line at a left/right snap).
+   * This is the real fix for "drops off in the corner and won't move" — CSS
+   * alone can't clamp a center-anchored box without knowing its size.
+   */
+  useLayoutEffect(() => {
+    if (!frameReady || editing) return;
+    const frame = previewRef.current;
+    const block = blockRef.current;
+    if (!frame || !block) return;
+    const fr = frame.getBoundingClientRect();
+    const br = block.getBoundingClientRect();
+    if (fr.width < 1 || fr.height < 1) return;
+
+    const hw = Math.min(0.49, br.width / 2 / fr.width);
+    const hh = Math.min(0.49, br.height / 2 / fr.height);
+    blockFracRef.current = { hw, hh };
+
+    // Don't fight an active drag.
+    if (dragRef.current) return;
+
+    const snap = snapPosition(overlayRef.current.vAlign, overlayRef.current.hAlign);
+    const curX =
+      typeof overlayRef.current.x === 'number' ? overlayRef.current.x : snap.x;
+    const curY =
+      typeof overlayRef.current.y === 'number' ? overlayRef.current.y : snap.y;
+
+    // Allowed center range so the whole block stays on-frame.
+    const minX = hw;
+    const maxX = 1 - hw;
+    const minY = hh;
+    const maxY = 1 - hh;
+    const clampedX = maxX >= minX ? Math.min(maxX, Math.max(minX, curX)) : 0.5;
+    const clampedY = maxY >= minY ? Math.min(maxY, Math.max(minY, curY)) : 0.5;
+
+    if (
+      Math.abs(clampedX - curX) > 0.002 ||
+      Math.abs(clampedY - curY) > 0.002 ||
+      typeof overlayRef.current.x !== 'number' ||
+      typeof overlayRef.current.y !== 'number'
+    ) {
+      setOverlay((prev) => ({ ...prev, x: clampedX, y: clampedY }));
+    }
+  }, [
+    frameReady,
+    editing,
+    previewW,
+    previewH,
+    overlay.x,
+    overlay.y,
+    overlay.text,
+    overlay.sub,
+    overlay.size,
+    overlay.fontScale,
+    overlay.maxWidthPct,
+    overlay.styleId,
+    overlay.hAlign,
+    overlay.vAlign,
+  ]);
+
+
+  // Always freeform in the editor so grab never jumps layout/size (snap buttons
+  // write x/y). Width is % of frame (stable across re-renders). Font scales
+  // from measured frame height — same ratio as canvas burn-in.
   const blockStyle: React.CSSProperties = useMemo(() => {
-    const maxW = `${Math.round((overlay.maxWidthPct ?? 0.88) * 100)}%`;
+    const maxWPct = overlay.maxWidthPct ?? 0.88;
     const weightNum = Number(getOverlayWeightCss(overlay.weight));
-    const frameH = previewH > 8 ? previewH : exportSize.height * 0.22;
-    const primaryPx = overlayPrimaryPx(
-      frameH,
+    // Scale export font into preview space (identical ratio to canvas).
+    const exportPrimary = overlayPrimaryPx(
+      exportSize.height,
       overlay.size,
       overlay.fontScale ?? 1,
     );
+    const scale = frameReady ? previewH / exportSize.height : 0;
+    const primaryPx = Math.max(8, exportPrimary * scale);
     const subPx = overlaySubPx(primaryPx);
     const tracking = `${overlay.tracking ?? 0}em`;
     const leading = overlay.leading ?? 1.2;
@@ -370,8 +541,28 @@ export const OverlayPanel: React.FC<{
     const padX = boxed ? Math.round(primaryPx * 0.55) : undefined;
     const padY = boxed ? Math.round(primaryPx * 0.35) : undefined;
 
-    const common: React.CSSProperties = {
-      maxWidth: maxW,
+// x/y are always the block CENTER. Never let vAlign shift via translate —
+    // that parked bottom-aligned text above the frame after drag/remount.
+    const snap = snapPosition(overlay.vAlign, overlay.hAlign);
+    const ax = typeof overlay.x === 'number' ? overlay.x : snap.x;
+    const ay = typeof overlay.y === 'number' ? overlay.y : snap.y;
+
+    return {
+      position: 'absolute' as const,
+      left: `${ax * 100}%`,
+      top: `${ay * 100}%`,
+      transform: freeformCssTransform(),
+
+      // Hug the text (matches canvas content-width) so translate(-50%) centers
+      // the *actual* box — a fixed 88% width only fit when x was exactly 50%
+      // and shoved left/right positions off-canvas.
+      width: 'max-content',
+      maxWidth: `${maxWPct * 100}%`,
+      boxSizing: 'border-box' as const,
+
+      whiteSpace: 'pre-wrap' as const,
+      overflowWrap: 'break-word' as const,
+      wordBreak: 'break-word' as const,
       textAlign: overlay.hAlign,
       fontFamily: font.family,
       fontWeight: weightNum,
@@ -400,45 +591,49 @@ export const OverlayPanel: React.FC<{
           ? `${Math.max(2, Math.round(primaryPx * 0.12))}px solid #B08D57`
           : undefined,
       cursor: editing ? 'text' : 'grab',
-      userSelect: editing ? 'text' : 'none',
+      userSelect: editing ? ('text' as const) : ('none' as const),
       outline: selected ? '1px dashed rgba(255,255,255,0.55)' : undefined,
       outlineOffset: 4,
       fontSize: primaryPx,
-      // Stash sub size for TextBlock via CSS variable
       ['--overlay-sub-px' as string]: `${subPx}px`,
       WebkitTextStroke:
         overlay.styleId === 'outline'
           ? `${Math.max(1, Math.round(primaryPx * 0.08))}px rgba(0,0,0,0.85)`
           : undefined,
     };
-
-if (hasFreeform) {
-      return {
-        ...common,
-        position: 'absolute' as const,
-        left: `${(overlay.x as number) * 100}%`,
-        top: `${(overlay.y as number) * 100}%`,
-        // Anchor point (x,y) + h/v align — same model as canvas layoutOverlay
-        transform: freeformCssTransform(overlay.hAlign, overlay.vAlign),
-      };
-    }
-    return common;
   }, [
-    overlay,
+    overlay.x,
+    overlay.y,
+    overlay.vAlign,
+    overlay.hAlign,
+    overlay.maxWidthPct,
+    overlay.size,
+    overlay.fontScale,
+    overlay.weight,
+    overlay.styleId,
+    overlay.tracking,
+    overlay.leading,
+    overlay.shadowStrength,
+    overlay.bgOpacity,
+    overlay.textOpacity,
     font.family,
     fillHex,
     previewColor,
     boxed,
-    hasFreeform,
     selected,
     editing,
+    frameReady,
     previewH,
     exportSize.height,
   ]);
 
 
 
-const seedFreeform = () => {
+
+
+
+/** Resolve current freeform anchor (always absolute in editor). */
+  const seedFreeform = () => {
     const o = overlayRef.current;
     const snap = snapPosition(o.vAlign, o.hAlign);
     const curX = typeof o.x === 'number' ? o.x : snap.x;
@@ -449,15 +644,142 @@ const seedFreeform = () => {
     return { curX, curY };
   };
 
+
+
+  /**
+   * Canva-smooth drag:
+   * - Move: live DOM left/top during pointermove (no React re-render thrash),
+   *   commit x/y once on pointerup. Never touches fontScale.
+   * - Resize: only from handle pointers; corners = type size, edges = width.
+   * Window-level listeners so tracking stays smooth if the cursor leaves the block.
+   */
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || d.pointerId !== e.pointerId) return;
+      const frame = previewRef.current;
+      if (!frame) return;
+      const rect = frame.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+
+      if (d.kind === 'move') {
+        const dxPx = e.clientX - d.startX;
+        const dyPx = e.clientY - d.startY;
+        // 3px threshold before treating as drag (keeps click-to-edit clean)
+        if (!d.moved && Math.hypot(dxPx, dyPx) < 3) return;
+        d.moved = true;
+        suppressEditClickRef.current = true;
+        // Clamp the CENTER anchor by the measured half-size so the whole block
+        // stays on-frame (never lets it slip off into a corner).
+        const { hw, hh } = blockFracRef.current;
+        const minX = Math.min(0.5, hw);
+        const maxX = Math.max(0.5, 1 - hw);
+        const minY = Math.min(0.5, hh);
+        const maxY = Math.max(0.5, 1 - hh);
+        const nx = Math.min(maxX, Math.max(minX, d.origX + dxPx / rect.width));
+        const ny = Math.min(maxY, Math.max(minY, d.origY + dyPx / rect.height));
+
+        // Live paint via DOM — no setState until release
+        if (d.el) {
+          d.el.style.left = `${nx * 100}%`;
+          d.el.style.top = `${ny * 100}%`;
+        }
+        // Stash latest for commit
+        (d as { lastX?: number; lastY?: number }).lastX = nx;
+        (d as { lastX?: number; lastY?: number }).lastY = ny;
+        return;
+      }
+
+      // Resize only — never runs on body drag
+      const dxPx = e.clientX - d.startX;
+      const dyPx = e.clientY - d.startY;
+      if (d.mode === 'e' || d.mode === 'w') {
+        const sign = d.mode === 'e' ? 1 : -1;
+        const next = Math.min(
+          0.94,
+          Math.max(0.4, d.origMaxW + (sign * dxPx) / rect.width),
+        );
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => {
+          setOverlay((prev) =>
+            prev.maxWidthPct === next ? prev : { ...prev, maxWidthPct: next },
+          );
+        });
+        return;
+      }
+      const sx = d.mode === 'se' || d.mode === 'ne' ? 1 : -1;
+      const sy = d.mode === 'se' || d.mode === 'sw' ? 1 : -1;
+      // Diagonal drag distance → scale (gentle, Canva-like)
+      const delta =
+        ((sx * dxPx) / Math.max(rect.width, 1) +
+          (sy * dyPx) / Math.max(rect.height, 1)) *
+        0.45;
+      const next = Math.min(1.4, Math.max(0.7, d.origScale + delta));
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setOverlay((prev) =>
+          prev.fontScale === next ? prev : { ...prev, fontScale: next },
+        );
+      });
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || d.pointerId !== e.pointerId) return;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      if (d.kind === 'move' && d.moved) {
+        const last = d as {
+          lastX?: number;
+          lastY?: number;
+          origX: number;
+          origY: number;
+        };
+        const nx = last.lastX ?? d.origX;
+        const ny = last.lastY ?? d.origY;
+        // Commit to state and let React own left/top from blockStyle.
+        // IMPORTANT: do NOT imperatively clear el.style.left/top here — React's
+        // vDOM still thinks it set them, so after clearing it sees "no change"
+        // and never re-applies, leaving the block with position:absolute but no
+        // left/top → it collapses to the top-left corner and can't be dragged
+        // back out. The committed x/y below already match the live DOM values,
+        // so there's no snap to hide.
+        setOverlay((prev) => ({ ...prev, x: nx, y: ny }));
+      }
+
+      // Move never touches width/font — nothing else to clear.
+
+      dragRef.current = null;
+
+      // Allow click-to-edit again after a tick
+      window.setTimeout(() => {
+        suppressEditClickRef.current = false;
+      }, 0);
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+
   const onPointerDownBlock = (e: React.PointerEvent) => {
     if (editing) return;
-    // Don't start move when interacting with inputs/handles (handles stopPropagation).
     if ((e.target as HTMLElement)?.closest?.('[data-overlay-handle]')) return;
     if ((e.target as HTMLElement)?.closest?.('textarea,input')) return;
     e.preventDefault();
     e.stopPropagation();
     setSelected(true);
+    const el = e.currentTarget as HTMLElement;
     const { curX, curY } = seedFreeform();
+    // Move only mutates left/top. Never freeze width/font — that caused the
+    // shrink-on-grab / expand-on-release jumps.
     dragRef.current = {
       kind: 'move',
       pointerId: e.pointerId,
@@ -466,13 +788,16 @@ const seedFreeform = () => {
       origX: curX,
       origY: curY,
       moved: false,
+      el,
     };
+
     try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      el.setPointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
   };
+
 
   const onPointerDownResize = (
     e: React.PointerEvent,
@@ -500,77 +825,10 @@ const seedFreeform = () => {
     }
   };
 
-  const onPointerMoveBlock = (e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d || d.pointerId !== e.pointerId) return;
-    const el = previewRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 1 || rect.height < 1) return;
+  // No-op stubs kept so TextBlock props stay stable (window listeners own move/up).
+  const onPointerMoveBlock = (_e: React.PointerEvent) => {};
+  const onPointerUpBlock = (_e: React.PointerEvent) => {};
 
-    if (d.kind === 'move') {
-      const dx = (e.clientX - d.startX) / rect.width;
-      const dy = (e.clientY - d.startY) / rect.height;
-      if (!d.moved && Math.abs(dx) < 0.002 && Math.abs(dy) < 0.002) return;
-      d.moved = true;
-      const nx = Math.min(0.9, Math.max(0.02, d.origX + dx));
-      const ny = Math.min(0.9, Math.max(0.02, d.origY + dy));
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        setOverlay((prev) =>
-          prev.x === nx && prev.y === ny ? prev : { ...prev, x: nx, y: ny },
-        );
-      });
-      return;
-    }
-
-    // Resize: corners → fontScale; left/right edges → maxWidthPct
-    const dxPx = e.clientX - d.startX;
-    const dyPx = e.clientY - d.startY;
-    if (d.mode === 'e' || d.mode === 'w') {
-      // Width: drag outward grows maxWidthPct
-      const sign = d.mode === 'e' ? 1 : -1;
-      const delta = (sign * dxPx) / rect.width;
-      const next = Math.min(0.94, Math.max(0.4, d.origMaxW + delta));
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        setOverlay((prev) =>
-          prev.maxWidthPct === next ? prev : { ...prev, maxWidthPct: next },
-        );
-      });
-      return;
-    }
-    // Corner: average of outward growth in x/y → font scale
-    const sx =
-      d.mode === 'se' || d.mode === 'ne' ? 1 : -1;
-    const sy =
-      d.mode === 'se' || d.mode === 'sw' ? 1 : -1;
-    // ~120px drag ≈ +0.4 scale at typical preview size
-    const delta =
-      ((sx * dxPx) / rect.width + (sy * dyPx) / rect.height) * 0.55;
-    const next = Math.min(1.4, Math.max(0.7, d.origScale + delta));
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      setOverlay((prev) =>
-        prev.fontScale === next ? prev : { ...prev, fontScale: next },
-      );
-    });
-  };
-
-  const onPointerUpBlock = (e: React.PointerEvent) => {
-    if (dragRef.current?.pointerId === e.pointerId) {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = 0;
-      }
-      dragRef.current = null;
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-    }
-  };
 
 
 
@@ -707,98 +965,89 @@ return (
           </div>
         </div>
 
-        <div
-          ref={previewRef}
-          className={`relative w-full max-h-[min(42vh,360px)] overflow-hidden rounded-xl border border-ink/15 bg-ink ${aspect}`}
-          onPointerDown={() => {
-            if (!editing) setSelected(false);
-          }}
-        >
+        {/* Shell measures available width; inner frame is exact export aspect. */}
+        <div ref={shellRef} className="flex w-full justify-center">
+          <div
+            ref={previewRef}
+            className="relative overflow-hidden rounded-xl border border-ink/15 bg-ink"
+            style={
+              frameReady
+                ? {
+                    width: previewW,
+                    height: previewH,
+                    flexShrink: 0,
+                  }
+                : {
+                    // Invisible placeholder until layout measure — never paint
+                    // at a different width than the final frame.
+                    width: '100%',
+                    aspectRatio: `${exportSize.width} / ${exportSize.height}`,
+                    maxHeight: 'min(42vh, 360px)',
+                    visibility: 'hidden' as const,
+                  }
+            }
 
-          {base ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={base}
-              alt=""
-              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-              draggable={false}
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs text-bone/40">
-              No base image
-            </div>
-          )}
-          {overlayOn && overlay.styleId === 'scrim' && (
 
-            <div
-              className="pointer-events-none absolute inset-x-0"
-              style={{
-                top:
-                  hasFreeform && (overlay.y as number) < 0.35
-                    ? 0
-                    : hasFreeform && (overlay.y as number) > 0.55
-                      ? undefined
-                      : hasFreeform
-                        ? '30%'
+            onPointerDown={() => {
+              if (!editing) setSelected(false);
+            }}
+          >
+            {base ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={base}
+                alt=""
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-bone/40">
+                No base image
+              </div>
+            )}
+            {overlayOn && overlay.styleId === 'scrim' && (
+              <div
+                className="pointer-events-none absolute inset-x-0"
+                style={{
+                  top:
+                    (typeof overlay.y === 'number'
+                      ? (overlay.y as number)
+                      : overlay.vAlign === 'top'
+                        ? 0
                         : overlay.vAlign === 'middle'
-                          ? '30%'
-                          : overlay.vAlign === 'top'
-                            ? 0
-                            : undefined,
-                bottom:
-                  hasFreeform && (overlay.y as number) > 0.55
-                    ? 0
-                    : !hasFreeform && overlay.vAlign === 'bottom'
+                          ? 0.5
+                          : 1) < 0.35
+                      ? 0
+                      : (typeof overlay.y === 'number'
+                            ? (overlay.y as number)
+                            : 1) > 0.55
+                        ? undefined
+                        : '30%',
+                  bottom:
+                    (typeof overlay.y === 'number'
+                      ? (overlay.y as number)
+                      : overlay.vAlign === 'bottom'
+                        ? 1
+                        : 0) > 0.55
                       ? 0
                       : undefined,
-                height: '38%',
-                background:
-                  (hasFreeform ? (overlay.y as number) < 0.35 : overlay.vAlign === 'top')
-                    ? 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)'
-                    : (hasFreeform ? (overlay.y as number) > 0.55 : overlay.vAlign === 'bottom')
-                      ? 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)'
-                      : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.65), transparent)',
-              }}
-            />
-          )}
-
-          {/* Snap layout wrapper when not freeform */}
-          {overlayOn ? (
-            !hasFreeform ? (
-              <div
-                className="absolute inset-0 flex p-[6%]"
-                style={{
-                  alignItems:
-                    overlay.vAlign === 'top'
-                      ? 'flex-start'
-                      : overlay.vAlign === 'middle'
-                        ? 'center'
-                        : 'flex-end',
-                  justifyContent:
-                    overlay.hAlign === 'left'
-                      ? 'flex-start'
-                      : overlay.hAlign === 'right'
-                        ? 'flex-end'
-                        : 'center',
+                  height: '38%',
+                  background:
+                    (typeof overlay.y === 'number'
+                      ? (overlay.y as number) < 0.35
+                      : overlay.vAlign === 'top')
+                      ? 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)'
+                      : (typeof overlay.y === 'number'
+                            ? (overlay.y as number) > 0.55
+                            : overlay.vAlign === 'bottom')
+                        ? 'linear-gradient(to top, rgba(0,0,0,0.75), transparent)'
+                        : 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.65), transparent)',
                 }}
-              >
-<TextBlock
-                  style={blockStyle}
-                  overlay={overlay}
-                  displayPrimary={displayPrimary}
-                  displaySub={displaySub}
-                  previewColor={previewColor}
-                  editing={editing}
-                  selected={selected}
-                  setEditing={setEditing}
-                  patch={patch}
-                  onPointerDown={onPointerDownBlock}
-                  onPointerMove={onPointerMoveBlock}
-                  onPointerUp={onPointerUpBlock}
-                  onPointerDownResize={onPointerDownResize}
-                />
-              </div>
-            ) : (
+              />
+            )}
+
+            {/* Wait for measured frame so type never paints at fallback size. */}
+            {overlayOn && frameReady ? (
               <TextBlock
                 style={blockStyle}
                 overlay={overlay}
@@ -809,30 +1058,35 @@ return (
                 selected={selected}
                 setEditing={setEditing}
                 patch={patch}
+                suppressEditClickRef={suppressEditClickRef}
+                containerRef={blockRef}
                 onPointerDown={onPointerDownBlock}
+
                 onPointerMove={onPointerMoveBlock}
                 onPointerUp={onPointerUpBlock}
                 onPointerDownResize={onPointerDownResize}
               />
-            )
+            ) : !overlayOn ? (
 
-          ) : (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-              <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] text-bone/80">
-                Overlay text off — image type only
-              </span>
-            </div>
-          )}
-</div>
-<p className="text-[10px] text-ink/40">
+              <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+                <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] text-bone/80">
+                  Overlay text off — image type only
+                </span>
+              </div>
+            ) : null}
+
+          </div>
+        </div>
+        <p className="text-[10px] text-ink/40">
           Export {exportSize.width}×{exportSize.height}
-          {hasFreeform
+          {typeof overlay.x === 'number' && typeof overlay.y === 'number'
             ? ` · ${Math.round((overlay.x as number) * 100)}%, ${Math.round((overlay.y as number) * 100)}%`
             : ' · snap'}
           {overlayOn
             ? ` · ${Math.round((overlay.fontScale ?? 1) * 100)}% type · ${Math.round((overlay.maxWidthPct ?? 0.88) * 100)}% wide · Enter edit · ± size`
             : ' · text hidden'}
         </p>
+
 
       </div>
 
@@ -855,10 +1109,71 @@ return (
           placeholder="On-screen line…"
           className="mt-1.5 w-full rounded-lg border border-ink/15 bg-white/70 p-2.5 text-sm text-ink placeholder:text-ink/35 focus:border-mode focus:outline-none"
         />
+
+        {/* Text-only AI variations of the Primary text (never touches image). */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void makeVariations()}
+            disabled={varBusy || !overlay.text.trim()}
+            className={`${aiBtnGhost} px-2.5 py-1 text-[11px]`}
+            title="Rewrite the primary text into alternatives (text only)"
+          >
+            {varBusy ? <Spinner /> : <Sparkles className="h-3 w-3" />}
+            {varItems.length ? 'Regenerate' : 'Variations'}
+          </button>
+          <div className="inline-flex overflow-hidden rounded-full border border-ink/15">
+            {[3, 5, 10].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setVarCount(n)}
+                className={`px-2 py-1 text-[11px] transition-colors ${
+                  varCount === n
+                    ? 'bg-mode/10 font-semibold text-mode'
+                    : 'text-ink/55 hover:text-ink/80'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+        <AiError message={varError} />
+        {varItems.length ? (
+          <div className="mt-1.5 flex flex-col gap-1">
+            {varItems.map((v, i) => (
+              <button
+                key={i}
+                type="button"
+                // Load both lines: primary always, sub only when the model
+                // returned one (keeps the current sub otherwise).
+                onClick={() =>
+                  patch(v.sub ? { text: v.text, sub: v.sub } : { text: v.text })
+                }
+                title="Load this variation into the editor"
+                className={`rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                  overlay.text.trim() === v.text.trim()
+                    ? 'border-mode/40 bg-mode/10 text-mode'
+                    : 'border-ink/15 text-ink/70 hover:border-ink/30 hover:bg-ink/5'
+                }`}
+              >
+                <span className="block">{v.text}</span>
+                {v.sub ? (
+                  <span className="mt-0.5 block text-[10px] text-ink/45">
+                    {v.sub}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+
+          </div>
+        ) : null}
       </div>
 
       <div>
         <span className={labelCls}>Sub text (optional)</span>
+
         <input
           type="text"
           value={overlay.sub ?? ''}
@@ -1222,13 +1537,15 @@ return (
               : 'Save recipe (no burn)'}
       </button>
       {overlay.renderedUrl ? (
-        <a
-          href={overlay.renderedUrl}
-          download="overlay.png"
+        <button
+          type="button"
+          onClick={() =>
+            void downloadUrl(overlay.renderedUrl as string, 'overlay.png')
+          }
           className={`${aiBtnGhost} justify-center`}
         >
           <Download className="h-3.5 w-3.5" /> Download last save
-        </a>
+        </button>
       ) : null}
       <p className="-mt-1 text-[11px] text-ink/40">
         {overlayOn
@@ -1255,6 +1572,8 @@ const TextBlock: React.FC<{
   selected: boolean;
   setEditing: (f: EditField) => void;
   patch: (p: Partial<ImageOverlay>) => void;
+  suppressEditClickRef: React.MutableRefObject<boolean>;
+  containerRef: React.RefObject<HTMLDivElement>;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
@@ -1272,11 +1591,15 @@ const TextBlock: React.FC<{
   selected,
   setEditing,
   patch,
+  suppressEditClickRef,
+  containerRef,
   onPointerDown,
   onPointerMove,
   onPointerUp,
   onPointerDownResize,
 }) => {
+
+
   const primaryRef = useRef<HTMLTextAreaElement>(null);
   const subRef = useRef<HTMLInputElement>(null);
 
@@ -1310,10 +1633,13 @@ const TextBlock: React.FC<{
 
   return (
     <div
+      ref={containerRef}
       role="group"
       aria-label="Overlay text — drag to move, handles to resize, double-click to edit"
-      className="relative max-w-full touch-none"
+      className="relative touch-none"
       style={style}
+
+
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -1371,6 +1697,8 @@ const TextBlock: React.FC<{
         <div
           className="cursor-text whitespace-pre-wrap break-words leading-[inherit]"
           onClick={(e) => {
+            // After a real drag, ignore the trailing click so we don't enter edit.
+            if (suppressEditClickRef.current) return;
             // Single click when already selected → edit (Figma-like)
             if (selected) {
               e.stopPropagation();
@@ -1384,6 +1712,7 @@ const TextBlock: React.FC<{
         <div
           className="cursor-text text-[11px] opacity-50"
           onClick={(e) => {
+            if (suppressEditClickRef.current) return;
             e.stopPropagation();
             setEditing('text');
           }}
@@ -1391,6 +1720,7 @@ const TextBlock: React.FC<{
           Click to type…
         </div>
       )}
+
       {overlay.styleId === 'brass-line' && (displayPrimary || editing) ? (
         <div
           className="mt-1 h-0.5 w-10 rounded-full"

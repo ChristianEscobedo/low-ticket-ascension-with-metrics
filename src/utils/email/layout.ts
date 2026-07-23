@@ -38,6 +38,11 @@ export interface EmailDoc {
   title: string;
   /** Lead paragraphs under the title. */
   intro?: string[];
+  /**
+   * Pre-rendered, email-safe body HTML (from the kit rich-text editor). When
+   * set, it replaces `intro` + `sections` so admin formatting is preserved.
+   */
+  bodyHtml?: string;
   sections?: EmailSection[];
   /** Primary call to action, rendered after the sections. */
   cta?: EmailButton;
@@ -101,8 +106,10 @@ export function renderEmail(doc: EmailDoc): { html: string; text: string } {
       ? `<div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:${C.brass};font-weight:700;margin:0 0 12px;font-family:${FONT_SANS}">${doc.eyebrow}</div>`
       : '') +
     `<h1 style="margin:0 0 20px;font-size:27px;line-height:1.25;color:${C.mode};font-family:${FONT_SERIF};font-weight:700">${doc.title}</h1>` +
-    (doc.intro ?? []).map(para).join('') +
-    (doc.sections ?? []).map(renderSection).join('') +
+    (doc.bodyHtml
+      ? `<div style="font-size:16px;line-height:1.7;color:${C.ink};font-family:${FONT_SANS}">${doc.bodyHtml}</div>`
+      : (doc.intro ?? []).map(para).join('') +
+        (doc.sections ?? []).map(renderSection).join('')) +
     (doc.cta ? button(doc.cta) : '') +
     (doc.receipt && doc.receipt.length ? receiptPanel(doc.receipt) : '') +
     (doc.outro ?? []).map(para).join('') +
@@ -136,6 +143,15 @@ function renderText(doc: EmailDoc, signName: string, signRole: string): string {
   const lines: string[] = [BRAND.name.toUpperCase(), ''];
   if (doc.eyebrow) lines.push(doc.eyebrow.toUpperCase(), '');
   lines.push(doc.title, '');
+  if (doc.bodyHtml) {
+    lines.push(
+      doc.bodyHtml
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+      '',
+    );
+  }
   for (const p of doc.intro ?? []) lines.push(p, '');
   for (const s of doc.sections ?? []) {
     if (s.heading) lines.push(s.heading, '');

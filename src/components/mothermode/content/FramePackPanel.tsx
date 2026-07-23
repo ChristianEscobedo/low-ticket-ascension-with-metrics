@@ -38,6 +38,8 @@ import {
   withFrameImages,
   patchFrame,
   continuityEditPrompt,
+  frameImagePrompt,
+  frameTextSource,
   buildStripPrompt,
   splitStripImage,
   supportsFramePack,
@@ -45,6 +47,7 @@ import {
   MAX_FRAME_PACK,
   MIN_FRAME_PACK,
 } from '@/lib/mothermode/content/framePack';
+
 import {
   setReviewFramePack,
   clearReviewFramePack,
@@ -225,10 +228,11 @@ export const FramePackPanel: React.FC<{
             throw new Error(`Frame ${frame.index} needs a prompt`);
           }
           url = await aiGenerateImage(
-            frame.prompt,
+            frameImagePrompt(frame),
             piece.format,
             imageModel || undefined,
           );
+
         } else {
           const editPrompt = continuityEditPrompt(frame, working);
           url = await aiEditImage({
@@ -259,10 +263,11 @@ export const FramePackPanel: React.FC<{
       if (index1 === 1 || !seed) {
         if (!frame.prompt?.trim()) throw new Error('Frame needs a prompt');
         url = await aiGenerateImage(
-          frame.prompt,
+          frameImagePrompt(frame),
           piece.format,
           imageModel || undefined,
         );
+
       } else {
         url = await aiEditImage({
           prompt: continuityEditPrompt(frame, pack),
@@ -536,6 +541,44 @@ export const FramePackPanel: React.FC<{
                           className="mt-1 w-full rounded-md border border-ink/15 bg-white px-2 py-1.5 text-sm"
                         />
                       </label>
+                      {f.text || f.sub ? (
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wide text-ink/40">
+                            Text handling
+                          </span>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {(
+                              [
+                                ['editor', 'Overlay editor text'],
+                                ['ai-prompt', 'Bake text into image'],
+                              ] as const
+                            ).map(([id, label]) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() =>
+                                  updateFrame(f.index, {
+                                    textSource:
+                                      id === 'ai-prompt' ? 'ai-prompt' : 'editor',
+                                  })
+                                }
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                  frameTextSource(f) === id
+                                    ? 'bg-mode/15 text-mode ring-1 ring-mode/30'
+                                    : 'border border-ink/15 text-ink/60'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-1 text-[10px] text-ink/40">
+                            {frameTextSource(f) === 'ai-prompt'
+                              ? 'The model writes the words directly into this frame — nothing gets overlaid on top.'
+                              : 'The words are overlaid on the rendered image; the model leaves clean space.'}
+                          </p>
+                        </div>
+                      ) : null}
                       <label className="block">
                         <span className="text-[10px] uppercase tracking-wide text-ink/40">
                           Image prompt
@@ -549,6 +592,7 @@ export const FramePackPanel: React.FC<{
                           className="mt-1 w-full rounded-md border border-ink/15 bg-white px-2 py-1.5 text-xs leading-relaxed"
                         />
                       </label>
+
                       {f.lookbackSummary ? (
                         <p className="text-[11px] text-ink/45">
                           Lookback: {f.lookbackSummary}

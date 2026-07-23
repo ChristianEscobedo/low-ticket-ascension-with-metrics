@@ -566,12 +566,135 @@ export async function rewriteContentText(
     : openAiRewrite(system, user, model);
 }
 
+export interface TextVariationsInput {
+  /** The current editor text to multiply into alternatives. */
+  text: string;
+  /** The current sub / secondary line, rewritten to match each variation. */
+  sub?: string;
+  /** How many alternatives to return (clamped 1..10). */
+  count: number;
+  /** Free-form guidance applied to every variation. */
+  instructions?: string;
+  context?: { theme?: string; tone?: string; platform?: string; format?: string };
+  /** Existing variations the model must not repeat or lightly reword. */
+  avoid?: string[];
+  /** Optional text model id from the selector. Empty/unknown means Auto. */
+  model?: string;
+}
+
+/** One text variation: a primary line and a matching sub / second line. */
+export interface TextVariation {
+  text: string;
+  sub: string;
+}
+
+/**
+ * Rewrite one piece of plain editor text into N distinct alternatives, held to
+ * the brand voice. Each alternative carries its own matching sub line so the
+ * secondary text moves with the primary instead of staying fixed. Pure text
+ * output for the overlay Primary-text "Variations" control — it never renders
+ * or touches an image. Returns `TextVariation[]`.
+ */
+export async function generateTextVariations(
+  input: TextVariationsInput,
+): Promise<AiResult<TextVariation[]>> {
+  const text = input.text.trim();
+  if (!text) {
+    return { ok: false, status: 400, error: 'Text is required to make variations' };
+  }
+  const sub = input.sub?.trim() ?? '';
+  const count = Math.max(1, Math.min(10, Math.round(input.count || 3)));
+  const c = input.context;
+  const ctxLine = c
+    ? `Context: platform ${c.platform ?? 'social'}, format ${c.format ?? 'post'}, tone ${c.tone ?? 'warm'}, theme "${c.theme ?? ''}".`
+    : '';
+  const changeLine = input.instructions?.trim()
+    ? `Apply these requested changes to every variation: ${input.instructions.trim()}`
+    : '';
+  const avoidLine = input.avoid?.length
+    ? `Do not repeat or lightly reword any of these existing lines: ${input.avoid
+        .filter((a) => a && a.trim())
+        .map((a) => `"${a.trim()}"`)
+        .join('; ')}.`
+    : '';
+  const subGuide = sub
+    ? `Each variation also needs a matching "sub" (the smaller second line). Rewrite the sub so it pairs with that variation's primary line, not the original. Keep it about the same length.`
+    : `Each variation may include a short "sub" (a smaller second line) only if it strengthens that specific primary line; otherwise return "sub" as an empty string.`;
+  const system = `You are the MotherMode brand copywriter. MotherMode helps mothers reclaim time and offload the mental load. ${VOICE_RULES} You rewrite one short piece of on-image or caption text into distinct alternatives, each with a matching sub line. Keep each roughly the same length and intent as the original. Return ONLY a JSON object, no prose, no code fences.`;
+  const user = [
+    `Rewrite the text below into ${count} distinct alternatives. Change the angle, rhythm, and wording each time. They must read as siblings of the same idea, not ${count} unrelated lines.`,
+    ctxLine,
+    changeLine,
+    avoidLine,
+    subGuide,
+    `Original primary text:\n"""\n${text}\n"""`,
+    sub ? `Original sub line:\n"""\n${sub}\n"""` : '',
+    `Respond with this exact JSON shape: { "items": [ { "text": "...", "sub": "..." } ] } containing exactly ${count} objects. No labels, no numbering, no surrounding quotes inside the strings.`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const { provider, model } = await resolveTextModel(input.model);
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model);
+  if (!raw.ok) return raw;
+  const items = parseVariationItems(raw.data)
+    .map((v) => ({
+      text: stripDashes(v.text.trim()),
+      sub: stripDashes(v.sub.trim()),
+    }))
+    .filter((v) => v.text.length > 0)
+    .slice(0, count);
+  if (items.length === 0) {
+    return { ok: false, status: 502, error: 'No variations were returned' };
+  }
+  return { ok: true, data: items };
+}
+
+/**
+ * Parse a `{ items: [...] }` payload into `{ text, sub }` pairs. Tolerant of the
+ * model returning bare strings (older shape) or objects with either key style.
+ */
+function parseVariationItems(raw: string): TextVariation[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) return [];
+    try {
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      return [];
+    }
+  }
+  const container = parsed as { items?: unknown };
+  const list = Array.isArray(container?.items) ? container.items : [];
+  const out: TextVariation[] = [];
+  for (const it of list) {
+    if (typeof it === 'string') {
+      out.push({ text: it, sub: '' });
+    } else if (it && typeof it === 'object') {
+      const o = it as Record<string, unknown>;
+      const text = typeof o.text === 'string' ? o.text : '';
+      const subv = typeof o.sub === 'string' ? o.sub : '';
+      out.push({ text, sub: subv });
+    }
+  }
+  return out;
+}
+
+
 /**
  * OpenAI chat-completions text call. Temperature is omitted: GPT-5 family
  * reasoning models reject a non-default value, and the variant angle is driven
  * by the prompt instead.
  */
 async function openAiRewrite(
+
   system: string,
   user: string,
   model: string,
@@ -1698,9 +1821,29 @@ export interface StoryboardPlanPiece {
   brollSeeds?: string[];
 }
 
+/**
+ * One clip-sized window of a video script fed to the planner as a single board.
+ * Board N renders exactly this window (a 15s or 18s video generation), so its
+ * imagePrompt/videoPrompt reflect only what happens inside [startSec, endSec).
+ */
+export interface StoryboardSegmentInput {
+  index: number;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  beats: Array<{
+    shot?: string;
+    onScreen?: string;
+    voiceover: string;
+    action?: string;
+    broll?: string;
+    brollPrompt?: string;
+  }>;
+}
+
 export interface StoryboardPlanInput {
   piece: StoryboardPlanPiece;
-  /** 1–4 connected boards. */
+  /** 1–6 connected boards (script-driven packs reach 6). */
   boardCount: number;
   mode: 'narrative' | 'broll';
   guides?: string;
@@ -1708,8 +1851,21 @@ export interface StoryboardPlanInput {
   hasCharacterRef?: boolean;
   /** Whether product/environment refs will be attached at render time. */
   hasReferenceImages?: boolean;
+  /**
+   * Where the plan is driven from. 'script' switches the planner to a
+   * one-board-per-segment instruction using `segments`; 'post' (default) uses
+   * the classic post-driven arc.
+   */
+  sourceMode?: 'post' | 'script';
+  /**
+   * Clip-sized script windows, one per board, when sourceMode is 'script'.
+   * Board k renders segment k's beats as a single video generation.
+   */
+  segments?: StoryboardSegmentInput[];
   model?: string;
 }
+
+
 
 export interface StoryboardBoardOut {
   index: number;
@@ -1719,7 +1875,12 @@ export interface StoryboardBoardOut {
   videoPrompt?: string;
   lookbackSummary: string;
   brollNotes?: string;
+  /** Clip window this board renders, echoed from the source segment. */
+  startSec?: number;
+  endSec?: number;
+  segmentDuration?: number;
 }
+
 
 function storyboardSourceSummary(p: StoryboardPlanPiece): string {
   const lines: string[] = [];
@@ -1748,6 +1909,7 @@ function buildStoryboardPlanUser(input: StoryboardPlanInput, count: number): str
       : `MODE: narrative. Each board advances the same character through a connected cinematic arc of the post's message. Board 1 opens; later boards escalate and resolve.`;
   const intent = `Plan exactly ${count} connected cinematic multi-panel storyboard contact sheet(s) for a ${input.piece.platform} ${input.piece.format}. Someone should be able to feed each board's imagePrompt into an image model and get a premium production contact sheet.`;
   const continuity = [
+
     'LOOKBACK / CONTINUITY (STRICT):',
     'Board 1 has no prior lookback; it establishes character, wardrobe, primary environment, and emotional baseline.',
     'For board k (k>1), you MUST continue from board k-1. Read prior lookbackSummary values as locked facts. Do not reset wardrobe, face, or world. Evolve location, emotion, and action naturally.',
@@ -1776,19 +1938,66 @@ function buildStoryboardPlanUser(input: StoryboardPlanInput, count: number): str
   const guides = input.guides?.trim()
     ? `Production guides (voice and continuity still win): ${input.guides.trim()}`
     : '';
+  // Script-driven: one board per clip-sized segment. Each board renders exactly
+  // its window's beats as a single 15s/18s video generation.
+  const segmentBlock =
+    input.sourceMode === 'script' && input.segments?.length
+      ? buildStoryboardSegmentBlock(input.segments)
+      : '';
   const shape = [
     'Respond with this exact JSON shape:',
     `{ "boards": [ { "index": number, "title": string, "scenes": [string], "imagePrompt": string, "videoPrompt": string, "lookbackSummary": string, "brollNotes": string } ] }`,
     `Return exactly ${count} boards with index 1..${count} in order. Omit brollNotes unless mode is broll.`,
   ].join('\n');
-  return [intent, modeLine, continuity, refs, promptRules, source, guides, shape]
+  return [intent, modeLine, continuity, refs, promptRules, source, segmentBlock, guides, shape]
     .filter(Boolean)
     .join('\n\n');
 }
 
+/**
+ * Build the one-board-per-segment instruction: board k renders segment k's clip
+ * window and is composed only from that window's beats, so its imagePrompt and
+ * videoPrompt cover exactly that clip. Lookback still carries continuity across
+ * all segments.
+ */
+function buildStoryboardSegmentBlock(segments: StoryboardSegmentInput[]): string {
+  const lines: string[] = [
+    'SCRIPT SEGMENTS (ONE BOARD PER SEGMENT):',
+    `This storyboard is driven by a video script. There is exactly one board per segment (${segments.length} total). Board k renders segment k as a SINGLE video generation.`,
+    'For each board:',
+    "- Compose the contact sheet ONLY from that segment's beats below (voiceover, on-screen, shot, action, b-roll).",
+    '- The videoPrompt MUST be a shootable clip direction for that segment length only (its start-to-end window), not the whole video.',
+    '- Keep character, wardrobe, and world congruent with the other segments via lookbackSummary.',
+  ];
+  for (const seg of segments) {
+    lines.push(
+      `\nSegment ${seg.index} · covers ${seg.startSec}-${seg.endSec}s (${seg.durationSec}s clip):`,
+    );
+    if (!seg.beats.length) {
+      lines.push('  (no beats in this window; extend the prior beat visually.)');
+      continue;
+    }
+    seg.beats.forEach((b, i) => {
+      const parts: string[] = [];
+      if (b.shot) parts.push(`shot: ${b.shot}`);
+      if (b.onScreen) parts.push(`on-screen: ${b.onScreen}`);
+      parts.push(`VO: ${b.voiceover}`);
+      if (b.action) parts.push(`action: ${b.action}`);
+      if (b.broll) parts.push(`b-roll: ${b.broll}`);
+      if (b.brollPrompt) parts.push(`b-roll prompt: ${b.brollPrompt}`);
+      lines.push(`  ${i + 1}. ${parts.join(' | ')}`);
+    });
+  }
+  return lines.join('\n');
+}
+
+
+
 function normalizeStoryboardBoards(
+
   raw: unknown,
   count: number,
+  segments?: StoryboardSegmentInput[],
 ): StoryboardBoardOut[] {
   if (!Array.isArray(raw)) return [];
   const out: StoryboardBoardOut[] = [];
@@ -1801,6 +2010,9 @@ function normalizeStoryboardBoards(
     if (!imagePrompt || !lookbackSummary) continue;
     const scenes = toList(rec.scenes) ?? [];
     const index = out.length + 1;
+    // Echo the clip window from the matching source segment (script-driven),
+    // so a board always knows exactly which 15s/18s clip it renders.
+    const seg = segments?.find((s) => s.index === index) ?? segments?.[index - 1];
     out.push({
       index,
       title: toText(rec.title) ?? `Board ${index}`,
@@ -1809,10 +2021,14 @@ function normalizeStoryboardBoards(
       videoPrompt: toText(rec.videoPrompt),
       lookbackSummary,
       brollNotes: toText(rec.brollNotes),
+      startSec: seg?.startSec,
+      endSec: seg?.endSec,
+      segmentDuration: seg?.durationSec,
     });
   }
   return out;
 }
+
 
 /**
  * Plan 1–4 connected cinematic storyboard contact sheets for a content piece.
@@ -1822,7 +2038,7 @@ function normalizeStoryboardBoards(
 export async function generateStoryboardPlan(
   input: StoryboardPlanInput,
 ): Promise<AiResult<{ boards: StoryboardBoardOut[]; model: string }>> {
-  const count = Math.max(1, Math.min(4, Math.round(input.boardCount || 1)));
+  const count = Math.max(1, Math.min(6, Math.round(input.boardCount || 1)));
   const { provider, model } = await resolveTextModel(input.model);
   const system = [
     'You are the MotherMode film director and storyboard artist planning premium cinematic multi-panel contact sheets for social and commercial production.',
@@ -1838,7 +2054,7 @@ export async function generateStoryboardPlan(
       : await openAiJson(system, user, model);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
-  const boards = normalizeStoryboardBoards(parsed?.boards, count);
+  const boards = normalizeStoryboardBoards(parsed?.boards, count, input.segments);
   if (boards.length === 0) {
     console.warn(
       `generateStoryboardPlan: no boards parsed (model ${model}). Raw:`,

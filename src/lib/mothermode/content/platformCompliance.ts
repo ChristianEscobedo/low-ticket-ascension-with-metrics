@@ -18,9 +18,11 @@ export type ComplianceSource =
   | 'tiktok'
   | 'google'
   | 'x'
+  | 'linkedin'
   | 'email'
   | 'pinterest'
   | 'general';
+
 
 export type ComplianceIssueSeverity = 'block' | 'warn' | 'note';
 
@@ -222,6 +224,25 @@ const X_PATTERNS: HeuristicPattern[] = [
 
 const PINTEREST_PATTERNS: HeuristicPattern[] = [...GENERAL_CLAIM_PATTERNS];
 
+const LINKEDIN_PATTERNS: HeuristicPattern[] = [
+  ...GENERAL_CLAIM_PATTERNS,
+  {
+    id: 'li-engagement-bait',
+    re: /\b(comment ["']?\w+["']? below|tag someone who|like if you|dm me ["']?\w+["']?)\b/gi,
+    severity: 'warn',
+    message: 'Engagement-bait phrasing reads poorly on LinkedIn.',
+    suggestion: 'Invite a genuine reply or share one clear insight.',
+  },
+  {
+    id: 'li-hashtag-stuffing',
+    re: /(#\w+\s*){6,}/g,
+    severity: 'note',
+    message: 'Hashtag stuffing looks spammy on LinkedIn.',
+    suggestion: 'Keep to 3-5 relevant, professional hashtags.',
+  },
+];
+
+
 /** Which pack applies for a platform. */
 export function platformPackFor(
   platform: ContentPlatform | string,
@@ -234,15 +255,20 @@ export function platformPackFor(
       return 'tiktok';
     case 'blog':
     case 'aeo':
+    case 'youtube':
       return 'google';
+
     case 'x':
       return 'x';
+    case 'linkedin':
+      return 'linkedin';
     case 'email':
       return 'email';
     case 'pinterest':
       return 'pinterest';
     default:
       return 'general';
+
   }
 }
 
@@ -258,8 +284,11 @@ function patternsFor(pack: ComplianceSource): HeuristicPattern[] {
       return EMAIL_PATTERNS;
     case 'x':
       return X_PATTERNS;
+    case 'linkedin':
+      return LINKEDIN_PATTERNS;
     case 'pinterest':
       return PINTEREST_PATTERNS;
+
     default:
       return GENERAL_CLAIM_PATTERNS;
   }
@@ -294,7 +323,12 @@ export function platformPolicyBrief(
     );
   } else if (pack === 'x') {
     lines.push('X: still no deceptive claims or medical/income guarantees.');
+  } else if (pack === 'linkedin') {
+    lines.push(
+      'LinkedIn: professional and credible; no engagement bait (comment X, tag someone); no hashtag stuffing; no deceptive or income/medical claims; keep it human and insight-led.',
+    );
   }
+
   if (ad) {
     lines.push(
       'PAID: weight platform policy higher. Prefer calm specificity over hype. Soft CTA only.',

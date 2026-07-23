@@ -5,7 +5,7 @@
  * (exact voiceover, shot direction, b-roll prompts), per-beat b-roll still
  * generation, and final-cut video upload. Persists to the piece's review state.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Clapperboard,
   Copy,
@@ -16,7 +16,14 @@ import {
   Trash2,
   Upload,
   Sparkles,
+  LayoutGrid,
+  ArrowDown,
+  Mic,
+  Music2,
+  Download,
 } from 'lucide-react';
+
+
 import {
   PLATFORM_LABEL,
   FORMAT_LABEL,
@@ -29,17 +36,37 @@ import type {
   PieceReview,
   VideoScript,
   VideoScriptBeat,
+  StoryboardPack,
+  StoryboardCount,
 } from '@/lib/mothermode/content/review';
+import {
+  splitScriptIntoSegments,
+  scriptBoardCount,
+  toSegmentLength,
+  SCRIPT_SEGMENT_LENGTHS,
+  DEFAULT_SCRIPT_SEGMENT_LENGTH,
+  type ScriptSegmentLength,
+} from '@/lib/mothermode/content/scriptStoryboard';
+import { beatDriftSec } from '@/lib/mothermode/content/voiceover';
 import {
   setReviewVideo,
   clearReviewVideo,
   setReviewVideoScript,
   clearReviewVideoScript,
+  setReviewStoryboard,
+  setReviewVoiceover,
+  clearReviewVoiceover,
 } from './reviewClient';
 import {
   aiGenerateVideoScript,
   aiGenerateImage,
+  aiGenerateStoryboardPlan,
+  aiGenerateVoiceover,
+  aiListVoices,
+  type AiVoice,
 } from './aiClient';
+
+
 import {
   useAiAction,
   aiBtnSolid,
@@ -101,7 +128,229 @@ export const VideoScriptPanel: React.FC<{
   const fileRef = useRef<HTMLInputElement>(null);
   const gen = useAiAction();
 
+  // Auto-storyboard-from-script state.
+  const [segmentLength, setSegmentLength] = useState<ScriptSegmentLength>(
+    toSegmentLength(review.storyboard?.boards?.[0]?.segmentDuration) ??
+      DEFAULT_SCRIPT_SEGMENT_LENGTH,
+  );
+  const [storyNote, setStoryNote] = useState<string | null>(null);
+  const board = useAiAction();
+  const boardCountHint = script
+    ? scriptBoardCount(script.totalSeconds, segmentLength)
+    : 0;
+
+  // Voiceover (ElevenLabs) state.
+  const voiceover = script?.voiceover;
+  const [voices, setVoices] = useState<AiVoice[]>([]);
+  const [voiceId, setVoiceId] = useState('');
+  const [manualVoiceId, setManualVoiceId] = useState('');
+  const [voiceModel, setVoiceModel] = useState<
+    'eleven_multilingual_v2' | 'eleven_turbo_v2_5'
+  >('eleven_multilingual_v2');
+  const [stability, setStability] = useState(0.5);
+  const [style, setStyle] = useState(0);
+  const [voBusy, setVoBusy] = useState<'combined' | 'sections' | null>(null);
+  const [voBeatBusy, setVoBeatBusy] = useState<number | null>(null);
+  const [voError, setVoError] = useState<string | null>(null);
+
+  // Load the account's voices once a script exists so the picker is ready.
+  useEffect(() => {
+    if (!script) return;
+    let cancelled = false;
+    void aiListVoices().then((list) => {
+      if (cancelled) return;
+      setVoices(list);
+      setVoiceId((prev) => prev || voiceover?.voiceId || list[0]?.id || '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [script, voiceover?.voiceId]);
+
+  /** The effective voice id: manual override wins, then the picker. */
+  const effectiveVoiceId = manualVoiceId.trim() || voiceId.trim();
+
+  /** Shared voice-setting args for either generation path. */
+  const voiceArgs = () => ({
+    voiceId: effectiveVoiceId || undefined,
+    modelId: voiceModel,
+    stability,
+    style,
+  });
+
+  const generateCombined = async () => {
+    if (!script || voBusy) return;
+    setVoError(null);
+    setVoBusy('combined');
+    try {
+      const result = await aiGenerateVoiceover({
+        mode: 'combined',
+        beats: script.beats.map((b, i) => ({ index: i, text: b.voiceover })),
+        ...voiceArgs(),
+      });
+      if (!result.audioUrl) throw new Error('No audio was returned');
+      onReviewChange(
+        setReviewVoiceover(offerSlug, piece.id, {
+          audioUrl: result.audioUrl,
+          durationSec: result.durationSec ?? 0,
+          mode: 'combined',
+          beatMarks: result.beatMarks,
+          voiceId: result.voiceId ?? (effectiveVoiceId || undefined),
+
+          model: result.model ?? voiceModel,
+          generatedAt: result.generatedAt ?? new Date().toISOString(),
+        }),
+      );
+    } catch (e) {
+      setVoError(e instanceof Error ? e.message : 'Voiceover generation failed');
+    } finally {
+      setVoBusy(null);
+    }
+  };
+
+  const generateSections = async () => {
+    if (!script || voBusy) return;
+    setVoError(null);
+    setVoBusy('sections');
+    try {
+      const result = await aiGenerateVoiceover({
+        mode: 'sections',
+        beats: script.beats.map((b, i) => ({ index: i, text: b.voiceover })),
+        ...voiceArgs(),
+      });
+      const clips = result.clips ?? [];
+      const beats = script.beats.map((b, i) => {
+        const clip = clips.find((c) => c.index === i);
+        return clip
+          ? {
+              ...b,
+              voiceoverAudio: clip.url,
+              voiceoverDurationSec: clip.durationSec,
+            }
+          : b;
+      });
+      onReviewChange(
+        setReviewVideoScript(offerSlug, piece.id, { ...script, beats }),
+      );
+    } catch (e) {
+      setVoError(e instanceof Error ? e.message : 'Voiceover generation failed');
+    } finally {
+      setVoBusy(null);
+    }
+  };
+
+  const regenBeatVoiceover = async (index: number) => {
+    if (!script || voBeatBusy !== null) return;
+    const beat = script.beats[index];
+    if (!beat?.voiceover?.trim()) return;
+    setVoError(null);
+    setVoBeatBusy(index);
+    try {
+      const result = await aiGenerateVoiceover({
+        mode: 'sections',
+        beats: [{ index, text: beat.voiceover }],
+        ...voiceArgs(),
+      });
+      const clip = result.clips?.[0];
+      if (!clip?.url) throw new Error('No audio was returned');
+      updateBeat(index, {
+        voiceoverAudio: clip.url,
+        voiceoverDurationSec: clip.durationSec,
+      });
+    } catch (e) {
+      setVoError(e instanceof Error ? e.message : 'Voiceover generation failed');
+    } finally {
+      setVoBeatBusy(null);
+    }
+  };
+
+  const clearVoiceover = () => {
+    onReviewChange(clearReviewVoiceover(offerSlug, piece.id));
+  };
+
+
+  const generateStoryboardFromScript = () => {
+    if (!script) return;
+    setStoryNote(null);
+    void board.run(async () => {
+      const segments = splitScriptIntoSegments(script, segmentLength);
+      const existing = review.storyboard;
+      const result = await aiGenerateStoryboardPlan({
+        piece: {
+          hook: piece.hook,
+          hooks: piece.hooks,
+          caption: piece.caption,
+          body: piece.body,
+          // Segments carry the real VO per beat; keep the piece script too.
+          script: piece.script,
+          theme: piece.theme,
+
+          tone: TONE_LABEL[piece.tone],
+          platform: PLATFORM_LABEL[piece.platform],
+          format: FORMAT_LABEL[piece.format],
+          brollSeeds: script.beats
+            .map((b) => b.brollPrompt || b.broll || '')
+            .filter(Boolean),
+        },
+        boardCount: segments.length,
+        mode: 'narrative',
+        sourceMode: 'script',
+        segments: segments.map((seg) => ({
+          index: seg.index,
+          startSec: seg.startSec,
+          endSec: seg.endSec,
+          durationSec: seg.durationSec,
+          beats: seg.beats.map((b) => ({
+            shot: b.shot,
+            onScreen: b.onScreen,
+            voiceover: b.voiceover,
+            action: b.action,
+            broll: b.broll,
+            brollPrompt: b.brollPrompt,
+          })),
+        })),
+        guides: guides.trim() || undefined,
+        hasCharacterRef: !!existing?.characterRef,
+        hasReferenceImages: (existing?.referenceImages?.length ?? 0) > 0,
+        model: model || undefined,
+      });
+      const byIndex = new Map(segments.map((s) => [s.index, s]));
+      const next: StoryboardPack = {
+        boardCount: result.boardCount as StoryboardCount,
+        mode: 'narrative',
+        guides: guides.trim() || undefined,
+        // Carry over brand refs so they persist for Image Studio renders.
+        characterRef: existing?.characterRef,
+        referenceImages: existing?.referenceImages,
+        boards: result.boards.map((b) => {
+          const seg = byIndex.get(b.index);
+          return {
+            index: b.index,
+            title: b.title,
+            scenes: b.scenes,
+            imagePrompt: b.imagePrompt,
+            videoPrompt: b.videoPrompt,
+            lookbackSummary: b.lookbackSummary,
+            brollNotes: b.brollNotes,
+            startSec: seg?.startSec,
+            endSec: seg?.endSec,
+            segmentDuration: seg?.durationSec,
+          };
+        }),
+        model: result.model,
+        generatedAt: new Date().toISOString(),
+      };
+      onReviewChange(setReviewStoryboard(offerSlug, piece.id, next));
+      setStoryNote(
+        `Storyboard ready — ${next.boards.length} board${
+          next.boards.length === 1 ? '' : 's'
+        }. Open the Storyboard section to edit & render in Image Studio.`,
+      );
+    });
+  };
+
   const generate = () =>
+
     gen.run(async () => {
       const result = await aiGenerateVideoScript({
         piece: {
@@ -396,6 +645,46 @@ export const VideoScriptPanel: React.FC<{
                   </p>
                 )}
 
+                {/* Per-beat voiceover clip (sections mode) */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {beat.voiceoverAudio && (
+                    <audio
+                      src={beat.voiceoverAudio}
+                      controls
+                      className="h-8 max-w-[220px]"
+                    />
+                  )}
+                  {typeof beat.voiceoverDurationSec === 'number' && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        Math.abs(
+                          beat.voiceoverDurationSec -
+                            (beat.endSec - beat.startSec),
+                        ) > 0.75
+                          ? 'bg-red-500/10 text-red-600'
+                          : 'bg-mode/10 text-mode'
+                      }`}
+                    >
+                      VO {beat.voiceoverDurationSec.toFixed(1)}s /{' '}
+                      {(beat.endSec - beat.startSec).toFixed(1)}s window
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void regenBeatVoiceover(i)}
+                    disabled={voBeatBusy !== null || !beat.voiceover?.trim()}
+                    className={aiBtnGhost}
+                  >
+                    {voBeatBusy === i ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                    {beat.voiceoverAudio ? 'Regen VO' : 'Generate VO'}
+                  </button>
+                </div>
+
+
                 {(beat.broll || beat.brollPrompt) && (
                   <div className="mt-2 rounded-md border border-dashed border-ink/15 bg-mushroom/10 p-2.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-brass">
@@ -451,8 +740,261 @@ export const VideoScriptPanel: React.FC<{
               </li>
             ))}
           </ol>
+
+          {/* Voiceover (ElevenLabs) */}
+          <div className="rounded-lg border border-mode/25 bg-white/60 p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-mode">
+              <Music2 className="h-3.5 w-3.5" />
+              Voiceover (ElevenLabs)
+            </p>
+            <p className="mt-1 text-xs text-ink/55">
+              Generate spoken audio for this script. One combined track keeps
+              per-beat timing marks (with drift vs the planned windows), or one
+              clip per beat for section-aligned editing.
+            </p>
+
+            {/* Voice + model + sliders */}
+            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-[11px] text-ink/55">
+                Voice
+                <select
+                  value={voiceId}
+                  onChange={(e) => setVoiceId(e.target.value)}
+                  disabled={voices.length === 0}
+                  className="rounded-md border border-ink/15 bg-white px-2 py-1 text-xs text-ink disabled:opacity-50"
+                >
+                  {voices.length === 0 && (
+                    <option value="">No voices — use manual ID</option>
+                  )}
+                  {voices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-ink/55">
+                Manual voice ID (override)
+                <input
+                  type="text"
+                  value={manualVoiceId}
+                  onChange={(e) => setManualVoiceId(e.target.value)}
+                  placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
+                  className="rounded-md border border-ink/15 bg-white px-2 py-1 text-xs text-ink"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] text-ink/55">
+                Model
+                <select
+                  value={voiceModel}
+                  onChange={(e) =>
+                    setVoiceModel(
+                      e.target.value as
+                        | 'eleven_multilingual_v2'
+                        | 'eleven_turbo_v2_5',
+                    )
+                  }
+                  className="rounded-md border border-ink/15 bg-white px-2 py-1 text-xs text-ink"
+                >
+                  <option value="eleven_multilingual_v2">
+                    Multilingual v2 (natural)
+                  </option>
+                  <option value="eleven_turbo_v2_5">Turbo v2.5 (fast)</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-[11px] text-ink/55">
+                  Stability {stability.toFixed(2)}
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={stability}
+                    onChange={(e) => setStability(Number(e.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[11px] text-ink/55">
+                  Style {style.toFixed(2)}
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={style}
+                    onChange={(e) => setStyle(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void generateCombined()}
+                disabled={voBusy !== null}
+                className={aiBtnSolid}
+              >
+                {voBusy === 'combined' ? (
+                  <Spinner />
+                ) : (
+                  <Music2 className="h-3.5 w-3.5" />
+                )}
+                {voBusy === 'combined'
+                  ? 'Generating…'
+                  : 'Generate one track'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void generateSections()}
+                disabled={voBusy !== null}
+                className={aiBtnGhost}
+              >
+                {voBusy === 'sections' ? (
+                  <Spinner />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+                {voBusy === 'sections' ? 'Generating…' : 'Generate per beat'}
+              </button>
+              {voiceover?.audioUrl && (
+                <button
+                  type="button"
+                  onClick={clearVoiceover}
+                  className={aiBtnGhost}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear track
+                </button>
+              )}
+            </div>
+            <AiError message={voError} />
+
+            {/* Combined-track player + timeline strip */}
+            {voiceover?.audioUrl && voiceover.mode === 'combined' && (
+              <div className="mt-3 space-y-2 rounded-md border border-ink/10 bg-mushroom/10 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-mode">
+                    Combined track · {voiceover.durationSec.toFixed(1)}s
+                  </span>
+                  <a
+                    href={voiceover.audioUrl}
+                    download
+                    className={aiBtnGhost}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                </div>
+                <audio
+                  src={voiceover.audioUrl}
+                  controls
+                  className="w-full"
+                />
+                {voiceover.beatMarks && voiceover.beatMarks.length > 0 && (
+                  <ul className="space-y-1">
+                    {voiceover.beatMarks.map((m) => {
+                      const beat = script.beats[m.index];
+                      const planned = beat?.startSec ?? 0;
+                      const drift = beatDriftSec(m.startSec, planned);
+                      const off = Math.abs(drift) > 0.5;
+                      return (
+                        <li
+                          key={m.index}
+                          className="flex flex-wrap items-center gap-2 text-[11px] text-ink/60"
+                        >
+                          <span className="rounded-full bg-mode/10 px-2 py-0.5 font-semibold text-mode">
+                            Beat {m.index + 1}
+                          </span>
+                          <span>
+                            starts {m.startSec.toFixed(1)}s · script{' '}
+                            {planned.toFixed(1)}s
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 font-semibold ${
+                              off
+                                ? 'bg-red-500/10 text-red-600'
+                                : 'bg-mode/10 text-mode'
+                            }`}
+                          >
+                            drift {drift > 0 ? '+' : ''}
+                            {drift.toFixed(1)}s
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Auto-storyboard from script */}
+
+          <div className="rounded-lg border border-brass/25 bg-white/60 p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass">
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Auto-storyboard
+            </p>
+            <p className="mt-1 text-xs text-ink/55">
+              Turn this script into connected cinematic boards — one board per
+              video-generation clip. Brand refs + lookback continuity carry
+              across every segment.
+            </p>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-ink/45">
+                Clip length
+              </span>
+              {SCRIPT_SEGMENT_LENGTHS.map((len) => (
+                <button
+                  key={len}
+                  type="button"
+                  onClick={() => setSegmentLength(len)}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    segmentLength === len
+                      ? 'border-brass bg-brass/10 font-semibold text-brass'
+                      : 'border-ink/15 text-ink/65 hover:border-ink/30'
+                  }`}
+                >
+                  {len}s
+                </button>
+              ))}
+              <span className="text-[11px] text-ink/45">
+                {boardCountHint} board{boardCountHint === 1 ? '' : 's'} · one per{' '}
+                {segmentLength}s clip
+              </span>
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={generateStoryboardFromScript}
+                disabled={board.busy}
+                className={aiBtnSolid}
+              >
+                {board.busy ? (
+                  <Spinner />
+                ) : (
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                )}
+                {board.busy
+                  ? 'Storyboarding…'
+                  : 'Generate storyboard from script'}
+              </button>
+            </div>
+            <AiError message={board.error} />
+            {storyNote && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-mode">
+                <ArrowDown className="h-3.5 w-3.5" />
+                {storyNote}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 };
+
+

@@ -26,6 +26,7 @@ import { RewriteField } from './RewriteField';
 import { VideoScriptPanel } from './VideoScriptPanel';
 import { StoryboardPanel } from './StoryboardPanel';
 import { FramePackPanel } from './FramePackPanel';
+import { YouTubeStudioPanel } from './YouTubeStudioPanel';
 
 
 
@@ -80,6 +81,7 @@ export const EditForm: React.FC<{
   const [model, setModel] = useState(AUTO_MODEL);
   const isVideo =
     piece.format === 'reel' || piece.format === 'video';
+  const isYouTube = piece.platform === 'youtube';
   // The brief the AI rewrites stay anchored to, in human labels.
   const context: AiContext = {
     theme: piece.theme,
@@ -133,7 +135,18 @@ export const EditForm: React.FC<{
         onReviewChange={onReviewChange}
       />
 
+      {isYouTube && (
+        <YouTubeStudioPanel
+          piece={piece}
+          review={review}
+          offerSlug={offerSlug}
+          model={model}
+          onReviewChange={onReviewChange}
+        />
+      )}
+
       <ImagesCard
+
 
         piece={piece}
         review={review}

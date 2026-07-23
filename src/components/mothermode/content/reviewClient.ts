@@ -15,15 +15,24 @@ import {
   withoutVideo,
   withVideoScript,
   withoutVideoScript,
+  withVoiceover,
+  withoutVoiceover,
   withStoryboard,
+
   withoutStoryboard,
   withStoryboardBoard,
   withFramePack,
   withoutFramePack,
+  withYouTubeKit,
+  patchYouTubeKit,
+  withoutYouTubeKit,
   type PieceReview,
   type VideoScript,
+  type VideoScriptVoiceover,
   type StoryboardPack,
   type StoryboardBoard,
+
+  type YouTubeKit,
 } from '@/lib/mothermode/content/review';
 import type { FramePack } from '@/lib/mothermode/content/framePack';
 
@@ -36,7 +45,35 @@ const cache = new Map<string, Record<string, PieceReview>>();
 /** In-flight/settled loads, so many cards share one network round-trip. */
 const loads = new Map<string, Promise<void>>();
 
+/** Live listeners so cards/sheets update when gallery/primary changes. */
+type ReviewListener = (
+  offerSlug: string,
+  pieceId: string,
+  review: PieceReview,
+) => void;
+const listeners = new Set<ReviewListener>();
+
+/** Subscribe to review cache writes. Returns unsubscribe. */
+export function subscribeReviews(fn: ReviewListener): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function notify(offerSlug: string, id: string, next: PieceReview): void {
+  listeners.forEach((fn) => {
+    try {
+      fn(offerSlug, id, next);
+    } catch (err) {
+      console.error('[reviewClient] listener failed', err);
+    }
+  });
+}
+
+
 function bucket(offerSlug: string): Record<string, PieceReview> {
+
   let b = cache.get(offerSlug);
   if (!b) {
     b = {};
@@ -88,12 +125,14 @@ function persist(offerSlug: string, id: string, next: PieceReview): void {
   const b = bucket(offerSlug);
   if (isEmptyReview(next)) {
     delete b[id];
+    notify(offerSlug, id, {});
     void fetch(
       `${ENDPOINT}?offer=${encodeURIComponent(offerSlug)}&id=${encodeURIComponent(id)}`,
       { method: 'DELETE' },
     ).catch((err) => console.error('[reviewClient] delete failed', err));
   } else {
     b[id] = next;
+    notify(offerSlug, id, next);
     void fetch(ENDPOINT, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -102,6 +141,7 @@ function persist(offerSlug: string, id: string, next: PieceReview): void {
   }
 }
 
+
 /** Merge a patch into a piece's review, update the cache, and persist. Returns
  *  the new review so the caller can reflect it immediately. */
 export function saveReview(
@@ -109,10 +149,27 @@ export function saveReview(
   id: string,
   patch: Partial<PieceReview>,
 ): PieceReview {
-  const next = mergeReview(getReview(offerSlug, id), patch);
+  const prev = getReview(offerSlug, id);
+  let next = mergeReview(prev, patch);
+  // Keep legacy `image` mirrored when only imageIndex changes so cards update.
+  if (
+    typeof patch.imageIndex === 'number' &&
+    patch.image === undefined &&
+    patch.images === undefined
+  ) {
+    const gallery = Array.isArray(next.images) ? next.images : [];
+    if (gallery.length > 0) {
+      const idx =
+        patch.imageIndex >= 0 && patch.imageIndex < gallery.length
+          ? Math.floor(patch.imageIndex)
+          : 0;
+      next = { ...next, imageIndex: idx, image: gallery[idx] };
+    }
+  }
   persist(offerSlug, id, next);
   return next;
 }
+
 
 /** Replace the image gallery and active index for a piece. Returns the new
  *  review. */
@@ -177,6 +234,29 @@ export function clearReviewVideoScript(offerSlug: string, id: string): PieceRevi
   return next;
 }
 
+/** Attach a combined-track voiceover to the piece's script. Returns the new
+ *  review (unchanged when there is no script yet). */
+export function setReviewVoiceover(
+  offerSlug: string,
+  id: string,
+  voiceover: VideoScriptVoiceover,
+): PieceReview {
+  const next = withVoiceover(getReview(offerSlug, id), voiceover);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the combined-track voiceover, leaving per-beat clips intact. Returns the
+ *  new review. */
+export function clearReviewVoiceover(offerSlug: string, id: string): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.videoScript?.voiceover) return prev;
+  const next = withoutVoiceover(prev);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+
 /** Set the piece's connected storyboard pack. Returns the new review. */
 export function setReviewStoryboard(
   offerSlug: string,
@@ -238,5 +318,41 @@ export function clearReviewFramePack(
   persist(offerSlug, id, next);
   return next;
 }
+
+/** Set the piece's YouTube publishing kit. Returns the new review. */
+export function setReviewYouTubeKit(
+  offerSlug: string,
+  id: string,
+  kit: YouTubeKit,
+): PieceReview {
+  const next = withYouTubeKit(getReview(offerSlug, id), kit);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Merge a patch into the piece's YouTube kit (e.g. edited copy or a rendered
+ *  thumbnail). Returns the new review. */
+export function patchReviewYouTubeKit(
+  offerSlug: string,
+  id: string,
+  patch: Partial<YouTubeKit>,
+): PieceReview {
+  const next = patchYouTubeKit(getReview(offerSlug, id), patch);
+  persist(offerSlug, id, next);
+  return next;
+}
+
+/** Drop the YouTube kit, keeping everything else. Returns the new review. */
+export function clearReviewYouTubeKit(
+  offerSlug: string,
+  id: string,
+): PieceReview {
+  const prev = getReview(offerSlug, id);
+  if (!prev.youtube) return prev;
+  const next = withoutYouTubeKit(prev);
+  persist(offerSlug, id, next);
+  return next;
+}
+
 
 

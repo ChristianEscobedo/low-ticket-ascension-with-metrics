@@ -89,3 +89,42 @@ export async function uploadVideoBuffer(
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+const AUDIO_EXT_BY_MIME: Record<string, string> = {
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/webm': 'weba',
+};
+
+/** Allowed audio MIME types for voiceover uploads (ElevenLabs returns mp3). */
+export const ALLOWED_AUDIO_MIMES = Object.keys(AUDIO_EXT_BY_MIME);
+
+/**
+ * Upload a raw audio buffer to Storage and return its public URL. Used for
+ * hosting ElevenLabs voiceover tracks (mp3) so they render in an <audio> tag
+ * and export alongside the rest of the piece. Mirrors uploadVideoBuffer. Throws
+ * on an unsupported type or a failed upload.
+ */
+export async function uploadAudioBuffer(
+  buffer: Buffer | Uint8Array,
+  mimeType: string,
+  folder = 'mothermode-audio',
+): Promise<string> {
+  const mime = mimeType.split(';')[0]?.trim().toLowerCase() || 'audio/mpeg';
+  if (!ALLOWED_AUDIO_MIMES.includes(mime)) {
+    throw new Error(`Unsupported audio type: ${mime}`);
+  }
+  const ext = AUDIO_EXT_BY_MIME[mime] || 'mp3';
+  const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 9)}.${ext}`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, buffer, { contentType: mime, cacheControl: '3600', upsert: false });
+  if (error) throw new Error(error.message);
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+
+
+

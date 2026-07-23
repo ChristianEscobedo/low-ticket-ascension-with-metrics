@@ -4,8 +4,11 @@ import {
   defaultPackAspect,
   defaultSlideCount,
   emptyFramePack,
+  frameImagePrompt,
+  frameTextSource,
   framesFromCatalogSlides,
   normalizeFrameRole,
+  slideCopyAt,
   supportsFramePack,
   targetSlideCount,
   withFrameImages,
@@ -13,6 +16,7 @@ import {
   MAX_FRAME_PACK,
   MIN_FRAME_PACK,
 } from '@/lib/mothermode/content/framePack';
+
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 
 function piece(partial: Partial<ContentPiece> & Pick<ContentPiece, 'format'>): ContentPiece {
@@ -124,4 +128,76 @@ describe('framePack', () => {
     expect(frames[1].role).toBe('hook');
     expect(frames[2].role).toBe('cta');
   });
+
+  describe('per-frame text source (editor vs ai-prompt)', () => {
+    it('defaults an unset frame to the editor (overlay) source', () => {
+      expect(frameTextSource({ index: 1, role: 'cover' })).toBe('editor');
+      expect(
+        frameTextSource({ index: 1, role: 'cover', textSource: 'editor' }),
+      ).toBe('editor');
+      expect(
+        frameTextSource({ index: 1, role: 'cover', textSource: 'ai-prompt' }),
+      ).toBe('ai-prompt');
+    });
+
+    it('editor frames keep the prompt clean (no baked-in type)', () => {
+      const prompt = frameImagePrompt({
+        index: 1,
+        role: 'cover',
+        text: 'Big idea',
+        sub: 'quiet line',
+        prompt: 'a calm kitchen at dawn',
+      });
+      expect(prompt).toBe('a calm kitchen at dawn');
+      expect(prompt).not.toContain('Big idea');
+    });
+
+    it('ai-prompt frames fold the words into the image prompt', () => {
+      const prompt = frameImagePrompt({
+        index: 1,
+        role: 'cover',
+        text: 'Big idea',
+        sub: 'quiet line',
+        prompt: 'a calm kitchen at dawn',
+        textSource: 'ai-prompt',
+      });
+      expect(prompt).toContain('a calm kitchen at dawn');
+      expect(prompt).toContain('Big idea');
+      expect(prompt).toContain('quiet line');
+    });
+
+    it('withPlannedFrames preserves an ai-prompt source and drops editor', () => {
+      const base = emptyFramePack(piece({ format: 'carousel' }), {
+        slideCount: 2,
+      });
+      const planned = withPlannedFrames(base, [
+        { index: 1, role: 'cover', text: 'A', prompt: 'p1', textSource: 'ai-prompt' },
+        { index: 2, role: 'cta', text: 'B', prompt: 'p2', textSource: 'editor' },
+      ]);
+      expect(planned.frames[0].textSource).toBe('ai-prompt');
+      // editor is the default, so it normalizes to undefined (not persisted).
+      expect(planned.frames[1].textSource).toBeUndefined();
+    });
+
+    it('slideCopyAt yields no overlay copy for an ai-prompt frame', () => {
+      const p = piece({
+        format: 'carousel',
+        slides: [{ text: 'Slide one' }, { text: 'Slide two' }],
+      });
+      const pack = withPlannedFrames(emptyFramePack(p, { slideCount: 2 }), [
+        { index: 1, role: 'cover', text: 'Frame one', prompt: 'p1' },
+        {
+          index: 2,
+          role: 'cta',
+          text: 'Frame two',
+          prompt: 'p2',
+          textSource: 'ai-prompt',
+        },
+      ]);
+      expect(slideCopyAt(p, pack, 0).text).toBe('Frame one');
+      expect(slideCopyAt(p, pack, 1).text).toBe('');
+    });
+  });
 });
+
+

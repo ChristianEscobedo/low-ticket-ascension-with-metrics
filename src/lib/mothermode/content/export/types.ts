@@ -29,8 +29,12 @@ export const SOCIAL_EXPORT_PLATFORMS: ContentPlatform[] = [
   'instagram',
   'x',
   'tiktok',
+  'youtube',
+  'linkedin',
   'pinterest',
 ];
+
+
 
 /** Options that shape selection, schedule, and output. */
 export interface ExportOptions {

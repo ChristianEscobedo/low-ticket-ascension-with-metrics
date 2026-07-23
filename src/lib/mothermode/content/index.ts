@@ -20,7 +20,11 @@ import { facebookContent } from './facebook';
 import { instagramContent } from './instagram';
 import { xContent } from './x';
 import { tiktokContent } from './tiktok';
+import { youtubeContent } from './youtube';
+import { linkedinContent } from './linkedin';
 import { emailContent } from './email';
+
+
 import { pinterestContent } from './pinterest';
 import { blogContent } from './blog';
 import { aeoContent } from './aeo';
@@ -51,7 +55,11 @@ export const allContent: ContentPiece[] = [
   ...instagramContent,
   ...xContent,
   ...tiktokContent,
+  ...youtubeContent,
+  ...linkedinContent,
   ...pinterestContent,
+
+
   ...blogContent,
   ...aeoContent,
   ...emailContent,
@@ -142,8 +150,12 @@ export function countByPlatform(
     instagram: 0,
     x: 0,
     tiktok: 0,
+    youtube: 0,
+    linkedin: 0,
     email: 0,
     pinterest: 0,
+
+
     blog: 0,
     aeo: 0,
   } as Record<ContentPlatform, number>;
@@ -215,11 +227,15 @@ export const PLATFORM_ORDER: ContentPlatform[] = [
   'instagram',
   'x',
   'tiktok',
+  'youtube',
+  'linkedin',
   'pinterest',
   'blog',
+
   'aeo',
   'email',
 ];
+
 
 /** Group pieces by platform, preserving canonical platform order. */
 export function groupByPlatform(

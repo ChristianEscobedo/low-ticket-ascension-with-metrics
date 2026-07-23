@@ -103,14 +103,16 @@ async function openAiJson(
         'content-type': 'application/json',
       },
       body: JSON.stringify({
+        // temperature is omitted: GPT-5 family reasoning models reject a
+        // non-default value ("temperature is deprecated for this model").
         model,
-        temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
       }),
+
     });
     const json = (await res.json().catch(() => ({}))) as {
       error?: { message?: string };
@@ -153,12 +155,13 @@ async function anthropicJson(
         'content-type': 'application/json',
       },
       body: JSON.stringify({
+        // temperature is omitted: Claude Opus 4.7+ rejects a non-default value.
         model,
         max_tokens: 4096,
-        temperature: 0.2,
         system,
         messages: [{ role: 'user', content: user }],
       }),
+
     });
     const json = (await res.json().catch(() => ({}))) as {
       error?: { message?: string };

@@ -22,6 +22,7 @@ import {
   labelCls,
   fieldCls,
 } from './AmplifyControls';
+import { PlatformSelect } from './PlatformSelect';
 import { AmplifyPools, partLabel } from './AmplifyPools';
 import { AmplifyComposer } from './AmplifyComposer';
 import { AmplifyIntro } from './AmplifyIntro';
@@ -400,17 +401,12 @@ export const AmplifyPanel: React.FC<{
           />
           {cfg.target === 'cross' && (
             <div className="grid grid-cols-2 gap-3">
-              <Select
+              <PlatformSelect
                 label="To channel"
                 value={cfg.targetPlatform}
+                options={PLATFORMS}
                 onChange={changeTargetPlatform}
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p} value={p}>
-                    {PLATFORM_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
+              />
               <Select
                 label="As format"
                 value={cfg.targetFormat}

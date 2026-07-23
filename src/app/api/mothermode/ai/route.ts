@@ -4,7 +4,9 @@ import {
   generateContentImage,
   editContentImage,
   rewriteContentText,
+  generateTextVariations,
   amplifyContent,
+
   amplifyParts,
   amplifyImagePrompts,
   generateVideoScript,
@@ -24,6 +26,7 @@ import {
   fixComplianceWithAgent,
   type ComplianceAgentPiece,
 } from '@/utils/integrations/openai-compliance';
+import { generateYouTubeKit } from '@/utils/integrations/openai-youtube';
 import { scoreLocalCompliance } from '@/lib/mothermode/content/platformCompliance';
 
 
@@ -269,7 +272,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, text: result.data });
   }
 
+  if (action === 'text-variations') {
+    const text = typeof body.text === 'string' ? body.text : '';
+    if (!text.trim()) {
+      return NextResponse.json(
+        { ok: false, error: 'text is required' },
+        { status: 400 },
+      );
+    }
+    const ctx =
+      body.context && typeof body.context === 'object'
+        ? (body.context as Record<string, unknown>)
+        : undefined;
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const avoid = Array.isArray(body.avoid)
+      ? body.avoid.filter((s): s is string => typeof s === 'string')
+      : undefined;
+    const result = await generateTextVariations({
+      text,
+      sub: str(body.sub),
+      count: Math.max(1, Math.min(10, Math.round(Number(body.count) || 3))),
+      instructions: str(body.instructions),
+
+      avoid,
+      context: ctx
+        ? {
+            theme: str(ctx.theme),
+            tone: str(ctx.tone),
+            platform: str(ctx.platform),
+            format: str(ctx.format),
+          }
+        : undefined,
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, items: result.data });
+  }
+
   if (action === 'amplifyParts') {
+
     if (!body.source || typeof body.source !== 'object') {
       return NextResponse.json(
         { ok: false, error: 'a source piece is required' },
@@ -458,10 +504,35 @@ export async function POST(request: NextRequest) {
       );
     }
     const mode = body.mode === 'broll' ? 'broll' : 'narrative';
+    const sourceMode = body.sourceMode === 'script' ? 'script' : 'post';
+    // Script-driven storyboards can need up to 6 boards (90s / 15s segments).
     const boardCount = Math.max(
       1,
-      Math.min(4, Math.round(Number(body.boardCount) || 1)),
+      Math.min(6, Math.round(Number(body.boardCount) || 1)),
     );
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+    const segments = Array.isArray(body.segments)
+      ? (body.segments as Array<Record<string, unknown>>)
+          .map((s, i) => {
+            const beats = Array.isArray(s.beats)
+              ? (s.beats as Array<Record<string, unknown>>).map((b) => ({
+                  shot: str(b.shot),
+                  onScreen: str(b.onScreen),
+                  voiceover: str(b.voiceover) ?? '',
+                  action: str(b.action),
+                  broll: str(b.broll),
+                  brollPrompt: str(b.brollPrompt),
+                }))
+              : [];
+            return {
+              index: num(s.index) ?? i + 1,
+              startSec: num(s.startSec) ?? 0,
+              endSec: num(s.endSec) ?? 0,
+              durationSec: num(s.durationSec) ?? 0,
+              beats,
+            };
+          })
+      : undefined;
     const result = await generateStoryboardPlan({
       piece: {
         hook,
@@ -477,11 +548,14 @@ export async function POST(request: NextRequest) {
       },
       boardCount,
       mode,
+      sourceMode,
+      segments: sourceMode === 'script' ? segments : undefined,
       guides: str(body.guides),
       hasCharacterRef: body.hasCharacterRef === true,
       hasReferenceImages: body.hasReferenceImages === true,
       model: modelId(body.model),
     });
+
     if (!result.ok) {
       return NextResponse.json(
         { ok: false, error: result.error },
@@ -885,11 +959,63 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (action === 'youtubeKit') {
+    if (!body.piece || typeof body.piece !== 'object') {
+      return NextResponse.json(
+        { ok: false, error: 'a piece is required' },
+        { status: 400 },
+      );
+    }
+    const p = body.piece as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+    const strList = (v: unknown): string[] | undefined =>
+      Array.isArray(v)
+        ? v.filter((s): s is string => typeof s === 'string' && !!s.trim())
+        : undefined;
+    const hook = str(p.hook);
+    if (!hook) {
+      return NextResponse.json(
+        { ok: false, error: 'piece.hook is required' },
+        { status: 400 },
+      );
+    }
+    const result = await generateYouTubeKit({
+      piece: {
+        hook,
+        hooks: strList(p.hooks),
+        caption: str(p.caption),
+        body: strList(p.body),
+        script: strList(p.script),
+        theme: str(p.theme) ?? '',
+        tone: str(p.tone) ?? '',
+      },
+      durationSec:
+        typeof body.durationSec === 'number'
+          ? Math.max(0, Math.round(body.durationSec))
+          : undefined,
+      titleCount: Math.max(2, Math.min(6, Math.round(Number(body.titleCount) || 4))),
+      thumbnailCount: Math.max(
+        1,
+        Math.min(4, Math.round(Number(body.thumbnailCount) || 3)),
+      ),
+      guides: str(body.guides),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, ...result.data });
+  }
+
   return NextResponse.json(
     { ok: false, error: 'unknown action' },
     { status: 400 },
   );
 }
+
 
 
 

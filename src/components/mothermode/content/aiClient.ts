@@ -9,6 +9,10 @@ import type {
   Perspective,
   Sophistication,
 } from '@/lib/mothermode/content/amplify';
+import type {
+  YouTubeChapter,
+  YouTubeThumbnail,
+} from '@/lib/mothermode/content/review';
 
 /** One part of a multi-part Refine run sent to the server. */
 export interface AmplifyPartRequest {
@@ -26,9 +30,13 @@ export interface AiContext {
   format?: string;
 }
 
+/** Endpoint for the dedicated ElevenLabs voiceover route (own runtime). */
+const VOICEOVER_ENDPOINT = '/api/mothermode/content/voiceover';
+
 async function postAi(
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+
   // Drop empty Auto model so the server uses its key-aware default path.
   // Sending model:"" is treated as a string and can confuse override logic.
   const body: Record<string, unknown> = { ...payload };
@@ -64,10 +72,12 @@ export async function aiHostImage(dataUrl: string): Promise<string> {
 }
 
 /** Generate a post image, returning a hosted public URL (the server uploads the
+
  *  render to Storage so it is renderable and GoHighLevel-postable; it falls back
  *  to a data URL only if hosting is unavailable). An optional model id overrides
  *  the server default; omit it (or pass empty) for Auto. */
 export async function aiGenerateImage(
+
 
   prompt: string,
   format?: string,
@@ -130,8 +140,52 @@ export async function aiRewriteText(args: {
   return json.text;
 }
 
+/** One text variation: a primary line plus its matching sub / second line. */
+export interface AiTextVariation {
+  text: string;
+  sub: string;
+}
+
+/**
+ * Rewrite one piece of plain editor text into N alternative variations, each
+ * carrying its own matching sub line, returned as `AiTextVariation[]`. This is
+ * text-only output (used by the overlay Primary-text "Variations" control) — it
+ * never touches an image. Tolerant of the older bare-string response shape.
+ */
+export async function aiTextVariations(args: {
+  text: string;
+  /** The current sub line, rewritten to pair with each variation. */
+  sub?: string;
+  count: number;
+  instructions?: string;
+  context?: AiContext;
+  /** Existing variations to avoid repeating. */
+  avoid?: string[];
+  /** Optional text model id. Omit/empty for Auto. */
+  model?: string;
+}): Promise<AiTextVariation[]> {
+  const json = await postAi({ action: 'text-variations', ...args });
+  if (!Array.isArray(json.items)) {
+    throw new Error('No variations were returned');
+  }
+  const out: AiTextVariation[] = [];
+  for (const item of json.items as unknown[]) {
+    if (typeof item === 'string') {
+      if (item.trim()) out.push({ text: item, sub: '' });
+    } else if (item && typeof item === 'object') {
+      const o = item as Record<string, unknown>;
+      const text = typeof o.text === 'string' ? o.text : '';
+      const sub = typeof o.sub === 'string' ? o.sub : '';
+      if (text.trim()) out.push({ text, sub });
+    }
+  }
+  return out;
+}
+
+
 /** Multiply one piece into a list of hooks, angles, CTAs, or body versions. */
 export async function aiAmplify(args: {
+
   dimension: AmplifyTextDimension;
   count: number;
   source: ContentPiece;
@@ -229,11 +283,35 @@ export interface AiStoryboardBoard {
   videoPrompt?: string;
   lookbackSummary: string;
   brollNotes?: string;
+  /** Clip window this board renders (script-driven packs only). */
+  startSec?: number;
+  endSec?: number;
+  segmentDuration?: number;
 }
 
 /**
- * Plan 1–4 connected cinematic storyboard contact sheets for a piece.
- * Board N continues from board N-1 via lookback summaries.
+ * One clip-sized script window fed to the planner as a single board, when a
+ * storyboard is generated from a video script (one board per 15s/18s clip).
+ */
+export interface AiStoryboardSegment {
+  index: number;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  beats: Array<{
+    shot?: string;
+    onScreen?: string;
+    voiceover: string;
+    action?: string;
+    broll?: string;
+    brollPrompt?: string;
+  }>;
+}
+
+/**
+ * Plan 1–6 connected cinematic storyboard contact sheets for a piece.
+ * Board N continues from board N-1 via lookback summaries. When `segments` are
+ * supplied with sourceMode 'script', each board maps to one clip window.
  */
 export async function aiGenerateStoryboardPlan(args: {
   piece: {
@@ -253,8 +331,13 @@ export async function aiGenerateStoryboardPlan(args: {
   guides?: string;
   hasCharacterRef?: boolean;
   hasReferenceImages?: boolean;
+  /** 'script' switches the planner to one-board-per-segment. Default 'post'. */
+  sourceMode?: 'post' | 'script';
+  /** Clip windows, one per board, when sourceMode is 'script'. */
+  segments?: AiStoryboardSegment[];
   model?: string;
 }): Promise<{
+
   boards: AiStoryboardBoard[];
   boardCount: number;
   mode: 'narrative' | 'broll';
@@ -573,6 +656,174 @@ export async function aiComplianceFix(args: {
     model: typeof json.model === 'string' ? json.model : undefined,
   };
 }
+
+/**
+ * Generate a full YouTube publishing kit for a piece: A/B title options, an SEO
+ * description, search tags, chapter markers (only when the runtime is long
+ * enough), and thumbnail concepts (a 16:9 image prompt plus a big overlay-text
+ * idea). Thumbnails are concepts here; render one with aiGenerateImage, then
+ * stitch the URL back into the kit's thumbnail.
+ */
+export async function aiGenerateYouTubeKit(args: {
+  piece: {
+    hook: string;
+    hooks?: string[];
+    caption?: string;
+    body?: string[];
+    /** VO lines from an existing script, to inform chapter timing. */
+    script?: string[];
+    theme: string;
+    tone: string;
+  };
+  durationSec?: number;
+  titleCount?: number;
+  thumbnailCount?: number;
+  guides?: string;
+  /** Optional text model id. Omit/empty for Auto. */
+  model?: string;
+}): Promise<{
+  titles: string[];
+  description: string;
+  tags: string[];
+  chapters: YouTubeChapter[];
+  thumbnails: YouTubeThumbnail[];
+  model?: string;
+}> {
+  const json = await postAi({ action: 'youtubeKit', ...args });
+  const titles = Array.isArray(json.titles)
+    ? (json.titles as unknown[]).filter((s): s is string => typeof s === 'string')
+    : [];
+  const description = typeof json.description === 'string' ? json.description : '';
+  if (titles.length === 0 && !description.trim()) {
+    throw new Error('No YouTube kit was returned');
+  }
+  return {
+    titles,
+    description,
+    tags: Array.isArray(json.tags)
+      ? (json.tags as unknown[]).filter((s): s is string => typeof s === 'string')
+      : [],
+    chapters: Array.isArray(json.chapters)
+      ? (json.chapters as YouTubeChapter[])
+      : [],
+    thumbnails: Array.isArray(json.thumbnails)
+      ? (json.thumbnails as YouTubeThumbnail[])
+      : [],
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
+/** A selectable ElevenLabs voice for the voiceover picker. */
+export interface AiVoice {
+  id: string;
+  name: string;
+}
+
+/**
+ * List the account's ElevenLabs voices for the picker. Returns an empty array
+ * (never throws) when the integration is unconfigured or the request fails, so
+ * the UI can quietly fall back to a manual voice-ID field.
+ */
+export async function aiListVoices(): Promise<AiVoice[]> {
+  try {
+    const res = await fetch(VOICEOVER_ENDPOINT, { method: 'GET' });
+    const json = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    if (!res.ok || json.ok !== true || !Array.isArray(json.voices)) return [];
+    return (json.voices as unknown[])
+      .map((v) => {
+        const o = (v ?? {}) as Record<string, unknown>;
+        return {
+          id: typeof o.id === 'string' ? o.id : '',
+          name: typeof o.name === 'string' ? o.name : '',
+        };
+      })
+      .filter((v) => v.id !== '');
+  } catch {
+    return [];
+  }
+}
+
+/** Per-beat time mark within a combined voiceover track. */
+export interface AiVoiceoverBeatMark {
+  index: number;
+  startSec: number;
+  endSec: number;
+}
+
+/** One per-section voiceover clip (sections mode). */
+export interface AiVoiceoverClip {
+  index: number;
+  url: string;
+  durationSec: number;
+}
+
+/** Result of a voiceover generation run (shape depends on mode). */
+export interface AiVoiceoverResult {
+  mode: 'combined' | 'sections';
+  /** Combined track URL (combined mode). */
+  audioUrl?: string;
+  /** Total spoken length in seconds (combined mode). */
+  durationSec?: number;
+  /** Per-beat marks within the combined track (combined mode). */
+  beatMarks?: AiVoiceoverBeatMark[];
+  /** Per-section clips (sections mode). */
+  clips?: AiVoiceoverClip[];
+  voiceId?: string;
+  model?: string;
+  generatedAt?: string;
+}
+
+/**
+ * Generate ElevenLabs voiceover for a script's beats via the dedicated
+ * voiceover route. In `combined` mode it returns a single hosted track plus
+ * per-beat time marks; in `sections` mode it returns one hosted clip per beat
+ * with its exact duration. Throws a readable Error (e.g. "ElevenLabs is not
+ * configured") so the panel can surface it inline.
+ */
+export async function aiGenerateVoiceover(args: {
+  mode: 'combined' | 'sections';
+  beats: Array<{ index: number; text: string }>;
+  voiceId?: string;
+  modelId?: string;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+}): Promise<AiVoiceoverResult> {
+  const res = await fetch(VOICEOVER_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok || json.ok !== true) {
+    const msg =
+      typeof json.error === 'string'
+        ? json.error
+        : `Voiceover request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return {
+    mode: json.mode === 'sections' ? 'sections' : 'combined',
+    audioUrl: typeof json.audioUrl === 'string' ? json.audioUrl : undefined,
+    durationSec:
+      typeof json.durationSec === 'number' ? json.durationSec : undefined,
+    beatMarks: Array.isArray(json.beatMarks)
+      ? (json.beatMarks as AiVoiceoverBeatMark[])
+      : undefined,
+    clips: Array.isArray(json.clips)
+      ? (json.clips as AiVoiceoverClip[])
+      : undefined,
+    voiceId: typeof json.voiceId === 'string' ? json.voiceId : undefined,
+    model: typeof json.model === 'string' ? json.model : undefined,
+    generatedAt:
+      typeof json.generatedAt === 'string' ? json.generatedAt : undefined,
+  };
+}
+
+
 
 
 

@@ -31,8 +31,15 @@ const Tags: React.FC<{ tags?: string[] }> = ({ tags }) =>
 /** Standard feed / carousel post. */
 const Feed: React.FC<PreviewProps> = ({ view }) => {
   const { piece, metrics } = view;
-  const caption = view.caption ?? view.hook;
-  const isCarousel = piece.format === 'carousel' && view.images.length > 1;
+  // Frames span the larger of the image gallery and the slide list, so a
+  // multi-slide carousel paginates even before every slide has a rendered image.
+  const frames = Math.max(view.images.length, view.slides.length);
+  const activeSlide = view.slides[view.imageIndex];
+  const isCarousel = piece.format === 'carousel' && frames > 1;
+  // On a carousel, lead the caption with the active slide's on-frame line so
+  // switching frames reads like flicking through the deck.
+  const caption = activeSlide?.text ?? view.caption ?? view.hook;
+
   return (
     <div className="mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-black/10 bg-white text-[13px] text-black">
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -48,8 +55,9 @@ const Feed: React.FC<PreviewProps> = ({ view }) => {
           tint="#E1306C"
         />
         {isCarousel && (
-          <CarouselDots count={view.images.length} active={view.imageIndex} />
+          <CarouselDots count={frames} active={view.imageIndex} />
         )}
+
       </div>
       <div className="px-3 pb-3 pt-2.5">
         <div className="flex items-center gap-4">
@@ -91,10 +99,13 @@ const Reel: React.FC<PreviewProps> = ({ view }) => {
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
       <div className="absolute bottom-3 left-3 right-14">
         <p className="text-sm font-semibold">{HANDLE}</p>
-        <p className="mt-1 text-xs leading-snug text-white/90 line-clamp-3">
-          {caption}
-        </p>
+        {view.showHookText !== false && (
+          <p className="mt-1 text-xs leading-snug text-white/90 line-clamp-3">
+            {caption}
+          </p>
+        )}
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-white/85">
+
           <Music2 className="h-3 w-3" /> Original audio
         </p>
       </div>
@@ -124,33 +135,51 @@ const Rail: React.FC<{ icon: React.ReactNode; label: string }> = ({
   </div>
 );
 
-/** Full-bleed story frame with a per-frame progress bar and centered hook. */
-const Story: React.FC<PreviewProps> = ({ view }) => (
-  <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+/** Full-bleed story frame with a per-frame progress bar and centered hook.
+ *  Multi-frame stories page through their slides: the progress bar has one
+ *  segment per frame and the centered line follows the active slide. */
+const Story: React.FC<PreviewProps> = ({ view }) => {
+  const frames = Math.max(1, view.images.length, view.slides.length);
+  const activeSlide = view.slides[view.imageIndex];
+  const headline = activeSlide?.text ?? view.hook;
+  return (
+    <div className="relative mx-auto aspect-[9/16] w-[280px] max-w-full overflow-hidden rounded-xl bg-black text-white">
+      <PreviewMedia
+        src={view.image}
+        alt={view.piece.title}
+        aspect="aspect-[9/16]"
+        tint="#E1306C"
+        className="absolute inset-0"
+      />
+      <StoryProgress
+        count={frames}
+        active={view.imageIndex}
+        animate={view.autoplay}
+        durationMs={view.frameDurationMs}
+      />
 
-    <PreviewMedia
-      src={view.image}
-      alt={view.piece.title}
-      aspect="aspect-[9/16]"
-      tint="#E1306C"
-      className="absolute inset-0"
-    />
-    <StoryProgress
-      count={Math.max(1, view.images.length)}
-      active={view.imageIndex}
-    />
-    <div className="absolute left-2 top-4 flex items-center gap-2">
-      <Avatar size="h-7 w-7" />
-      <span className="text-xs font-semibold">{HANDLE}</span>
-      <span className="text-[10px] text-white/70">3h</span>
+      <div className="absolute left-2 top-4 flex items-center gap-2">
+        <Avatar size="h-7 w-7" />
+        <span className="text-xs font-semibold">{HANDLE}</span>
+        <span className="text-[10px] text-white/70">3h</span>
+      </div>
+      {view.showHookText !== false && (
+        <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 text-center">
+          <p className="text-lg font-semibold leading-snug drop-shadow">
+            {headline}
+          </p>
+          {activeSlide?.sub && (
+            <p className="mt-2 text-sm leading-snug text-white/90 drop-shadow">
+              {activeSlide.sub}
+            </p>
+          )}
+        </div>
+      )}
     </div>
-    <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 text-center">
-      <p className="text-lg font-semibold leading-snug drop-shadow">
-        {view.hook}
-      </p>
-    </div>
-  </div>
-);
+  );
+};
+
+
 
 export const InstagramPreview: React.FC<PreviewProps> = (props) => {
   if (props.view.piece.format === 'reel') return <Reel {...props} />;

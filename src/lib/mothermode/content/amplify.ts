@@ -170,7 +170,13 @@ export const PLATFORM_NORMS: Record<ContentPlatform, string> = {
   x: 'X: tight and punchy, number the thread when long, no hashtags, one idea per post.',
   tiktok:
     'TikTok: spoken-word script, a fast hook in the first 3 seconds, casual cadence.',
+  youtube:
+    'YouTube: for long-form, a strong title and first 30 seconds, chaptered structure, spoken narration; for Shorts, a vertical 3-second hook and tight pacing.',
+  linkedin:
+    'LinkedIn: professional but human, a strong first line before the "see more" fold, short paragraphs, one clear insight, credible and calm, minimal hashtags.',
   email:
+
+
     'Email: a subject and preheader, conversational, one clear call to action.',
   pinterest:
     'Pinterest: keyword-rich, helpful and search-led, descriptive caption.',

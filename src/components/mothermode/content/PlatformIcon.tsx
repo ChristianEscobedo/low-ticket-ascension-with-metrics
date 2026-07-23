@@ -7,8 +7,12 @@ export const PLATFORM_BRAND: Record<ContentPlatform, string> = {
   instagram: '#E1306C',
   x: '#1A1816',
   tiktok: '#1A1816',
+  youtube: '#FF0000',
+  linkedin: '#0A66C2',
   email: '#A88B5C',
+
   pinterest: '#E60023',
+
   blog: '#532B3C',
   aeo: '#8A6D3B',
 };
@@ -61,10 +65,24 @@ export const PlatformIcon: React.FC<PlatformIconProps> = ({
           <path d="M16.6 0h-3.36v15.86a2.85 2.85 0 0 1-2.86 2.78 2.85 2.85 0 0 1-2.85-2.86 2.85 2.85 0 0 1 3.7-2.72v-3.4a6.23 6.23 0 0 0-.85-.06A6.25 6.25 0 0 0 4.13 16a6.25 6.25 0 0 0 6.25 6.25A6.25 6.25 0 0 0 16.63 16V7.7a7.7 7.7 0 0 0 4.5 1.44V5.78a4.52 4.52 0 0 1-4.53-4.5V0Z" />
         </svg>
       );
+    case 'youtube':
+      return (
+        <svg {...common}>
+          <path d="M23.5 6.2a3.02 3.02 0 0 0-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.51A3.02 3.02 0 0 0 .5 6.2C0 8.08 0 12 0 12s0 3.92.5 5.8a3.02 3.02 0 0 0 2.12 2.14c1.88.51 9.38.51 9.38.51s7.5 0 9.38-.51a3.02 3.02 0 0 0 2.12-2.14C24 15.92 24 12 24 12s0-3.92-.5-5.8ZM9.6 15.57V8.43L15.82 12 9.6 15.57Z" />
+        </svg>
+      );
+    case 'linkedin':
+      return (
+        <svg {...common}>
+          <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.07 2.07 0 1 1 0-4.14 2.07 2.07 0 0 1 0 4.14ZM7.12 20.45H3.55V9h3.57v11.45ZM22.22 0H1.77C.8 0 0 .78 0 1.75v20.5C0 23.22.79 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.75V1.75C24 .78 23.2 0 22.22 0Z" />
+        </svg>
+      );
     case 'email':
       return (
         <svg {...common} fill="none" stroke="currentColor" strokeWidth={1.8}>
           <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+
+
           <path d="m3 6 9 6.5L21 6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );

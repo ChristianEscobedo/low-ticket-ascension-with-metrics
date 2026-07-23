@@ -246,7 +246,11 @@ export const PLATFORM_LABEL: Record<ContentPlatform, string> = {
   instagram: 'Instagram',
   x: 'X',
   tiktok: 'TikTok',
+  youtube: 'YouTube',
+  linkedin: 'LinkedIn',
   email: 'Email',
+
+
   pinterest: 'Pinterest',
   blog: 'Blog',
   aeo: 'AEO',
@@ -260,7 +264,9 @@ export const FORMAT_LABEL: Record<ContentFormat, string> = {
   thread: 'Thread',
   article: 'Article',
   video: 'Video',
+  long: 'Long-form video',
   email: 'Email',
+
   pin: 'Pin',
   idea: 'Idea pin',
   blog: 'Blog post',
@@ -279,7 +285,11 @@ export const PLATFORM_FORMATS: Record<ContentPlatform, ContentFormat[]> = {
   instagram: ['feed', 'carousel', 'story', 'reel'],
   x: ['feed', 'thread', 'article'],
   tiktok: ['video'],
+  youtube: ['long', 'reel'],
+  linkedin: ['feed', 'carousel', 'article', 'video'],
   email: ['email'],
+
+
   pinterest: ['pin', 'idea'],
   blog: ['blog'],
   aeo: ['answer'],

@@ -22,6 +22,8 @@ import { TikTokPreview } from './TikTokPreview';
 import { PinterestPreview } from './PinterestPreview';
 import { BlogPreview } from './BlogPreview';
 import { EmailPreview } from './EmailPreview';
+import { YouTubePreview } from './YouTubePreview';
+import { LinkedInPreview } from './LinkedInPreview';
 
 /** The piece media source, preferring a video poster for stills. */
 function catalogImage(piece: ContentPiece): string | undefined {
@@ -71,7 +73,21 @@ export function buildView(piece: ContentPiece, review: PieceReview): PreviewView
 
   const editedImages = reviewImages(review);
   const images = editedImages.length > 0 ? editedImages : catalogFrames(piece);
-  const imageIndex = clampIndex(review.imageIndex, images.length);
+
+  // Per-slide copy for carousels/stories/idea pins. The active frame index runs
+  // across the larger of the image gallery and the slide list, so a multi-slide
+  // piece still paginates even when it has a single (or no) rendered image yet.
+  const slides = (piece.slides ?? []).map((s) => ({
+    text: s.text,
+    sub: s.sub,
+  }));
+  const frameCount = Math.max(images.length, slides.length, 1);
+  const imageIndex = clampIndex(review.imageIndex, frameCount);
+  // Fall back to the last available image when there are more slides than
+  // rendered frames, so the media never collapses to the empty placeholder.
+  const activeImage =
+    images[imageIndex] ?? images[images.length - 1] ?? undefined;
+
 
   const editedHooks = reviewHooks(edits);
   const hooks = editedHooks.length > 0 ? editedHooks : catalogHooks(piece);
@@ -81,8 +97,10 @@ export function buildView(piece: ContentPiece, review: PieceReview): PreviewView
     piece,
     images,
     imageIndex,
-    image: images[imageIndex],
+    image: activeImage,
+    slides,
     hooks,
+
     hookIndex,
     hook: hooks[hookIndex] ?? piece.hook,
     caption: edits.caption?.trim() ? edits.caption : piece.caption,
@@ -119,8 +137,16 @@ function surfaceFor(piece: ContentPiece, view: PreviewView): React.ReactElement 
       return <XPreview view={view} />;
     case 'tiktok':
       return <TikTokPreview view={view} />;
+    case 'youtube':
+      // Shorts render vertically; long-form reads as a watch page.
+      return <YouTubePreview view={view} />;
+    case 'linkedin':
+      // A professional feed card whose surface changes by format.
+      return <LinkedInPreview view={view} />;
     case 'pinterest':
+
       return <PinterestPreview view={view} />;
+
     case 'blog':
     case 'aeo':
       return <BlogPreview view={view} />;
@@ -134,8 +160,26 @@ function surfaceFor(piece: ContentPiece, view: PreviewView): React.ReactElement 
 export const PlatformPreview: React.FC<{
   piece: ContentPiece;
   review: PieceReview;
-}> = ({ piece, review }) => {
-  const view = buildView(piece, review);
+  /** When false, hide the hook/caption painted on top of the image. */
+  showHookText?: boolean;
+  /** When true, story/reel surfaces animate the progress bar as they advance. */
+  autoplay?: boolean;
+  /** Per-frame duration (ms) for the autoplay progress sweep. */
+  frameDurationMs?: number;
+}> = ({
+  piece,
+  review,
+  showHookText = true,
+  autoplay = false,
+  frameDurationMs = 3500,
+}) => {
+  const view = {
+    ...buildView(piece, review),
+    showHookText,
+    autoplay,
+    frameDurationMs,
+  };
+
   // Force left alignment so post copy reads the way it does natively, immune to
   // any centered ancestor; surfaces that intentionally center (story hooks) set
   // their own alignment on the inner element and still win.

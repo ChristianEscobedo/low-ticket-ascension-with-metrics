@@ -9,7 +9,8 @@
  * persist to the review store, keyed by piece id.
  */
 import React, { useEffect, useState } from 'react';
-import { X as XIcon, Copy, Check } from 'lucide-react';
+import { X as XIcon, Copy, Check, Play, Pause } from 'lucide-react';
+
 import {
   pieceToText,
   PLATFORM_LABEL,
@@ -28,7 +29,9 @@ import {
   getReview,
   saveReview,
   setReviewImages,
+  subscribeReviews,
 } from './reviewClient';
+
 import { PlatformPreview, buildView } from './previews/PlatformPreview';
 import { EditForm, MetricsForm } from './SheetForms';
 import { SchedulePanel } from './SchedulePanel';
@@ -52,6 +55,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'schedule', label: 'Schedule' },
   { id: 'amplify', label: 'Amplify' },
 ];
+
+/** How long each frame holds before autoplay advances (ms). */
+const FRAME_MS = 3500;
+
 
 /**
  * A small chip selector shown above the preview so the reviewer can switch the
@@ -98,18 +105,53 @@ export const ContentSheet: React.FC<{
   const [tab, setTab] = useState<Tab>('preview');
   const [review, setReview] = useState<PieceReview>({});
   const [copied, setCopied] = useState(false);
+  // Preview-only: hide the hook/caption painted on top of the image so it
+  // doesn't stack on burned-in type. Defaults on; not persisted.
+  const [showHookText, setShowHookText] = useState(true);
 
-  // Hydrate from the shared review cache (loaded once per offer), then read this
-  // piece's state. Writes update the cache and persist in the background.
+  // Preview-only autoplay: multi-frame Stories/Reels/carousels advance on a
+  // timer so the preview reads like a live post. `previewIndex` overrides the
+  // persisted frame during autoplay without writing to the store; a manual
+  // pick pauses autoplay and persists the choice. None of this is persisted.
+  const [autoplay, setAutoplay] = useState(true);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [hovering, setHovering] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  // Respect the OS "reduce motion" setting — never auto-advance for those users.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReducedMotion(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+
+  // Reset the local playback state whenever the piece changes.
+  useEffect(() => {
+    setAutoplay(true);
+    setPreviewIndex(null);
+    setHovering(false);
+  }, [piece.id]);
+
+
+  // Hydrate + live-subscribe so primary/gallery updates without refresh.
+
   useEffect(() => {
     let active = true;
     void loadReviews(offerSlug).then(() => {
       if (active) setReview(getReview(offerSlug, piece.id));
     });
+    const unsub = subscribeReviews((slug, id, next) => {
+      if (active && slug === offerSlug && id === piece.id) setReview(next);
+    });
     return () => {
       active = false;
+      unsub();
     };
   }, [offerSlug, piece.id]);
+
 
   // Persist a patch; the store returns the merged review so the preview reflects
   // it immediately.
@@ -120,7 +162,49 @@ export const ContentSheet: React.FC<{
   // The computed view drives the preview, the selectors, and the copy text.
   const view = buildView(piece, review);
 
+  // Autoplay eligibility: multi-frame decks (story/carousel/idea) page through
+  // their slides; vertical video surfaces (reels, TikTok) page through image
+  // A/B variants. Everything else is static.
+  const isDeck =
+    piece.format === 'story' ||
+    piece.format === 'carousel' ||
+    piece.format === 'idea';
+  const isVertical = piece.format === 'reel' || piece.platform === 'tiktok';
+  const frameCount = isDeck
+    ? Math.max(view.images.length, view.slides.length)
+    : view.images.length;
+  const canAutoplay = (isDeck || isVertical) && frameCount > 1;
+  // The frame the preview actually shows: the autoplay override when present,
+  // otherwise the persisted choice. Clamped to the live frame count.
+  const effectiveIndex = clampIndex(
+    previewIndex ?? view.imageIndex,
+    Math.max(frameCount, 1),
+  );
+  // Autoplay runs only on the Preview tab, when eligible, not hovered, and the
+  // viewer hasn't asked to reduce motion.
+  const running =
+    autoplay &&
+    canAutoplay &&
+    !hovering &&
+    !reducedMotion &&
+    tab === 'preview';
+  // Render the preview against the effective frame without persisting it.
+  const previewReview: PieceReview = { ...review, imageIndex: effectiveIndex };
+
+  // Advance the frame on a timer while autoplay is running, looping at the end.
+  useEffect(() => {
+    if (!running || frameCount <= 1) return;
+    const id = window.setInterval(() => {
+      setPreviewIndex((cur) => {
+        const base = cur ?? view.imageIndex;
+        return (base + 1) % frameCount;
+      });
+    }, FRAME_MS);
+    return () => window.clearInterval(id);
+  }, [running, frameCount, view.imageIndex]);
+
   // Image gallery: append a frame/variant and make it active, remove one and
+
   // reindex, or just switch which is shown (promoting catalog frames first so
   // the choice persists).
   const addImage = (dataUrl: string) => addImages([dataUrl]);
@@ -184,8 +268,15 @@ export const ContentSheet: React.FC<{
   };
   const setImageIndex = (index: number) => {
     if (reviewImages(review).length > 0) apply({ imageIndex: index });
-    else setReview(setReviewImages(offerSlug, piece.id, view.images, index));
+    // A/B image set with no gallery yet: promote the catalog frames so the
+    // choice persists against the concrete image list.
+    else if (view.images.length > 1)
+      setReview(setReviewImages(offerSlug, piece.id, view.images, index));
+    // Slide-only deck (frames outrun rendered images): just remember which
+    // frame is active; buildView clamps it across the slide count.
+    else apply({ imageIndex: index });
   };
+
 
   // Hook variants: switch the active one, promoting catalog hooks into the
   // edits first so a bare selection still persists.
@@ -281,26 +372,81 @@ export const ContentSheet: React.FC<{
                   onSelect={setHookIndex}
                 />
               )}
-              {view.images.length > 1 && (
-                <Selector
-                  label={
-                    piece.format === 'story' ||
-                    piece.format === 'carousel' ||
-                    piece.format === 'idea'
-                      ? 'Frame'
-                      : 'Image variant'
-                  }
-                  items={view.images.map((_, i) => `${i + 1}`)}
-                  active={view.imageIndex}
-                  onSelect={setImageIndex}
-                  compact
-                />
+              {frameCount > 1 && (
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <Selector
+                    label={isDeck ? 'Frame' : 'Image variant'}
+                    items={Array.from({ length: frameCount }, (_, i) =>
+                      `${i + 1}`,
+                    )}
+                    active={effectiveIndex}
+                    // A manual pick pauses autoplay and persists the choice.
+                    onSelect={(i) => {
+                      setAutoplay(false);
+                      setPreviewIndex(i);
+                      setImageIndex(i);
+                    }}
+                    compact
+                  />
+                  {canAutoplay && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Resume from the frame currently on screen.
+                        if (!autoplay) setPreviewIndex(effectiveIndex);
+                        setAutoplay((a) => !a);
+                      }}
+                      aria-pressed={running}
+                      title={running ? 'Pause autoplay' : 'Play frames'}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1.5 text-xs text-ink/70 hover:border-ink/30 hover:text-ink"
+                    >
+                      {running ? (
+                        <Pause className="h-3.5 w-3.5" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5" />
+                      )}
+                      {running ? 'Pause' : 'Play'}
+                    </button>
+                  )}
+                </div>
               )}
-              <div className="flex justify-center">
-                <PlatformPreview piece={piece} review={review} />
+
+              {(piece.platform === 'tiktok' ||
+                piece.format === 'story' ||
+                piece.format === 'reel') && (
+                <label className="flex items-center gap-2 text-xs text-ink/65">
+                  <input
+                    type="checkbox"
+                    checked={showHookText}
+                    onChange={(e) => setShowHookText(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-ink/30 text-mode focus:ring-mode"
+                  />
+                  Show hook text over image
+                  <span className="text-ink/40">
+                    (off to preview burned-in type alone)
+                  </span>
+                </label>
+              )}
+              {/* Hover/focus pauses autoplay so the reviewer can study a frame. */}
+              <div
+                className="flex justify-center"
+                onMouseEnter={() => setHovering(true)}
+                onMouseLeave={() => setHovering(false)}
+                onFocusCapture={() => setHovering(true)}
+                onBlurCapture={() => setHovering(false)}
+              >
+                <PlatformPreview
+                  piece={piece}
+                  review={previewReview}
+                  showHookText={showHookText}
+                  autoplay={running}
+                  frameDurationMs={FRAME_MS}
+                />
               </div>
+
             </div>
           )}
+
           {tab === 'edit' && (
             <EditForm
               piece={piece}
