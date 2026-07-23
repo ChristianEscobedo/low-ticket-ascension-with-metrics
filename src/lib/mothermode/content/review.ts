@@ -246,7 +246,57 @@ export interface StoryboardBoard {
   segmentDuration?: number;
   /** Hosted URL of the rendered contact-sheet image, when generated. */
   imageUrl?: string;
+  /** Final Seedance prompt used to render this board's clip (Reel Director). */
+  seedancePrompt?: string;
+  /** MUAPI task id for an in-flight/last render of this board's clip. */
+  videoTaskId?: string;
+  /** Render lifecycle for this board's Seedance clip. */
+  videoStatus?: 'idle' | 'rendering' | 'done' | 'failed';
+  /** Hosted (re-hosted to Supabase) URL of this board's rendered clip. */
+  videoUrl?: string;
 }
+
+/**
+ * A story arc produced by the Reel Director's Story Agent from a single idea.
+ * Drives exactly four storyboard chapters; the app asks for a story, never for
+ * scene prompts.
+ */
+export interface ReelStory {
+  /** Story title. */
+  title: string;
+  /** The single core emotion the reel should land. */
+  coreEmotion: string;
+  /** Opening hook line / concept. */
+  hook: string;
+  /** Narrative arc beats (Beginning, Conflict, Escalation, Breakthrough, Payoff). */
+  arc: string[];
+  /** Closing call to action. */
+  cta: string;
+  /** Exactly four storyboard chapters (purpose/emotion/visual goal/transition). */
+  chapters: ReelStoryChapter[];
+  /** The model that wrote the story, for reference. */
+  model?: string;
+  /** ISO timestamp of generation. */
+  generatedAt?: string;
+}
+
+/** One of the four storyboard chapters within a {@link ReelStory}. */
+export interface ReelStoryChapter {
+  /** 1-based chapter index (1..4). */
+  index: number;
+  /** What this chapter accomplishes in the arc. */
+  purpose: string;
+  /** The emotional state at this chapter. */
+  emotionalState: string;
+  /** The visual goal for this chapter's storyboard. */
+  visualGoal: string;
+  /** How this chapter transitions into the next. */
+  transition: string;
+}
+
+/** Audio treatment preset for a finished reel. */
+export type ReelWrapper = 'silent' | 'music' | 'voice' | 'voice+music';
+
 
 
 /**
