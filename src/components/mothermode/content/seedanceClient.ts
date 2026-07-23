@@ -96,8 +96,11 @@ export async function renderSeedanceClip(
     onStatus?: (status: SeedanceTaskStatus) => void;
   } = {},
 ): Promise<string> {
-  const intervalMs = opts.intervalMs ?? 5000;
-  const maxWaitMs = opts.maxWaitMs ?? 5 * 60 * 1000;
+  // Seedance renders routinely run several minutes; poll patiently and wait up
+  // to 12 minutes before giving up, well past the typical finish time.
+  const intervalMs = opts.intervalMs ?? 6000;
+  const maxWaitMs = opts.maxWaitMs ?? 12 * 60 * 1000;
+
 
   const taskId = await submitSeedanceRender(input);
   opts.onStatus?.('pending');
@@ -117,5 +120,13 @@ export async function renderSeedanceClip(
       throw new Error(result.error || 'The render failed');
     }
   }
-  throw new Error('Timed out waiting for the clip to render');
+  throw new Error(
+    'Still rendering after 12 minutes — Seedance is taking longer than usual. ' +
+      'Your credits were still spent on this task; leave the tab open and try ' +
+      'Re-render, or check MUAPI for task ' +
+      taskId +
+      '.',
+  );
 }
+
+

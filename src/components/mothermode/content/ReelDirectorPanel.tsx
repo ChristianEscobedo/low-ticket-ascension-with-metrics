@@ -10,9 +10,22 @@
  *
  * The storyboard is always the source of truth: we animate the existing frame,
  * we never regenerate composition here.
+ *
+ * Rendering is slow (minutes per clip) and costs credits, so the UI is explicit
+ * about both: a standing time/cost banner, a live per-board status + elapsed
+ * timer while a clip renders, and an estimated per-clip cost that tracks the
+ * chosen model and duration.
  */
-import React, { useMemo, useState } from 'react';
-import { Clapperboard, Film, Loader2, Play, RefreshCw } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Clapperboard,
+  Clock,
+  Film,
+  Loader2,
+  Play,
+  RefreshCw,
+  Wallet,
+} from 'lucide-react';
 import {
   buildSeedancePrompt,
   REEL_WRAPPER_LIST,
@@ -40,17 +53,55 @@ const DURATIONS = [3, 5, 8, 10];
 /**
  * Seedance models selectable at render time. The value is sent as-is to MUAPI;
  * leave it as one of the slugs MUAPI lists in its model catalog. "" means
- * "use the server default" (MUAPI_SEEDANCE_MODEL / seedance-1.0).
+ * "use the server default" (MUAPI_SEEDANCE_MODEL).
+ *
+ * `perSecondUsd` is a rough, editable estimate used only to preview cost in the
+ * UI — MUAPI bills the real amount. Update these if MUAPI changes pricing. The
+ * VIP Omni Reference tier is the cheapest and is the default.
  */
-const SEEDANCE_MODELS: { id: string; label: string }[] = [
+interface SeedanceModel {
+  id: string;
+  label: string;
+  /** Estimated USD per second of output; used only for the UI preview. */
+  perSecondUsd: number;
+  /** Short note shown next to the option. */
+  note?: string;
+}
+
+const SEEDANCE_MODELS: SeedanceModel[] = [
   {
     id: 'seedance-2-vip-omni-reference-1080p',
     label: 'Seedance 2 · VIP Omni Reference · 1080p',
+    perSecondUsd: 0.03,
+    note: 'Recommended · lowest cost · omni-reference',
   },
-  { id: 'seedance-1.0', label: 'Seedance 1.0' },
-  { id: '', label: 'Server default' },
+  {
+    id: 'seedance-1.0',
+    label: 'Seedance 1.0',
+    perSecondUsd: 0.06,
+    note: 'Legacy',
+  },
+  { id: '', label: 'Server default', perSecondUsd: 0.03 },
 ];
 
+/** Look up the selected model's metadata (falls back to the first entry). */
+function modelMeta(id: string): SeedanceModel {
+  return SEEDANCE_MODELS.find((m) => m.id === id) ?? SEEDANCE_MODELS[0];
+}
+
+/** Estimated per-clip cost string, e.g. "≈ $0.15". */
+function estCost(modelId: string, durationSec: number): string {
+  const usd = modelMeta(modelId).perSecondUsd * durationSec;
+  return `≈ $${usd.toFixed(2)}`;
+}
+
+/** Format elapsed milliseconds as m:ss. */
+function fmtElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 interface ReelDirectorPanelProps {
   offerSlug: string;
@@ -60,6 +111,19 @@ interface ReelDirectorPanelProps {
   onReviewChange?: (review: PieceReview) => void;
 }
 
+/** Human label for a live render status. */
+function liveLabel(status: SeedanceTaskStatus | undefined): string {
+  switch (status) {
+    case 'pending':
+      return 'Queued…';
+    case 'processing':
+      return 'Rendering…';
+    case 'succeeded':
+      return 'Finishing…';
+    default:
+      return 'Working…';
+  }
+}
 
 /** Human label + tone for a board's render status chip. */
 function statusChip(status: StoryboardBoard['videoStatus']): {
@@ -84,7 +148,6 @@ export default function ReelDirectorPanel({
   pack,
   onReviewChange,
 }: ReelDirectorPanelProps) {
-
   const [wrapper, setWrapper] = useState<ReelWrapper>('silent');
   const [aspectRatio, setAspectRatio] = useState<string>('9:16');
   const [durationSec, setDurationSec] = useState<number>(5);
@@ -96,6 +159,35 @@ export default function ReelDirectorPanel({
   const [errors, setErrors] = useState<Record<number, string>>({});
   // Board indices currently rendering, so we can disable their buttons.
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  // Live provider status per board while a render is in flight.
+  const [liveStatus, setLiveStatus] = useState<
+    Record<number, SeedanceTaskStatus>
+  >({});
+  // When each in-flight render started, so we can show an elapsed timer.
+  const [startedAt, setStartedAt] = useState<Record<number, number>>({});
+  // Ticking clock (updated every second while any render is running).
+  const [now, setNow] = useState<number>(() => Date.now());
+  // Count of boards whose prompt was just recomposed, for a brief confirmation.
+  const [recomposedCount, setRecomposedCount] = useState<number>(0);
+
+  const anyBusy = useMemo(
+    () => Object.values(busy).some(Boolean),
+    [busy],
+  );
+
+  // Run a 1s clock only while something is rendering, to drive elapsed timers.
+  useEffect(() => {
+    if (!anyBusy) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [anyBusy]);
+
+  // Auto-dismiss the "prompts recomposed" confirmation.
+  useEffect(() => {
+    if (recomposedCount <= 0) return;
+    const t = setTimeout(() => setRecomposedCount(0), 3000);
+    return () => clearTimeout(t);
+  }, [recomposedCount]);
 
   const boards = useMemo(
     () => (Array.isArray(pack.boards) ? pack.boards : []),
@@ -117,6 +209,7 @@ export default function ReelDirectorPanel({
       next[b.index] = buildSeedancePrompt({ board: b, wrapper });
     });
     setDrafts(next);
+    setRecomposedCount(boards.length);
   }
 
   /** Persist a board patch and bubble the fresh review to the parent. */
@@ -124,7 +217,6 @@ export default function ReelDirectorPanel({
     const review = patchReviewStoryboardBoard(offerSlug, pieceId, index, patch);
     onReviewChange?.(review);
   }
-
 
   async function handleRender(board: StoryboardBoard) {
     const imageUrl = board.imageUrl?.trim();
@@ -143,6 +235,9 @@ export default function ReelDirectorPanel({
 
     setErrors((e) => ({ ...e, [board.index]: '' }));
     setBusy((b) => ({ ...b, [board.index]: true }));
+    setStartedAt((s) => ({ ...s, [board.index]: Date.now() }));
+    setNow(Date.now());
+    setLiveStatus((l) => ({ ...l, [board.index]: 'pending' }));
     patchBoard(board.index, {
       seedancePrompt: prompt,
       videoStatus: 'rendering',
@@ -153,7 +248,7 @@ export default function ReelDirectorPanel({
         { prompt, imageUrl, aspectRatio, durationSec, model: model || undefined },
         {
           onStatus: (s: SeedanceTaskStatus) => {
-            if (s === 'succeeded' || s === 'failed') return;
+            setLiveStatus((l) => ({ ...l, [board.index]: s }));
           },
         },
       );
@@ -164,6 +259,11 @@ export default function ReelDirectorPanel({
       patchBoard(board.index, { videoStatus: 'failed' });
     } finally {
       setBusy((b) => ({ ...b, [board.index]: false }));
+      setLiveStatus((l) => {
+        const next = { ...l };
+        delete next[board.index];
+        return next;
+      });
     }
   }
 
@@ -177,8 +277,22 @@ export default function ReelDirectorPanel({
     );
   }
 
+  const selected = modelMeta(model);
+
   return (
     <div className="space-y-4">
+      {/* Standing time + cost notice */}
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          <span className="font-semibold">Heads up — video renders take a
+          while.</span>{' '}
+          Each clip usually takes 2–5 minutes (occasionally longer). Keep this
+          tab open until it finishes. Every render spends MUAPI credits, so
+          only render boards you intend to use.
+        </p>
+      </div>
+
       {/* Global render controls */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-ink/10 bg-white/60 px-3 py-3">
         <div className="flex items-center gap-2 text-mode">
@@ -237,10 +351,21 @@ export default function ReelDirectorPanel({
             {SEEDANCE_MODELS.map((m) => (
               <option key={m.id || 'default'} value={m.id}>
                 {m.label}
+                {m.note ? ` — ${m.note}` : ''}
               </option>
             ))}
           </select>
         </label>
+
+        {/* Estimated cost per clip for the current model + duration */}
+        <div className="flex flex-col text-[11px] uppercase tracking-wide text-ink/60">
+          Est. cost / clip
+          <span className="mt-1 inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-sm font-medium text-emerald-700">
+            <Wallet className="h-3.5 w-3.5" />
+            {estCost(model, durationSec)}
+          </span>
+        </div>
+
         <button
           type="button"
           onClick={recomposeAll}
@@ -251,12 +376,32 @@ export default function ReelDirectorPanel({
         </button>
       </div>
 
+      {/* Cost + recompose confirmation line */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-ink/50">
+        <span>
+          {selected.label} · {estCost(model, durationSec)} per {durationSec}s
+          clip (estimate — MUAPI bills the actual amount).
+        </span>
+        {recomposedCount > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-mode/10 px-2 py-0.5 font-medium text-mode">
+            <RefreshCw className="h-3 w-3" />
+            Recomposed {recomposedCount} prompt
+            {recomposedCount === 1 ? '' : 's'} from the “{wrapper}” wrapper —
+            edits discarded.
+          </span>
+        ) : null}
+      </div>
+
       {/* Per-board render cards */}
       <div className="space-y-3">
         {boards.map((board) => {
           const chip = statusChip(board.videoStatus);
-          const rendering = busy[board.index] || board.videoStatus === 'rendering';
+          const rendering =
+            busy[board.index] || board.videoStatus === 'rendering';
           const err = errors[board.index];
+          const started = startedAt[board.index];
+          const elapsed = rendering && started ? now - started : 0;
+          const live = liveStatus[board.index];
           return (
             <div
               key={board.index}
@@ -307,7 +452,7 @@ export default function ReelDirectorPanel({
                       setDrafts((d) => ({ ...d, [board.index]: e.target.value }))
                     }
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       disabled={rendering || !board.imageUrl}
@@ -319,8 +464,17 @@ export default function ReelDirectorPanel({
                       ) : (
                         <Play className="h-3.5 w-3.5" />
                       )}
-                      {board.videoUrl ? 'Re-render clip' : 'Render clip'}
+                      {rendering
+                        ? `${liveLabel(live)} ${fmtElapsed(elapsed)}`
+                        : board.videoUrl
+                        ? 'Re-render clip'
+                        : `Render clip · ${estCost(model, durationSec)}`}
                     </button>
+                    {rendering ? (
+                      <span className="text-[11px] text-ink/50">
+                        This can take a few minutes — keep the tab open.
+                      </span>
+                    ) : null}
                     {err ? (
                       <span className="text-xs text-rose-600">{err}</span>
                     ) : null}

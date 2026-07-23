@@ -15,8 +15,12 @@
  *   MUAPI_API_KEY          required — the pipeline is a clear "not configured"
  *                          state without it.
  *   MUAPI_BASE_URL         defaults to https://api.muapi.ai
- *   MUAPI_SEEDANCE_MODEL   defaults to seedance-1.0 (used as the path segment)
- *   MUAPI_POLL_TIMEOUT_MS  defaults to 180000 (3 min)
+ *   MUAPI_SEEDANCE_MODEL   defaults to seedance-2-vip-omni-reference-1080p (used
+ *                          as the path segment). This is the cheapest Seedance
+ *                          tier and supports omni-reference stills.
+ *   MUAPI_POLL_TIMEOUT_MS  defaults to 600000 (10 min) — Seedance renders are
+ *                          slow, so the blocking path waits generously.
+
  *   MUAPI_POLL_INTERVAL_MS defaults to 3000
  *   MUAPI_SEEDANCE_REF_FIELD
  *                          request-body key for the omni-reference image array
@@ -88,13 +92,16 @@ function baseUrl(): string {
 }
 
 function model(): string {
-  return process.env.MUAPI_SEEDANCE_MODEL || 'seedance-1.0';
+  // Cheapest Seedance tier and omni-reference capable — the recommended default.
+  return process.env.MUAPI_SEEDANCE_MODEL || 'seedance-2-vip-omni-reference-1080p';
 }
 
 function pollTimeoutMs(): number {
   const n = Number(process.env.MUAPI_POLL_TIMEOUT_MS);
-  return Number.isFinite(n) && n > 0 ? n : 180000;
+  // 10 min default: Seedance renders routinely run several minutes.
+  return Number.isFinite(n) && n > 0 ? n : 600000;
 }
+
 
 function pollIntervalMs(): number {
   const n = Number(process.env.MUAPI_POLL_INTERVAL_MS);
