@@ -116,6 +116,57 @@ estimate — **preview only**; MUAPI bills the real amount.
 - [ ] No migration required — panel state (`startedAt`, `liveStatus`,
       `recomposedCount`) is ephemeral React state.
 
+## Commit reference chain & files to port
+
+Port these in order. The base Seedance pipeline + Brand Bible (commit `26b7a20`
+and its predecessors) must already be in place — this UX work only touches
+files that pipeline created. All files below are **modified pre-existing files**
+unless flagged **(new)**.
+
+### `26b7a20` — base (prerequisite, not part of this doc)
+As-built Seedance pipeline port + Brand Bible port doc. Establishes
+`reelDirector.ts`, `muapi-seedance.ts`, `seedance/route.ts`, `seedanceClient.ts`,
+`ReelDirectorPanel.tsx`, and the data model in `review.ts`. Port this first.
+
+### `b728870` — omni-reference image support (env-configurable body field)
+Threads an ordered `referenceImages` URL array through the integration + route so
+omni-reference models resolve `@image1`/`@character` tokens against supplied
+stills. The array is only attached when usable http(s) URLs are present and rides
+under `MUAPI_SEEDANCE_REF_FIELD` (default `reference_images`), so a schema change
+is an env flip, not a code change.
+
+- `src/utils/integrations/muapi-seedance.ts` — reference-image cleaning
+  (http-only, de-duped, order-preserved) + conditional body field.
+- `src/lib/mothermode/content/reelDirector.ts` — carry/compose reference images
+  into the render request.
+- `src/app/api/mothermode/content/seedance/route.ts` — parse `string[]` **or**
+  `{url}[]` request shapes.
+- `src/components/mothermode/content/ReelDirectorPanel.tsx` — surface reference
+  stills in the panel.
+- `src/components/mothermode/content/seedanceClient.ts` — pass `referenceImages`
+  through the submit payload.
+- `.env.example` — `MUAPI_SEEDANCE_REF_FIELD` docs.
+- `docs/SEEDANCE_MODEL_SELECTOR_PORT.md` **(new)** — model-selector port doc.
+- `docs/SEEDANCE_VIDEO_PIPELINE_SYSTEM_PORT.md` — omni-reference addendum.
+
+### `ad55d33` — render UX (this doc's subject)
+Cheapest omni-reference default, longer timeouts, and time/cost/progress feedback
+(detailed in sections 1–3 above).
+
+- `src/utils/integrations/muapi-seedance.ts` — `model()` default →
+  `seedance-2-vip-omni-reference-1080p`; `MUAPI_POLL_TIMEOUT_MS` default 3→10 min.
+- `src/components/mothermode/content/seedanceClient.ts` — `renderSeedanceClip`
+  `intervalMs` 6 s / `maxWaitMs` 12 min defaults + credit-aware timeout message.
+- `src/components/mothermode/content/ReelDirectorPanel.tsx` — `modelMeta` cost
+  table, `estCost`/`fmtElapsed`, `startedAt`/`liveStatus` + 1 s clock, standing
+  banner, est-cost chip, recompose pill, state-aware render button.
+- `.env.example` — updated default docs for model + poll timing.
+
+### `89ca7d2` — this port doc
+- `docs/SEEDANCE_RENDER_UX_PORT.md` **(new)**.
+
+---
+
 ## Verification
 - `tsc --noEmit` clean.
 - `vitest` — reel-director, film-bible, brand-bible, muapi-seedance suites green
