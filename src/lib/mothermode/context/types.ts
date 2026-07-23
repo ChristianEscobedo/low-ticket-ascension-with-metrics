@@ -22,6 +22,7 @@ export type ContextSourceKind =
   | 'high-ticket-kit'
   | 'lead-gen-kit'
   | 'email-kit'
+  | 'brand-bible' // admin-editable visual identity for the cinematic pipeline
   | 'link' // an ad-hoc URL the copy should point at (inline value)
   | 'text'; // free-form notes pasted in by the owner (inline value)
 
@@ -33,6 +34,7 @@ export const CONTEXT_SOURCE_KINDS: ContextSourceKind[] = [
   'high-ticket-kit',
   'lead-gen-kit',
   'email-kit',
+  'brand-bible',
   'link',
   'text',
 ];

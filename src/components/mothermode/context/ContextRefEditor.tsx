@@ -24,6 +24,7 @@ const KIND_LABELS: Record<ContextSourceKind, string> = {
   'high-ticket-kit': 'High-ticket kit',
   'lead-gen-kit': 'Lead-gen kit',
   'email-kit': 'Email kit',
+  'brand-bible': 'Brand Bible',
   link: 'Link (URL)',
   text: 'Text notes',
 };
