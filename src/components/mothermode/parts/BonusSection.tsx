@@ -1,6 +1,10 @@
+'use client';
+
+import { iconFor } from '@/components/mothermode/parts/iconRegistry';
 import React from 'react';
 import { Gift, Check } from 'lucide-react';
 import type { MotherModeOffer } from '@/lib/mothermode/types';
+import { MmEditable } from '@/components/mothermode/sales/SalesPageEditContext';
 
 /** A small brass value tag, e.g. "$19 value". */
 const ValueTag: React.FC<{ value: string }> = ({ value }) => (
@@ -25,15 +29,15 @@ export const BonusSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =>
           <div className="max-w-2xl">
             <div className="flex items-center gap-2.5 text-sm uppercase tracking-[0.2em] text-mode">
               <Gift className="h-4 w-4" />
-              {bonuses.eyebrow}
+              <MmEditable field="bonusesEyebrow" as="span">{bonuses.eyebrow}</MmEditable>
             </div>
-            <h2 className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
+            <MmEditable field="bonusesHeading" as="h2" className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
               {bonuses.heading}
-            </h2>
+            </MmEditable>
             {bonuses.intro && (
-              <p className="mt-5 text-xl leading-relaxed text-ink/65">
+              <MmEditable field="bonusesIntro" multiline as="p" className="mt-5 text-xl leading-relaxed text-ink/65">
                 {bonuses.intro}
-              </p>
+              </MmEditable>
             )}
           </div>
           {bonuses.totalValue && (
@@ -42,7 +46,7 @@ export const BonusSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =>
                 Bonus stack
               </div>
               <div className="mt-1 font-display text-4xl text-brass">
-                {bonuses.totalValue}
+                <MmEditable field="bonusesTotalValue" as="span">{bonuses.totalValue}</MmEditable>
               </div>
               <div className="text-xs uppercase tracking-[0.18em] text-ink/45">
                 value, free
@@ -53,11 +57,11 @@ export const BonusSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =>
 
         <div className="mt-12 grid gap-5 sm:grid-cols-3">
           {bonuses.items.map((bonus, i) => {
-            const Icon = bonus.icon;
+            const Icon = iconFor(bonus.icon);
             const n = (i + 1).toString().padStart(2, '0');
             return (
               <article
-                key={bonus.title}
+                key={bonus.title + i}
                 className="group relative flex flex-col overflow-hidden rounded-3xl border border-ink/10 bg-white/70 p-7 transition hover:border-mode/30 hover:shadow-sm"
               >
                 <span className="pointer-events-none absolute -right-2 -top-6 select-none font-display text-8xl leading-none text-mode/[0.05]">
@@ -67,28 +71,44 @@ export const BonusSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =>
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-mode/20 bg-bone">
                     <Icon className="h-5 w-5 text-mode" />
                   </span>
-                  <ValueTag value={bonus.value} />
+                  <MmEditable field={`bonusesItems.${i}.value`} as="span">
+                    <ValueTag value={bonus.value} />
+                  </MmEditable>
                 </div>
                 {bonus.tag && (
-                  <div className="relative mt-6 text-xs uppercase tracking-[0.18em] text-brass">
+                  <MmEditable
+                    field={`bonusesItems.${i}.tag`}
+                    as="div"
+                    className="relative mt-6 text-xs uppercase tracking-[0.18em] text-brass"
+                  >
                     {bonus.tag}
-                  </div>
+                  </MmEditable>
                 )}
-                <h3 className="relative mt-1.5 font-display text-2xl text-ink">
+                <MmEditable
+                  field={`bonusesItems.${i}.title`}
+                  as="h3"
+                  className="relative mt-1.5 font-display text-2xl text-ink"
+                >
                   {bonus.title}
-                </h3>
-                <p className="relative mt-2.5 flex-1 text-lg leading-relaxed text-ink/65">
+                </MmEditable>
+                <MmEditable
+                  field={`bonusesItems.${i}.description`}
+                  multiline
+                  as="p"
+                  className="relative mt-2.5 flex-1 text-lg leading-relaxed text-ink/65"
+                >
                   {bonus.description}
-                </p>
+                </MmEditable>
               </article>
             );
           })}
         </div>
 
+
         {bonuses.closer && (
           <div className="mt-8 flex items-center justify-center gap-2 text-base text-ink/60">
             <Check className="h-4 w-4 flex-shrink-0 text-mode" />
-            <span>{bonuses.closer}</span>
+            <span><MmEditable field="bonusesCloser" multiline as="span">{bonuses.closer}</MmEditable></span>
           </div>
         )}
       </div>

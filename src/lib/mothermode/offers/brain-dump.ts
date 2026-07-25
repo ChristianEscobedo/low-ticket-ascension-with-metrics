@@ -99,11 +99,11 @@ export const brainDump: MotherModeOffer = {
     lead:
       'These are not generic templates you fill in yourself. The AI builds each one from your answers, so every piece fits your actual life: get it out, decide it once, hand off what was never yours, keep it light. Nothing here is filler.',
     items: [
-      { title: 'The Brain Dump Template', description: 'The structured prompts that pull every open tab out of your head. No blank page to stare at, no wondering if you missed something.', icon: ListChecks, tag: 'Get it out', value: '$27', outcome: 'The list leaves your head and becomes something anyone can read.', resourceKey: 'brain-dump-template' },
-      { title: 'The Sorting Pass', description: 'Move each item into Drop, Automate, Delegate, or Keep. The decision gets made one time, not re-made every night at 11pm.', icon: SplitSquareVertical, tag: 'Decide once', value: '$24', outcome: 'A third of the list is gone before you do a single task.', resourceKey: 'sorting-pass' },
-      { title: 'The Delegate Scripts', description: 'The exact words for the partner, the sitter, the family. The sentences most mothers never find, so the asking stays harder than the doing.', icon: MessagesSquare, tag: 'Hand it off', value: '$19', outcome: 'The work that was never only yours finally moves off your plate.', resourceKey: 'delegate-scripts' },
-      { title: 'The Weekly Reset', description: 'A one-page rhythm that catches the list before it refills. About 10 minutes, once a week. Not a new habit to defend.', icon: RefreshCcw, tag: 'Keep it light', value: '$17', outcome: 'The load never gets the chance to climb back to where it was.', resourceKey: 'weekly-reset' },
-      { title: 'The Load Map', description: 'A one-page picture of where the weight actually sits, so you stop guessing and know exactly what to cut first.', icon: Map, tag: 'See it', value: '$10', outcome: 'You can finally point at the invisible work and say: this is what I carry.', resourceKey: 'load-map' },
+      { title: 'The Brain Dump Template', description: 'The structured prompts that pull every open tab out of your head. No blank page to stare at, no wondering if you missed something.', icon: 'ListChecks', tag: 'Get it out', value: '$27', outcome: 'The list leaves your head and becomes something anyone can read.', resourceKey: 'brain-dump-template' },
+      { title: 'The Sorting Pass', description: 'Move each item into Drop, Automate, Delegate, or Keep. The decision gets made one time, not re-made every night at 11pm.', icon: 'SplitSquareVertical', tag: 'Decide once', value: '$24', outcome: 'A third of the list is gone before you do a single task.', resourceKey: 'sorting-pass' },
+      { title: 'The Delegate Scripts', description: 'The exact words for the partner, the sitter, the family. The sentences most mothers never find, so the asking stays harder than the doing.', icon: 'MessagesSquare', tag: 'Hand it off', value: '$19', outcome: 'The work that was never only yours finally moves off your plate.', resourceKey: 'delegate-scripts' },
+      { title: 'The Weekly Reset', description: 'A one-page rhythm that catches the list before it refills. About 10 minutes, once a week. Not a new habit to defend.', icon: 'RefreshCcw', tag: 'Keep it light', value: '$17', outcome: 'The load never gets the chance to climb back to where it was.', resourceKey: 'weekly-reset' },
+      { title: 'The Load Map', description: 'A one-page picture of where the weight actually sits, so you stop guessing and know exactly what to cut first.', icon: 'Map', tag: 'See it', value: '$10', outcome: 'You can finally point at the invisible work and say: this is what I carry.', resourceKey: 'load-map' },
     ],
   },
 
@@ -112,10 +112,10 @@ export const brainDump: MotherModeOffer = {
     subheading:
       'You answer a few questions. The AI does the rest. No blank page, no weekend lost, nothing to keep up with. Most of the work here was never yours to do.',
     steps: [
-      { number: 1, title: 'Answer', description: 'A few quick questions about your life and your people. No blank page to stare at. This is the only part you do.', icon: Brain, meta: 'About 3 minutes', shift: 'The whole load gets named in one place, without you digging for it.' },
-      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system, already sorted into Drop, Automate, Delegate, and Keep. The load is not just out of your head, it arrives already shrunk.', icon: Sparkles, meta: 'Instant', shift: 'You see how much you were carrying that never needed to be yours.' },
-      { number: 3, title: 'Hand off', description: 'The AI writes the exact words for the partner, the sitter, the family. You send them. The work that was never only yours finally moves.', icon: MessagesSquare, meta: 'One conversation', shift: 'The work leaves your plate instead of just moving around on it.' },
-      { number: 4, title: 'Stay light', description: 'A quick weekly check catches new items before they pile back up. The AI keeps it current, so you do not have to.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The list never climbs back to the level that used to keep you up.' },
+      { number: 1, title: 'Answer', description: 'A few quick questions about your life and your people. No blank page to stare at. This is the only part you do.', icon: 'Brain', meta: 'About 3 minutes', shift: 'The whole load gets named in one place, without you digging for it.' },
+      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system, already sorted into Drop, Automate, Delegate, and Keep. The load is not just out of your head, it arrives already shrunk.', icon: 'Sparkles', meta: 'Instant', shift: 'You see how much you were carrying that never needed to be yours.' },
+      { number: 3, title: 'Hand off', description: 'The AI writes the exact words for the partner, the sitter, the family. You send them. The work that was never only yours finally moves.', icon: 'MessagesSquare', meta: 'One conversation', shift: 'The work leaves your plate instead of just moving around on it.' },
+      { number: 4, title: 'Stay light', description: 'A quick weekly check catches new items before they pile back up. The AI keeps it current, so you do not have to.', icon: 'RefreshCcw', meta: 'A few minutes a week', shift: 'The list never climbs back to the level that used to keep you up.' },
     ],
     closer:
       'No project to start. No streak to protect. You answer, the AI builds, and you walk away with a system that survives a hard week, because most weeks are.',
@@ -167,9 +167,9 @@ export const brainDump: MotherModeOffer = {
       'The AI gets the list out of your head in minutes. These make sure the quiet actually sticks past the first day.',
     totalValue: '$65',
     items: [
-      { title: 'The First Night Guide', description: 'Exactly what to do the evening after your first dump so the quiet does not evaporate by morning. Not more work. A short ritual that closes the loop your brain keeps reopening.', value: '$19', icon: Moon, tag: 'Use it tonight' },
-      { title: 'The Invisible Work Conversation', description: 'A one-page way to show your partner what the load actually is, before you ask them to carry part of it. So the conversation starts with seeing, not blaming.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
-      { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: Feather, tag: 'Put it down' },
+      { title: 'The First Night Guide', description: 'Exactly what to do the evening after your first dump so the quiet does not evaporate by morning. Not more work. A short ritual that closes the loop your brain keeps reopening.', value: '$19', icon: 'Moon', tag: 'Use it tonight' },
+      { title: 'The Invisible Work Conversation', description: 'A one-page way to show your partner what the load actually is, before you ask them to carry part of it. So the conversation starts with seeing, not blaming.', value: '$29', icon: 'HeartHandshake', tag: 'Bring them in' },
+      { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: 'Feather', tag: 'Put it down' },
     ],
     closer:
       'All three land in your account the moment you join. Nothing else to buy, nothing else to claim.',

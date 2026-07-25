@@ -6,7 +6,6 @@ import {
   ListChecks,
   RefreshCcw,
   Sparkles,
-  Scale,
   HeartHandshake,
   Feather,
   Scissors,
@@ -101,11 +100,11 @@ export const offloadMap: MotherModeOffer = {
     lead:
       'These are not blank templates you sort yourself. The AI runs your actual list through the filter, so every piece is acting on your real tasks: sort them, drop them, automate them, hand them off, and protect the short pile that is left. Nothing here is filler.',
     items: [
-      { title: 'The Sorting Grid', description: 'The one-page filter that gives every task a single, final home: Drop, Automate, Delegate, or Keep. No item gets to stay undecided.', icon: Filter, tag: 'Sort it', value: '$27', outcome: 'Every task has exactly one decision attached, instead of defaulting to you.' },
-      { title: 'The Drop List', description: 'The permission and the prompts to delete the tasks that never actually mattered. The fastest weight you will ever lose.', icon: Trash2, tag: 'Drop it', value: '$19', outcome: 'A third of the list is gone before you do a single thing.' },
-      { title: 'The Automate Library', description: 'The set-and-forget setups that delete recurring tasks for good. The standing order, the auto-refill, the recurring everything.', icon: Repeat, tag: 'Automate it', value: '$24', outcome: 'The tasks that came back every week stop coming back at all.' },
-      { title: 'The Delegate Scripts', description: 'Word-for-word asks for the partner, the sitter, the family. The sentences that make the work stay handed off instead of boomeranging back.', icon: MessagesSquare, tag: 'Delegate it', value: '$24', outcome: 'The work that was never only yours finally moves, and stays moved.' },
-      { title: 'The Keep List', description: 'The short, honest pile of what is genuinely yours, with everything else cleared away from around it. So you can see it is smaller than it felt.', icon: ListChecks, tag: 'Keep it', value: '$10', outcome: 'You see, in one page, how little was ever actually only yours.' },
+      { title: 'The Sorting Grid', description: 'The one-page filter that gives every task a single, final home: Drop, Automate, Delegate, or Keep. No item gets to stay undecided.', icon: 'Filter', tag: 'Sort it', value: '$27', outcome: 'Every task has exactly one decision attached, instead of defaulting to you.' },
+      { title: 'The Drop List', description: 'The permission and the prompts to delete the tasks that never actually mattered. The fastest weight you will ever lose.', icon: 'Trash2', tag: 'Drop it', value: '$19', outcome: 'A third of the list is gone before you do a single thing.' },
+      { title: 'The Automate Library', description: 'The set-and-forget setups that delete recurring tasks for good. The standing order, the auto-refill, the recurring everything.', icon: 'Repeat', tag: 'Automate it', value: '$24', outcome: 'The tasks that came back every week stop coming back at all.' },
+      { title: 'The Delegate Scripts', description: 'Word-for-word asks for the partner, the sitter, the family. The sentences that make the work stay handed off instead of boomeranging back.', icon: 'MessagesSquare', tag: 'Delegate it', value: '$24', outcome: 'The work that was never only yours finally moves, and stays moved.' },
+      { title: 'The Keep List', description: 'The short, honest pile of what is genuinely yours, with everything else cleared away from around it. So you can see it is smaller than it felt.', icon: 'ListChecks', tag: 'Keep it', value: '$10', outcome: 'You see, in one page, how little was ever actually only yours.' },
     ],
   },
 
@@ -114,10 +113,10 @@ export const offloadMap: MotherModeOffer = {
     subheading:
       'You bring the list. The AI does the deciding and the moving. No blank grid to fill in, no weekend lost, nothing to keep up with. Most of this list was never yours to carry.',
     steps: [
-      { number: 1, title: 'Bring the list', description: 'Dump what you are carrying, or paste a brain dump you already have. A few quick questions about your people fill in the gaps. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole plate is named in one place, ready to be cut down.' },
-      { number: 2, title: 'The AI sorts it', description: 'Every item gets one decision: Drop, Automate, Delegate, or Keep. The load is not just organized, it arrives already cut, with the Keep pile finally small.', icon: Filter, meta: 'Instant', shift: 'You see how much of the list never needed to be yours at all.' },
-      { number: 3, title: 'Move it', description: 'The AI writes the delegate scripts, lays out the automations, and confirms the drops. You send and set up. The non-Keep piles leave your plate.', icon: MessagesSquare, meta: 'One sitting', shift: 'The work moves off your plate instead of just around on it.' },
-      { number: 4, title: 'Stay light', description: 'A quick weekly re-sort catches anything that drifted back to Keep before it settles. The AI keeps it current, so you do not have to.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The plate stops quietly refilling itself by default.' },
+      { number: 1, title: 'Bring the list', description: 'Dump what you are carrying, or paste a brain dump you already have. A few quick questions about your people fill in the gaps. This is the only part you do.', icon: 'Sparkles', meta: 'About 3 minutes', shift: 'The whole plate is named in one place, ready to be cut down.' },
+      { number: 2, title: 'The AI sorts it', description: 'Every item gets one decision: Drop, Automate, Delegate, or Keep. The load is not just organized, it arrives already cut, with the Keep pile finally small.', icon: 'Filter', meta: 'Instant', shift: 'You see how much of the list never needed to be yours at all.' },
+      { number: 3, title: 'Move it', description: 'The AI writes the delegate scripts, lays out the automations, and confirms the drops. You send and set up. The non-Keep piles leave your plate.', icon: 'MessagesSquare', meta: 'One sitting', shift: 'The work moves off your plate instead of just around on it.' },
+      { number: 4, title: 'Stay light', description: 'A quick weekly re-sort catches anything that drifted back to Keep before it settles. The AI keeps it current, so you do not have to.', icon: 'RefreshCcw', meta: 'A few minutes a week', shift: 'The plate stops quietly refilling itself by default.' },
     ],
     closer:
       'No system to maintain. No streak to protect. You bring the list once, the AI cuts and moves it, and you walk away carrying only what was actually yours.',
@@ -169,9 +168,9 @@ export const offloadMap: MotherModeOffer = {
       'The AI sorts the list in minutes. These make sure the things you drop and hand off actually stay gone.',
     totalValue: '$65',
     items: [
-      { title: 'The First Cut Guide', description: 'Exactly how to drop your first ten items tonight without second-guessing every one. The fastest way to feel the plate get lighter on day one.', value: '$19', icon: Scissors, tag: 'Start tonight' },
-      { title: 'The Fair-Share Picture', description: 'A one-page way to show your partner what the load actually is before you ask them to carry part of it. So the handoff starts with seeing, not blaming.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
-      { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you delete or hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: Feather, tag: 'Put it down' },
+      { title: 'The First Cut Guide', description: 'Exactly how to drop your first ten items tonight without second-guessing every one. The fastest way to feel the plate get lighter on day one.', value: '$19', icon: 'Scissors', tag: 'Start tonight' },
+      { title: 'The Fair-Share Picture', description: 'A one-page way to show your partner what the load actually is before you ask them to carry part of it. So the handoff starts with seeing, not blaming.', value: '$29', icon: 'HeartHandshake', tag: 'Bring them in' },
+      { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you delete or hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: 'Feather', tag: 'Put it down' },
     ],
     closer:
       'All three land in your account the moment you join. Nothing else to buy, nothing else to claim.',

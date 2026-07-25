@@ -1,10 +1,17 @@
 'use client';
 
+import { iconFor } from '@/components/mothermode/parts/iconRegistry';
 import React, { useEffect, useState } from 'react';
 import { Timer, Check, ShieldCheck, ArrowRight } from 'lucide-react';
 import { OneClickCheckoutModal } from '@/components/checkout/OneClickCheckoutModal';
 import { MediaFrame } from '@/components/mothermode/parts/MediaFrame';
 import type { AscensionOffer } from '@/lib/mothermode/ascension';
+import {
+  MmEditable,
+  MmEditButton,
+  useSalesPageEdit,
+} from '@/components/mothermode/sales/SalesPageEditContext';
+
 import {
   parsePurchaseQuery,
   readPurchases,
@@ -54,8 +61,10 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
   const [extendEmail, setExtendEmail] = useState('');
   const [extendDeadline, setExtendDeadline] = useState<string | null>(null);
   const [extendError, setExtendError] = useState<string | null>(null);
+  const pageEdit = useSalesPageEdit();
 
   useEffect(() => {
+
     const t = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
@@ -86,10 +95,15 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
     }
   }, [recordOnAccept, acceptRedirect]);
 
-  const accept = () => setShowModal(true);
+  const accept = () => {
+    if (pageEdit?.isEditMode) return;
+    setShowModal(true);
+  };
   const decline = () => {
+    if (pageEdit?.isEditMode) return;
     window.location.href = declineRedirect;
   };
+
   const onCheckoutSuccess = () => {
     writePurchases(recordOnAccept);
     setShowModal(false);
@@ -158,33 +172,43 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
 
   return (
     <div className="min-h-screen bg-bone font-sans text-ink antialiased">
-      {/* Timer */}
+      {/* Timer banner — whole bar is editable in edit mode */}
       <div className="bg-mode py-3 text-center text-bone">
         <div className="flex items-center justify-center gap-2 text-sm">
           <Timer className="h-4 w-4 text-brass" />
           <span className="font-medium tabular-nums">
-            {offer.timerLabel}. {pad(timeLeft.minutes)}:{pad(timeLeft.seconds)}
+            <MmEditable
+              field="timerLabel"
+              as="span"
+              onDark
+              value={offer.timerLabel}
+              className="px-1"
+            >
+              {offer.timerLabel ||
+                (pageEdit?.isEditMode ? 'Timer label…' : '')}
+            </MmEditable>
+            . {pad(timeLeft.minutes)}:{pad(timeLeft.seconds)}
           </span>
         </div>
       </div>
 
       <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
         {/* Hook */}
-        <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass">
+        <MmEditable field="eyebrow" as="p" className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass">
           {offer.eyebrow}
-        </p>
+        </MmEditable>
         <h1 className="mt-5 text-center font-display text-4xl leading-[1.05] text-ink sm:text-5xl md:text-6xl">
-          {offer.headline}{' '}
-          <span className="italic text-mode">{offer.headlineEmphasis}</span>
+          <MmEditable field="headline" as="span">{offer.headline}</MmEditable>{' '}
+          <MmEditable field="headlineEmphasis" as="span" className="italic text-mode">{offer.headlineEmphasis}</MmEditable>
         </h1>
         {offer.headlineSuffix && (
-          <p className="mt-4 text-center font-display text-xl text-ink/70 sm:text-2xl">
+          <MmEditable field="headlineSuffix" as="p" className="mt-4 text-center font-display text-xl text-ink/70 sm:text-2xl">
             {offer.headlineSuffix}
-          </p>
+          </MmEditable>
         )}
-        <p className="mx-auto mt-6 max-w-2xl text-center text-lg leading-relaxed text-ink/70">
+        <MmEditable field="subheadline" multiline as="p" className="mx-auto mt-6 max-w-2xl text-center text-lg leading-relaxed text-ink/70">
           {offer.subheadline}
-        </p>
+        </MmEditable>
 
         {/* Top video. Shows a walkthrough or an on-brand placeholder slot. */}
         {offer.media?.video && (
@@ -195,79 +219,108 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
               label="Walkthrough video"
               hint="1280 × 720"
               video
+              mediaField="mediaVideoPoster"
+              mediaKind="image"
+              mediaLabel="Upsell video poster"
             />
+
           </div>
         )}
 
         <div className="mt-10 flex flex-col items-center">
-          <button
+          <MmEditButton
+            field="ctaYes"
+            value={offer.acceptLabel}
             onClick={accept}
+            onDark
             className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-full bg-mode px-8 py-5 text-lg font-semibold text-bone transition-colors hover:bg-mode-deep"
           >
             <Check className="h-5 w-5 text-brass" />
-            {offer.acceptLabel}
-          </button>
+            {offer.acceptLabel ||
+              (pageEdit?.isEditMode ? 'Yes button text…' : '')}
+          </MmEditButton>
           <p className="mt-3 text-sm text-ink/45">
             This page closes when the timer runs out. You will not see it again.
           </p>
         </div>
 
         {/* Letter */}
-        <div className="mx-auto mt-16 max-w-2xl space-y-5 text-lg leading-relaxed text-ink/80">
+        <MmEditable field="letter" multiline as="div" className="mx-auto mt-16 max-w-2xl space-y-5 text-lg leading-relaxed text-ink/80" value={(offer.letter || []).join('\n')}>
           {offer.letter.map((para, i) => (
             <p key={i}>{para}</p>
           ))}
-        </div>
+        </MmEditable>
 
         {/* Gallery. Screenshots that show the thing actually working. */}
-        {offer.media?.gallery && offer.media.gallery.length > 0 && (
+        {(offer.media?.gallery && offer.media.gallery.length > 0) ||
+        pageEdit?.isEditMode ? (
           <div className="mt-16">
-            {offer.media.galleryEyebrow && (
-              <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass">
-                {offer.media.galleryEyebrow}
-              </p>
+            {(offer.media?.galleryEyebrow || pageEdit?.isEditMode) && (
+              <MmEditable
+                field="galleryEyebrow"
+                as="p"
+                className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass"
+              >
+                {offer.media?.galleryEyebrow ||
+                  (pageEdit?.isEditMode ? 'Gallery eyebrow…' : '')}
+              </MmEditable>
             )}
             <div
               className={`mt-8 grid gap-5 ${
-                offer.media.gallery.length === 2
+                (offer.media?.gallery?.length || 0) === 2
                   ? 'sm:grid-cols-2'
                   : 'sm:grid-cols-3'
               }`}
             >
-              {offer.media.gallery.map((shot) => (
-                <figure key={shot.alt}>
+              {(offer.media?.gallery && offer.media.gallery.length > 0
+                ? offer.media.gallery
+                : pageEdit?.isEditMode
+                  ? [
+                      { alt: 'Shot 1', hint: '1080 × 1920' },
+                      { alt: 'Shot 2', hint: '1080 × 1920' },
+                      { alt: 'Shot 3', hint: '1080 × 1920' },
+                    ]
+                  : []
+              ).map((shot, gi) => (
+                <figure key={`${shot.alt || 'shot'}-${gi}`}>
                   <MediaFrame
                     src={shot.src}
-                    alt={shot.alt}
-                    label={shot.alt}
+                    alt={shot.alt || `Gallery shot ${gi + 1}`}
+                    label={shot.alt || `Gallery shot ${gi + 1}`}
                     hint={shot.hint}
                     aspect={offer.media?.galleryAspect ?? 'aspect-[9/16]'}
+                    mediaField={`gallery.${gi}.src`}
+                    mediaKind="image"
+                    mediaLabel={`Gallery shot ${gi + 1}`}
                   />
-                  {shot.caption && (
-                    <figcaption className="mt-3 text-center text-sm leading-relaxed text-ink/60">
-                      {shot.caption}
-                    </figcaption>
-                  )}
+                  <MmEditable
+                    field={`gallery.${gi}.caption`}
+                    as="figcaption"
+                    className="mt-3 text-center text-sm leading-relaxed text-ink/60"
+                  >
+                    {shot.caption ||
+                      (pageEdit?.isEditMode ? 'Caption…' : '')}
+                  </MmEditable>
                 </figure>
               ))}
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Value stack */}
         <div className="mt-16">
-          <p className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass">
+          <MmEditable field="stackEyebrow" as="p" className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-brass">
             {offer.stackEyebrow}
-          </p>
-          <h2 className="mt-3 text-center font-display text-3xl text-ink sm:text-4xl">
+          </MmEditable>
+          <MmEditable field="stackHeading" as="h2" className="mt-3 text-center font-display text-3xl text-ink sm:text-4xl">
             {offer.stackHeading}
-          </h2>
+          </MmEditable>
           <div className="mt-8 overflow-hidden rounded-2xl border border-ink/10 bg-white/70 shadow-sm">
-            {offer.features.map((f) => {
-              const Icon = f.icon;
+            {offer.features.map((f, fi) => {
+              const Icon = iconFor(f.icon);
               return (
                 <div
-                  key={f.title}
+                  key={`${f.title}-${fi}`}
                   className={`flex items-start justify-between gap-4 border-b border-ink/[0.06] px-5 py-4 last:border-b-0 ${
                     f.core ? 'bg-mode/[0.04]' : ''
                   }`}
@@ -279,54 +332,95 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
                       }`}
                     />
                     <div>
-                      <div className="font-display text-lg text-ink">
+                      <MmEditable
+                        field={`features.${fi}.title`}
+                        as="div"
+                        className="font-display text-lg text-ink"
+                      >
                         {f.title}
-                      </div>
-                      <div className="text-sm text-ink/60">{f.description}</div>
+                      </MmEditable>
+                      <MmEditable
+                        field={`features.${fi}.description`}
+                        multiline
+                        as="div"
+                        className="text-sm text-ink/60"
+                      >
+                        {f.description}
+                      </MmEditable>
                     </div>
                   </div>
-                  <span className="flex-shrink-0 font-display text-lg text-brass">
+                  <MmEditable
+                    field={`features.${fi}.value`}
+                    as="span"
+                    className="flex-shrink-0 font-display text-lg text-brass"
+                  >
                     {f.value}
-                  </span>
+                  </MmEditable>
                 </div>
               );
             })}
           </div>
           <p className="mt-4 text-right text-sm text-ink/55">
             Total value:{' '}
-            <span className="font-display text-base text-ink">
+            <MmEditable
+              field="totalValueLabel"
+              as="span"
+              className="font-display text-base text-ink"
+            >
               {offer.totalValueLabel}
-            </span>
+            </MmEditable>
           </p>
         </div>
 
         {/* Big idea */}
-        <p className="mx-auto mt-16 max-w-2xl text-center font-display text-2xl italic leading-snug text-mode sm:text-3xl">
+        <MmEditable
+          field="bigIdea"
+          multiline
+          as="p"
+          className="mx-auto mt-16 max-w-2xl text-center font-display text-2xl italic leading-snug text-mode sm:text-3xl"
+        >
           {offer.bigIdea}
-        </p>
+        </MmEditable>
 
         {/* Pricing + decision */}
         <div className="mt-12 rounded-2xl border border-brass/30 bg-white/70 p-8 text-center shadow-sm sm:p-10">
-          <div className="font-display text-2xl text-ink/40 line-through">
+          <MmEditable
+            field="originalPriceLabel"
+            as="div"
+            className="font-display text-2xl text-ink/40 line-through"
+          >
             {offer.originalPriceLabel}
-          </div>
-          <div className="mt-1 font-display text-5xl text-mode sm:text-6xl">
+          </MmEditable>
+          <MmEditable
+            field="priceLabel"
+            as="div"
+            className="mt-1 font-display text-5xl text-mode sm:text-6xl"
+          >
             {offer.priceLabel}
-          </div>
+          </MmEditable>
           <div className="mt-8 flex flex-col items-center gap-3">
-            <button
+            <MmEditButton
+              field="ctaYes"
+              value={offer.acceptLabel}
               onClick={accept}
+              onDark
               className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-full bg-mode px-8 py-5 text-lg font-semibold text-bone transition-colors hover:bg-mode-deep"
             >
               <Check className="h-5 w-5 text-brass" />
-              {offer.acceptLabel}
-            </button>
-            <button
+              {offer.acceptLabel ||
+                (pageEdit?.isEditMode ? 'Yes button text…' : '')}
+            </MmEditButton>
+            <MmEditButton
+              field="ctaNo"
+              value={offer.declineLabel}
               onClick={decline}
+              onDark={false}
               className="px-6 py-3 text-sm text-ink/45 transition-colors hover:text-ink/70"
             >
-              {offer.declineLabel}
-            </button>
+              {offer.declineLabel ||
+                (pageEdit?.isEditMode ? 'No button text…' : '')}
+            </MmEditButton>
+
 
             {extendSequenceId && extendState === 'idle' && (
               <button
@@ -398,24 +492,38 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
         <div className="mt-10 flex items-start gap-4 rounded-2xl border border-ink/10 bg-mode/[0.03] p-6">
           <ShieldCheck className="mt-0.5 h-8 w-8 flex-shrink-0 text-brass" />
           <div>
-            <h3 className="font-display text-lg text-ink">
+            <MmEditable
+              field="guaranteeTitle"
+              as="h3"
+              className="font-display text-lg text-ink"
+            >
               {offer.guarantee.title}
-            </h3>
-            <p className="mt-1 leading-relaxed text-ink/70">
+            </MmEditable>
+            <MmEditable
+              field="guaranteeBody"
+              multiline
+              as="p"
+              className="mt-1 leading-relaxed text-ink/70"
+            >
               {offer.guarantee.body}
-            </p>
+            </MmEditable>
           </div>
         </div>
 
         <div className="mt-10 flex justify-center">
-          <button
+          <MmEditButton
+            field="ctaNo"
+            value={offer.declineLabel}
             onClick={decline}
+            onDark={false}
             className="inline-flex items-center gap-1.5 text-sm text-ink/40 transition-colors hover:text-ink/60"
           >
-            <span>{offer.declineLabel}</span>
+            {offer.declineLabel ||
+              (pageEdit?.isEditMode ? 'No button text…' : '')}
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </MmEditButton>
         </div>
+
       </div>
 
       <OneClickCheckoutModal

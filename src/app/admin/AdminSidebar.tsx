@@ -15,7 +15,10 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/high-ticket', label: 'High Ticket Kit' },
   { href: '/admin/lead-gen', label: 'Lead Gen Kit' },
   { href: '/admin/email-marketing', label: 'Email Marketing Kit' },
+  { href: '/admin/funnels', label: 'Funnels' },
+  { href: '/admin/sales-funnels', label: 'Sales Funnels' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
+
 
   { href: '/admin/purchases', label: 'Purchases' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },

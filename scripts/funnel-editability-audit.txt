@@ -1,0 +1,167 @@
+
+======== SalesOptinContent (SalesOptinPage) ========
+Type fields (17): eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, audience, benefits, ctaText, badgeText, magnetTitle, magnetDescription, coverImageUrl, heroVideoUrl, emailPlaceholder, namePlaceholder, collectName, privacyNote
+On-page field= refs (11): audience, badgeText, benefits, eyebrow, headline, headlineEmphasis, headlineSuffix, magnetDescription, magnetTitle, privacyNote, subheadline
+Missing on-page: ctaText, coverImageUrl, heroVideoUrl, emailPlaceholder, namePlaceholder, collectName
+Missing admin: (none)
+
+======== SalesPageContent (SalesPage) ========
+Type fields (88): name, tagline, category, priceCents, originalPriceCents, priceLabel, originalPriceLabel, priceDescription, ctaText, ctaSubtext, guaranteeTitle, guaranteeText, heroImageUrl, heroVideoUrl, founderPhotoUrl, eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, audience, promise, problemHeading, problemIntro, problemScene, problemPoints, problemCost, problemBody, originEyebrow, originHeading, originParagraphs, whatIsHeading, whatIsParagraphs, solutionHeading, solutionBody, mechanismEyebrow, mechanismHeading, mechanismLabel, mechanismParagraphs, mechanismPoints, insideHeading, insideSubheading, insideLead, insideItems, title, description, tag, value, outcome, featuresHeading, features, methodHeading, methodSubheading, methodSteps, number, title, description, meta, shift, methodCloser, oldWayHeading, oldWayItems, newWayHeading, newWayItems, proof, testimonialsHeading, testimonials, bonusesEyebrow, bonusesHeading, bonusesIntro, bonusesItems, bonusesTotalValue, bonusesCloser, founderEyebrow, founderHeading, founderGreeting, founderParagraphs, founderSignoff, founderPs, faqHeading, faqs, finalCtaHeading, finalCtaBody, bumps, id, title, description, price
+On-page field= refs (58): audience, bonusesCloser, bonusesEyebrow, bonusesHeading, bonusesIntro, bonusesTotalValue, category, ctaSubtext, ctaText, eyebrow, faqHeading, finalCtaBody, finalCtaHeading, founderEyebrow, founderGreeting, founderHeading, founderParagraphs, founderPs, founderSignoff, guaranteeText, guaranteeTitle, headline, headlineEmphasis, headlineSuffix, insideHeading, insideLead, insideSubheading, letter, mechanismEyebrow, mechanismHeading, mechanismLabel, mechanismParagraphs, methodCloser, methodHeading, methodSubheading, name, newWayHeading, newWayItems, oldWayHeading, oldWayItems, originEyebrow, originHeading, originParagraphs, originalPriceLabel, priceLabel, problemCost, problemHeading, problemIntro, problemPoints, problemScene, promise, stackEyebrow, stackHeading, subheadline, tagline, testimonialsHeading, whatIsHeading, whatIsParagraphs
+Missing on-page: priceCents, originalPriceCents, priceDescription, heroImageUrl, heroVideoUrl, founderPhotoUrl, problemBody, solutionHeading, solutionBody, mechanismPoints, insideItems, title, description, tag, value, outcome, featuresHeading, features, methodSteps, number, title, description, meta, shift, proof, testimonials, bonusesItems, faqs, bumps, id, title, description, price
+Missing admin: originalPriceCents
+
+======== VslPageContent (VslPage) ========
+Type fields (10): eyebrow, headline, subheadline, videoUrl, ctaRevealSeconds, ctaText, ctaHref, bullets, stickyPlayer, autoplay
+On-page field= refs (8): bullets, ctaHref, ctaRevealSeconds, ctaText, eyebrow, headline, subheadline, videoUrl
+Missing on-page: stickyPlayer, autoplay
+Missing admin: (none)
+
+======== CheckoutContent (CheckoutPage) ========
+Type fields (14): eyebrow, headline, subheadline, priceLabel, priceCents, stripePriceId, productName, productId, productImageUrl, bullets, ctaText, guaranteeText, paymentType, trialDays
+On-page field= refs (7): bullets, eyebrow, guaranteeText, headline, priceLabel, productName, subheadline
+Missing on-page: priceCents, stripePriceId, productId, productImageUrl, ctaText, paymentType, trialDays
+Missing admin: (none)
+
+======== UpsellContent (UpsellPage) ========
+Type fields (38): enabled, productId, billingType, interval, priceCents, priceLabel, originalPriceLabel, metadataType, pageType, stripePriceId, productName, paymentType, timerLabel, timerMinutes, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, imageUrl, videoUrl, eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, letter, bullets, stackEyebrow, stackHeading, features, totalValueLabel, bigIdea, ctaYes, ctaNo, yesHref, guaranteeTitle, guaranteeBody
+On-page field= refs (61): audience, bigIdea, bonusesCloser, bonusesEyebrow, bonusesHeading, bonusesIntro, bonusesTotalValue, category, ctaNo, ctaYes, eyebrow, faqHeading, finalCtaBody, finalCtaHeading, founderEyebrow, founderGreeting, founderHeading, founderParagraphs, founderPs, founderSignoff, guaranteeBody, guaranteeText, guaranteeTitle, headline, headlineEmphasis, headlineSuffix, insideHeading, insideLead, insideSubheading, letter, mechanismEyebrow, mechanismHeading, mechanismLabel, mechanismParagraphs, methodCloser, methodHeading, methodSubheading, newWayHeading, newWayItems, oldWayHeading, oldWayItems, originEyebrow, originHeading, originParagraphs, originalPriceLabel, priceLabel, problemCost, problemHeading, problemIntro, problemPoints, problemScene, productName, promise, stackEyebrow, stackHeading, subheadline, testimonialsHeading, timerLabel, totalValueLabel, whatIsHeading, whatIsParagraphs
+Missing on-page: enabled, productId, billingType, interval, priceCents, metadataType, pageType, stripePriceId, paymentType, timerMinutes, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, imageUrl, videoUrl, bullets, features, yesHref
+Missing admin: billingType, interval, metadataType, pageType, timerLabel, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, letter, stackEyebrow, stackHeading, totalValueLabel, bigIdea, guaranteeBody
+
+======== SuccessContent (SuccessPage) ========
+Type fields (8): headline, subheadline, purchaseSummary, deliveryCards, ctaText, ctaHref, supportEmail, secondaryNote
+On-page field= refs (7): ctaHref, ctaText, headline, purchaseSummary, secondaryNote, subheadline, supportEmail
+Missing on-page: deliveryCards
+Missing admin: (none)
+
+======== AccessContent (AccessPage) ========
+Type fields (8): headline, subheadline, onboardingItems, deliveryLinks, welcomeVideoUrl, communityHref, communityLabel, supportEmail
+On-page field= refs (6): communityHref, communityLabel, headline, subheadline, supportEmail, welcomeVideoUrl
+Missing on-page: onboardingItems, deliveryLinks
+Missing admin: (none)
+
+======== SalesFooterContent (admin-only) ========
+Type fields (5): enabled, brandLine, disclaimer, links, copyright
+On-page field= refs (0): 
+Missing on-page: enabled, brandLine, disclaimer, links, copyright
+Missing admin: (none)
+
+======== HARDCODED COPY SCAN (parts) ========
+ClosingSections.tsx: "The questions mothers ask first" NEAR MmEditable
+ClosingSections.tsx: "One page. One sitting" *** HARDCODED / NOT EDITABLE ***
+ClosingSections.tsx: "What it costs to keep carrying it" *** HARDCODED / NOT EDITABLE ***
+ClosingSections.tsx: "Get instant access" NEAR MmEditable
+ContentSidebar.tsx: "Get instant access" *** HARDCODED / NOT EDITABLE ***
+InsideSection.tsx: "Everything in the pack" NEAR MmEditable
+NarrativeSections.tsx: "There is the way it has been" NEAR MmEditable
+ProofSection.tsx: "Mothers who put some of it down" NEAR MmEditable
+Sidebar.tsx: "Get instant access" *** HARDCODED / NOT EDITABLE ***
+
+======== FOOTER / SHARED ========
+SalesFooterContent fields: enabled, brandLine, disclaimer, links, copyright
+Optin page references footer: true
+
+======== NESTED STRUCTURES (need special editors) ========
+- SalesPageContent.problemPoints[]
+- SalesPageContent.originParagraphs[]
+- SalesPageContent.whatIsParagraphs[]
+- SalesPageContent.mechanismParagraphs[] / mechanismPoints[]
+- SalesPageContent.insideItems[]
+- SalesPageContent.methodSteps[]
+- SalesPageContent.oldWayItems[] / newWayItems[]
+- SalesPageContent.proof[] / testimonials[]
+- SalesPageContent.bonusesItems[]
+- SalesPageContent.founderParagraphs[]
+- SalesPageContent.faqs[]
+- SalesPageContent.bumps[]
+- UpsellContent.letter[] / features[] / gallery[] / bullets[]
+- SuccessContent.deliveryCards[]
+- AccessContent.onboardingItems[] / deliveryLinks[]
+- SalesFooterContent.links[]
+
+======== GAP TABLE (field missing on-page OR admin) ========
+block | field | onPage | admin
+SalesOptinContent | ctaText | NO | yes
+SalesOptinContent | coverImageUrl | NO | yes
+SalesOptinContent | heroVideoUrl | NO | yes
+SalesOptinContent | emailPlaceholder | NO | yes
+SalesOptinContent | namePlaceholder | NO | yes
+SalesOptinContent | collectName | NO | yes
+SalesPageContent | priceCents | NO | yes
+SalesPageContent | originalPriceCents | NO | NO
+SalesPageContent | priceDescription | NO | yes
+SalesPageContent | heroImageUrl | NO | yes
+SalesPageContent | heroVideoUrl | NO | yes
+SalesPageContent | founderPhotoUrl | NO | yes
+SalesPageContent | problemBody | NO | yes
+SalesPageContent | solutionHeading | NO | yes
+SalesPageContent | solutionBody | NO | yes
+SalesPageContent | mechanismPoints | NO | yes
+SalesPageContent | insideItems | NO | yes
+SalesPageContent | title | NO | yes
+SalesPageContent | description | NO | yes
+SalesPageContent | tag | NO | yes
+SalesPageContent | value | NO | yes
+SalesPageContent | outcome | NO | yes
+SalesPageContent | featuresHeading | NO | yes
+SalesPageContent | features | NO | yes
+SalesPageContent | methodSteps | NO | yes
+SalesPageContent | number | NO | yes
+SalesPageContent | title | NO | yes
+SalesPageContent | description | NO | yes
+SalesPageContent | meta | NO | yes
+SalesPageContent | shift | NO | yes
+SalesPageContent | proof | NO | yes
+SalesPageContent | testimonials | NO | yes
+SalesPageContent | bonusesItems | NO | yes
+SalesPageContent | faqs | NO | yes
+SalesPageContent | bumps | NO | yes
+SalesPageContent | id | NO | yes
+SalesPageContent | title | NO | yes
+SalesPageContent | description | NO | yes
+SalesPageContent | price | NO | yes
+VslPageContent | stickyPlayer | NO | yes
+VslPageContent | autoplay | NO | yes
+CheckoutContent | priceCents | NO | yes
+CheckoutContent | stripePriceId | NO | yes
+CheckoutContent | productId | NO | yes
+CheckoutContent | productImageUrl | NO | yes
+CheckoutContent | ctaText | NO | yes
+CheckoutContent | paymentType | NO | yes
+CheckoutContent | trialDays | NO | yes
+UpsellContent | enabled | NO | yes
+UpsellContent | productId | NO | yes
+UpsellContent | billingType | NO | NO
+UpsellContent | interval | NO | NO
+UpsellContent | priceCents | NO | yes
+UpsellContent | metadataType | NO | NO
+UpsellContent | pageType | NO | NO
+UpsellContent | stripePriceId | NO | yes
+UpsellContent | paymentType | NO | yes
+UpsellContent | timerLabel | yes | NO
+UpsellContent | timerMinutes | NO | yes
+UpsellContent | mediaVideo | NO | NO
+UpsellContent | mediaVideoPoster | NO | NO
+UpsellContent | galleryEyebrow | NO | NO
+UpsellContent | galleryAspect | NO | NO
+UpsellContent | gallery | NO | NO
+UpsellContent | imageUrl | NO | yes
+UpsellContent | videoUrl | NO | yes
+UpsellContent | letter | yes | NO
+UpsellContent | bullets | NO | yes
+UpsellContent | stackEyebrow | yes | NO
+UpsellContent | stackHeading | yes | NO
+UpsellContent | features | NO | yes
+UpsellContent | totalValueLabel | yes | NO
+UpsellContent | bigIdea | yes | NO
+UpsellContent | yesHref | NO | yes
+UpsellContent | guaranteeBody | yes | NO
+SuccessContent | deliveryCards | NO | yes
+AccessContent | onboardingItems | NO | yes
+AccessContent | deliveryLinks | NO | yes
+SalesFooterContent | enabled | NO | yes
+SalesFooterContent | brandLine | NO | yes
+SalesFooterContent | disclaimer | NO | yes
+SalesFooterContent | links | NO | yes
+SalesFooterContent | copyright | NO | yes

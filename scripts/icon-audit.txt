@@ -1,0 +1,199 @@
+# icon-in-data audit
+
+## Distinct component values assigned to `icon:`
+Activity, Anchor, Backpack, BookOpen, Brain, Briefcase, CalendarHeart, Clock, Code2, Compass, DoorOpen, Download, Eraser, Feather, Filter, Gift, Headphones, Heart, HeartHandshake, Icon, InfinityIcon, Layers, LifeBuoy, ListChecks, ListOrdered, Map, MessageCircle, MessagesSquare, Mic, Moon, RefreshCcw, Repeat, Route, Scissors, ShieldCheck, Sparkles, SplitSquareVertical, Sun, Sunrise, Trash2, UserCheck, Users, Utensils, UtensilsCrossed, Video, Zap
+
+## Files (28)
+
+=== src\app\admin\sales-funnels\parts\PageTabs.tsx
+  147  USE   value={success.deliveryCards.map((c) => c.title + '|' + c.description + '|' + c.href + '|' + c.icon).join('\n')}
+
+=== src\components\checkout\StripeCheckoutForm.tsx
+  222  USE   <CheckCircle className={`w-4 h-4 mr-2 ${accent.icon}`} />
+
+=== src\components\footer-8.tsx
+  104  USE   {s.icon}
+
+=== src\components\mothermode\content\RichTextField.tsx
+   42  DECL  icon: LucideIcon;
+   47  LIT   }> = ({ icon: Icon, label, active, disabled, onClick }) => (
+
+=== src\components\mothermode\context\KitRichTextField.tsx
+   90  DECL  icon: LucideIcon;
+   95  LIT   }> = ({ icon: Icon, label, active, disabled, onClick }) => (
+  118  DECL  icon: LucideIcon;
+  124  LIT   }> = ({ icon: Icon, label, swatches, active, onPick, onClear }) => {
+
+=== src\components\mothermode\email\EmailInsightsPanel.tsx
+  106  USE   {meta.icon}
+
+=== src\components\mothermode\parts\BonusSection.tsx
+   59  USE   const Icon = bonus.icon;
+
+=== src\components\mothermode\parts\InsideSection.tsx
+   26  USE   const LeadIcon = lead.icon;
+  104  USE   const Icon = item.icon;
+
+=== src\components\mothermode\parts\NarrativeSections.tsx
+  201  USE   const Icon = step.icon;
+
+=== src\components\mothermode\sales\SuccessPage.tsx
+  118  USE   const Icon = ICON_MAP[card.icon] || Check;
+  149  USE   <Editable edit={edit} field={`deliveryCards.${i}.icon`}>
+  150  USE   {card.icon || 'check'}
+
+=== src\components\mothermode\upsell\MotherModeUpsellPage.tsx
+  319  USE   const Icon = f.icon;
+
+=== src\components\sales-page\mindshift-sections\MindshiftBonusSection.tsx
+   38  USE   const IconComponent = bonus.icon;
+
+=== src\components\sales-page\mindshift-sections\MindshiftFeatureSection.tsx
+   34  USE   const IconComponent = feature.icon;
+
+=== src\components\sales-page\mindshift-sections\MindshiftFounderBioSection.tsx
+   14  LIT   icon: Briefcase,
+   19  LIT   icon: Compass,
+   24  LIT   icon: Users,
+   29  LIT   icon: Code2,
+   80  USE   const Icon = c.icon;
+
+=== src\components\sales-page\mindshift-sections\MindshiftSolutionSection.tsx
+   50  USE   const Icon = step.icon;
+
+=== src\components\sales-page\mindshift-sections\constants.ts
+   61  DECL  icon: LucideIcon;
+   66  LIT   { number: 1, title: 'Surface', icon: Activity, description: 'Pull the exact ceiling belief out of the subconscious \u2014 the one your conscious mind doesn\u2019t know is there.' },
+   67  LIT   { number: 2, title: 'Test', icon: Brain, description: 'Muscle-test it so the body confirms (in seconds) what the mind would spend months talking around.' },
+   68  LIT   { number: 3, title: 'Clear', icon: Heart, description: 'Run the precise clearing sequence \u2014 at the nervous-system level, not the affirmation level.' },
+   69  LIT   { number: 4, title: 'Install', icon: Sparkles, description: 'Install the new belief and verify with the body that it actually took. No guessing.' },
+   76  DECL  icon: LucideIcon;
+   86  LIT   icon: Compass,
+   98  LIT   icon: Zap,
+  110  LIT   icon: Eraser,
+  122  LIT   icon: Anchor,
+  134  LIT   icon: Sunrise,
+  149  DECL  icon: LucideIcon;
+  161  LIT   icon: Mic,
+  171  LIT   icon: Headphones,
+  180  LIT   icon: BookOpen,
+  189  LIT   icon: Brain,
+  198  LIT   icon: Users,
+  207  LIT   icon: Repeat,
+  264  DECL  icon: LucideIcon;
+  273  LIT   icon: Compass,
+  280  LIT   icon: Zap,
+  287  LIT   icon: Eraser,
+  294  LIT   icon: Anchor,
+  301  LIT   icon: Sunrise,
+  308  LIT   icon: Mic,
+  315  LIT   icon: Headphones,
+  322  LIT   icon: ShieldCheck,
+
+=== src\components\ui\AuthForms\OauthSignIn.tsx
+   62  USE   <span className="mr-2">{provider.icon}</span>
+
+=== src\components\upsell\MillionaireMindshiftUpsell3Page.tsx
+  257  USE   <div className="text-4xl flex-shrink-0">{item.icon}</div>
+
+=== src\lib\mothermode\ascension.ts
+   30  DECL  icon: LucideIcon;
+  147  LIT   { title: 'An assistant that already knows your family', description: 'Tell it the ages, allergies, sizes, and schools once. It remembers, so you never repeat yourself or start from scratch again.', value: '$197', icon: Sparkles, core: true },
+  148  LIT   { title: 'The week of meals, planned and shopped', description: 'Ask for dinners and get a week built around the allergies and the picky one, turned into a categorized grocery list in one tap.', value: '$97', icon: Utensils },
+  149  LIT   { title: 'Routines that run themselves', description: 'Bedtime, mornings, after school. Step-by-step and age-matched, checkable, so the evening stops being a fight.', value: '$49', icon: Moon },
+  150  LIT   { title: 'The whole family, in sync', description: 'Invite your partner, your mother, the sitter. Everyone sees the same plan, and every update lands in real time.', value: '$97', icon: Users },
+  151  LIT   { title: 'A morning brief and a weekly recap', description: 'Two lines each morning on what today needs and who has it, then a short digest at the end of the week.', value: '$39/mo', icon: Sun },
+  152  LIT   { title: 'Talk to it with your hands full', description: 'Cooking with a toddler on your hip? Tap the mic and say it. It listens, you glance to confirm, it is done.', value: '$29/mo', icon: Mic },
+  199  LIT   { title: 'Two months, free', description: 'Twelve months of the OS for the price of ten. The savings is automatic.', value: '$58', icon: CalendarHeart, core: true },
+  200  LIT   { title: 'Your founding rate, locked', description: 'The lowest price the OS will ever be, held for as long as you stay.', value: 'For good', icon: InfinityIcon },
+  201  LIT   { title: 'Nothing to manage monthly', description: 'One payment, one year, zero card-decline surprises in a hard week.', value: 'Included', icon: RefreshCcw },
+  247  LIT   { title: 'Every Mental Load system', description: 'The brain dump, the offload map, the invisible labor inventory, and the weekly reset.', value: '$108', icon: Layers },
+  248  LIT   { title: 'Every Daily Rhythm system', description: 'The 5pm reset and the morning without yelling, ready to run tonight and tomorrow.', value: '$54', icon: RefreshCcw },
+  249  LIT   { title: 'The Fourth Trimester system', description: 'The first 90 days, for the newborn fog and your own recovery.', value: '$27', icon: Moon },
+  250  LIT   { title: 'Every future pack, free', description: 'Anything new we build lands in your Vault automatically, at no extra cost.', value: '$108', icon: InfinityIcon, core: true },
+  251  LIT   { title: 'Print and editable versions', description: 'Every system as a print-ready PDF plus an editable file for any device.', value: 'Included', icon: Download },
+  299  LIT   { title: 'Two live calls a month', description: 'Small-group coaching, twice a month, all year. Bring the week that is not working and leave with the next move.', value: '$1,800', icon: Video, core: true },
+  300  LIT   { title: 'A coach who knows your family', description: 'Help built around your kids, your schools, and the season you are in, never a generic worksheet.', value: '$600', icon: UserCheck },
+  301  LIT   { title: 'A private circle of mothers', description: 'A small founding room carrying the same load, so a question at 11pm gets a real answer.', value: '$360', icon: Users },
+  302  LIT   { title: 'Direct access between calls', description: 'Send the hard moment as it happens and get a real reply, not a ticket number.', value: '$204', icon: MessageCircle },
+
+=== src\lib\mothermode\offers\brain-dump.ts
+  102  LIT   { title: 'The Brain Dump Template', description: 'The structured prompts that pull every open tab out of your head. No blank page to stare at, no wondering if you missed something.', icon: ListChecks, tag: 'Get it out', value: '$27', outcome: 'The list leaves your head and becomes something anyone can read.', resourceKey: 'brain-dump-template' },
+  103  LIT   { title: 'The Sorting Pass', description: 'Move each item into Drop, Automate, Delegate, or Keep. The decision gets made one time, not re-made every night at 11pm.', icon: SplitSquareVertical, tag: 'Decide once', value: '$24', outcome: 'A third of the list is gone before you do a single task.', resourceKey: 'sorting-pass' },
+  104  LIT   { title: 'The Delegate Scripts', description: 'The exact words for the partner, the sitter, the family. The sentences most mothers never find, so the asking stays harder than the doing.', icon: MessagesSquare, tag: 'Hand it off', value: '$19', outcome: 'The work that was never only yours finally moves off your plate.', resourceKey: 'delegate-scripts' },
+  105  LIT   { title: 'The Weekly Reset', description: 'A one-page rhythm that catches the list before it refills. About 10 minutes, once a week. Not a new habit to defend.', icon: RefreshCcw, tag: 'Keep it light', value: '$17', outcome: 'The load never gets the chance to climb back to where it was.', resourceKey: 'weekly-reset' },
+  106  LIT   { title: 'The Load Map', description: 'A one-page picture of where the weight actually sits, so you stop guessing and know exactly what to cut first.', icon: Map, tag: 'See it', value: '$10', outcome: 'You can finally point at the invisible work and say: this is what I carry.', resourceKey: 'load-map' },
+  115  LIT   { number: 1, title: 'Answer', description: 'A few quick questions about your life and your people. No blank page to stare at. This is the only part you do.', icon: Brain, meta: 'About 3 minutes', shift: 'The whole load gets named in one place, without you digging for it.' },
+  116  LIT   { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system, already sorted into Drop, Automate, Delegate, and Keep. The load is not just out of your head, it arrives already shrunk.', icon: Sparkles, meta: 'Instant', shift: 'You see how much you were carrying that never needed to be yours.' },
+  117  LIT   { number: 3, title: 'Hand off', description: 'The AI writes the exact words for the partner, the sitter, the family. You send them. The work that was never only yours finally moves.', icon: MessagesSquare, meta: 'One conversation', shift: 'The work leaves your plate instead of just moving around on it.' },
+  118  LIT   { number: 4, title: 'Stay light', description: 'A quick weekly check catches new items before they pile back up. The AI keeps it current, so you do not have to.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The list never climbs back to the level that used to keep you up.' },
+  170  LIT   { title: 'The First Night Guide', description: 'Exactly what to do the evening after your first dump so the quiet does not evaporate by morning. Not more work. A short ritual that closes the loop your brain keeps reopening.', value: '$19', icon: Moon, tag: 'Use it tonight' },
+  171  LIT   { title: 'The Invisible Work Conversation', description: 'A one-page way to show your partner what the load actually is, before you ask them to carry part of it. So the conversation starts with seeing, not blaming.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
+  172  LIT   { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: Feather, tag: 'Put it down' },
+
+=== src\lib\mothermode\offers\draft.ts
+   51  LIT   { number: 1, title: 'Name it', description: 'Get the full picture out of your head and onto the page.', icon: ListChecks },
+   52  LIT   { number: 2, title: 'Sort it', description: 'Decide each item once: drop, automate, delegate, or keep.', icon: SplitSquareVertical },
+   53  LIT   { number: 3, title: 'Hand it off', description: 'Use the scripts to move the work that was never only yours.', icon: MessagesSquare },
+   54  LIT   { number: 4, title: 'Keep it light', description: 'A short weekly rhythm so it never refills to the same level.', icon: RefreshCcw },
+
+=== src\lib\mothermode\offers\five-pm-reset.ts
+  103  LIT   { title: 'The Evening Sequence', description: 'A fixed, low-friction order for the whole dinner-to-bed stretch, built for your kids\u2019 ages. The spine you run on autopilot instead of improvising.', icon: ListOrdered, tag: 'The spine', value: '$27', outcome: 'The two hours run on a plan instead of on whatever you have left.' },
+  104  LIT   { title: 'The 15-Minute Dinner Shortlist', description: 'A short, personalized list of low-effort dinners, so the meal is decided long before the meltdown asks the question.', icon: UtensilsCrossed, tag: 'Dinner decided', value: '$19', outcome: 'The hardest question of the evening is already answered.' },
+  105  LIT   { title: 'The Wind-Down Script', description: 'The exact words and steps that move the night toward sleep instead of a standoff. The part most routines leave you to wing.', icon: Moon, tag: 'End calm', value: '$24', outcome: 'Bedtime ends in lights out, not a negotiation.' },
+  106  LIT   { title: 'The Reset Card', description: 'A one-glance recovery for the nights it goes sideways. What to do in the moment so one hard patch does not sink the whole evening.', icon: LifeBuoy, tag: 'When it slips', value: '$19', outcome: 'A bad ten minutes stops becoming a bad night.' },
+  107  LIT   { title: 'The Family Cue Card', description: 'A kid-readable version of the sequence, so they can see what comes next without you narrating every step out loud.', icon: Route, tag: 'For the kids', value: '$10', outcome: 'The kids run the order with you, instead of waiting to be told.' },
+  116  LIT   { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, the dinners you actually make, and your bedtime. No blank chart to design. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole evening gets planned in one calm sitting, not at 5:10.' },
+  117  LIT   { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized sequence: the order, the dinner shortlist, the wind-down words, and the reset card. The evening arrives already decided.', icon: Clock, meta: 'Instant', shift: 'Every hard call for the night is made before the noise starts.' },
+  118  LIT   { number: 3, title: 'Run it tonight', description: 'You follow the sequence instead of inventing it. Dinner is decided, the order is set, the words are ready. You are running the plan, not writing it on empty.', icon: ListOrdered, meta: 'Tonight', shift: 'The evening stops depending on how much you have left.' },
+  119  LIT   { number: 4, title: 'Stay calm on repeat', description: 'Run the same sequence each night and tweak it weekly as the kids change. The AI keeps it current, so the order stays boring in the best way.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The witching hour becomes the most predictable part of the day.' },
+  171  LIT   { title: 'The Bad Night Recovery Card', description: 'A one-glance script for the evenings that go off the rails anyway. Exactly what to do in the moment so you can pull the night back instead of riding it down.', value: '$19', icon: LifeBuoy, tag: 'Use it tonight' },
+  172  LIT   { title: 'The Evening Handoff Card', description: 'A simple way to split the two hours with a partner so the load does not all land on you. Who has what, on one page, no negotiation required mid-meltdown.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
+  173  LIT   { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the nights you raised your voice, so the guilt does not follow you into tomorrow and make the next evening worse.', value: '$17', icon: Feather, tag: 'Let it go' },
+
+=== src\lib\mothermode\offers\morning-without-yelling.ts
+  104  LIT   { title: 'The Night-Before Setup', description: 'A five-minute evening checklist that defuses the morning before it starts. Clothes, bags, and breakfast decided while the day still has slack.', icon: Moon, tag: 'The night before', value: '$24', outcome: 'Tomorrow morning starts already half done.' },
+  105  LIT   { title: 'The Visual Morning Map', description: 'A kid-readable routine they follow themselves, built for their ages, so you stop narrating every single step out loud.', icon: Route, tag: 'For the kids', value: '$27', outcome: 'The routine lives on the wall instead of in your mouth.' },
+  106  LIT   { title: 'The Launch Pad Checklist', description: 'One landing spot for shoes, bags, and everything that goes out the door, set up the night before so nothing is ever hunted at 7:50.', icon: Backpack, tag: 'No more hunting', value: '$14', outcome: 'The frantic search for shoes and bags is over.' },
+  107  LIT   { title: 'The Calm Exit Routine', description: 'The final ten minutes, sequenced, so leaving is boring instead of frantic. The handoff from home to door, made automatic.', icon: DoorOpen, tag: 'Out the door', value: '$19', outcome: 'You leave on time without the last-minute panic.' },
+  108  LIT   { title: 'The Independence Cue Cards', description: 'Age-appropriate steps each kid owns, so the morning advances on their effort, not only yours. The path off being the engine.', icon: ListChecks, tag: 'They run it', value: '$10', outcome: 'The kids move themselves, instead of waiting to be pushed.' },
+  117  LIT   { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, your leave time, and where the morning usually jams. No blank chart to design. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole morning gets planned in a calm moment, not at 7:48.' },
+  118  LIT   { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system: the night-before setup, the visual map, the launch pad, and the exit routine. The morning arrives already designed.', icon: Sunrise, meta: 'Instant', shift: 'The work moves off your shoulders and onto a system the house can see.' },
+  119  LIT   { number: 3, title: 'Set up tonight', description: 'Run the five-minute night-before setup and put the map on the wall. Tomorrow the kids follow the steps themselves instead of waiting on you.', icon: Moon, meta: 'Tonight', shift: 'You stop being the engine and become the person who set it up.' },
+  120  LIT   { number: 4, title: 'Stay calm on repeat', description: 'Run the same shape each day and tweak it as the kids grow into more steps. The AI keeps it current, so the morning stays boring in the best way.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The school morning becomes the most predictable part of the day.' },
+  172  LIT   { title: 'The Off-Morning Recovery Card', description: 'A one-glance plan for the mornings that go sideways anyway. The late wake-up, the lost shoe, the meltdown. Exactly what to drop so you still leave on time.', value: '$19', icon: LifeBuoy, tag: 'Use it tomorrow' },
+  173  LIT   { title: 'The Co-Parent Morning Split', description: 'A simple way to divide the morning with a partner so it does not all route through you. Who has which steps, on one page, no negotiation at 7am.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
+  174  LIT   { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the mornings you raised your voice, so the guilt does not ride along to school and set the tone for the next one.', value: '$17', icon: Feather, tag: 'Let it go' },
+
+=== src\lib\mothermode\offers\offload-map.ts
+  104  LIT   { title: 'The Sorting Grid', description: 'The one-page filter that gives every task a single, final home: Drop, Automate, Delegate, or Keep. No item gets to stay undecided.', icon: Filter, tag: 'Sort it', value: '$27', outcome: 'Every task has exactly one decision attached, instead of defaulting to you.' },
+  105  LIT   { title: 'The Drop List', description: 'The permission and the prompts to delete the tasks that never actually mattered. The fastest weight you will ever lose.', icon: Trash2, tag: 'Drop it', value: '$19', outcome: 'A third of the list is gone before you do a single thing.' },
+  106  LIT   { title: 'The Automate Library', description: 'The set-and-forget setups that delete recurring tasks for good. The standing order, the auto-refill, the recurring everything.', icon: Repeat, tag: 'Automate it', value: '$24', outcome: 'The tasks that came back every week stop coming back at all.' },
+  107  LIT   { title: 'The Delegate Scripts', description: 'Word-for-word asks for the partner, the sitter, the family. The sentences that make the work stay handed off instead of boomeranging back.', icon: MessagesSquare, tag: 'Delegate it', value: '$24', outcome: 'The work that was never only yours finally moves, and stays moved.' },
+  108  LIT   { title: 'The Keep List', description: 'The short, honest pile of what is genuinely yours, with everything else cleared away from around it. So you can see it is smaller than it felt.', icon: ListChecks, tag: 'Keep it', value: '$10', outcome: 'You see, in one page, how little was ever actually only yours.' },
+  117  LIT   { number: 1, title: 'Bring the list', description: 'Dump what you are carrying, or paste a brain dump you already have. A few quick questions about your people fill in the gaps. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole plate is named in one place, ready to be cut down.' },
+  118  LIT   { number: 2, title: 'The AI sorts it', description: 'Every item gets one decision: Drop, Automate, Delegate, or Keep. The load is not just organized, it arrives already cut, with the Keep pile finally small.', icon: Filter, meta: 'Instant', shift: 'You see how much of the list never needed to be yours at all.' },
+  119  LIT   { number: 3, title: 'Move it', description: 'The AI writes the delegate scripts, lays out the automations, and confirms the drops. You send and set up. The non-Keep piles leave your plate.', icon: MessagesSquare, meta: 'One sitting', shift: 'The work moves off your plate instead of just around on it.' },
+  120  LIT   { number: 4, title: 'Stay light', description: 'A quick weekly re-sort catches anything that drifted back to Keep before it settles. The AI keeps it current, so you do not have to.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The plate stops quietly refilling itself by default.' },
+  172  LIT   { title: 'The First Cut Guide', description: 'Exactly how to drop your first ten items tonight without second-guessing every one. The fastest way to feel the plate get lighter on day one.', value: '$19', icon: Scissors, tag: 'Start tonight' },
+  173  LIT   { title: 'The Fair-Share Picture', description: 'A one-page way to show your partner what the load actually is before you ask them to carry part of it. So the handoff starts with seeing, not blaming.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
+  174  LIT   { title: 'Drop-the-Guilt Scripts', description: 'Short reframes for the guilt that shows up the first time you delete or hand something off. Because the hardest part of putting it down is letting yourself.', value: '$17', icon: Feather, tag: 'Put it down' },
+
+=== src\lib\mothermode\sales\fromAscension.ts
+   86  LIT   icon: Sparkles,
+   93  LIT   icon: Sparkles,
+
+=== src\lib\mothermode\sales\fromOffer.ts
+  287  LIT   icon: Sparkles,
+  293  LIT   icon: Sparkles,
+  305  LIT   icon: Sparkles,
+  327  LIT   icon: Gift,
+
+=== src\lib\mothermode\sales\types.ts
+  970  USE   icon: asString(c.icon, 'check'),
+
+=== src\lib\mothermode\types.ts
+   12  DECL  icon: LucideIcon;
+   30  DECL  icon: LucideIcon;
+   39  DECL  icon: LucideIcon;
+   49  DECL  icon: LucideIcon;

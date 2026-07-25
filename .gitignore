@@ -50,3 +50,11 @@ build*.log
 tsc-*.txt
 tsc-out*.txt
 vitest-*.txt
+
+# generated migration-audit artifacts (regenerate with scripts/db-table-audit.cjs)
+supabase/_pending.json
+supabase/_bundle_pending.sql
+scripts/db-audit-run.txt
+scripts/bundle-run.txt
+
+

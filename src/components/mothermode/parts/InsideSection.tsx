@@ -1,6 +1,10 @@
+'use client';
+
+import { iconFor } from '@/components/mothermode/parts/iconRegistry';
 import React from 'react';
 import { Check } from 'lucide-react';
 import type { MotherModeOffer } from '@/lib/mothermode/types';
+import { MmEditable } from '@/components/mothermode/sales/SalesPageEditContext';
 import { formatPrice } from '@/lib/mothermode/format';
 
 /** A small brass value tag, e.g. "$27 value". */
@@ -20,7 +24,7 @@ const ValueTag: React.FC<{ value?: string }> = ({ value }) =>
 export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) => {
   const items = offer.inside.items;
   const [lead, ...rest] = items;
-  const LeadIcon = lead.icon;
+  const LeadIcon = iconFor(lead.icon);
   return (
     <section className="border-t border-ink/10">
       <div className="mx-auto max-w-5xl px-4 py-16 sm:py-24">
@@ -29,12 +33,12 @@ export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =
             <div className="text-sm uppercase tracking-[0.2em] text-mode">
               Everything in the pack
             </div>
-            <h2 className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
+            <MmEditable field="insideHeading" as="h2" className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-5xl">
               {offer.inside.heading}
-            </h2>
-            <p className="mt-5 text-xl leading-relaxed text-ink/65">
+            </MmEditable>
+            <MmEditable field="insideSubheading" multiline as="p" className="mt-5 text-xl leading-relaxed text-ink/65">
               {offer.inside.subheading}
-            </p>
+            </MmEditable>
           </div>
           <div className="flex-shrink-0 rounded-2xl border border-ink/10 bg-white/60 px-6 py-5 text-center">
             <div className="font-display text-4xl text-ink">{items.length}</div>
@@ -52,9 +56,9 @@ export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =
 
         {/* Mechanism-forward lead: how the pieces relate before the list. */}
         {offer.inside.lead && (
-          <p className="mt-10 max-w-3xl border-l-2 border-mode/40 pl-5 font-display text-2xl leading-relaxed text-ink">
+          <MmEditable field="insideLead" multiline as="p" className="mt-10 max-w-3xl border-l-2 border-mode/40 pl-5 font-display text-2xl leading-relaxed text-ink">
             {offer.inside.lead}
-          </p>
+          </MmEditable>
         )}
 
         {/* The featured lead resource. */}
@@ -68,22 +72,28 @@ export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =
             </span>
             <div className="flex-1">
               {lead.tag && (
-                <div className="text-xs uppercase tracking-[0.18em] text-brass">
+                <MmEditable field="insideItems.0.tag" as="div" className="text-xs uppercase tracking-[0.18em] text-brass">
                   {lead.tag}
-                </div>
+                </MmEditable>
               )}
-              <h3 className="mt-1.5 font-display text-3xl text-ink">{lead.title}</h3>
-              <p className="mt-3 text-xl leading-relaxed text-ink/70">
+              <MmEditable field="insideItems.0.title" as="h3" className="mt-1.5 font-display text-3xl text-ink">
+                {lead.title}
+              </MmEditable>
+              <MmEditable field="insideItems.0.description" multiline as="p" className="mt-3 text-xl leading-relaxed text-ink/70">
                 {lead.description}
-              </p>
+              </MmEditable>
               {lead.outcome && (
                 <p className="mt-4 flex items-start gap-2.5 text-lg leading-relaxed text-mode">
                   <Check className="mt-1.5 h-4 w-4 flex-shrink-0" />
-                  <span>{lead.outcome}</span>
+                  <MmEditable field="insideItems.0.outcome" multiline as="span">
+                    {lead.outcome}
+                  </MmEditable>
                 </p>
               )}
               <div className="mt-6">
-                <ValueTag value={lead.value} />
+                <MmEditable field="insideItems.0.value" as="span">
+                  <ValueTag value={lead.value} />
+                </MmEditable>
               </div>
             </div>
           </div>
@@ -92,7 +102,7 @@ export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =
         {/* The rest of the pack. */}
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           {rest.map((item, i) => {
-            const Icon = item.icon;
+            const Icon = iconFor(item.icon);
             const n = (i + 2).toString().padStart(2, '0');
             return (
               <article
@@ -106,23 +116,27 @@ export const InsideSection: React.FC<{ offer: MotherModeOffer }> = ({ offer }) =
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-mode/20 bg-bone">
                     <Icon className="h-5 w-5 text-mode" />
                   </span>
-                  <ValueTag value={item.value} />
+                  <MmEditable field={`insideItems.${i + 1}.value`} as="span">
+                    <ValueTag value={item.value} />
+                  </MmEditable>
                 </div>
                 {item.tag && (
-                  <div className="relative mt-6 text-xs uppercase tracking-[0.18em] text-brass">
+                  <MmEditable field={`insideItems.${i + 1}.tag`} as="div" className="relative mt-6 text-xs uppercase tracking-[0.18em] text-brass">
                     {item.tag}
-                  </div>
+                  </MmEditable>
                 )}
-                <h3 className="relative mt-1.5 font-display text-2xl text-ink">
+                <MmEditable field={`insideItems.${i + 1}.title`} as="h3" className="relative mt-1.5 font-display text-2xl text-ink">
                   {item.title}
-                </h3>
-                <p className="relative mt-2.5 text-lg leading-relaxed text-ink/65">
+                </MmEditable>
+                <MmEditable field={`insideItems.${i + 1}.description`} multiline as="p" className="relative mt-2.5 text-lg leading-relaxed text-ink/65">
                   {item.description}
-                </p>
+                </MmEditable>
                 {item.outcome && (
                   <p className="relative mt-4 flex flex-1 items-start gap-2.5 border-t border-ink/10 pt-4 text-base leading-relaxed text-mode">
                     <Check className="mt-1 h-4 w-4 flex-shrink-0" />
-                    <span>{item.outcome}</span>
+                    <MmEditable field={`insideItems.${i + 1}.outcome`} multiline as="span">
+                      {item.outcome}
+                    </MmEditable>
                   </p>
                 )}
               </article>

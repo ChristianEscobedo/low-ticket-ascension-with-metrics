@@ -1,6 +1,13 @@
+'use client';
+
 import React from 'react';
-import { ImageIcon, Play } from 'lucide-react';
+import { ImageIcon, Play, Pencil } from 'lucide-react';
 import { PALETTE } from '@/lib/mothermode/brand';
+import {
+  useSalesPageEdit,
+  type SalesMediaOpenRequest,
+} from '@/components/mothermode/sales/SalesPageEditContext';
+import type { FunnelMediaKind } from '@/components/mothermode/sales/FunnelMediaStudio';
 
 interface MediaFrameProps {
   /** When set, the real image renders. When absent, an on-brand placeholder
@@ -17,13 +24,19 @@ interface MediaFrameProps {
   /** Show a play affordance (for VSL / video posters). */
   video?: boolean;
   className?: string;
+  /**
+   * Funnel sales JSON media field (e.g. heroImageUrl, heroVideoUrl, founderPhotoUrl).
+   * When set and admin is in edit mode, click opens Funnel Media Studio.
+   */
+  mediaField?: string;
+  mediaKind?: FunnelMediaKind;
+  mediaLabel?: string;
 }
 
 /**
  * One image slot for the MotherMode sales page. Renders the supplied image, or a
- * tasteful Editorial Warm placeholder that tells the user exactly what to drop
- * in and at what dimensions. Drop real files in /public/mothermode and set the
- * matching path in the offer catalog.
+ * tasteful Editorial Warm placeholder. On funnel pages in edit mode, click opens
+ * the media studio when mediaField is provided.
  */
 export const MediaFrame: React.FC<MediaFrameProps> = ({
   src,
@@ -34,20 +47,61 @@ export const MediaFrame: React.FC<MediaFrameProps> = ({
   rounded = 'rounded-2xl',
   video = false,
   className = '',
+  mediaField,
+  mediaKind,
+  mediaLabel,
 }) => {
-  const frame = `relative overflow-hidden ${rounded} border border-ink/10 ${className}`;
+  const edit = useSalesPageEdit();
+  const canEdit =
+    Boolean(edit?.isEditMode && mediaField && edit.openMediaStudio);
+  const frame = `relative overflow-hidden ${rounded} border border-ink/10 ${className} ${
+    canEdit
+      ? 'cursor-pointer outline-dashed outline-1 outline-transparent hover:outline-mode/50 ring-offset-2'
+      : ''
+  }`;
+
+  const onEditClick = (e: React.MouseEvent) => {
+    if (!canEdit || !edit?.openMediaStudio || !mediaField) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const req: SalesMediaOpenRequest = {
+      kind: mediaKind || (video ? 'video' : 'image'),
+      field: mediaField,
+      label: mediaLabel || label,
+    };
+    edit.openMediaStudio(req);
+  };
+
+  const editBadge = canEdit ? (
+    <span className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-bone shadow">
+      <Pencil className="h-3 w-3" />
+      Edit media
+    </span>
+  ) : null;
 
   if (src) {
     return (
-      <div className={frame}>
+      <div
+        className={frame}
+        onClick={canEdit ? onEditClick : undefined}
+        title={canEdit ? 'Click to edit media' : undefined}
+        role={canEdit ? 'button' : undefined}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt} className={`${aspect} w-full object-cover`} />
         {video && <PlayBadge />}
+        {editBadge}
       </div>
     );
   }
 
   return (
-    <div className={`${frame} ${aspect} w-full bg-bone`}>
+    <div
+      className={`${frame} ${aspect} w-full bg-bone`}
+      onClick={canEdit ? onEditClick : undefined}
+      title={canEdit ? 'Click to add media' : undefined}
+      role={canEdit ? 'button' : undefined}
+    >
       <div
         className="absolute inset-0 opacity-[0.5]"
         style={{
@@ -69,7 +123,13 @@ export const MediaFrame: React.FC<MediaFrameProps> = ({
             {hint}
           </span>
         )}
+        {canEdit && (
+          <span className="mt-1 text-xs font-semibold text-mode">
+            Click to add / edit
+          </span>
+        )}
       </div>
+      {editBadge}
     </div>
   );
 };

@@ -101,11 +101,11 @@ export const morningWithoutYelling: MotherModeOffer = {
     lead:
       'These are not generic charts you fill in yourself. The AI builds each one from your kids\u2019 ages and your real leave time, so the whole system fits your actual morning: front-load it, make it visible, hand it off, and leave on time. Nothing here is filler.',
     items: [
-      { title: 'The Night-Before Setup', description: 'A five-minute evening checklist that defuses the morning before it starts. Clothes, bags, and breakfast decided while the day still has slack.', icon: Moon, tag: 'The night before', value: '$24', outcome: 'Tomorrow morning starts already half done.' },
-      { title: 'The Visual Morning Map', description: 'A kid-readable routine they follow themselves, built for their ages, so you stop narrating every single step out loud.', icon: Route, tag: 'For the kids', value: '$27', outcome: 'The routine lives on the wall instead of in your mouth.' },
-      { title: 'The Launch Pad Checklist', description: 'One landing spot for shoes, bags, and everything that goes out the door, set up the night before so nothing is ever hunted at 7:50.', icon: Backpack, tag: 'No more hunting', value: '$14', outcome: 'The frantic search for shoes and bags is over.' },
-      { title: 'The Calm Exit Routine', description: 'The final ten minutes, sequenced, so leaving is boring instead of frantic. The handoff from home to door, made automatic.', icon: DoorOpen, tag: 'Out the door', value: '$19', outcome: 'You leave on time without the last-minute panic.' },
-      { title: 'The Independence Cue Cards', description: 'Age-appropriate steps each kid owns, so the morning advances on their effort, not only yours. The path off being the engine.', icon: ListChecks, tag: 'They run it', value: '$10', outcome: 'The kids move themselves, instead of waiting to be pushed.' },
+      { title: 'The Night-Before Setup', description: 'A five-minute evening checklist that defuses the morning before it starts. Clothes, bags, and breakfast decided while the day still has slack.', icon: 'Moon', tag: 'The night before', value: '$24', outcome: 'Tomorrow morning starts already half done.' },
+      { title: 'The Visual Morning Map', description: 'A kid-readable routine they follow themselves, built for their ages, so you stop narrating every single step out loud.', icon: 'Route', tag: 'For the kids', value: '$27', outcome: 'The routine lives on the wall instead of in your mouth.' },
+      { title: 'The Launch Pad Checklist', description: 'One landing spot for shoes, bags, and everything that goes out the door, set up the night before so nothing is ever hunted at 7:50.', icon: 'Backpack', tag: 'No more hunting', value: '$14', outcome: 'The frantic search for shoes and bags is over.' },
+      { title: 'The Calm Exit Routine', description: 'The final ten minutes, sequenced, so leaving is boring instead of frantic. The handoff from home to door, made automatic.', icon: 'DoorOpen', tag: 'Out the door', value: '$19', outcome: 'You leave on time without the last-minute panic.' },
+      { title: 'The Independence Cue Cards', description: 'Age-appropriate steps each kid owns, so the morning advances on their effort, not only yours. The path off being the engine.', icon: 'ListChecks', tag: 'They run it', value: '$10', outcome: 'The kids move themselves, instead of waiting to be pushed.' },
     ],
   },
 
@@ -114,10 +114,10 @@ export const morningWithoutYelling: MotherModeOffer = {
     subheading:
       'You answer a few questions. The AI builds the system. No chart to design, no morning lost figuring it out, nothing to keep up with. The morning was never meant to run on one person.',
     steps: [
-      { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, your leave time, and where the morning usually jams. No blank chart to design. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole morning gets planned in a calm moment, not at 7:48.' },
-      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system: the night-before setup, the visual map, the launch pad, and the exit routine. The morning arrives already designed.', icon: Sunrise, meta: 'Instant', shift: 'The work moves off your shoulders and onto a system the house can see.' },
-      { number: 3, title: 'Set up tonight', description: 'Run the five-minute night-before setup and put the map on the wall. Tomorrow the kids follow the steps themselves instead of waiting on you.', icon: Moon, meta: 'Tonight', shift: 'You stop being the engine and become the person who set it up.' },
-      { number: 4, title: 'Stay calm on repeat', description: 'Run the same shape each day and tweak it as the kids grow into more steps. The AI keeps it current, so the morning stays boring in the best way.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The school morning becomes the most predictable part of the day.' },
+      { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, your leave time, and where the morning usually jams. No blank chart to design. This is the only part you do.', icon: 'Sparkles', meta: 'About 3 minutes', shift: 'The whole morning gets planned in a calm moment, not at 7:48.' },
+      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized system: the night-before setup, the visual map, the launch pad, and the exit routine. The morning arrives already designed.', icon: 'Sunrise', meta: 'Instant', shift: 'The work moves off your shoulders and onto a system the house can see.' },
+      { number: 3, title: 'Set up tonight', description: 'Run the five-minute night-before setup and put the map on the wall. Tomorrow the kids follow the steps themselves instead of waiting on you.', icon: 'Moon', meta: 'Tonight', shift: 'You stop being the engine and become the person who set it up.' },
+      { number: 4, title: 'Stay calm on repeat', description: 'Run the same shape each day and tweak it as the kids grow into more steps. The AI keeps it current, so the morning stays boring in the best way.', icon: 'RefreshCcw', meta: 'A few minutes a week', shift: 'The school morning becomes the most predictable part of the day.' },
     ],
     closer:
       'No new speed to summon. No streak to protect. You answer, the AI builds, and you walk into tomorrow with the work already done and the kids already moving, even on the hard mornings, because most mornings are.',
@@ -169,9 +169,9 @@ export const morningWithoutYelling: MotherModeOffer = {
       'The AI builds the system in minutes. These make sure tomorrow actually goes differently, and that it holds.',
     totalValue: '$65',
     items: [
-      { title: 'The Off-Morning Recovery Card', description: 'A one-glance plan for the mornings that go sideways anyway. The late wake-up, the lost shoe, the meltdown. Exactly what to drop so you still leave on time.', value: '$19', icon: LifeBuoy, tag: 'Use it tomorrow' },
-      { title: 'The Co-Parent Morning Split', description: 'A simple way to divide the morning with a partner so it does not all route through you. Who has which steps, on one page, no negotiation at 7am.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
-      { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the mornings you raised your voice, so the guilt does not ride along to school and set the tone for the next one.', value: '$17', icon: Feather, tag: 'Let it go' },
+      { title: 'The Off-Morning Recovery Card', description: 'A one-glance plan for the mornings that go sideways anyway. The late wake-up, the lost shoe, the meltdown. Exactly what to drop so you still leave on time.', value: '$19', icon: 'LifeBuoy', tag: 'Use it tomorrow' },
+      { title: 'The Co-Parent Morning Split', description: 'A simple way to divide the morning with a partner so it does not all route through you. Who has which steps, on one page, no negotiation at 7am.', value: '$29', icon: 'HeartHandshake', tag: 'Bring them in' },
+      { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the mornings you raised your voice, so the guilt does not ride along to school and set the tone for the next one.', value: '$17', icon: 'Feather', tag: 'Let it go' },
     ],
     closer:
       'All three land in your account the moment you join. Nothing else to buy, nothing else to claim.',

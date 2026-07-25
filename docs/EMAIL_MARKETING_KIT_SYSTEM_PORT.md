@@ -211,3 +211,13 @@ summary:
 None require a migration — every field rides in the existing `sequence` JSONB.
 
 
+
+---
+
+## Related: Email kit autobuild
+
+Per-event email kits for a sales funnel are generated and bound by the autobuild system —
+see `docs/SALES_FUNNEL_EMAIL_AUTOBUILD_SYSTEM_PORT.md`
+(`src/lib/mothermode/sales/emailPlan.ts`, `emailAutobuild.ts`,
+`/api/mothermode/sales-email-kits`, and the `EmailKitAutobuildPanel` mounted in
+`SalesFunnelEditor`'s "Email kits by funnel event" block).

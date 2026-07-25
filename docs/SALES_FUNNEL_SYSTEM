@@ -1,0 +1,115 @@
+# MotherMode Sales Funnel — System Port
+
+Status: **in progress** (Phases 1-3 complete, Phase 4 partial). Build passing.
+
+## What it is
+
+A DB-driven full sales funnel builder in the **Editorial Warm** MotherMode brand
+(bone / ink / mode / brass), modeled on the optin funnel but extended to a
+complete purchase path: optin, sales page, VSL, checkout, 4 upsells, success,
+and access pages.
+
+The existing optin funnel (`/admin/funnels`, `/optin/[slug]/**`) is **not
+modified or deleted** — it served as the reference model. The new system lives
+under its own slug namespace and admin route.
+
+```
+/funnel/[slug]            -> optin (lead capture)
+/funnel/[slug]/sales      -> long-form sales page
+/funnel/[slug]/vsl        -> video sales letter
+/funnel/[slug]/checkout   -> Stripe checkout
+/funnel/[slug]/upsell      -> OTO1
+/funnel/[slug]/upsell-2    -> OTO2
+/funnel/[slug]/upsell-3    -> OTO3
+/funnel/[slug]/upsell-4    -> OTO4
+/funnel/[slug]/success     -> receipt + delivery cards
+/funnel/[slug]/access      -> members delivery + onboarding
+```
+
+Admin: `/admin/sales-funnels` (sidebar: **Sales Funnels**).
+
+## Files
+
+```
+supabase/migrations/20260901000000_mothermode_sales_funnels.sql
+src/lib/mothermode/sales/
+  types.ts      All 10 content block interfaces + normalizers + row mappers + rate helpers
+  defaults.ts   MotherMode starter copy for all 10 blocks
+  aiIntake.ts   Client-safe AI brief types
+  store.ts      Service-role CRUD + capture + mark step/purchase/upsell + leads + rate limit + email enrollment
+  index.ts
+src/utils/integrations/openai-sales.ts        Server-only AI generator (OpenAI + Anthropic fallback)
+src/app/api/mothermode/sales-ai/route.ts      Admin AI: action=generate
+src/app/api/admin/mothermode-sales/route.ts   GET/POST/DELETE (+ ?leads=1)
+src/app/admin/sales-funnels/page.tsx
+src/app/admin/sales-funnels/SalesFunnelEditor.tsx   48KB client editor with 14 tabs + preview links for all steps
+src/components/mothermode/sales/SalesPage.tsx   Long-form sales page component (done)
+```
+
+## Schema
+
+- `mothermode_sales_funnels` — identity, status, JSONB blocks for each page step
+  (optin, sales, vsl, checkout, upsell1-4, success, access, footer), stats
+  (views, conversions, checkouts, purchases, upsell yes/no counts, revenue),
+  resource links (offer, lead-gen, deliverable, email kit, Stripe product).
+- `mothermode_sales_funnel_leads` — unique `(funnel_id, email)`, UTM, step
+  reached, purchase status + amount.
+- `mothermode_sales_funnel_events` — event stream for analytics.
+- RLS: service_role only. Public traffic goes through Next.js APIs.
+
+## How to use
+
+1. Apply migration `20260901000000_mothermode_sales_funnels.sql`.
+2. Open `/admin/sales-funnels` -> **AI build** tab -> fill niche/audience/
+   magnet/offer/upsells -> **AI: generate full funnel** (or Load MotherMode
+   defaults).
+3. Review all 14 tabs (AI build, optin, sales, VSL, checkout, upsell 1-4,
+   success, access, footer, links, leads) -> set status to **published** ->
+   Save.
+4. Preview links in the editor header open each step in a new tab:
+   `/funnel/{slug}`, `/funnel/{slug}/sales`, `/funnel/{slug}/vsl`, etc.
+5. Leads tab shows captures with step reached, purchase status, UTM, CSV export.
+
+## Editor features
+
+- **14 tabs**: AI build, optin, sales page, VSL, checkout, upsell 1-4, success,
+  access, footer, links, leads
+- **AI self-build**: Fill a short brief (niche, audience, magnet, offer, price,
+  4 upsell names/prices, tone notes) -> AI writes all 10 blocks in MotherMode
+  voice
+- **Preview links**: All 10 steps have preview links that open in new tabs
+- **Publish checklist**: Slug, optin headline, sales headline, checkout price,
+  checkout price (cents), success headline, access headline, footer disclaimer,
+  email kit linked
+- **Stats**: Views, optins, optin rate, purchases, checkout rate, upsell 1 take
+  rate, revenue
+- **Leads table**: Email, name, funnel, status, step reached, purchased, UTM,
+  when + CSV export
+- **Duplicate**: Clone a funnel as draft with unique slug suffix
+- **ASCII-safe**: All UI text uses plain ASCII (no unicode symbols) to avoid
+  encoding issues
+
+## On-page inline edit (planned)
+
+Admins who open any sales funnel page will see a floating **Edit page** toolbar
+(same pattern as optin funnel). Click any copy field to patch it inline; Save
+writes the merged funnel row back through `/api/admin/mothermode-sales`.
+
+## Not in this port yet
+
+- Public route pages (`/funnel/[slug]/**`) — 10 Next.js pages
+- Remaining page components (VslPage, CheckoutPage, UpsellPage, SuccessPage,
+  AccessPage, SalesOptinPage, inlineEdit)
+- Capture route (`/api/funnel/capture`)
+- Stripe charge on checkout/upsells
+- Tests
+- Mindshift skin
+
+## Design notes
+
+- Content is JSONB blocks (MotherMode kit style), not 100 flat columns.
+- Visual language matches `MotherModeSalesPage` / `HeroSection` wordmark.
+- All page components reuse shared optin components (Wordmark, OptinFooter,
+  MediaBlock) for layout consistency.
+- The optin funnel is the reference model — same patterns, same store shape,
+  same inline edit hook, same AI generator pattern.

@@ -61,6 +61,8 @@ import {
   type EmailSequence,
   type EmailBranchCondition,
   type EmailPsFramework,
+  openRate,
+  ctr,
 } from '@/lib/mothermode/email';
 
 import {
@@ -75,7 +77,11 @@ import {
   type RichTextToken,
 } from '@/components/mothermode/context/KitRichTextField';
 import EmailImageStudio from '@/components/mothermode/email/EmailImageStudio';
-import EmailFlowPanel from '@/components/mothermode/email/EmailFlowPanel';
+import EmailFlowDashboard from '@/components/mothermode/email/EmailFlowDashboard';
+import EmailAnalyticsDashboard from '@/components/mothermode/email/EmailAnalyticsDashboard';
+import EmailInsightsPanel from '@/components/mothermode/email/EmailInsightsPanel';
+import type { SequenceStats } from '@/lib/mothermode/email/analytics';
+import type { EnrollmentData } from '@/lib/mothermode/email/enrollment';
 import EmailPreviewModal from '@/components/mothermode/email/EmailPreviewModal';
 
 import {
@@ -197,6 +203,28 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
     };
   }, []);
 
+  // Fetch stats + enrollment data when a kit is selected (Phase 5).
+  useEffect(() => {
+    if (!selectedId) {
+      setStats(null);
+      setEnrollment(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/admin/mothermode-email/stats?kitId=${encodeURIComponent(selectedId)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled && j.success) {
+          setStats(j.stats ?? null);
+          setEnrollment(j.enrollment ?? null);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
   // Merge the static catalog + custom tokens into the shape the editor wants.
   const bodyTokens = useMemo<RichTextToken[]>(() => {
     const base: RichTextToken[] = EMAIL_MERGE_TOKENS.map((t) => ({
@@ -262,17 +290,26 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
   }
   // Which email's Image Studio is open (email id), or null when closed.
   const [imageFor, setImageFor] = useState<string | null>(null);
-  // Whether the read-only sequence flow canvas is open.
+  // Whether the interactive sequence flow canvas is open.
   const [flowOpen, setFlowOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [insightsReport, setInsightsReport] = useState<import('@/utils/integrations/openai-email-insights').EmailInsightsReport | null>(null);
+  const [insightsBusy, setInsightsBusy] = useState(false);
+  const [stats, setStats] = useState<SequenceStats | null>(null);
+  const [enrollment, setEnrollment] = useState<EnrollmentData | null>(null);
   // Which email the inbox-preview modal is open for (email id), or null.
   const [previewFor, setPreviewFor] = useState<string | null>(null);
 
   /**
-   * Close the flow view and scroll the clicked email's card into view, giving
-   * it a brief highlight so the admin can see which node they picked.
+   * Jump to an email card in the editor. Closes overlay panels so Flow /
+   * Analytics / Insights never compete with the form. Used by explicit
+   * "Open in editor" actions — not by mere node selection on the canvas.
    */
   function focusEmailCard(emailId: string) {
     setFlowOpen(false);
+    setAnalyticsOpen(false);
+    setInsightsOpen(false);
     requestAnimationFrame(() => {
       const el = document.getElementById(`email-card-${emailId}`);
       if (!el) return;
@@ -1163,9 +1200,25 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
             className={btnGhost}
             onClick={() => setFlowOpen(true)}
             disabled={sequence.emails.length === 0}
-            title="Open a read-only map of the sequence trunk and branches."
+            title="Open the interactive flow canvas with trigger programming, live subscriber counters, heat map, and zoom/pan."
           >
-            View flow
+            Flow
+          </button>
+          <button
+            className={btnGhost}
+            onClick={() => setAnalyticsOpen(true)}
+            disabled={sequence.emails.length === 0}
+            title="Open the analytics dashboard with KPI cards, funnel, per-email table, and cohort matrix."
+          >
+            Analytics
+          </button>
+          <button
+            className={btnGhost}
+            onClick={() => setInsightsOpen(true)}
+            disabled={sequence.emails.length === 0}
+            title="Open AI insights for this sequence."
+          >
+            AI Insights
           </button>
           <button
             className={btnGhost}
@@ -1325,6 +1378,21 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
                   </select>
                 </div>
 
+                {/* Inline mini-stats (Phase 5) — shows open rate, CTR, and sent count
+                    when analytics data is available for this email. */}
+                {stats && stats.byEmail?.[email.id] ? (
+                  <div className="flex items-center gap-2 text-[10px] font-semibold text-bone/60">
+                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">
+                      {Math.round(openRate(stats.byEmail[email.id]) * 100)}% open
+                    </span>
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-sky-300">
+                      {Math.round(ctr(stats.byEmail[email.id]) * 100)}% CTR
+                    </span>
+                    <span className="rounded bg-bone/10 px-1.5 py-0.5 text-bone/50">
+                      {stats.byEmail[email.id].sent} sent
+                    </span>
+                  </div>
+                ) : null}
                 <input
                   className={inputClass}
                   value={email.subject}
@@ -1688,12 +1756,48 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
           );
         })()}
 
-        {/* Read-only sequence flow canvas (Phase 1) */}
-        <EmailFlowPanel
+        {/* Analytics dashboard (Phase 3) */}
+        {analyticsOpen && (
+          <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
+            <button
+              type="button"
+              aria-label="Close analytics"
+              onClick={() => setAnalyticsOpen(false)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col border-l border-bone/15 bg-ink shadow-2xl overflow-auto">
+              <header className="flex items-center justify-between gap-3 border-b border-bone/10 px-5 py-4">
+                <h2 className="flex items-center gap-2 font-display text-lg text-bone">
+                  Analytics
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsOpen(false)}
+                  className="rounded-lg border border-bone/20 p-2 text-bone/70 transition hover:border-brass/50 hover:text-bone"
+                >
+                  X
+                </button>
+              </header>
+              <div className="flex-1 overflow-auto p-5">
+                <EmailAnalyticsDashboard
+                  sequence={sequence}
+                  stats={stats}
+                  enrollment={enrollment}
+                  onSelectEmail={focusEmailCard}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Interactive flow canvas (merged View flow + Dashboard) */}
+        <EmailFlowDashboard
           open={flowOpen}
           onClose={() => setFlowOpen(false)}
           sequence={sequence}
           onSelectEmail={focusEmailCard}
+          stats={stats}
+          enrollment={enrollment}
           onChangeTrigger={(trigger) =>
             setSequence((prev) => ({ ...prev, trigger }))
           }
@@ -1705,6 +1809,73 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
             .filter((s) => s.kind !== 'link' && s.kind !== 'text')
             .map((s) => ({ id: s.id, label: s.label }))}
         />
+
+        {/* AI insights panel (Phase 4) */}
+        {insightsOpen && (
+          <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
+            <button
+              type="button"
+              aria-label="Close AI insights"
+              onClick={() => setInsightsOpen(false)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <div className="relative ml-auto flex h-full w-full max-w-2xl flex-col border-l border-bone/15 bg-ink shadow-2xl overflow-auto">
+              <header className="flex items-center justify-between gap-3 border-b border-bone/10 px-5 py-4">
+                <h2 className="flex items-center gap-2 font-display text-lg text-bone">
+                  AI Insights
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setInsightsOpen(false)}
+                  className="rounded-lg border border-bone/20 p-2 text-bone/70 transition hover:border-brass/50 hover:text-bone"
+                >
+                  X
+                </button>
+              </header>
+              <div className="flex-1 overflow-auto p-5">
+                <EmailInsightsPanel
+                  report={insightsReport}
+                  busy={insightsBusy}
+                  onApply={(insight) => {
+                    // Pre-fill editor changes based on the insight action type.
+                    if (insight.actionType === 'edit-subject' && insight.emailId) {
+                      focusEmailCard(insight.emailId);
+                    }
+                  }}
+                  onDismiss={(id) => {
+                    setInsightsReport((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            insights: prev.insights.filter((i) => i.id !== id),
+                            totalInsights: prev.totalInsights - 1,
+                          }
+                        : null,
+                    );
+                  }}
+                  onRefresh={async () => {
+                    if (!selectedId || insightsBusy) return;
+                    setInsightsBusy(true);
+                    try {
+                      const res = await fetch('/api/admin/mothermode-email/insights', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ kitId: selectedId, sequence }),
+                      });
+                      const json = await res.json();
+                      if (json.success) setInsightsReport(json.report);
+                    } catch {
+                      // Silently fail — the panel shows the empty state.
+                    } finally {
+                      setInsightsBusy(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
 
 
 

@@ -26,9 +26,12 @@ const CHROMELESS_PREFIXES = [
   '/',
   '/mothermode',
   '/millionaire-mindshift',
+  '/optin',
+  '/funnel',
   '/signin',
   '/admin'
 ];
+
 
 const isChromelessRoute = (pathname: string) =>
   CHROMELESS_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -52,15 +55,20 @@ export default async function RootLayout({ children }: PropsWithChildren) {
 
   return (
     <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
-      <body className="bg-black">
+      <body className={chromeless ? 'bg-bone' : 'bg-black'}>
         {!chromeless && <Navbar />}
         <main
           id="skip"
-          className="min-h-[calc(100dvh-4rem)] md:min-h[calc(100dvh-5rem)]"
+          className={
+            chromeless
+              ? 'min-h-dvh'
+              : 'min-h-[calc(100dvh-4rem)] md:min-h-[calc(100dvh-5rem)]'
+          }
         >
           {children}
         </main>
         {!chromeless && <Footer />}
+
         <Suspense>
           <Toaster />
         </Suspense>

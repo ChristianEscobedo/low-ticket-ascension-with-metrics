@@ -11,11 +11,28 @@ import { useStripeConfig } from '@/hooks/useStripeConfig';
 import { ContactPaymentCard } from './ContactPaymentCard';
 import { OrderBumps } from './OrderBumps';
 import { OrderSummary } from './OrderSummary';
+import { MmEditable } from '@/components/mothermode/sales/SalesPageEditContext';
 
 interface MotherModeCheckoutProps {
   offer: MotherModeOffer;
   affiliateRef?: string;
+  /**
+   * Where to send the buyer after successful payment (before query string).
+   * Defaults to the original OTO1 path `/mothermode/upsell`.
+   * Funnel builder passes `/funnel/{slug}/upsell` so the ladder stays in-builder.
+   */
+  successPath?: string;
+  /** Optional back-link target. Defaults to the catalog offer page. */
+  backHref?: string;
+  /** Optional back-link label. */
+  backLabel?: string;
+  /** Top timer bar label. Editable in funnel builder via checkout.timerLabel. */
+  timerLabel?: string;
+  /** Header brand text. Editable in funnel builder via checkout.brandLabel. */
+  brandLabel?: string;
 }
+
+
 
 /**
  * The themed MotherMode checkout. Reads one offer, renders its order bumps as
@@ -25,7 +42,14 @@ interface MotherModeCheckoutProps {
 export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
   offer,
   affiliateRef,
+  successPath,
+  backHref,
+  backLabel,
+  timerLabel = 'Founding price held for:',
+  brandLabel = 'MOTHERMODE',
 }) => {
+
+
   const { stripePromise } = useStripeConfig();
   const [customerData, setCustomerData] = useState({
     firstName: '',
@@ -114,7 +138,8 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
   // Land on the first OTO, not the delivery page. The front-end pack + bumps
   // ride along in the query so OTO1 can finalize the purchase record.
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const successUrl = `${origin}/mothermode/upsell${buildPurchaseQuery({
+  const oto1Path = successPath?.trim() || '/mothermode/upsell';
+  const successUrl = `${origin}${oto1Path}${buildPurchaseQuery({
     fe: true,
     feSlug: offer.slug,
     bumps: activeBumps.map((b) => b.id),
@@ -129,9 +154,15 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
       <div className="bg-mode px-4 py-2.5 text-center text-bone">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 text-sm">
           <Timer className="h-4 w-4" />
-          <span className="font-semibold tracking-wide">
-            Founding price held for:
-          </span>
+          <MmEditable
+            field="timerLabel"
+            as="span"
+            onDark
+            value={timerLabel}
+            className="font-semibold tracking-wide px-1"
+          >
+            {timerLabel}
+          </MmEditable>
           <span className="font-mono text-base tabular-nums text-brass">
             {pad(timeLeft.hours)}:{pad(timeLeft.minutes)}:{pad(timeLeft.seconds)}
           </span>
@@ -139,20 +170,26 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
       </div>
 
       <header className="border-b border-ink/10 bg-bone/80 py-5 text-center backdrop-blur">
-        <span className="font-display text-lg tracking-[0.2em] text-mode">
-          MOTHERMODE
-        </span>
+        <MmEditable
+          field="brandLabel"
+          as="span"
+          value={brandLabel}
+          className="font-display text-lg tracking-[0.2em] text-mode px-1"
+        >
+          {brandLabel}
+        </MmEditable>
       </header>
 
       <div className="mx-auto max-w-5xl px-4 pt-6">
         <Link
-          href={`${ROUTES.offerBase}/${offer.slug}`}
+          href={backHref || `${ROUTES.offerBase}/${offer.slug}`}
           className="inline-flex items-center gap-1.5 text-sm text-ink/55 transition-colors hover:text-mode"
         >
           <ChevronLeft className="h-4 w-4" />
-          <span>Back to offer details</span>
+          <span>{backLabel || 'Back to offer details'}</span>
         </Link>
       </div>
+
 
       <div className="mx-auto max-w-5xl px-4 py-10">
         <div className="grid gap-8 lg:grid-cols-5">

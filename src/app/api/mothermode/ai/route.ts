@@ -33,7 +33,7 @@ import { scoreLocalCompliance } from '@/lib/mothermode/content/platformComplianc
 
 
 import { IMAGE_STYLE } from '@/lib/mothermode/content/constants';
-import { hostGeneratedImage } from '@/utils/mothermode/storage';
+import { hostGeneratedImage, uploadVideoDataUrl } from '@/utils/mothermode/storage';
 import {
   isPerspective,
   isSophistication,
@@ -104,6 +104,32 @@ export async function POST(request: NextRequest) {
   }
 
   const action = body.action;
+
+  // Host a client-side video data URL (funnel VSL / hero upload) to Storage.
+  if (action === 'hostVideo') {
+    const dataUrl =
+      typeof body.dataUrl === 'string'
+        ? body.dataUrl
+        : typeof body.video === 'string'
+          ? body.video
+          : '';
+    if (!dataUrl.startsWith('data:')) {
+      if (/^https?:\/\//i.test(dataUrl)) {
+        return NextResponse.json({ ok: true, video: dataUrl });
+      }
+      return NextResponse.json(
+        { ok: false, error: 'A data URL video is required' },
+        { status: 400 },
+      );
+    }
+    try {
+      const video = await uploadVideoDataUrl(dataUrl);
+      return NextResponse.json({ ok: true, video });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Video upload failed';
+      return NextResponse.json({ ok: false, error: msg }, { status: 400 });
+    }
+  }
 
   // Host a client-side data URL (overlay burn-in, local upload) to Storage.
   if (action === 'hostImage') {

@@ -100,11 +100,11 @@ export const fivePmReset: MotherModeOffer = {
     lead:
       'These are not generic charts you fill in yourself. The AI builds each one from your kids, your dinners, and your bedtime, so the whole sequence fits your actual evening: decide it ahead, run one order, end calm, and recover when it slips. Nothing here is filler.',
     items: [
-      { title: 'The Evening Sequence', description: 'A fixed, low-friction order for the whole dinner-to-bed stretch, built for your kids\u2019 ages. The spine you run on autopilot instead of improvising.', icon: ListOrdered, tag: 'The spine', value: '$27', outcome: 'The two hours run on a plan instead of on whatever you have left.' },
-      { title: 'The 15-Minute Dinner Shortlist', description: 'A short, personalized list of low-effort dinners, so the meal is decided long before the meltdown asks the question.', icon: UtensilsCrossed, tag: 'Dinner decided', value: '$19', outcome: 'The hardest question of the evening is already answered.' },
-      { title: 'The Wind-Down Script', description: 'The exact words and steps that move the night toward sleep instead of a standoff. The part most routines leave you to wing.', icon: Moon, tag: 'End calm', value: '$24', outcome: 'Bedtime ends in lights out, not a negotiation.' },
-      { title: 'The Reset Card', description: 'A one-glance recovery for the nights it goes sideways. What to do in the moment so one hard patch does not sink the whole evening.', icon: LifeBuoy, tag: 'When it slips', value: '$19', outcome: 'A bad ten minutes stops becoming a bad night.' },
-      { title: 'The Family Cue Card', description: 'A kid-readable version of the sequence, so they can see what comes next without you narrating every step out loud.', icon: Route, tag: 'For the kids', value: '$10', outcome: 'The kids run the order with you, instead of waiting to be told.' },
+      { title: 'The Evening Sequence', description: 'A fixed, low-friction order for the whole dinner-to-bed stretch, built for your kids\u2019 ages. The spine you run on autopilot instead of improvising.', icon: 'ListOrdered', tag: 'The spine', value: '$27', outcome: 'The two hours run on a plan instead of on whatever you have left.' },
+      { title: 'The 15-Minute Dinner Shortlist', description: 'A short, personalized list of low-effort dinners, so the meal is decided long before the meltdown asks the question.', icon: 'UtensilsCrossed', tag: 'Dinner decided', value: '$19', outcome: 'The hardest question of the evening is already answered.' },
+      { title: 'The Wind-Down Script', description: 'The exact words and steps that move the night toward sleep instead of a standoff. The part most routines leave you to wing.', icon: 'Moon', tag: 'End calm', value: '$24', outcome: 'Bedtime ends in lights out, not a negotiation.' },
+      { title: 'The Reset Card', description: 'A one-glance recovery for the nights it goes sideways. What to do in the moment so one hard patch does not sink the whole evening.', icon: 'LifeBuoy', tag: 'When it slips', value: '$19', outcome: 'A bad ten minutes stops becoming a bad night.' },
+      { title: 'The Family Cue Card', description: 'A kid-readable version of the sequence, so they can see what comes next without you narrating every step out loud.', icon: 'Route', tag: 'For the kids', value: '$10', outcome: 'The kids run the order with you, instead of waiting to be told.' },
     ],
   },
 
@@ -113,10 +113,10 @@ export const fivePmReset: MotherModeOffer = {
     subheading:
       'You answer a few questions. The AI builds the sequence. No chart to design, no evening lost figuring it out, nothing to keep up with. The hard part of the evening was never meant to be improvised.',
     steps: [
-      { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, the dinners you actually make, and your bedtime. No blank chart to design. This is the only part you do.', icon: Sparkles, meta: 'About 3 minutes', shift: 'The whole evening gets planned in one calm sitting, not at 5:10.' },
-      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized sequence: the order, the dinner shortlist, the wind-down words, and the reset card. The evening arrives already decided.', icon: Clock, meta: 'Instant', shift: 'Every hard call for the night is made before the noise starts.' },
-      { number: 3, title: 'Run it tonight', description: 'You follow the sequence instead of inventing it. Dinner is decided, the order is set, the words are ready. You are running the plan, not writing it on empty.', icon: ListOrdered, meta: 'Tonight', shift: 'The evening stops depending on how much you have left.' },
-      { number: 4, title: 'Stay calm on repeat', description: 'Run the same sequence each night and tweak it weekly as the kids change. The AI keeps it current, so the order stays boring in the best way.', icon: RefreshCcw, meta: 'A few minutes a week', shift: 'The witching hour becomes the most predictable part of the day.' },
+      { number: 1, title: 'Answer', description: 'A few quick questions about your kids\u2019 ages, the dinners you actually make, and your bedtime. No blank chart to design. This is the only part you do.', icon: 'Sparkles', meta: 'About 3 minutes', shift: 'The whole evening gets planned in one calm sitting, not at 5:10.' },
+      { number: 2, title: 'The AI builds it', description: 'Your answers become a personalized sequence: the order, the dinner shortlist, the wind-down words, and the reset card. The evening arrives already decided.', icon: 'Clock', meta: 'Instant', shift: 'Every hard call for the night is made before the noise starts.' },
+      { number: 3, title: 'Run it tonight', description: 'You follow the sequence instead of inventing it. Dinner is decided, the order is set, the words are ready. You are running the plan, not writing it on empty.', icon: 'ListOrdered', meta: 'Tonight', shift: 'The evening stops depending on how much you have left.' },
+      { number: 4, title: 'Stay calm on repeat', description: 'Run the same sequence each night and tweak it weekly as the kids change. The AI keeps it current, so the order stays boring in the best way.', icon: 'RefreshCcw', meta: 'A few minutes a week', shift: 'The witching hour becomes the most predictable part of the day.' },
     ],
     closer:
       'No new routine to white-knuckle. No streak to protect. You answer, the AI builds, and you walk into 5pm with the plan already made, even on the hard days, because most days are.',
@@ -168,9 +168,9 @@ export const fivePmReset: MotherModeOffer = {
       'The AI builds the sequence in minutes. These make sure tonight actually goes differently, and that it sticks.',
     totalValue: '$65',
     items: [
-      { title: 'The Bad Night Recovery Card', description: 'A one-glance script for the evenings that go off the rails anyway. Exactly what to do in the moment so you can pull the night back instead of riding it down.', value: '$19', icon: LifeBuoy, tag: 'Use it tonight' },
-      { title: 'The Evening Handoff Card', description: 'A simple way to split the two hours with a partner so the load does not all land on you. Who has what, on one page, no negotiation required mid-meltdown.', value: '$29', icon: HeartHandshake, tag: 'Bring them in' },
-      { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the nights you raised your voice, so the guilt does not follow you into tomorrow and make the next evening worse.', value: '$17', icon: Feather, tag: 'Let it go' },
+      { title: 'The Bad Night Recovery Card', description: 'A one-glance script for the evenings that go off the rails anyway. Exactly what to do in the moment so you can pull the night back instead of riding it down.', value: '$19', icon: 'LifeBuoy', tag: 'Use it tonight' },
+      { title: 'The Evening Handoff Card', description: 'A simple way to split the two hours with a partner so the load does not all land on you. Who has what, on one page, no negotiation required mid-meltdown.', value: '$29', icon: 'HeartHandshake', tag: 'Bring them in' },
+      { title: 'Drop-the-Guilt Reframes', description: 'Short reframes for the nights you raised your voice, so the guilt does not follow you into tomorrow and make the next evening worse.', value: '$17', icon: 'Feather', tag: 'Let it go' },
     ],
     closer:
       'All three land in your account the moment you join. Nothing else to buy, nothing else to claim.',

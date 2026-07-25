@@ -1,3 +1,4 @@
+import type { IconName } from '../icons';
 import {
   ListChecks,
   SplitSquareVertical,
@@ -48,15 +49,15 @@ function defaultMethod(): MotherModeOffer['method'] {
   return {
     heading: 'How it works',
     steps: [
-      { number: 1, title: 'Name it', description: 'Get the full picture out of your head and onto the page.', icon: ListChecks },
-      { number: 2, title: 'Sort it', description: 'Decide each item once: drop, automate, delegate, or keep.', icon: SplitSquareVertical },
-      { number: 3, title: 'Hand it off', description: 'Use the scripts to move the work that was never only yours.', icon: MessagesSquare },
-      { number: 4, title: 'Keep it light', description: 'A short weekly rhythm so it never refills to the same level.', icon: RefreshCcw },
+      { number: 1, title: 'Name it', description: 'Get the full picture out of your head and onto the page.', icon: 'ListChecks' },
+      { number: 2, title: 'Sort it', description: 'Decide each item once: drop, automate, delegate, or keep.', icon: 'SplitSquareVertical' },
+      { number: 3, title: 'Hand it off', description: 'Use the scripts to move the work that was never only yours.', icon: 'MessagesSquare' },
+      { number: 4, title: 'Keep it light', description: 'A short weekly rhythm so it never refills to the same level.', icon: 'RefreshCcw' },
     ],
   };
 }
 
-const defaultIcons = [ListChecks, SplitSquareVertical, MessagesSquare, RefreshCcw, Map];
+const defaultIcons: IconName[] = ['ListChecks', 'SplitSquareVertical', 'MessagesSquare', 'RefreshCcw', 'Map'];
 
 /** Attach default icons to inside items that did not specify one. */
 function withIcons(items: Omit<InsideItem, 'icon'>[]): InsideItem[] {

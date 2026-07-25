@@ -125,6 +125,22 @@ export async function uploadAudioBuffer(
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+/**
+ * Upload a video data-URL (from a browser FileReader) to Storage and return its
+ * public URL. Used by the funnel media studio so admins can drop an MP4/WebM
+ * onto a VSL/optin/upsell slot without leaving the page.
+ */
+export async function uploadVideoDataUrl(
+  dataUrl: string,
+  folder = 'mothermode-funnel-video',
+): Promise<string> {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid video data URL');
+  const mimeType = match[1].split(';')[0].trim().toLowerCase();
+  const binary = Buffer.from(match[2], 'base64');
+  return uploadVideoBuffer(binary, mimeType, folder);
+}
+
 
 
 

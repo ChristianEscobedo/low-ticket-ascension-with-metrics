@@ -1,0 +1,172 @@
+### sales types optin/magnet (src/lib/mothermode/sales/types.ts)
+5 *   optin → sales → vsl → checkout → upsell1-4 → success → access
+12 * the optin funnel and MotherModeSalesPage.
+31 'optin',
+46 | 'optin_submit'
+60 /** Optin (step 1) page copy + form chrome. Same shape as optin funnel. */
+61 export interface SalesOptinContent {
+71 magnetTitle: string;
+72 magnetDescription: string;
+73 coverImageUrl: string;
+377 /** Programmable footer for sales funnel pages. Same shape as optin footer. */
+392 | 'optin'
+405 'optin', 'checkout_start', 'purchase',
+412 optin: 'Opt-in capture',
+442 /** Multi-event email kit bindings. emailKitId remains legacy optin kit. */
+445 optin: SalesOptinContent;
+507 optin: unknown;
+601 return 'optin';
+604 export function normalizeSalesOptin(raw: unknown): SalesOptinContent {
+616 magnetTitle: asString(o.magnetTitle),
+617 magnetDescription: asString(o.magnetDescription),
+618 coverImageUrl: asString(o.coverImageUrl),
+1047 // Back-compat: legacy single kit becomes optin binding when email_kits empty.
+1049 emailKits = [{ event: 'optin', emailKitId }];
+1063 optin: normalizeSalesOptin(row.optin),
+1098 /** Optin rate 0–1 from views + conversions. Zero-safe. */
+1099 export function salesOptinRate(views: number, conversions: number): number {
+1136 stepReached: row.step_reached || 'optin',
+1154 export function blankSalesOptin(): SalesOptinContent {
+1165 magnetTitle: '',
+1166 magnetDescription: '',
+1167 coverImageUrl: '',
+
+### sales defaults magnet (src/lib/mothermode/sales/defaults.ts)
+43 magnetTitle: 'The Brain Dump Starter',
+44 magnetDescription:
+46 coverImageUrl: '',
+
+### leadgen types (src/lib/mothermode/leadgen/types.ts)
+5 * Community Kit. From a short intake plus a chosen lead-magnet format it
+6 * produces a complete, long-form, brand-styled document (an ebook, guide, SOP,
+15 * Mappers are pure and side-effect free so they can be unit tested without a
+25 export type LeadGenStatus = (typeof LEAD_GEN_STATUSES)[number];
+27 /** The lead-magnet formats. Each drives a §3 skeleton the generator fills. */
+28 export const LEAD_MAGNET_FORMATS = [
+30 'guide',
+40 export type LeadMagnetFormat = (typeof LEAD_MAGNET_FORMATS)[number];
+44 export type LeadGenLength = (typeof LEAD_GEN_LENGTHS)[number];
+61 export type DocBlockKind = (typeof DOC_BLOCK_KINDS)[number];
+64 * A format module: the skeleton the generator must follow plus a short
+65 * authoring-style note. Kept as data so a format can be tuned without touching
+66 * generation logic. Defined here (rather than in formats/index.ts) so each
+67 * format module can import the type without a circular dependency.
+69 export interface LeadMagnetFormatSpec {
+72 /** One-line description of when to use this format. */
+76 /** Authoring-style guidance (voice, density, pacing) for this format. */
+84 export interface LeadGenIntake {
+91 /** The promised outcome / transformation. */
+92 transformation: string;
+100 offerSlug: string;
+110 transformation: '',
+114 offerSlug: '',
+124 export interface DocBlock {
+131 title?: string;
+135 return { kind, text: '', items: [], title: '' };
+138 /** A nested lesson (course / minicourse formats only). */
+139 export interface DocLesson {
+140 title: string;
+144 export interface DocSection {
+145 /** Stable id for per-section regen. */
+146 id: string;
+157 export function blankSection(id?: string): DocSection {
+159 id: id || makeSectionId(),
+167 /** Simple, dependency-free stable id generator for sections. */
+168 export function makeSectionId(): string {
+172 export interface LeadGenCta {
+173 title: string;
+179 return { title: '', body: '', button: '' };
+182 export interface LeadGenDoc {
+183 title: string;
+184 subtitle: string;
+196 title: '',
+197 subtitle: '',
+209 export interface LeadGenKitRecord {
+210 id: string;
+211 slug: string;
+213 format: LeadMagnetFormat;
+217 publishedSlug: string | null;
+224 export interface LeadGenKitRow {
+225 id: string;
+226 slug: string;
+228 format: string | null;
+232 published_slug: string | null;
+249 export function toLeadMagnetFormat(value: unknown): LeadMagnetFormat {
+250 return LEAD_MAGNET_FORMATS.includes(value as LeadMagnetFormat)
+251 ? (value as LeadMagnetFormat)
+252 : 'guide';
+285 transformation: str(i.transformation) || base.transformation,
+289 offerSlug: str(i.offerSlug) || base.offerSlug,
+300 title: str(b.title),
+312 return { title: str(row.title), blocks: normalizeBlocks(row.blocks) };
+321 id: str(s.id) || makeSectionId(),
+336 title: str(c.title),
+346 title: str(d.title),
+347 subtitle: str(d.subtitle),
+361 id: row.id,
+362 slug: row.slug,
+364 format: toLeadMagnetFormat(row.format),
+368 publishedSlug: row.published_slug,
+
+### leadgen admin api (src/app/api/admin/mothermode-leadgen/route.ts)
+24 export async function GET() {
+29 return NextResponse.json({ success: true, admin: true, items });
+33 * POST: admin-only. Two shapes, discriminated by `action`:
+35 *   { action?: 'save', id?, slug, name, format, status, intake, doc }
+36 *     Create or update one lead-gen kit (default when action is absent).
+38 *   { action: 'publish', id, publishedSlug, publishedKey }
+44 export async function POST(request: NextRequest) {
+50 body = await request.json();
+52 return NextResponse.json(
+58 const action = String(body.action ?? 'save');
+61 if (action === 'publish') {
+69 return NextResponse.json(
+77 return NextResponse.json(
+97 return NextResponse.json({ success: true, publishedSlug, publishedKey });
+100 return NextResponse.json({ success: false, error: message }, { status: 500 });
+109 return NextResponse.json(
+127 return NextResponse.json({ success: true, item: saved });
+133 return NextResponse.json({ success: false, error: friendly }, { status: 500 });
+140 export async function DELETE(request: NextRequest) {
+146 return NextResponse.json(
+155 return NextResponse.json({ success: true });
+158 return NextResponse.json({ success: false, error: message }, { status: 500 });
+
+### leadgen ai api (src/app/api/mothermode/leadgen-ai/route.ts)
+29 export async function POST(request: NextRequest) {
+47 if (action === 'fillIntake') {
+58 if (action === 'outline') {
+69 if (action === 'expand') {
+84 if (action === 'generate') {
+
+### editor optin fields (src/app/admin/sales-funnels/SalesFunnelEditor.tsx)
+104 const [optin, setOptin] = useState<SalesOptinContent>(defaultMotherModeSalesOptin());
+176 function setOptinField<K extends keyof SalesOptinContent>(key: K, value: SalesOptinContent[K]) { setOptin((prev) => ({ ...prev, [key]: value })); }
+383 current: optin.coverImageUrl || '',
+384 prompt: base + ' Lead magnet cover mockup for "' + (optin.magnetTitle || intake.magnetName || subject) + '".',
+385 apply: (url) => setOptinField('coverImageUrl', url),
+661 <Field label="Magnet promise" value={intake.magnetPromise} onChange={(v) => setIntakeField('magnetPromise', v)} placeholder="Unload your head in 20 minutes" />
+797 <Field label="Eyebrow" value={optin.eyebrow} onChange={(v) => setOptinField('eyebrow', v)} />
+798 <Field label="Badge" value={optin.badgeText} onChange={(v) => setOptinField('badgeText', v)} />
+800 <Field label="Headline" value={optin.headline} onChange={(v) => setOptinField('headline', v)} />
+801 <Field label="Emphasis (italic)" value={optin.headlineEmphasis} onChange={(v) => setOptinField('headlineEmphasis', v)} />
+802 <Field label="Headline suffix" value={optin.headlineSuffix} onChange={(v) => setOptinField('headlineSuffix', v)} />
+804 <Area label="Subheadline" value={optin.subheadline} onChange={(v) => setOptinField('subheadline', v)} />
+805 <Area label="Audience line" value={optin.audience} onChange={(v) => setOptinField('audience', v)} />
+806 <Area label="Benefits (one per line)" value={listToLines(optin.benefits)} onChange={(v) => setOptinField('benefits', linesToList(v))} rows={5} />
+808 <Field label="Magnet title" value={optin.magnetTitle} onChange={(v) => setOptinField('magnetTitle', v)} />
+809 <Field label="CTA button" value={optin.ctaText} onChange={(v) => setOptinField('ctaText', v)} />
+811 <Area label="Magnet description" value={optin.magnetDescription} onChange={(v) => setOptinField('magnetDescription', v)} />
+813 <Field label="Cover image URL" value={optin.coverImageUrl} onChange={(v) => setOptinField('coverImageUrl', v)} placeholder="https:///cover.jpg" />
+814 <Field label="Hero video URL" value={optin.heroVideoUrl} onChange={(v) => setOptinField('heroVideoUrl', v)} placeholder="https://youtube.com/watch?v= or .mp4" />
+817 <Field label="Email placeholder" value={optin.emailPlaceholder} onChange={(v) => setOptinField('emailPlaceholder', v)} />
+818 <Field label="Name placeholder" value={optin.namePlaceholder} onChange={(v) => setOptinField('namePlaceholder', v)} />
+820 <label className="flex items-center gap-2 text-sm text-bone/70"><input type="checkbox" checked={optin.collectName} onChange={(e) => setOptinField('collectName', e.target.checked)} /> Collect first name</label>
+821 <Field label="Privacy note" value={optin.privacyNote} onChange={(v) => setOptinField('privacyNote', v)} />
+
+### editor build bar (src/app/admin/sales-funnels/SalesFunnelEditor.tsx)
+77 const btnPrimary = btn + ' bg-brass/[0.14] text-brass border border-brass/30 hover:bg-brass/20';
+78 const btnGhost = btn + ' text-bone/60 border border-bone/15 hover:text-bone hover:bg-bone/[0.05]';
+670 {busy === 'fillIntake' ? 'Filling stack…' : '1. AI fill brief + stack'}
+673 {busy === 'generate' ? 'Generating pages…' : '2. Generate full funnel'}
+676 {busy === 'generateImages' ? 'Generating images…' : '3. Generate missing images'}

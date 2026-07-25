@@ -1,7 +1,10 @@
+'use client';
+
 import React from 'react';
 import { Check } from 'lucide-react';
 import type { MotherModeOffer } from '@/lib/mothermode/types';
 import { formatPrice } from '@/lib/mothermode/format';
+import { MmEditable } from '@/components/mothermode/sales/SalesPageEditContext';
 
 /**
  * The "what is inside" card used in the sticky side rails. A running manifest of
@@ -21,18 +24,26 @@ export const InsidePanel: React.FC<{ offer: MotherModeOffer }> = ({ offer }) => 
       </div>
 
       <ul className="divide-y divide-ink/10">
-        {items.map((item) => (
-          <li key={item.title} className="flex items-start gap-3 px-5 py-3">
+        {items.map((item, ii) => (
+          <li key={item.title + ii} className="flex items-start gap-3 px-5 py-3">
             <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-mode/10">
               <Check className="h-3 w-3 text-mode" />
             </span>
-            <span className="flex-1 text-sm font-medium leading-snug text-ink/80">
+            <MmEditable
+              field={`insideItems.${ii}.title`}
+              as="span"
+              className="flex-1 text-sm font-medium leading-snug text-ink/80"
+            >
               {item.title}
-            </span>
+            </MmEditable>
             {item.value && (
-              <span className="flex-shrink-0 text-xs font-medium text-brass">
+              <MmEditable
+                field={`insideItems.${ii}.value`}
+                as="span"
+                className="flex-shrink-0 text-xs font-medium text-brass"
+              >
                 {item.value}
-              </span>
+              </MmEditable>
             )}
           </li>
         ))}

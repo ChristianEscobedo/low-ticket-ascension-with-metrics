@@ -3,13 +3,13 @@
  * low-ticket resource pack with its own sales page, all funneling into the
  * shared ascension (OS membership, Redesign Vault, Coaching).
  */
-import type { LucideIcon } from 'lucide-react';
+import type { IconName } from './icons';
 
 /** One resource inside the pack ("what's inside" / modules equivalent). */
 export interface InsideItem {
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: IconName;
   tag?: string;
   value?: string;
   /** The one-line shift this piece creates. What changes the moment she uses it. */
@@ -27,7 +27,7 @@ export interface MethodStep {
   number: number;
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: IconName;
   /** Time or cadence anchor, e.g. "20 minutes, once". Lowers perceived effort. */
   meta?: string;
   /** The internal shift the step produces. The reaction, not the instruction. */
@@ -36,7 +36,7 @@ export interface MethodStep {
 
 /** A compact feature card for the supporting grid. */
 export interface FeatureCard {
-  icon: LucideIcon;
+  icon: IconName;
   title: string;
   description: string;
 }
@@ -46,7 +46,7 @@ export interface BonusItem {
   title: string;
   description: string;
   value: string;
-  icon: LucideIcon;
+  icon: IconName;
   tag?: string;
 }
 

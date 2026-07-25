@@ -4,7 +4,7 @@
  * Retreat. Each OTO page reads one of these so the pages stay data-driven and
  * on-brand. Voice rules apply: no em dashes, no NO-list words, numerals for time.
  */
-import type { LucideIcon } from 'lucide-react';
+import type { IconName } from './icons';
 import {
   CalendarHeart,
   Users,
@@ -27,7 +27,7 @@ export interface AscensionFeature {
   title: string;
   description: string;
   value: string;
-  icon: LucideIcon;
+  icon: IconName;
   /** Marks the core inclusion, rendered as the highlighted row. */
   core?: boolean;
 }
@@ -144,12 +144,12 @@ export const mothermodeOS: AscensionOffer = {
   stackEyebrow: 'Everything the OS does for you',
   stackHeading: 'Your founding membership',
   features: [
-    { title: 'An assistant that already knows your family', description: 'Tell it the ages, allergies, sizes, and schools once. It remembers, so you never repeat yourself or start from scratch again.', value: '$197', icon: Sparkles, core: true },
-    { title: 'The week of meals, planned and shopped', description: 'Ask for dinners and get a week built around the allergies and the picky one, turned into a categorized grocery list in one tap.', value: '$97', icon: Utensils },
-    { title: 'Routines that run themselves', description: 'Bedtime, mornings, after school. Step-by-step and age-matched, checkable, so the evening stops being a fight.', value: '$49', icon: Moon },
-    { title: 'The whole family, in sync', description: 'Invite your partner, your mother, the sitter. Everyone sees the same plan, and every update lands in real time.', value: '$97', icon: Users },
-    { title: 'A morning brief and a weekly recap', description: 'Two lines each morning on what today needs and who has it, then a short digest at the end of the week.', value: '$39/mo', icon: Sun },
-    { title: 'Talk to it with your hands full', description: 'Cooking with a toddler on your hip? Tap the mic and say it. It listens, you glance to confirm, it is done.', value: '$29/mo', icon: Mic },
+    { title: 'An assistant that already knows your family', description: 'Tell it the ages, allergies, sizes, and schools once. It remembers, so you never repeat yourself or start from scratch again.', value: '$197', icon: 'Sparkles', core: true },
+    { title: 'The week of meals, planned and shopped', description: 'Ask for dinners and get a week built around the allergies and the picky one, turned into a categorized grocery list in one tap.', value: '$97', icon: 'Utensils' },
+    { title: 'Routines that run themselves', description: 'Bedtime, mornings, after school. Step-by-step and age-matched, checkable, so the evening stops being a fight.', value: '$49', icon: 'Moon' },
+    { title: 'The whole family, in sync', description: 'Invite your partner, your mother, the sitter. Everyone sees the same plan, and every update lands in real time.', value: '$97', icon: 'Users' },
+    { title: 'A morning brief and a weekly recap', description: 'Two lines each morning on what today needs and who has it, then a short digest at the end of the week.', value: '$39/mo', icon: 'Sun' },
+    { title: 'Talk to it with your hands full', description: 'Cooking with a toddler on your hip? Tap the mic and say it. It listens, you glance to confirm, it is done.', value: '$29/mo', icon: 'Mic' },
   ],
   totalValueLabel: '$508/mo',
   bigIdea: 'You cannot hold the whole load in your head. This is the place to set it down where it actually gets carried.',
@@ -196,9 +196,9 @@ export const osAnnualUpgrade: AscensionOffer = {
   stackEyebrow: 'What switching to annual gives you',
   stackHeading: 'The founding year',
   features: [
-    { title: 'Two months, free', description: 'Twelve months of the OS for the price of ten. The savings is automatic.', value: '$58', icon: CalendarHeart, core: true },
-    { title: 'Your founding rate, locked', description: 'The lowest price the OS will ever be, held for as long as you stay.', value: 'For good', icon: InfinityIcon },
-    { title: 'Nothing to manage monthly', description: 'One payment, one year, zero card-decline surprises in a hard week.', value: 'Included', icon: RefreshCcw },
+    { title: 'Two months, free', description: 'Twelve months of the OS for the price of ten. The savings is automatic.', value: '$58', icon: 'CalendarHeart', core: true },
+    { title: 'Your founding rate, locked', description: 'The lowest price the OS will ever be, held for as long as you stay.', value: 'For good', icon: 'InfinityIcon' },
+    { title: 'Nothing to manage monthly', description: 'One payment, one year, zero card-decline surprises in a hard week.', value: 'Included', icon: 'RefreshCcw' },
   ],
   totalValueLabel: 'Save $58 today',
   bigIdea: 'The redesign works when it stays. Annual is how it stays.',
@@ -244,11 +244,11 @@ export const redesignVault: AscensionOffer = {
   stackEyebrow: 'Everything, downloaded and kept',
   stackHeading: 'The complete Vault',
   features: [
-    { title: 'Every Mental Load system', description: 'The brain dump, the offload map, the invisible labor inventory, and the weekly reset.', value: '$108', icon: Layers },
-    { title: 'Every Daily Rhythm system', description: 'The 5pm reset and the morning without yelling, ready to run tonight and tomorrow.', value: '$54', icon: RefreshCcw },
-    { title: 'The Fourth Trimester system', description: 'The first 90 days, for the newborn fog and your own recovery.', value: '$27', icon: Moon },
-    { title: 'Every future pack, free', description: 'Anything new we build lands in your Vault automatically, at no extra cost.', value: '$108', icon: InfinityIcon, core: true },
-    { title: 'Print and editable versions', description: 'Every system as a print-ready PDF plus an editable file for any device.', value: 'Included', icon: Download },
+    { title: 'Every Mental Load system', description: 'The brain dump, the offload map, the invisible labor inventory, and the weekly reset.', value: '$108', icon: 'Layers' },
+    { title: 'Every Daily Rhythm system', description: 'The 5pm reset and the morning without yelling, ready to run tonight and tomorrow.', value: '$54', icon: 'RefreshCcw' },
+    { title: 'The Fourth Trimester system', description: 'The first 90 days, for the newborn fog and your own recovery.', value: '$27', icon: 'Moon' },
+    { title: 'Every future pack, free', description: 'Anything new we build lands in your Vault automatically, at no extra cost.', value: '$108', icon: 'InfinityIcon', core: true },
+    { title: 'Print and editable versions', description: 'Every system as a print-ready PDF plus an editable file for any device.', value: 'Included', icon: 'Download' },
   ],
   totalValueLabel: '$297',
   bigIdea: 'Buy the room when you need it, or own the whole house once and never think about it again.',
@@ -296,10 +296,10 @@ export const motherModeCoaching: AscensionOffer = {
   stackEyebrow: 'What the coaching year holds',
   stackHeading: 'The founding coaching year',
   features: [
-    { title: 'Two live calls a month', description: 'Small-group coaching, twice a month, all year. Bring the week that is not working and leave with the next move.', value: '$1,800', icon: Video, core: true },
-    { title: 'A coach who knows your family', description: 'Help built around your kids, your schools, and the season you are in, never a generic worksheet.', value: '$600', icon: UserCheck },
-    { title: 'A private circle of mothers', description: 'A small founding room carrying the same load, so a question at 11pm gets a real answer.', value: '$360', icon: Users },
-    { title: 'Direct access between calls', description: 'Send the hard moment as it happens and get a real reply, not a ticket number.', value: '$204', icon: MessageCircle },
+    { title: 'Two live calls a month', description: 'Small-group coaching, twice a month, all year. Bring the week that is not working and leave with the next move.', value: '$1,800', icon: 'Video', core: true },
+    { title: 'A coach who knows your family', description: 'Help built around your kids, your schools, and the season you are in, never a generic worksheet.', value: '$600', icon: 'UserCheck' },
+    { title: 'A private circle of mothers', description: 'A small founding room carrying the same load, so a question at 11pm gets a real answer.', value: '$360', icon: 'Users' },
+    { title: 'Direct access between calls', description: 'Send the hard moment as it happens and get a real reply, not a ticket number.', value: '$204', icon: 'MessageCircle' },
   ],
   totalValueLabel: '$2,964/yr',
   bigIdea: 'A plan tells you what to do. A coach makes sure you are still standing when it gets hard, and you keep going.',

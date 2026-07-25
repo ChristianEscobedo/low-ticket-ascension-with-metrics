@@ -71,6 +71,18 @@ export async function aiHostImage(dataUrl: string): Promise<string> {
   return json.image;
 }
 
+/**
+ * Host a client-produced video data URL in Storage and return a public http(s)
+ * URL. Pass-through if already hosted. Used by the funnel media studio.
+ */
+export async function aiHostVideo(dataUrl: string): Promise<string> {
+  if (!dataUrl?.trim()) throw new Error('No video to host');
+  if (/^https?:\/\//i.test(dataUrl.trim())) return dataUrl.trim();
+  const json = await postAi({ action: 'hostVideo', dataUrl });
+  if (typeof json.video === 'string') return json.video;
+  throw new Error('Hosting returned no video URL');
+}
+
 /** Generate a post image, returning a hosted public URL (the server uploads the
 
  *  render to Storage so it is renderable and GoHighLevel-postable; it falls back
