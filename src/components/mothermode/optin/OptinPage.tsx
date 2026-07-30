@@ -21,13 +21,21 @@ interface Props {
   isAdmin?: boolean;
 }
 
-function readUtm(): { utmSource?: string; utmMedium?: string; utmCampaign?: string } {
+function readUtm(): {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+} {
   if (typeof window === 'undefined') return {};
   const sp = new URLSearchParams(window.location.search);
   return {
     utmSource: sp.get('utm_source') || undefined,
     utmMedium: sp.get('utm_medium') || undefined,
     utmCampaign: sp.get('utm_campaign') || undefined,
+    // utm_content is the planner piece id: which post sent them, not just
+    // which channel. Read here or the funnel can never attribute a lead.
+    utmContent: sp.get('utm_content') || undefined,
   };
 }
 

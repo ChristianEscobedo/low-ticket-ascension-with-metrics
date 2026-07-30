@@ -72,6 +72,8 @@ import {
   type ContextSourceKind,
   type ContextSourceOption,
 } from '@/lib/mothermode/context';
+import { usePromptBankRecipes } from '@/components/mothermode/content/usePromptBankRecipes';
+import { orderEmailRecipesForTrigger } from '@/lib/mothermode/content/promptBankActions';
 import {
   KitRichTextField,
   type RichTextToken,
@@ -157,6 +159,13 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
   const [intake, setIntake] = useState<EmailKitIntake>(blankIntake());
   const [contextRefs, setContextRefs] = useState<ContextRef[]>([]);
   const [sequence, setSequence] = useState<EmailSequence>(blankSequence());
+  // Round 5: the live merged prompt bank for the per-email Bank framework
+  // picker, ordered so the family matching the sequence trigger sorts first.
+  const { recipes: bankRecipes } = usePromptBankRecipes();
+  const emailBankRecipes = useMemo(
+    () => orderEmailRecipesForTrigger(bankRecipes, sequence.trigger),
+    [bankRecipes, sequence.trigger],
+  );
   // Whether AI writes bodies as plain text or lightly-formatted HTML (bold,
   // bullets). Both are sanitized to clean text wherever they feed a prompt.
   const [bodyFormat, setBodyFormat] = useState<'text' | 'html'>('text');
@@ -685,7 +694,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
         )}
 
         {/* Identity + status */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-bone/10 bg-ink/30 p-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4">
           <div>
             <label className={labelClass}>Name</label>
             <input
@@ -954,7 +963,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
 
 
         {/* Intake */}
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-4">
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg">Intake</h2>
             <button
@@ -1034,7 +1043,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
         </section>
 
         {/* Context sources */}
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3">
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg">Attached context</h2>
             <button className={btnGhost} onClick={addRef} disabled={busy !== null}>
@@ -1135,7 +1144,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
         </section>
 
         {/* Available merge tokens */}
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3">
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3">
           <h2 className="font-display text-lg">Available tokens</h2>
           <p className="text-xs text-bone/40">
             Drop these <code className="text-brass/80">{'{{token}}'}</code> markers
@@ -1258,7 +1267,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
               <article
                 key={email.id}
                 id={`email-card-${email.id}`}
-                className="scroll-mt-24 rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3 transition"
+                className="scroll-mt-24 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3 transition"
               >
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -1290,6 +1299,23 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
                     {allFrameworks().map((f) => (
                       <option key={f} value={f}>
                         {EMAIL_FRAMEWORK_SPECS[f].label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className={`${inputClass} max-w-[200px]`}
+                    value={email.frameworkRecipeId ?? ''}
+                    onChange={(e) =>
+                      patchEmail(email.id, {
+                        frameworkRecipeId: e.target.value || undefined,
+                      })
+                    }
+                    title="Optional prompt-bank recipe steering this email's expand pass (round 5). Families matching the sequence trigger sort first."
+                  >
+                    <option value="">Bank: framework only</option>
+                    {emailBankRecipes.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
                       </option>
                     ))}
                   </select>
@@ -1892,7 +1918,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
 
         {/* Extend / add */}
         {sequence.emails.length > 0 && (
-          <section className="flex flex-wrap items-center gap-2 rounded-xl border border-bone/10 bg-ink/30 p-4">
+          <section className="flex flex-wrap items-center gap-2 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4">
             <h2 className="font-display text-lg mr-2">Extend</h2>
             <label className="flex items-center gap-2 text-xs text-bone/50">
               <span className="uppercase tracking-wider font-semibold">Add</span>
@@ -1945,7 +1971,7 @@ export default function EmailKitEditor({ initialKits, sources = [] }: Props) {
         )}
 
         {/* Custom merge tokens */}
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3">
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3">
           <div>
             <h2 className="font-display text-lg">Custom tokens</h2>
             <p className="text-xs text-bone/40">

@@ -18,6 +18,11 @@ import {
 } from '@/lib/mothermode/content/review';
 import { RichTextField } from './RichTextField';
 import { aiRewriteText, type AiContext } from './aiClient';
+import { FrameworkPicker } from './FrameworkPicker';
+import type {
+  ContentFormat,
+  ContentPlatform,
+} from '@/lib/mothermode/content/types';
 import {
   AiError,
   InstructionsInput,
@@ -43,6 +48,9 @@ export const HookVariants: React.FC<{
   onPatch: (patch: Partial<PieceEdits>) => void;
 }> = ({ piece, review, context, model, onPatch }) => {
   const [instructions, setInstructions] = useState('');
+  /** Bank steering for rewrites/variants: a framework pick plus its inputs. */
+  const [framework, setFramework] = useState('');
+  const [recipeInputs, setRecipeInputs] = useState<Record<string, string>>({});
   const { busy, error, run } = useAiAction();
 
   const edited = reviewHooks(review.edits);
@@ -66,6 +74,8 @@ export const HookVariants: React.FC<{
         field: 'hook',
         text: hooks[active],
         instructions: instructions.trim() || undefined,
+        framework: framework || undefined,
+        recipeInputs: framework ? recipeInputs : undefined,
         context,
         model: model || undefined,
       });
@@ -79,6 +89,8 @@ export const HookVariants: React.FC<{
         text: hooks[active],
         instructions: instructions.trim() || undefined,
         variant: true,
+        framework: framework || undefined,
+        recipeInputs: framework ? recipeInputs : undefined,
         context,
         model: model || undefined,
       });
@@ -137,6 +149,14 @@ export const HookVariants: React.FC<{
       </div>
 
       <div className="mt-2.5 space-y-2">
+        <FrameworkPicker
+          platform={context.platform as ContentPlatform | undefined}
+          format={context.format as ContentFormat | undefined}
+          value={framework}
+          onChange={setFramework}
+          inputValues={recipeInputs}
+          onInputValues={setRecipeInputs}
+        />
         <InstructionsInput
           value={instructions}
           onChange={setInstructions}

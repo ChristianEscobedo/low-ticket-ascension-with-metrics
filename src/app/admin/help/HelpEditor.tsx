@@ -17,6 +17,13 @@ import {
   type ChangelogType,
   type KbArticle,
 } from '@/lib/mothermode/help/types';
+import {
+  HELP_CENTER_SEED_ARTICLES,
+  HELP_CENTER_SEED_CHANGELOG,
+  type SeedArticle,
+  type SeedChangelog,
+} from '@/lib/mothermode/help/seedContent';
+import { ARTICLE_BODY_STYLES } from '@/lib/mothermode/help/articleStyles';
 
 interface Props {
   initialArticles: KbArticle[];
@@ -95,6 +102,7 @@ type ArticleDraft = {
   body: string;
   published: boolean;
   sortOrder: number;
+  audience: 'admin' | 'buyer';
 };
 
 function blankArticle(): ArticleDraft {
@@ -107,6 +115,7 @@ function blankArticle(): ArticleDraft {
     body: '',
     published: false,
     sortOrder: 0,
+    audience: 'admin',
   };
 }
 
@@ -120,6 +129,7 @@ function toArticleDraft(a: KbArticle): ArticleDraft {
     body: a.body,
     published: a.published,
     sortOrder: a.sortOrder,
+    audience: a.audience ?? 'admin',
   };
 }
 
@@ -128,6 +138,34 @@ function ArticlesTab({ initial }: { initial: KbArticle[] }) {
   const [selectedId, setSelectedId] = useState<string | 'new' | null>(
     initial[0]?.id ?? null,
   );
+
+  // Only seed the articles whose slug is not already present, so hand edits
+  // to existing articles are never clobbered.
+  const missingArticles = useMemo(() => {
+    const have = new Set(initial.map((a) => a.slug));
+    return HELP_CENTER_SEED_ARTICLES.filter((s) => !have.has(s.slug));
+  }, [initial]);
+
+  const loadStarter = async () => {
+    for (const s of missingArticles as SeedArticle[]) {
+      await fetch('/api/admin/mothermode-help', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: null,
+          slug: s.slug,
+          title: s.title,
+          category: s.category,
+          excerpt: s.excerpt,
+          body: s.body,
+          published: s.published,
+          sortOrder: s.sortOrder,
+          audience: s.audience ?? 'admin',
+        }),
+      });
+    }
+    router.refresh();
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, KbArticle[]>();
@@ -159,6 +197,13 @@ function ArticlesTab({ initial }: { initial: KbArticle[] }) {
           New article
         </button>
 
+        {missingArticles.length > 0 && (
+          <SeedButton
+            label={`Load ${missingArticles.length} starter article${missingArticles.length === 1 ? '' : 's'}`}
+            onRun={loadStarter}
+          />
+        )}
+
         {initial.length === 0 && (
           <p className="text-sm text-bone/50">No articles yet. Create one.</p>
         )}
@@ -182,7 +227,10 @@ function ArticlesTab({ initial }: { initial: KbArticle[] }) {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate">{item.title}</span>
-                    <PublishedBadge published={item.published} />
+                    <span className="flex items-center gap-1.5">
+                      <AudienceBadge audience={item.audience} />
+                      <PublishedBadge published={item.published} />
+                    </span>
                   </div>
                 </button>
               ))}
@@ -225,6 +273,7 @@ function ArticlePanel({
   const [body, setBody] = useState(draft.body);
   const [published, setPublished] = useState(draft.published);
   const [sortOrder, setSortOrder] = useState(draft.sortOrder);
+  const [audience, setAudience] = useState<'admin' | 'buyer'>(draft.audience ?? 'admin');
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -250,6 +299,7 @@ function ArticlePanel({
           body,
           published,
           sortOrder,
+          audience,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -347,6 +397,17 @@ function ArticlePanel({
             onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
             className={inputClass}
           />
+        </Field>
+        <Field label="Audience" htmlFor="kb-audience">
+          <select
+            id="kb-audience"
+            value={audience}
+            onChange={(e) => setAudience(e.target.value === 'buyer' ? 'buyer' : 'admin')}
+            className={inputClass}
+          >
+            <option value="admin">Admin (how to run the app)</option>
+            <option value="buyer">Buyer (public help center)</option>
+          </select>
         </Field>
       </div>
 
@@ -448,6 +509,34 @@ function ChangelogTab({ initial }: { initial: ChangelogEntry[] }) {
     initial[0]?.id ?? null,
   );
 
+  // Only seed changelog entries whose (releasedOn + title) is not already
+  // present, so hand edits to existing entries are never clobbered.
+  const missingChangelog = useMemo(() => {
+    const have = new Set(initial.map((e) => `${e.releasedOn?.slice(0, 10)}|${e.title}`));
+    return HELP_CENTER_SEED_CHANGELOG.filter(
+      (s) => !have.has(`${s.releasedOn}|${s.title}`),
+    );
+  }, [initial]);
+
+  const loadStarter = async () => {
+    for (const s of missingChangelog as SeedChangelog[]) {
+      await fetch('/api/admin/mothermode-changelog', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: null,
+          version: s.version,
+          releasedOn: s.releasedOn,
+          entryType: s.entryType,
+          title: s.title,
+          body: s.body,
+          published: s.published,
+        }),
+      });
+    }
+    router.refresh();
+  };
+
   const draft =
     selectedId === 'new'
       ? blankChangelog()
@@ -467,6 +556,13 @@ function ChangelogTab({ initial }: { initial: ChangelogEntry[] }) {
           <Plus className="w-4 h-4" />
           New entry
         </button>
+
+        {missingChangelog.length > 0 && (
+          <SeedButton
+            label={`Load ${missingChangelog.length} starter ${missingChangelog.length === 1 ? 'entry' : 'entries'}`}
+            onRun={loadStarter}
+          />
+        )}
 
         {initial.length === 0 && (
           <p className="text-sm text-bone/50">No entries yet. Create one.</p>
@@ -710,6 +806,21 @@ function Field({
   );
 }
 
+function AudienceBadge({ audience }: { audience?: 'admin' | 'buyer' }) {
+  const buyer = audience === 'buyer';
+  return (
+    <span
+      className={`flex-shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${
+        buyer
+          ? 'border-sky-400/30 bg-sky-400/[0.08] text-sky-200'
+          : 'border-brass/30 bg-brass/[0.06] text-brass/80'
+      }`}
+    >
+      {buyer ? 'Buyer' : 'Admin'}
+    </span>
+  );
+}
+
 function PublishedBadge({ published }: { published: boolean }) {
   return (
     <span
@@ -765,8 +876,10 @@ function BodyPreview({ html }: { html: string }) {
     () =>
       `<!doctype html><html><head><meta charset="utf-8" />` +
       `<script src="https://cdn.tailwindcss.com"></script>` +
-      `<style>body{background:#F5F1EB;color:#1A1816;font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;}</style>` +
-      `</head><body><p style="text-transform:uppercase;letter-spacing:.2em;font-size:11px;color:#A88B5C;">Preview</p>${html}</body></html>`,
+      `<style>body{background:#F5F1EB;color:#1A1816;font-family:ui-sans-serif,system-ui,sans-serif;padding:24px;margin:0;}` +
+      ARTICLE_BODY_STYLES +
+      `</style>` +
+      `</head><body><p style="text-transform:uppercase;letter-spacing:.2em;font-size:11px;color:#A88B5C;margin:0 0 12px;">Preview</p><div class="prose">${html}</div></body></html>`,
     [html],
   );
 
@@ -783,6 +896,29 @@ function BodyPreview({ html }: { html: string }) {
         className="w-full h-[320px] bg-bone"
       />
     </div>
+  );
+}
+
+/** A secondary button that loads bundled starter content. Shows a busy state
+ *  while the batch runs. */
+function SeedButton({ label, onRun }: { label: string; onRun: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await onRun();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-bone/15 bg-bone/[0.04] text-bone/60 text-xs font-semibold hover:text-bone hover:bg-bone/[0.08] disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {busy ? 'Loading…' : label}
+    </button>
   );
 }
 

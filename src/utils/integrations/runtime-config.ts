@@ -17,6 +17,14 @@ type ConfigMap = Record<string, Record<string, unknown>>;
 const TTL_MS = 30_000;
 let cache: { at: number; data: ConfigMap } | null = null;
 
+/**
+ * Credential-only providers: the key's presence IS the config. They have no
+ * event fan-out, so the "Enabled" toggle (built for webhook dispatch) should
+ * never gate whether their key is read — a saved-but-unchecked row silently
+ * "not persisting" is exactly the bug this rule answers.
+ */
+const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify']);
+
 async function loadAll(): Promise<ConfigMap> {
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) return cache.data;
@@ -24,7 +32,9 @@ async function loadAll(): Promise<ConfigMap> {
   try {
     const rows = await listIntegrations();
     for (const r of rows) {
-      if (r.enabled) map[r.provider] = (r.config as Record<string, unknown>) ?? {};
+      if (r.enabled || ALWAYS_ON_PROVIDERS.has(r.provider)) {
+        map[r.provider] = (r.config as Record<string, unknown>) ?? {};
+      }
     }
   } catch (err) {
     console.error('runtime-config.loadAll failed:', err);
@@ -88,6 +98,18 @@ export async function getGoogleKey(): Promise<string | null> {
   );
 }
 
+/** Moonshot key for the Kimi text models. Env-only (same pattern as the
+ *  Google image key): reads MOONSHOT_API_KEY, then KIMI_API_KEY. Kimi speaks
+ *  the OpenAI-compatible chat API, so the generators reuse that call shape
+ *  against the Moonshot base URL with this key. */
+export async function getMoonshotKey(): Promise<string | null> {
+  return (
+    envClean(process.env.MOONSHOT_API_KEY) ??
+    envClean(process.env.KIMI_API_KEY) ??
+    null
+  );
+}
+
 export async function getTextModelOverride(): Promise<string | undefined> {
   return (
     (await stored('anthropic', 'text_model')) ??
@@ -101,6 +123,83 @@ export async function getTextProviderOverride(): Promise<string | undefined> {
     (await stored('openai', 'text_provider')) ??
     envClean(process.env.MOTHERMODE_AI_TEXT_PROVIDER)
   );
+}
+
+// ----------------------------------------------------------------------------
+// Research data (Monid social scraping + RapidAPI Amazon)
+// ----------------------------------------------------------------------------
+export async function getMonidKey(): Promise<string | null> {
+  return (await resolve('monid', 'api_key', process.env.MONID_API_KEY)) ?? null;
+}
+
+export async function getMonidBaseUrl(): Promise<string> {
+  return (
+    (await resolve('monid', 'base_url', process.env.MONID_BASE_URL)) ??
+    'https://api.monid.ai'
+  );
+}
+
+/**
+ * Optional per-platform endpoint pins (x, tiktok, instagram, reddit, youtube),
+ * stored as flat `endpoint_<platform>` config keys on the monid row.
+ */
+export async function getMonidEndpoints(): Promise<Record<string, string>> {
+  const map = await loadAll();
+  const cfg = map['monid'] ?? {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(cfg)) {
+    if (!k.startsWith('endpoint_')) continue;
+    if (typeof v === 'string' && v.trim()) {
+      out[k.slice('endpoint_'.length).toLowerCase()] = v.trim();
+    }
+  }
+  return out;
+}
+
+export async function getRapidApiKey(): Promise<string | null> {
+  return (
+    (await resolve('rapidapi', 'api_key', process.env.RAPIDAPI_KEY)) ?? null
+  );
+}
+
+export async function getRapidApiAmazonHost(): Promise<string> {
+  return (
+    (await resolve(
+      'rapidapi',
+      'amazon_host',
+      process.env.RAPIDAPI_AMAZON_HOST,
+    )) ?? 'real-time-amazon-data.p.rapidapi.com'
+  );
+}
+
+/** Apify token — the fallback engine for Amazon review mining. */
+export async function getApifyToken(): Promise<string | null> {
+  return (
+    (await resolve('apify', 'api_token', process.env.APIFY_API_TOKEN)) ?? null
+  );
+}
+
+/** Apify reviews actor id (swappable in /admin/integrations if the default 404s). */
+export async function getApifyReviewsActor(): Promise<string> {
+  return (
+    (await resolve(
+      'apify',
+      'reviews_actor',
+      process.env.APIFY_REVIEWS_ACTOR,
+    )) ?? 'apify/amazon-reviews-scraper'
+  );
+}
+
+/**
+ * Amazon engine preference: 'rapidapi' (default, RapidAPI-first with Apify
+ * fallback) or 'apify' (skip RapidAPI for reviews entirely — query searches
+ * still need RapidAPI /search to resolve the ASIN).
+ */
+export async function getAmazonEngine(): Promise<'rapidapi' | 'apify'> {
+  const v = (
+    (await resolve('rapidapi', 'engine', process.env.AMAZON_ENGINE)) ?? ''
+  ).toLowerCase();
+  return v === 'apify' ? 'apify' : 'rapidapi';
 }
 
 // ----------------------------------------------------------------------------

@@ -165,7 +165,7 @@ export default function BrandBibleEditor({
       </div>
 
       {/* Form */}
-      <div className="rounded-xl border border-bone/10 bg-bone/[0.02] p-5">
+      <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-5">
         {error && (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/[0.08] px-3 py-2 text-sm text-red-300">
             {error}

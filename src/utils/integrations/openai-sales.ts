@@ -16,6 +16,7 @@ import {
   normalizeUpsell,
   normalizeSuccess,
   normalizeAccess,
+  normalizeSalesFooter,
   type SalesOptinContent,
   type SalesPageContent,
   type VslPageContent,
@@ -23,10 +24,16 @@ import {
   type UpsellContent,
   type SuccessContent,
   type AccessContent,
+  type SalesFooterContent,
 } from '@/lib/mothermode/sales/types';
 import type { SalesAiIntake } from '@/lib/mothermode/sales/aiIntake';
 import {
+  funnelBriefFromIntake,
+  formatFunnelBriefForPrompt,
+} from '@/lib/mothermode/sales/funnelBrief';
+import {
   blankSalesAiIntake,
+  formatIntakeVisualForPrompt,
   formatOfferStackForPrompt,
   normalizeOfferStack,
   normalizeSalesAiIntake,
@@ -37,6 +44,7 @@ import { getTextModel, type TextProvider } from '@/lib/mothermode/content/models
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
@@ -54,10 +62,12 @@ export {
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 
 const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 const DEFAULT_ANTHROPIC_TEXT_MODEL = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT_TEXT_MODEL = 'kimi-k3';
 
 export type AiResult<T> =
   | { ok: true; data: T }
@@ -76,6 +86,7 @@ export interface SalesAiBundle {
   upsell4: UpsellContent;
   success: SuccessContent;
   access: AccessContent;
+  footer: SalesFooterContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,14 +113,20 @@ type TextConfig =
 async function resolveTextConfig(): Promise<TextConfig> {
   const openaiKey = await getOpenAiKey();
   const anthropicKey = await getAnthropicKey();
-  if (!openaiKey && !anthropicKey) {
+  const moonshotKey = await getMoonshotKey();
+  if (!openaiKey && !anthropicKey && !moonshotKey) {
     return { ok: false, error: 'No AI provider key configured.' };
   }
 
   const overrideModel = await getTextModelOverride();
   const overridePick = getTextModel(overrideModel);
   if (overridePick) {
-    const key = overridePick.provider === 'anthropic' ? anthropicKey : openaiKey;
+    const key =
+      overridePick.provider === 'anthropic'
+        ? anthropicKey
+        : overridePick.provider === 'moonshot'
+          ? moonshotKey
+          : openaiKey;
     if (key) return { ok: true, provider: overridePick.provider, model: overridePick.id, key };
   }
 
@@ -130,12 +147,28 @@ async function resolveTextConfig(): Promise<TextConfig> {
       key: openaiKey,
     };
   }
+  if (pref === 'moonshot' && moonshotKey) {
+    return {
+      ok: true,
+      provider: 'moonshot',
+      model: overrideModel || DEFAULT_MOONSHOT_TEXT_MODEL,
+      key: moonshotKey,
+    };
+  }
   if (anthropicKey) {
     return {
       ok: true,
       provider: 'anthropic',
       model: DEFAULT_ANTHROPIC_TEXT_MODEL,
       key: anthropicKey,
+    };
+  }
+  if (moonshotKey) {
+    return {
+      ok: true,
+      provider: 'moonshot',
+      model: DEFAULT_MOONSHOT_TEXT_MODEL,
+      key: moonshotKey,
     };
   }
   return { ok: true, provider: 'openai', model: DEFAULT_OPENAI_TEXT_MODEL, key: openaiKey! };
@@ -195,7 +228,9 @@ async function callJson<T>(system: string, user: string): Promise<AiResult<T>> {
       const payload = (await res.json()) as { content?: Array<{ text?: string }> };
       raw = payload.content?.map((c) => c.text ?? '').join('') ?? '';
     } else {
-      const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      // Kimi (Moonshot) speaks the OpenAI-compatible chat API on its own base.
+      const base = cfg.provider === 'moonshot' ? MOONSHOT_BASE : OPENAI_BASE;
+      const res = await fetch(`${base}/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -252,6 +287,7 @@ interface RawBundle {
   upsell4?: unknown;
   success?: unknown;
   access?: unknown;
+  footer?: unknown;
 }
 
 /**
@@ -344,6 +380,22 @@ Return a single JSON object with this exact shape:
     "faqs": [{ "question": string, "answer": string }][3-5],
     "finalCtaHeading": string,
     "finalCtaBody": string,
+    "soldSeparatelyLabel": string,
+    "todayLabel": string,
+    "savingsLabel": string,
+    "foundingPriceLabel": string,
+    "pricingStackTotalLabel": string,
+    "timerNote": string,
+    "resourcesInstantLabel": string,
+    "secureCheckoutLabel": string,
+    "guaranteeNote": string,
+    "proofEyebrow": string,
+    "brandLine": string,
+    "conversionLine": string,
+    "generationalLine": string,
+    "categoryLine": string,
+    "founderName": string,
+    "founderRole": string,
     "bumps": [{ "id": string, "title": string, "price": string, "description": string }]
   },
 
@@ -397,6 +449,13 @@ Return a single JSON object with this exact shape:
     "communityHref": "",
     "communityLabel": "Join the community",
     "supportEmail": "support@mothermode.com"
+  },
+  "footer": {
+    "enabled": true,
+    "brandLine": string,
+    "disclaimer": string,
+    "links": [{ "label": string, "href": "" }],
+    "copyright": string
   }
 }
 
@@ -451,13 +510,24 @@ Rules for structure:
 - For each upsell slot: if the stack marks it DISABLED or empty, set enabled:false and leave copy minimal. If enabled, write full upsell copy using the stack name/price/promise/billingType.
 - priceLabel / priceCents on checkout and sales must match the front-end offer price from the stack.
 - originalPriceLabel / originalPriceCents should use the stack originalPrice when provided.
+- The identity lines (brandLine, conversionLine, generationalLine, categoryLine,
+  founderName, founderRole) and the footer block MUST come from the FUNNEL BRIEF.
+  If the brief does not name a founder, leave founderName and founderRole empty.
+  Never carry another funnel's brand or founder into this one.
+- Micro-labels (soldSeparatelyLabel, todayLabel, savingsLabel, foundingPriceLabel,
+  pricingStackTotalLabel, timerNote, resourcesInstantLabel, secureCheckoutLabel,
+  guaranteeNote, proofEyebrow) are short in-voice UI strings for THIS offer.
+- footer.links are real legal/support links for this funnel with href left empty.
 
 `.trim();
 
   const synced = syncIntakeStack(intake);
   const stack = normalizeOfferStack(synced.offerStack);
+  const brief = funnelBriefFromIntake(synced);
 
   const user = `
+${formatFunnelBriefForPrompt(brief)}
+
 INTAKE
 - Niche / topic: ${synced.niche || '(not set)'}
 - Audience: ${synced.audience || '(not set)'}
@@ -468,6 +538,7 @@ INTAKE
 - Paid offer name: ${synced.offerName || stack.frontEnd.name || '(not set)'}
 - Paid offer price: ${synced.offerPrice || stack.frontEnd.price || '(not set)'}
 - Tone notes: ${synced.toneNotes || '(default MotherMode calm authority)'}
+- Visual direction: ${formatIntakeVisualForPrompt(synced) || '(not set)'}
 
 OFFER STACK (authoritative money path — honor this exactly)
 ${formatOfferStackForPrompt(stack)}
@@ -489,6 +560,7 @@ Write the full 10-block sales funnel JSON now. Map stack bonuses → sales.bonus
   const upsell4 = normalizeUpsell(raw.upsell4);
   const success = normalizeSuccess(raw.success);
   const access = normalizeAccess(raw.access);
+  const footer = normalizeSalesFooter(raw.footer);
 
   // Prefer intake / offer-stack values when model leaves blanks.
   const syncedIntake = syncIntakeStack(intake);
@@ -601,6 +673,7 @@ Write the full 10-block sales funnel JSON now. Map stack bonuses → sales.bonus
       upsell4,
       success,
       access,
+      footer,
     },
   };
 }
@@ -642,6 +715,12 @@ Respond with ONE JSON object matching this shape exactly:
   "upsell4Name": string,
   "upsell4Price": string,
   "toneNotes": string,
+  "visualSubject": string,
+  "visualPalette": string,
+  "visualStyleKeywords": string,
+  "visualLighting": string,
+  "visualComposition": string,
+  "visualAvoid": string,
   "offerStack": {
     "frontEnd": {
       "name": string,
@@ -668,6 +747,11 @@ Rules:
 - Enable 1-2 upsells by default unless the brief already specifies more.
 - leadGenSlug may stay empty unless the brief implies a kit slug.
 - toneNotes stay short.
+- visual* fields are art direction for image generation, not copy. Describe a
+  look this specific brand could own; do not reach for a generic stock look.
+  visualPalette, visualStyleKeywords and visualAvoid are comma separated.
+  Leave a visual field empty rather than inventing a look that fights the niche
+  — an empty field is reported to the admin, a wrong one silently renders.
 `.trim();
 
   const synced = syncIntakeStack(intake);
@@ -691,6 +775,8 @@ Return the full filled intake JSON now.
     'niche', 'audience', 'pain', 'magnetName', 'magnetPromise', 'leadGenSlug',
     'offerName', 'offerPrice', 'upsell1Name', 'upsell1Price', 'upsell2Name', 'upsell2Price',
     'upsell3Name', 'upsell3Price', 'upsell4Name', 'upsell4Price', 'toneNotes',
+    'visualSubject', 'visualPalette', 'visualStyleKeywords', 'visualLighting',
+    'visualComposition', 'visualAvoid',
   ];
   for (const k of strKeys) {
     const owner = String(synced[k] ?? '').trim();
@@ -752,7 +838,8 @@ export type SalesAiPageKey =
   | 'upsell3'
   | 'upsell4'
   | 'success'
-  | 'access';
+  | 'access'
+  | 'footer';
 
 const PAGE_LABELS: Record<SalesAiPageKey, string> = {
   optin: 'opt-in / lead magnet capture page',
@@ -765,6 +852,7 @@ const PAGE_LABELS: Record<SalesAiPageKey, string> = {
   upsell4: 'upsell 4 (OTO) page',
   success: 'post-purchase success / receipt page',
   access: 'members access / onboarding page',
+  footer: 'site-wide funnel footer block',
 };
 
 /**
@@ -777,6 +865,7 @@ export async function aiGenerateSalesPage(
 ): Promise<AiResult<unknown>> {
   const synced = syncIntakeStack(intake);
   const stack = normalizeOfferStack(synced.offerStack);
+  const brief = funnelBriefFromIntake(synced);
   const label = PAGE_LABELS[page] || page;
 
   let shapeHint = '';
@@ -857,6 +946,19 @@ If disabled and unnamed, return enabled:false with minimal copy.`;
   "communityBody": string, "supportHeading": string, "supportBody": string,
   "supportEmail": "support@mothermode.com"
 }`;
+  } else if (page === 'footer') {
+    shapeHint = `Return JSON for the footer block only:
+{
+  "enabled": true,
+  "brandLine": string,
+  "disclaimer": string,
+  "links": [{ "label": string, "href": "" }][2-4],
+  "copyright": string
+}
+brandLine and disclaimer come from the FUNNEL BRIEF identity, never from another brand.
+links are the real legal/support links for this funnel (for example Terms, Privacy,
+Support) with href left empty for the admin to fill.
+copyright is a plain line like "(c) <year> <brand>. All rights reserved."`;
   }
 
   const system = `
@@ -874,6 +976,8 @@ Rules:
 `.trim();
 
   const user = `
+${formatFunnelBriefForPrompt(brief)}
+
 INTAKE
 - Niche: ${synced.niche || '(not set)'}
 - Audience: ${synced.audience || '(not set)'}
@@ -881,6 +985,7 @@ INTAKE
 - Magnet: ${synced.magnetName || '(not set)'} — ${synced.magnetPromise || ''}
 - Offer: ${synced.offerName || stack.frontEnd.name || '(not set)'} @ ${synced.offerPrice || stack.frontEnd.price || '(not set)'}
 - Tone: ${synced.toneNotes || '(default MotherMode)'}
+- Visual direction: ${formatIntakeVisualForPrompt(synced) || '(not set)'}
 
 OFFER STACK
 ${formatOfferStackForPrompt(stack)}
@@ -964,8 +1069,11 @@ Write the ${label} JSON now.
       return { ok: true, data: normalizeSuccess(block) };
     case 'access':
       return { ok: true, data: normalizeAccess(block) };
+    case 'footer':
+      return { ok: true, data: normalizeSalesFooter(block) };
     default:
       return { ok: false, error: 'Unknown page: ' + page, status: 400 };
   }
 }
+
 

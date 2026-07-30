@@ -1,6 +1,7 @@
 'use client';
 
 import type { OfferStack, OfferStackBonus, OfferStackBump, OfferStackUpsell, SalesAiIntake } from '@/lib/mothermode/sales/aiIntake';
+import { missingIntakeVisualFields } from '@/lib/mothermode/sales/aiIntake';
 import {
   Area,
   Collapse,
@@ -8,7 +9,8 @@ import {
   btnDanger,
   btnGhost,
   btnPrimary,
-  inputClass, selectClass,
+  selectClass,
+
   labelClass,
   linesToList,
   listToLines,
@@ -124,6 +126,18 @@ export default function OfferTab({
         </div>
         <Area label="Tone notes (optional)" value={intake.toneNotes} onChange={(v) => setIntakeField('toneNotes', v)} rows={2} />
 
+        {/* Art direction. Without these six fields every image slot falls back to a
+            neutral look, which is honest but is nobody in particular. */}
+        <p className="mt-4 text-xs uppercase tracking-wide text-neutral-400">Visual direction (drives generated images)</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Recurring subject" value={intake.visualSubject} onChange={(v) => setIntakeField('visualSubject', v)} placeholder="A calm home desk and the system on it" />
+          <Field label="Palette (comma separated)" value={intake.visualPalette} onChange={(v) => setIntakeField('visualPalette', v)} placeholder="warm sand, deep green, off white" />
+          <Field label="Style keywords (comma separated)" value={intake.visualStyleKeywords} onChange={(v) => setIntakeField('visualStyleKeywords', v)} placeholder="editorial, tactile, unfussy" />
+          <Field label="Lighting" value={intake.visualLighting} onChange={(v) => setIntakeField('visualLighting', v)} placeholder="late afternoon window light" />
+          <Field label="Composition" value={intake.visualComposition} onChange={(v) => setIntakeField('visualComposition', v)} placeholder="off centre subject, generous negative space" />
+          <Field label="Avoid (comma separated)" value={intake.visualAvoid} onChange={(v) => setIntakeField('visualAvoid', v)} placeholder="stock smiles, clutter, neon" />
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={onFillIntake} disabled={busy !== null} className={btnPrimary}>
             {busy === 'fillIntake' ? 'Filling stack…' : '1. AI fill brief + stack'}
@@ -131,6 +145,11 @@ export default function OfferTab({
           <button type="button" onClick={onGenerate} disabled={busy !== null} className={btnPrimary}>
             {busy === 'generate' ? 'Generating pages…' : '2. Generate full funnel'}
           </button>
+          {missingIntakeVisualFields(intake).length > 0 && (
+            <p className="basis-full text-xs text-amber-300">
+              No visual direction for {missingIntakeVisualFields(intake).join(', ')} — generated images will use a neutral look. Fill the fields above to make them match this brand.
+            </p>
+          )}
           <button type="button" onClick={onGenerateImages} disabled={busy !== null} className={btnGhost}>
             {busy === 'generateImages' ? 'Generating images…' : '3. Generate missing images'}
           </button>
@@ -188,7 +207,13 @@ export default function OfferTab({
           {stack.bonuses.length === 0 && <p className="text-xs text-bone/40">No bonuses yet. AI fill or add manually.</p>}
           {stack.bonuses.map((b, i) => (
             <div key={i} className="rounded-lg border border-bone/10 bg-ink/40 p-3 space-y-2">
-              <div className="grid gap-2 sm:grid-cols-[1fr_120px_auto]">
+              {/* Plain column counts only, matching SalesTab. A fixed `120px`
+                  track cannot shrink, and the trailing `auto` track sizes to the
+                  button's max-content -- together they hold a floor width the
+                  row can't go below, so this row pushed wider than its siblings
+                  and broke the panel's right edge. */}
+              <div className="grid gap-2 sm:grid-cols-3">
+
                 <Field label="Title" value={b.title} onChange={(v) => updateBonus(i, { title: v })} placeholder="Partner Scripts Pack" />
                 <Field label="Value" value={b.value} onChange={(v) => updateBonus(i, { value: v })} placeholder="$47" />
                 <div className="flex min-w-0 items-end">
@@ -209,7 +234,12 @@ export default function OfferTab({
           {stack.bumps.length === 0 && <p className="text-xs text-bone/40">No bumps yet. AI fill or add manually.</p>}
           {stack.bumps.map((b, i) => (
             <div key={i} className="rounded-lg border border-bone/10 bg-ink/40 p-3 space-y-2">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Capped at 2 columns. SalesTab never goes past 3, and this row
+                  sits two containers deeper (Collapse padding + card padding),
+                  so 4 tracks of inputs had far less width per field than the
+                  same `sm:grid-cols-*` markup gets on the Sales tab. */}
+              <div className="grid gap-2 sm:grid-cols-2">
+
                 <Field label="Id" value={b.id} onChange={(v) => updateBump(i, { id: v })} placeholder="bump_scripts" />
                 <Field label="Title" value={b.title} onChange={(v) => updateBump(i, { title: v })} placeholder="Script Vault" />
                 <Field label="Price" value={b.price} onChange={(v) => updateBump(i, { price: v })} placeholder="$17" />

@@ -12,24 +12,41 @@ import type {
   MassConfig,
   OpenAiConfig,
   AnthropicConfig,
-  EmailConfig
+  EmailConfig,
+  MonidConfig,
+  RapidApiConfig,
+  ApifyConfig
 } from '@/utils/integrations/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function IntegrationsPage() {
   const supabase = createClient();
-  const [webhook, ghl, mass, openai, anthropic, email, user, resendHealth] =
-    await Promise.all([
-      getIntegration<GenericWebhookConfig>('generic_webhook'),
-      getIntegration<GhlConfig>('ghl'),
-      getIntegration<MassConfig>('mass'),
-      getIntegration<OpenAiConfig>('openai'),
-      getIntegration<AnthropicConfig>('anthropic'),
-      getIntegration<EmailConfig>('email'),
-      getUser(supabase),
-      getResendWebhookHealth()
-    ]);
+  const [
+    webhook,
+    ghl,
+    mass,
+    openai,
+    anthropic,
+    email,
+    monid,
+    rapidapi,
+    apify,
+    user,
+    resendHealth
+  ] = await Promise.all([
+    getIntegration<GenericWebhookConfig>('generic_webhook'),
+    getIntegration<GhlConfig>('ghl'),
+    getIntegration<MassConfig>('mass'),
+    getIntegration<OpenAiConfig>('openai'),
+    getIntegration<AnthropicConfig>('anthropic'),
+    getIntegration<EmailConfig>('email'),
+    getIntegration<MonidConfig>('monid'),
+    getIntegration<RapidApiConfig>('rapidapi'),
+    getIntegration<ApifyConfig>('apify'),
+    getUser(supabase),
+    getResendWebhookHealth()
+  ]);
 
   // Strip secrets before they reach the client cards; pass only configured +
   // last4 status so the UI can show a "saved, leave blank to keep" hint.
@@ -43,6 +60,9 @@ export default async function IntegrationsPage() {
     'resend_api_key',
     'postmark_api_token'
   ]);
+  const monidMask = maskConfig(asCfg(monid?.config), ['api_key']);
+  const rapidapiMask = maskConfig(asCfg(rapidapi?.config), ['api_key']);
+  const apifyMask = maskConfig(asCfg(apify?.config), ['api_token']);
 
   return (
     <div>
@@ -217,6 +237,131 @@ export default async function IntegrationsPage() {
             initialEvents={anthropic?.events ?? []}
             initialConfig={anthropicMask.safeConfig}
             secretStatus={anthropicMask.secretStatus}
+            hideEventsFilter
+            hideTestButton
+          />
+        </div>
+      </div>
+
+      <div className="mt-10">
+        <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
+          Research data
+        </div>
+        <h2 className="font-display text-xl font-semibold tracking-tight mb-2">
+          Research Lab sources
+        </h2>
+        <p className="text-sm text-bone/60 max-w-2xl mb-4">
+          Paid data sources the Research Lab agent can call. Both bill per run,
+          so results are cached in the app; the matching environment variable
+          stays as a fallback when a field is blank.
+        </p>
+        <div className="space-y-4">
+          <IntegrationCard
+            provider="monid"
+            title="Monid (social scraping)"
+            description="The discover -> inspect -> run gateway the agent uses for social_search (X, TikTok, Instagram, Reddit, YouTube). Endpoint pins are optional: fill one to skip discovery for that platform."
+            fields={[
+              {
+                key: 'api_key',
+                label: 'API key',
+                type: 'password',
+                placeholder: 'monid_...',
+                helper: 'Dashboard -> API keys. Falls back to MONID_API_KEY.'
+              },
+              {
+                key: 'base_url',
+                label: 'Base URL (optional)',
+                placeholder: 'https://api.monid.ai'
+              },
+              {
+                key: 'endpoint_x',
+                label: 'Pin: X/Twitter endpoint (optional)',
+                placeholder: '/apidojo/tweet-scraper'
+              },
+              {
+                key: 'endpoint_tiktok',
+                label: 'Pin: TikTok endpoint (optional)',
+                placeholder: 'endpoint path from /v1/discover'
+              },
+              {
+                key: 'endpoint_instagram',
+                label: 'Pin: Instagram endpoint (optional)',
+                placeholder: 'endpoint path from /v1/discover'
+              },
+              {
+                key: 'endpoint_reddit',
+                label: 'Pin: Reddit endpoint (optional)',
+                placeholder: 'endpoint path from /v1/discover'
+              },
+              {
+                key: 'endpoint_youtube',
+                label: 'Pin: YouTube endpoint (optional)',
+                placeholder: 'endpoint path from /v1/discover'
+              }
+            ]}
+            initialEnabled={monid?.enabled ?? false}
+            initialEvents={monid?.events ?? []}
+            initialConfig={monidMask.safeConfig}
+            secretStatus={monidMask.secretStatus}
+            hideEventsFilter
+            hideTestButton
+          />
+
+          <IntegrationCard
+            provider="rapidapi"
+            title="RapidAPI (Amazon reviews)"
+            description="One key covers the Amazon product + review data the agent mines with amazon_reviews. Defaults to the real-time-amazon-data API; change the host only if you subscribe to a different Amazon API."
+            fields={[
+              {
+                key: 'api_key',
+                label: 'RapidAPI key',
+                type: 'password',
+                placeholder: 'xxxxxxxxxxxxxxxx',
+                helper: 'rapidapi.com -> My Apps -> security. Falls back to RAPIDAPI_KEY.'
+              },
+              {
+                key: 'amazon_host',
+                label: 'Amazon API host (optional)',
+                placeholder: 'real-time-amazon-data.p.rapidapi.com'
+              },
+              {
+                key: 'engine',
+                label: 'Engine preference (optional)',
+                placeholder: 'rapidapi or apify',
+                helper: 'Set to apify to skip RapidAPI for reviews entirely (query searches still use RapidAPI to resolve the ASIN).'
+              }
+            ]}
+            initialEnabled={rapidapi?.enabled ?? false}
+            initialEvents={rapidapi?.events ?? []}
+            initialConfig={rapidapiMask.safeConfig}
+            secretStatus={rapidapiMask.secretStatus}
+            hideEventsFilter
+            hideTestButton
+          />
+
+          <IntegrationCard
+            provider="apify"
+            title="Apify (Amazon fallback)"
+            description="The fallback engine for Amazon review mining: if RapidAPI fails (unsubscribed, rate-limited, down), the agent tries a maintained Apify reviews actor next. Leave the actor blank to use the default."
+            fields={[
+              {
+                key: 'api_token',
+                label: 'Apify API token',
+                type: 'password',
+                placeholder: 'apify_api_...',
+                helper: 'apify.com -> Settings -> Integrations. Falls back to APIFY_API_TOKEN.'
+              },
+              {
+                key: 'reviews_actor',
+                label: 'Reviews actor (optional)',
+                placeholder: 'apify/amazon-reviews-scraper',
+                helper: 'Only change if the default actor 404s.'
+              }
+            ]}
+            initialEnabled={apify?.enabled ?? false}
+            initialEvents={apify?.events ?? []}
+            initialConfig={apifyMask.safeConfig}
+            secretStatus={apifyMask.secretStatus}
             hideEventsFilter
             hideTestButton
           />

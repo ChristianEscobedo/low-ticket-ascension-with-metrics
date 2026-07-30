@@ -21,9 +21,14 @@ import {
   Search,
   MessageCircleQuestion,
   ImagePlus,
+  Images,
+  PaintBucket,
   Trash2,
   StickyNote,
   Maximize2,
+  Type,
+  MessageSquare,
+  BadgeCheck,
 } from 'lucide-react';
 import { MediaFrame } from '@/components/mothermode/parts/MediaFrame';
 import { PlatformIcon, PLATFORM_BRAND } from './PlatformIcon';
@@ -34,6 +39,16 @@ import {
   KIND_LABEL,
   PLATFORM_LABEL,
   TONE_LABEL,
+  colorBlockBackground,
+  colorBlockFontScale,
+  colorBlockStyleFor,
+  colorBlockTextColor,
+  textPostBackground,
+  textPostFontScale,
+  textPostStyleFor,
+  textPostTextColor,
+  tweetCardFor,
+  tweetThemeColors,
   type ContentFormat,
   type ContentPiece,
 } from '@/lib/mothermode/content';
@@ -57,7 +72,11 @@ import {
 /** Lucide glyph per native format, for a quick visual read on each card. */
 const FORMAT_ICON: Record<ContentFormat, React.ElementType> = {
   feed: Square,
+  colorblock: PaintBucket,
+  textpost: Type,
+  tweet: MessageSquare,
   carousel: LayoutGrid,
+  slideshow: Images,
   story: Smartphone,
   reel: Film,
   thread: ListOrdered,
@@ -70,6 +89,114 @@ const FORMAT_ICON: Record<ContentFormat, React.ElementType> = {
   idea: Sparkles,
   blog: Newspaper,
   answer: MessageCircleQuestion,
+};
+
+/**
+ * The visual for a color-block piece on its card: the brand background with the
+ * active hook scaled the way Facebook scales the native block. Rendered in
+ * place of the media frame, since color blocks carry no image.
+ */
+const ColorBlockVisual: React.FC<{ piece: ContentPiece; hook: string }> = ({
+  piece,
+  hook,
+}) => {
+  const style = colorBlockStyleFor(piece);
+  const scale = colorBlockFontScale(hook, style);
+  return (
+    <div
+      className="mt-4 flex aspect-square w-full items-center justify-center rounded-xl px-6 text-center"
+      style={{ background: colorBlockBackground(style) }}
+    >
+      <p
+        className="font-bold leading-tight"
+        style={{ color: colorBlockTextColor(style), fontSize: `${1.35 * scale}rem` }}
+      >
+        {hook}
+      </p>
+    </div>
+  );
+};
+
+/**
+ * The visual for a textpost piece on its card: the brand background with the
+ * active hook big and auto-scaled, at the surface aspect. Rendered in place of
+ * the media frame, since text overlays render natively.
+ */
+const TextPostVisual: React.FC<{ piece: ContentPiece; hook: string }> = ({
+  piece,
+  hook,
+}) => {
+  const style = textPostStyleFor(piece);
+  const scale = textPostFontScale(hook, style);
+  const vertical = (style.aspect ?? '1:1') === '9:16';
+  return (
+    <div
+      className={`mt-4 flex items-center justify-center rounded-xl px-6 text-center ${
+        vertical ? 'mx-auto aspect-[9/16] w-3/5' : 'aspect-square w-full'
+      }`}
+      style={{ background: textPostBackground(style) }}
+    >
+      <p
+        className="font-extrabold leading-tight"
+        style={{ color: textPostTextColor(style), fontSize: `${1.35 * scale}rem` }}
+      >
+        {hook}
+      </p>
+    </div>
+  );
+};
+
+/**
+ * The visual for a tweet screen-grab piece on its card: the tweet chrome
+ * (avatar, name, badge, text) on its themed backdrop. Rendered in place of
+ * the media frame, since the card renders natively.
+ */
+const TweetVisual: React.FC<{ piece: ContentPiece; hook: string }> = ({
+  piece,
+  hook,
+}) => {
+  const chrome = tweetCardFor(piece);
+  const colors = tweetThemeColors(chrome.theme);
+  return (
+    <div
+      className="mt-4 rounded-xl p-4"
+      style={{ background: colors.backdrop }}
+    >
+      <div
+        className="rounded-lg border p-3"
+        style={{ background: colors.card, borderColor: colors.border }}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+            style={{ background: colors.avatarBg, color: colors.avatarText }}
+          >
+            {chrome.name.trim().charAt(0).toUpperCase() || 'M'}
+          </span>
+          <div className="min-w-0 leading-tight">
+            <p
+              className="flex items-center gap-1 truncate text-[12px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              {chrome.name}
+              {chrome.verified && (
+                <BadgeCheck className="h-3 w-3 shrink-0" style={{ color: colors.badge }} />
+              )}
+            </p>
+            <p className="truncate text-[11px]" style={{ color: colors.sub }}>
+              {chrome.handle}
+            </p>
+          </div>
+        </div>
+        <p
+          className="mt-2 whitespace-pre-wrap text-[13px] leading-snug"
+          style={{ color: colors.ink }}
+        >
+          {hook}
+        </p>
+      </div>
+    </div>
+  );
 };
 
 /** One marketing piece, rendered as a copy-ready card for internal use. The
@@ -254,27 +381,36 @@ export const ContentCard: React.FC<{
         <span className="ml-auto text-ink/45">{TONE_LABEL[piece.tone]}</span>
       </div>
 
-      {(piece.media || image) && (
-        <div className="mt-4">
-          <MediaFrame
-            src={
-              image ??
-              (piece.media?.type === 'video'
-                ? piece.media?.poster
-                : piece.media?.src)
-            }
-            alt={piece.media?.alt ?? piece.title}
-            label={piece.media?.type === 'video' ? 'Video' : 'Image'}
-            hint={piece.media?.hint}
-            aspect={piece.media?.aspect ?? 'aspect-[4/5]'}
-            video={piece.media?.type === 'video' && !image}
-          />
-          {image && (
-            <p className="mt-1.5 text-[11px] text-ink/45">
-              Custom image added for review.
-            </p>
-          )}
-        </div>
+      {/* Native text-render pieces show their block/card, not a media frame. */}
+      {piece.format === 'colorblock' && !image ? (
+        <ColorBlockVisual piece={piece} hook={activeHook} />
+      ) : piece.format === 'textpost' && !image ? (
+        <TextPostVisual piece={piece} hook={activeHook} />
+      ) : piece.format === 'tweet' && !image ? (
+        <TweetVisual piece={piece} hook={activeHook} />
+      ) : (
+        (piece.media || image) && (
+          <div className="mt-4">
+            <MediaFrame
+              src={
+                image ??
+                (piece.media?.type === 'video'
+                  ? piece.media?.poster
+                  : piece.media?.src)
+              }
+              alt={piece.media?.alt ?? piece.title}
+              label={piece.media?.type === 'video' ? 'Video' : 'Image'}
+              hint={piece.media?.hint}
+              aspect={piece.media?.aspect ?? 'aspect-[4/5]'}
+              video={piece.media?.type === 'video' && !image}
+            />
+            {image && (
+              <p className="mt-1.5 text-[11px] text-ink/45">
+                Custom image added for review.
+              </p>
+            )}
+          </div>
+        )
       )}
 
       <h3 className="mt-4 font-display text-xl leading-snug text-ink">

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { listPublishedChangelog } from '@/lib/mothermode/help/store';
-import type { ChangelogType } from '@/lib/mothermode/help/types';
+import ChangelogList from './ChangelogList';
 
 export const revalidate = 3600;
 
@@ -10,25 +10,8 @@ export const metadata = {
   description: 'What is new, improved, and fixed in MotherMode.',
 };
 
-const TYPE_STYLES: Record<ChangelogType, string> = {
-  added: 'border-emerald-500/40 bg-emerald-50 text-emerald-700',
-  improved: 'border-sky-500/40 bg-sky-50 text-sky-700',
-  fixed: 'border-amber-500/40 bg-amber-50 text-amber-700',
-  removed: 'border-red-500/40 bg-red-50 text-red-700',
-};
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-/** Public changelog. Published entries, newest first, with a colored type tag
- *  and the trusted, admin-authored body HTML. */
+/** Public changelog. Published entries, newest first, as expandable cards:
+ *  a summary row per release that opens to the full change/fix detail. */
 export default async function ChangelogPage() {
   const entries = await listPublishedChangelog();
 
@@ -58,39 +41,7 @@ export default async function ChangelogPage() {
         {entries.length === 0 ? (
           <p className="mt-10 text-ink/50">No changelog entries are published yet.</p>
         ) : (
-          <div className="mt-10 space-y-8">
-            {entries.map((entry) => (
-              <article
-                key={entry.id}
-                className="rounded-2xl border border-ink/10 bg-white/50 p-6"
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    className={`text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${TYPE_STYLES[entry.entryType]}`}
-                  >
-                    {entry.entryType}
-                  </span>
-                  {entry.version && (
-                    <span className="text-sm font-semibold text-ink/70">
-                      {entry.version}
-                    </span>
-                  )}
-                  <span className="text-sm text-ink/45">{formatDate(entry.releasedOn)}</span>
-                </div>
-
-                <h2 className="mt-3 font-display text-xl font-semibold tracking-tight">
-                  {entry.title}
-                </h2>
-
-                <div
-                  className="prose prose-neutral mt-3 max-w-none prose-sm"
-                  // Body is trusted, hand-authored admin content, never buyer input.
-                  // eslint-disable-next-line react/no-danger
-                  dangerouslySetInnerHTML={{ __html: entry.body }}
-                />
-              </article>
-            ))}
-          </div>
+          <ChangelogList entries={entries} />
         )}
       </main>
     </div>

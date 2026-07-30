@@ -410,6 +410,13 @@ export interface PieceReview {
   compliance?: StoredComplianceReport;
   /** Last text-on-image overlay recipe (re-openable in Image Studio). */
   overlay?: StoredImageOverlay;
+  /**
+   * Per-slide text overlays for multi-frame posts (TikTok photo-mode slideshows
+   * and carousels). Keyed by slide index (0-based); each entry is the overlay
+   * recipe burned onto that slide, so each slide can carry its own styled text
+   * (the TikTok text-editing feature). Rides the review JSONB, no migration.
+   */
+  slideOverlays?: Record<number, StoredImageOverlay>;
   /** Ordered multi-slide pack for carousel / story / idea (plan + renders). */
   framePack?: import('./framePack').FramePack;
   /** YouTube publishing kit: titles, SEO description, tags, chapters, thumbnails. */
@@ -645,6 +652,30 @@ export function withStoryboardBoard(
     b.index === boardIndex ? { ...b, ...patch } : b,
   );
   return { ...prev, storyboard: { ...pack, boards } };
+}
+
+/**
+ * Set (or replace) the per-slide text overlay for one slide index, preserving
+ * the others. Pure: returns a new object.
+ */
+export function withSlideOverlay(
+  prev: PieceReview,
+  slideIndex: number,
+  overlay: StoredImageOverlay,
+): PieceReview {
+  const slideOverlays = { ...(prev.slideOverlays ?? {}), [slideIndex]: overlay };
+  return { ...prev, slideOverlays };
+}
+
+/** Drop one slide's overlay, keeping everything else. Pure. */
+export function withoutSlideOverlay(
+  prev: PieceReview,
+  slideIndex: number,
+): PieceReview {
+  if (!prev.slideOverlays) return prev;
+  const slideOverlays = { ...prev.slideOverlays };
+  delete slideOverlays[slideIndex];
+  return { ...prev, slideOverlays };
 }
 
 /** Set the piece's multi-frame pack (carousel/story/idea). Pure. */

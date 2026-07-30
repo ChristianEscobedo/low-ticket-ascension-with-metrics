@@ -9,6 +9,11 @@ import React, { useState } from 'react';
 import { Wand2 } from 'lucide-react';
 import { RichTextField } from './RichTextField';
 import { aiRewriteText, type AiContext } from './aiClient';
+import { FrameworkPicker } from './FrameworkPicker';
+import type {
+  ContentFormat,
+  ContentPlatform,
+} from '@/lib/mothermode/content/types';
 import {
   AiError,
   InstructionsInput,
@@ -44,6 +49,9 @@ export const RewriteField: React.FC<{
   onChange,
 }) => {
   const [instructions, setInstructions] = useState('');
+  /** Bank steering for the rewrite: a framework pick plus its filled inputs. */
+  const [framework, setFramework] = useState('');
+  const [recipeInputs, setRecipeInputs] = useState<Record<string, string>>({});
   const { busy, error, run } = useAiAction();
 
   const rewrite = () =>
@@ -52,6 +60,8 @@ export const RewriteField: React.FC<{
         field,
         text: value.trim() ? value : fallback,
         instructions: instructions.trim() || undefined,
+        framework: framework || undefined,
+        recipeInputs: framework ? recipeInputs : undefined,
         context,
         model: model || undefined,
       });
@@ -67,6 +77,15 @@ export const RewriteField: React.FC<{
         placeholder={placeholder}
         minHeight={minHeight}
         onChange={onChange}
+      />
+      <FrameworkPicker
+        className="mt-2"
+        platform={context.platform as ContentPlatform | undefined}
+        format={context.format as ContentFormat | undefined}
+        value={framework}
+        onChange={setFramework}
+        inputValues={recipeInputs}
+        onInputValues={setRecipeInputs}
       />
       <div className="mt-2 flex items-center gap-2">
         <InstructionsInput value={instructions} onChange={setInstructions} />

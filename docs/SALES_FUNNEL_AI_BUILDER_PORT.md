@@ -179,3 +179,42 @@ inventing one — an invented-but-plausible founder name is the exact failure
 - Persist (`brief jsonb` + migration + `sales/store.ts` mapper + admin write
   path), then a gap-filling `brief` AI mode, then consume in the per-page
   prompts. Ordered detail in `docs/FUNNEL_BRIEF_HANDOFF.md`.
+
+## 2026-07-25 — Visual direction: the brief finally has a writer
+
+**What shipped**
+
+`SalesAiIntake` gained six flat art-direction fields — `visualSubject`,
+`visualPalette`, `visualStyleKeywords`, `visualLighting`, `visualComposition`,
+`visualAvoid` — and `funnelBriefFromIntake` now maps them onto
+`FunnelBrief.visual`. Before this, nothing in `src/` wrote a single `visual.*`
+field: the mapper spread `blankFunnelBrief()` and set only identity, audience,
+promise, voice and offer. Every funnel's 16 image slots therefore rendered the
+neutral fallback and `assumedVisualFields` returned all five names. The slots
+agreed with each other; they did not agree with any brand.
+
+Flat string fields, not a nested block, on purpose: the intake already stores
+flat `upsell1Name`/`upsell1Price` pairs, the admin setter is
+`setIntakeField(key, value)` keyed on `keyof SalesAiIntake`, and the AI-fill
+merge copies an allowlist of scalar keys. A nested object would have needed all
+three changed; flat fields ride plumbing that already exists and is already
+tested. The list-ish fields are comma separated and split in exactly one place,
+`splitVisualList`.
+
+
+**AI surface changes in `src/utils/integrations/openai-sales.ts`**
+
+- `aiFillSalesIntake` — the response schema gained the six `visual*` keys, the
+  guidance block explains they are art direction rather than copy and that a
+  field left empty is reported to the admin while a wrong one silently renders,
+  and the six keys were added to the scalar allowlist so a proposed value
+  actually survives the merge instead of being dropped.
+- `aiGenerateSalesFunnel` and `aiGenerateSalesPage` — both INTAKE blocks now
+  include a `Visual direction:` line via `formatIntakeVisualForPrompt`, which
+  renders `(not set)` when nothing is stated. Copy generation can now reference
+  the same world the images are built in.
+
+Not verified: no live model call was made, so how well a model fills these
+fields is unknown. The allowlist change is the part that matters and is
+mechanical — without it the model's answer would have been discarded silently,
+which is the failure mode that would have looked like "the AI ignores visuals".

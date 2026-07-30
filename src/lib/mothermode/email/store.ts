@@ -15,6 +15,7 @@ import {
   type EmailFramework,
   type EmailSequence,
 } from './types';
+import { renderSequenceHtml } from './export';
 import type { ContextRef } from '@/lib/mothermode/context';
 
 const TABLE = 'mothermode_email_kits';
@@ -91,7 +92,15 @@ export interface UpsertKitInput {
   updatedBy?: string | null;
 }
 
-/** Admin-only upsert. Insert when `id` is absent, update in place otherwise. */
+/**
+ * Admin-only upsert. Insert when `id` is absent, update in place otherwise.
+ *
+ * HTML OUTPUT INVARIANT: the sequence is (re)rendered through
+ * `renderSequenceHtml` before it is written, so every email's `bodyHtml` is
+ * derived from its `bodyText` (the source of truth) on EVERY write path —
+ * the editor save route, the sales-funnel autobuild, and any future caller.
+ * A stored kit can never drift into an HTML-less state.
+ */
 export async function upsertKit(input: UpsertKitInput): Promise<EmailKitRecord> {
   const row: Record<string, unknown> = {
     slug: input.slug,
@@ -101,7 +110,7 @@ export async function upsertKit(input: UpsertKitInput): Promise<EmailKitRecord> 
     status: input.status,
     intake: input.intake,
     context_refs: input.contextRefs,
-    sequence: input.sequence,
+    sequence: renderSequenceHtml(input.sequence),
     updated_by: input.updatedBy ?? null,
     updated_at: new Date().toISOString(),
   };

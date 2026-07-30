@@ -36,6 +36,12 @@ import {
   type SalesEmailEvent,
 } from './types';
 import { upsertEnrollments } from '@/lib/mothermode/email/enrollmentStore';
+import {
+  utmContentFields,
+  withUtmContentColumn,
+  withUtmContentFallback,
+} from '@/lib/mothermode/leadUtmContent';
+
 
 const FUNNELS = 'mothermode_sales_funnels';
 const LEADS = 'mothermode_sales_funnel_leads';
@@ -46,6 +52,11 @@ const FUNNEL_COLUMNS =
 
 const LEAD_COLUMNS =
   'id, funnel_id, email, first_name, status, step_reached, purchased, purchase_amount_cents, utm_source, utm_medium, utm_campaign, referrer, user_agent, ip_hash, metadata, created_at, updated_at';
+
+// utm_content is listed separately because it ships in a migration that may not
+// have run yet; see src/lib/mothermode/leadUtmContent.ts.
+const leadColumns = () => withUtmContentColumn(LEADS, LEAD_COLUMNS);
+
 
 let _service: ReturnType<typeof createClient> | null = null;
 function serviceClient() {
@@ -422,6 +433,12 @@ export interface CaptureSalesLeadInput {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  /**
+   * The piece of content that produced this lead (utm_content = piece_id).
+   * utm_campaign says the funnel earned the lead; this says which of the twelve
+   * posts did it — see src/lib/mothermode/planner/utm.ts.
+   */
+  utmContent?: string | null;
   referrer?: string | null;
   userAgent?: string | null;
   ipHash?: string | null;
@@ -439,57 +456,67 @@ export async function captureLead(
     throw new Error('Valid email is required');
   }
 
-  const existing = await (serviceClient() as any)
-    .from(LEADS)
-    .select(LEAD_COLUMNS)
-    .eq('funnel_id', input.funnelId)
-    .eq('email', email)
-    .maybeSingle();
+  const existing = await withUtmContentFallback(LEADS, () =>
+    (serviceClient() as any)
+      .from(LEADS)
+      .select(leadColumns())
+      .eq('funnel_id', input.funnelId)
+      .eq('email', email)
+      .maybeSingle(),
+  );
 
   if (existing.data) {
-    const patch: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-    if (input.firstName) patch.first_name = input.firstName.trim();
-    const { data, error } = await (serviceClient() as any)
-      .from(LEADS)
-      .update(patch)
-      .eq('id', existing.data.id)
-      .select(LEAD_COLUMNS)
-      .single();
+    const existingId = (existing.data as SalesLeadRow).id;
+    const { data, error } = await withUtmContentFallback(LEADS, () => {
+      const patch: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (input.firstName) patch.first_name = input.firstName.trim();
+      // Attribution is first-touch: a returning lead keeps the utm_content of
+      // the post that originally found them. Overwriting it here would credit
+      // whichever piece they happened to click last and quietly rewrite history.
+      return (serviceClient() as any)
+        .from(LEADS)
+        .update(patch)
+        .eq('id', existingId)
+        .select(leadColumns())
+        .single();
+    });
     if (error || !data) {
       throw new Error(`captureLead update failed: ${error?.message ?? 'no row'}`);
     }
     return { lead: rowToSalesLead(data as SalesLeadRow), isNew: false };
   }
 
-  const insertRow = {
-    funnel_id: input.funnelId,
-    email,
-    first_name: input.firstName?.trim() || null,
-    status: 'captured',
-    step_reached: 'optin',
-    purchased: false,
-    purchase_amount_cents: 0,
-    utm_source: input.utmSource || null,
-    utm_medium: input.utmMedium || null,
-    utm_campaign: input.utmCampaign || null,
-    referrer: input.referrer || null,
-    user_agent: input.userAgent || null,
-    ip_hash: input.ipHash || null,
-    metadata: {},
-  };
-
-  const { data, error } = await (serviceClient() as any)
-    .from(LEADS)
-    .insert(insertRow)
-    .select(LEAD_COLUMNS)
-    .single();
+  const { data, error } = await withUtmContentFallback(LEADS, () =>
+    (serviceClient() as any)
+      .from(LEADS)
+      .insert({
+        funnel_id: input.funnelId,
+        email,
+        first_name: input.firstName?.trim() || null,
+        status: 'captured',
+        step_reached: 'optin',
+        purchased: false,
+        purchase_amount_cents: 0,
+        utm_source: input.utmSource || null,
+        utm_medium: input.utmMedium || null,
+        utm_campaign: input.utmCampaign || null,
+        ...utmContentFields(LEADS, input.utmContent),
+        referrer: input.referrer || null,
+        user_agent: input.userAgent || null,
+        ip_hash: input.ipHash || null,
+        metadata: {},
+      })
+      .select(leadColumns())
+      .single(),
+  );
   if (error || !data) {
     throw new Error(`captureLead insert failed: ${error?.message ?? 'no row'}`);
   }
   return { lead: rowToSalesLead(data as SalesLeadRow), isNew: true };
 }
+
 
 /** Mark which step a lead has reached. */
 export async function markLeadStep(
@@ -570,11 +597,13 @@ export async function markLeadUpsell(
 export async function getLeadById(leadId: string): Promise<SalesLeadRecord | null> {
   if (!leadId) return null;
   try {
-    const { data, error } = await (serviceClient() as any)
-      .from(LEADS)
-      .select(LEAD_COLUMNS)
-      .eq('id', leadId)
-      .maybeSingle();
+    const { data, error } = await withUtmContentFallback(LEADS, () =>
+      (serviceClient() as any)
+        .from(LEADS)
+        .select(leadColumns())
+        .eq('id', leadId)
+        .maybeSingle(),
+    );
     if (error || !data) return null;
     return rowToSalesLead(data as SalesLeadRow);
   } catch {
@@ -589,16 +618,17 @@ export async function listLeadsForAdmin(opts?: {
 }): Promise<SalesLeadRecord[]> {
   try {
     const limit = opts?.limit ?? 100;
-    let q = (serviceClient() as any)
-      .from(LEADS)
-      .select(
-        `${LEAD_COLUMNS}, funnel:mothermode_sales_funnels!funnel_id ( name, slug )`,
-      )
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (opts?.funnelId) q = q.eq('funnel_id', opts.funnelId);
-
-    const { data, error } = await q;
+    const { data, error } = await withUtmContentFallback(LEADS, () => {
+      let q = (serviceClient() as any)
+        .from(LEADS)
+        .select(
+          `${leadColumns()}, funnel:mothermode_sales_funnels!funnel_id ( name, slug )`,
+        )
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (opts?.funnelId) q = q.eq('funnel_id', opts.funnelId);
+      return q;
+    });
     if (error || !data) return [];
 
     return (data as Array<SalesLeadRow & { funnel?: { name?: string; slug?: string } | null }>).map(

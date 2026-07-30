@@ -26,6 +26,7 @@ import {
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
@@ -36,9 +37,11 @@ export type AiResult<T> =
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_OPENAI = 'gpt-5.5';
 const DEFAULT_ANTHROPIC = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT = 'kimi-k3';
 
 const VOICE_RULES = [
   'Never use em dashes or en dashes. Use periods or commas.',
@@ -50,11 +53,14 @@ const VOICE_RULES = [
 async function availableProvider(
   preferred?: string | null,
 ): Promise<TextProvider> {
-  const [oa, an] = await Promise.all([getOpenAiKey(), getAnthropicKey()]);
+  const [oa, an, mo] = await Promise.all([getOpenAiKey(), getAnthropicKey(), getMoonshotKey()]);
   const pref = preferred?.toLowerCase();
   if (pref === 'anthropic' && an) return 'anthropic';
   if (pref === 'openai' && oa) return 'openai';
+  if (pref === 'moonshot' && mo) return 'moonshot';
   if (an) return 'anthropic';
+  if (oa) return 'openai';
+  if (mo) return 'moonshot';
   return 'openai';
 }
 
@@ -67,7 +73,9 @@ async function resolveModel(requested?: string): Promise<{
     const key =
       picked.provider === 'anthropic'
         ? await getAnthropicKey()
-        : await getOpenAiKey();
+        : picked.provider === 'moonshot'
+          ? await getMoonshotKey()
+          : await getOpenAiKey();
     if (key) return { provider: picked.provider, model: picked.id };
   }
   const overrideProvider = await getTextProviderOverride();
@@ -77,13 +85,20 @@ async function resolveModel(requested?: string): Promise<{
     const key =
       overridePick.provider === 'anthropic'
         ? await getAnthropicKey()
-        : await getOpenAiKey();
+        : overridePick.provider === 'moonshot'
+          ? await getMoonshotKey()
+          : await getOpenAiKey();
     if (key) return { provider: overridePick.provider, model: overridePick.id };
   }
   const provider = await availableProvider(overrideProvider);
   return {
     provider,
-    model: provider === 'anthropic' ? DEFAULT_ANTHROPIC : DEFAULT_OPENAI,
+    model:
+      provider === 'anthropic'
+        ? DEFAULT_ANTHROPIC
+        : provider === 'moonshot'
+          ? DEFAULT_MOONSHOT
+          : DEFAULT_OPENAI,
   };
 }
 
@@ -91,12 +106,14 @@ async function openAiJson(
   system: string,
   user: string,
   model: string,
+  provider: TextProvider = 'openai',
 ): Promise<AiResult<string>> {
-  const key = await getOpenAiKey();
+  const moonshot = provider === 'moonshot';
+  const key = moonshot ? await getMoonshotKey() : await getOpenAiKey();
   if (!key)
-    return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
+    return { ok: false, status: 501, error: moonshot ? 'MOONSHOT_API_KEY is not configured' : 'OPENAI_API_KEY is not configured' };
   try {
-    const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    const res = await fetch(`${moonshot ? MOONSHOT_BASE : OPENAI_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${key}`,
@@ -358,7 +375,7 @@ export async function scoreComplianceWithAgent(input: {
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   if (!parsed) {
@@ -485,7 +502,7 @@ export async function fixComplianceWithAgent(input: {
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   if (!parsed) {

@@ -552,3 +552,41 @@ see `docs/SALES_FUNNEL_EMAIL_AUTOBUILD_SYSTEM_PORT.md`
 (`src/lib/mothermode/sales/emailPlan.ts`, `emailAutobuild.ts`,
 `/api/mothermode/sales-email-kits`, and the `EmailKitAutobuildPanel` mounted in
 `SalesFunnelEditor`'s "Email kits by funnel event" block).
+
+## 2026-07-25 — Visual direction: the brief finally has a writer
+
+**What shipped**
+
+`SalesAiIntake` gained six flat art-direction fields — `visualSubject`,
+`visualPalette`, `visualStyleKeywords`, `visualLighting`, `visualComposition`,
+`visualAvoid` — and `funnelBriefFromIntake` now maps them onto
+`FunnelBrief.visual`. Before this, nothing in `src/` wrote a single `visual.*`
+field: the mapper spread `blankFunnelBrief()` and set only identity, audience,
+promise, voice and offer. Every funnel's 16 image slots therefore rendered the
+neutral fallback and `assumedVisualFields` returned all five names. The slots
+agreed with each other; they did not agree with any brand.
+
+Flat string fields, not a nested block, on purpose: the intake already stores
+flat `upsell1Name`/`upsell1Price` pairs, the admin setter is
+`setIntakeField(key, value)` keyed on `keyof SalesAiIntake`, and the AI-fill
+merge copies an allowlist of scalar keys. A nested object would have needed all
+three changed; flat fields ride plumbing that already exists and is already
+tested. The list-ish fields are comma separated and split in exactly one place,
+`splitVisualList`.
+
+
+**Porting notes**
+
+- Schema: none required. The six fields live inside the existing `ai_intake`
+  JSON column on the sales funnel row; `normalizeSalesAiIntake` defaults them to
+  `''`, so older rows load unchanged.
+- Files touched: `src/lib/mothermode/sales/aiIntake.ts` (fields, blank,
+  normalize, `splitVisualList`, `missingIntakeVisualFields`,
+  `formatIntakeVisualForPrompt`), `src/lib/mothermode/sales/funnelBrief.ts`
+  (the mapping), `src/utils/integrations/openai-sales.ts` (fill schema,
+  guidance, allowlist, two prompt blocks),
+  `src/app/admin/sales-funnels/parts/OfferTab.tsx` (six inputs plus the
+  pre-flight warning), `tests/lib/sales-visual-direction.test.ts` (new).
+- Applied by `scripts/wire-visual-direction.cjs`, which asserts each anchor
+  matches exactly once, is idempotent, and preserves each file's existing line
+  endings.

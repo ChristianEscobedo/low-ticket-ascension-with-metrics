@@ -38,7 +38,7 @@ function serviceClient() {
 }
 
 const ARTICLE_COLUMNS =
-  'id, slug, title, category, excerpt, body, published, sort_order, updated_at, updated_by';
+  'id, slug, title, category, excerpt, body, published, sort_order, audience, updated_at, updated_by';
 const CHANGELOG_COLUMNS =
   'id, version, released_on, entry_type, title, body, published, updated_at, updated_by';
 
@@ -46,15 +46,17 @@ const CHANGELOG_COLUMNS =
 // Knowledge base articles
 // ---------------------------------------------------------------------------
 
-/** Public read: every published article, ordered by category then sort order.
- *  Returns [] when nothing is published, the table is absent, or Supabase is
- *  not configured. */
+/** Public read: every published BUYER article, ordered by category then sort
+ *  order. RLS also restricts anon to published buyer rows, but we filter here
+ *  too so the service-role path and tests behave identically. Returns [] when
+ *  nothing is published, the table is absent, or Supabase is not configured. */
 export async function listPublishedArticles(): Promise<KbArticle[]> {
   try {
     const { data, error } = await (anonClient() as any)
       .from(ARTICLES_TABLE)
       .select(ARTICLE_COLUMNS)
       .eq('published', true)
+      .eq('audience', 'buyer')
       .order('category', { ascending: true })
       .order('sort_order', { ascending: true });
     if (error || !data) return [];
@@ -64,7 +66,7 @@ export async function listPublishedArticles(): Promise<KbArticle[]> {
   }
 }
 
-/** Public read: a single published article by slug, or null if not found. */
+/** Public read: a single published BUYER article by slug, or null if not found. */
 export async function getArticleBySlug(slug: string): Promise<KbArticle | null> {
   try {
     const { data, error } = await (anonClient() as any)
@@ -72,6 +74,7 @@ export async function getArticleBySlug(slug: string): Promise<KbArticle | null> 
       .select(ARTICLE_COLUMNS)
       .eq('slug', slug)
       .eq('published', true)
+      .eq('audience', 'buyer')
       .maybeSingle();
     if (error || !data) return null;
     return rowToArticle(data as KbArticleRow);
@@ -80,12 +83,15 @@ export async function getArticleBySlug(slug: string): Promise<KbArticle | null> 
   }
 }
 
-/** Admin read: every article (drafts included), ordered for the editor. */
-export async function listArticlesForAdmin(): Promise<KbArticle[]> {
+/** Admin read: every article (drafts included), ordered for the editor.
+ *  Pass an audience to list only that set. */
+export async function listArticlesForAdmin(audience?: 'admin' | 'buyer'): Promise<KbArticle[]> {
   try {
-    const { data, error } = await (serviceClient() as any)
+    let q = (serviceClient() as any)
       .from(ARTICLES_TABLE)
-      .select(ARTICLE_COLUMNS)
+      .select(ARTICLE_COLUMNS);
+    if (audience) q = q.eq('audience', audience);
+    const { data, error } = await q
       .order('category', { ascending: true })
       .order('sort_order', { ascending: true });
     if (error || !data) return [];
@@ -104,6 +110,7 @@ export interface UpsertArticleInput {
   body: string;
   published: boolean;
   sortOrder: number;
+  audience?: 'admin' | 'buyer';
   updatedBy?: string | null;
 }
 
@@ -117,6 +124,7 @@ export async function upsertArticle(input: UpsertArticleInput): Promise<void> {
     body: input.body,
     published: input.published,
     sort_order: input.sortOrder ?? 0,
+    audience: input.audience === 'buyer' ? 'buyer' : 'admin',
     updated_by: input.updatedBy ?? null,
     updated_at: new Date().toISOString(),
   };

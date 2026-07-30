@@ -35,6 +35,17 @@ export interface GenerateBatchArgs {
   /** Prompt style id from the Generate drawer. Omit/empty for Auto. */
   style?: string;
   /**
+   * Optional image-bank recipe id (imagePromptBank.ts). When set, visual
+   * formats compose media.prompt through that image creative framework.
+   */
+  imageFramework?: string;
+  /**
+   * Values for the picked framework's custom input fields (recipe.inputs),
+   * keyed by field id. Only meaningful with an explicit `style` pick that
+   * declares inputs; Auto rotation ignores them.
+   */
+  recipeInputs?: Record<string, string>;
+  /**
    * When true, the server inserts the batch immediately (Amplify full-post path).
    * When false/omitted, pieces are returned for review and nothing is saved yet.
    */

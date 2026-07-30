@@ -143,6 +143,8 @@ export interface OptinLeadRecord {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  /** Piece id of the content that produced the lead. Null until utm_content ships. */
+  utmContent: string | null;
   referrer: string | null;
   createdAt: string;
   updatedAt: string;
@@ -188,6 +190,8 @@ export interface OptinLeadRow {
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
+  // Optional: absent from the row entirely until 20261005000000 is applied.
+  utm_content?: string | null;
   referrer: string | null;
   user_agent: string | null;
   ip_hash: string | null;
@@ -360,6 +364,7 @@ export function rowToOptinLead(
     utmSource: row.utm_source,
     utmMedium: row.utm_medium,
     utmCampaign: row.utm_campaign,
+    utmContent: row.utm_content ?? null,
     referrer: row.referrer,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

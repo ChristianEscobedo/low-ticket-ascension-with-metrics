@@ -20,16 +20,19 @@ import { getTextModel, type TextProvider } from '@/lib/mothermode/content/models
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 
 const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 const DEFAULT_ANTHROPIC_TEXT_MODEL = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT_TEXT_MODEL = 'kimi-k3';
 
 /** Exactly four chapters make a reel's arc: hook, build, turn, land. */
 const CHAPTER_COUNT = 4;
@@ -56,11 +59,14 @@ const REEL_VOICE = [
 async function availableTextProvider(
   preferred?: string | null,
 ): Promise<TextProvider> {
-  const [oa, an] = await Promise.all([getOpenAiKey(), getAnthropicKey()]);
+  const [oa, an, mo] = await Promise.all([getOpenAiKey(), getAnthropicKey(), getMoonshotKey()]);
   const pref = preferred?.toLowerCase();
   if (pref === 'anthropic' && an) return 'anthropic';
   if (pref === 'openai' && oa) return 'openai';
+  if (pref === 'moonshot' && mo) return 'moonshot';
   if (an) return 'anthropic';
+  if (oa) return 'openai';
+  if (mo) return 'moonshot';
   return 'openai';
 }
 
@@ -75,7 +81,9 @@ async function resolveTextModel(
     const key =
       picked.provider === 'anthropic'
         ? await getAnthropicKey()
-        : await getOpenAiKey();
+        : picked.provider === 'moonshot'
+          ? await getMoonshotKey()
+          : await getOpenAiKey();
     if (key) return { provider: picked.provider, model: picked.id };
   }
 
@@ -86,7 +94,9 @@ async function resolveTextModel(
     const key =
       overridePick.provider === 'anthropic'
         ? await getAnthropicKey()
-        : await getOpenAiKey();
+        : overridePick.provider === 'moonshot'
+          ? await getMoonshotKey()
+          : await getOpenAiKey();
     if (key) return { provider: overridePick.provider, model: overridePick.id };
   }
 
@@ -94,7 +104,9 @@ async function resolveTextModel(
   const model =
     provider === 'anthropic'
       ? DEFAULT_ANTHROPIC_TEXT_MODEL
-      : DEFAULT_OPENAI_TEXT_MODEL;
+      : provider === 'moonshot'
+        ? DEFAULT_MOONSHOT_TEXT_MODEL
+        : DEFAULT_OPENAI_TEXT_MODEL;
   return { provider, model };
 }
 
@@ -108,18 +120,20 @@ async function callTextJson(
 ): Promise<AiResult<string>> {
   return provider === 'anthropic'
     ? anthropicJson(system, user, model)
-    : openAiJson(system, user, model);
+    : openAiJson(system, user, model, provider);
 }
 
 async function openAiJson(
   system: string,
   user: string,
   model: string,
+  provider: TextProvider = 'openai',
 ): Promise<AiResult<string>> {
-  const key = await getOpenAiKey();
-  if (!key) return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
+  const moonshot = provider === 'moonshot';
+  const key = moonshot ? await getMoonshotKey() : await getOpenAiKey();
+  if (!key) return { ok: false, status: 501, error: moonshot ? 'MOONSHOT_API_KEY is not configured' : 'OPENAI_API_KEY is not configured' };
   try {
-    const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    const res = await fetch(`${moonshot ? MOONSHOT_BASE : OPENAI_BASE}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: JSON.stringify({

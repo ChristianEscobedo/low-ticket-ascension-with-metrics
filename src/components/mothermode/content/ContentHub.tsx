@@ -144,6 +144,19 @@ export const ContentHub: React.FC<{
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // Deep link from the Asset Hub: `/admin/content?piece=<id>` opens that
+  // piece's sheet. Generated rows arrive asynchronously, so this re-checks on
+  // every `generated` change and no-ops when the id isn't (yet) present —
+  // clicking "Edit" on an organic post or ad lands on the post, not the grid.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const wanted = new URLSearchParams(window.location.search).get('piece');
+    if (!wanted) return;
+    const match =
+      generated.find((p) => p.id === wanted) ??
+      allContent.find((p) => p.id === wanted);
+    if (match) setOpenPiece(match);
+  }, [generated]);
 
   // Load the saved AI-generated pieces once, newest first, and merge them ahead
   // of the static catalog so they surface at the top of each channel.
@@ -283,7 +296,9 @@ export const ContentHub: React.FC<{
           </h1>
           <p className="mt-3 text-ink/65">
             Every organic post, paid ad, and email, in voice, each routing to{' '}
-            {offerName ?? 'the $7 Brain Dump'}. {basePieces.length} pieces across{' '}
+            {offerName ?? 'your featured offer'}. {basePieces.length} pieces
+            across{' '}
+
             {PLATFORM_ORDER.length} channels. Search or filter, then copy any
             piece straight into your scheduler or ad manager.
           </p>

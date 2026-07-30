@@ -29,24 +29,80 @@ an `AdminSidebar` NAV entry.
 
 ---
 
+## 1b. Round 2: audiences, buyer docs, in-app help, step-by-step rewrite
+
+The original Help Center was a single flat set of articles. Round 2 turned it
+into three surfaces on one table, plus a full content rewrite.
+
+- **Audience split.** `mothermode_kb_articles` gained an `audience` column
+  (`'admin' | 'buyer'`, default `'admin'`), migration
+  `20261027000000_kb_articles_audience.sql`. RLS now lets anon read **only
+  published buyer rows**; admin docs are read through the service role only.
+  The 33 seeded guides are admin docs (how to run the app). A new
+  `seedContent/buyerHelp.ts` holds 5 buyer-facing articles (access a purchase,
+  use deliverables/worksheets, missing access email, devices and printing,
+  billing and refunds), shown publicly at `/mothermode/help`.
+- **In-app admin docs browser.** `/admin/help-docs` (`page.tsx` +
+  `AdminDocsBrowser.tsx`) renders the admin-audience articles read-only with
+  search, category grouping, and a reader pane. Deep-links via
+  `?article=<slug>`. Added to the sidebar as "Help Docs".
+- **Contextual help icon.** `help-docs/HelpIcon.tsx` floats top-right on every
+  admin screen (wired in `app/admin/layout.tsx`) and deep-links to the relevant
+  guide via `help-docs/helpLinks.ts` (`ADMIN_HELP_LINKS`, route -> slug).
+- **Step-by-step rewrite + shared formatting.** All 33 guides were rewritten as
+  numbered walkthroughs. `seedContent/helpers.ts` exports the formatting
+  primitives (`step`, `callout`, `introBox`, `table`, `chip`, `media`), and
+  `help/articleStyles.ts` holds the shared `.prose`-scoped stylesheet used by
+  both the public article page and the admin live-preview iframe. The seed was
+  split into one module per category under `seedContent/` with an `index.ts`
+  barrel; `seedContent.ts` re-exports it, so `scripts/seed-help-center.cjs`
+  (now TypeScript-compiled on the fly) and the editor keep working.
+- **Expandable changelog.** `/mothermode/changelog` renders `ChangelogList.tsx`,
+  a client component where each release is a card (type tag, version, date,
+  title) that expands to the full body on click.
+
+Store changes: `listPublishedArticles()` and `getArticleBySlug()` are
+buyer-only; `listArticlesForAdmin(audience?)` filters; `upsertArticle` writes
+`audience`. The admin editor (`HelpEditor.tsx`) has an audience selector and
+badges. `ARTICLE_COLUMNS` includes `audience`.
+
+---
+
 ## 2. Files
 
 ```
 supabase/migrations/20260710000000_mothermode_help_center.sql   Two tables + RLS
+supabase/migrations/20261027000000_kb_articles_audience.sql     audience column + RLS split
 src/lib/mothermode/help/
-  types.ts        KbArticle / ChangelogEntry + row types + row->type mappers
-  store.ts        anon read client + service-role write client + CRUD
+  types.ts        KbArticle (+audience) / ChangelogEntry + row types + mappers
+  store.ts        anon read (buyer-only) + service-role write + CRUD
+  articleStyles.ts shared .prose-scoped stylesheet (step/callout/table/media)
+  seedContent.ts            barrel re-export
+  seedContent/helpers.ts    formatting primitives + SeedArticle/SeedChangelog
+  seedContent/gettingStarted.ts offersFunnels.ts contentHub.ts planner.ts
+  seedContent/kits.ts system.ts  admin seed guides, one module per category
+  seedContent/buyerHelp.ts  buyer-facing seed articles (audience: 'buyer')
+  seedContent/changelog.ts  seed changelog entries
+  seedContent/index.ts      assembled HELP_CENTER_SEED_ARTICLES
 src/app/api/admin/
-  mothermode-help/route.ts        GET/POST/DELETE articles (admin-guarded)
+  mothermode-help/route.ts        GET/POST/DELETE articles (admin-guarded, +audience)
   mothermode-changelog/route.ts   GET/POST/DELETE changelog (admin-guarded)
 src/app/admin/help/
   page.tsx        Server page: loads admin lists, renders the editor
-  HelpEditor.tsx  Client two-tab editor (modeled on DeliverablesEditor)
-src/app/mothermode/help/page.tsx            Public KB index
-src/app/mothermode/help/[slug]/page.tsx     Public single article
-src/app/mothermode/changelog/page.tsx       Public changelog
-src/app/admin/AdminSidebar.tsx              NAV entry: { /admin/help, 'Help Center' }
-tests/lib/help-mappers.test.ts              Row->type mapper unit tests
+  HelpEditor.tsx  Client two-tab editor (+ audience selector/badges)
+src/app/admin/help-docs/
+  page.tsx        Admin docs browser (server, admin-audience articles)
+  AdminDocsBrowser.tsx  searchable read-only reader (client)
+  helpLinks.ts    ADMIN_HELP_LINKS route -> slug map + href builder
+  HelpIcon.tsx    contextual help icon (client), wired in admin/layout.tsx
+src/app/mothermode/help/page.tsx            Public KB index (buyer only)
+src/app/mothermode/help/[slug]/page.tsx     Public single buyer article
+src/app/mothermode/changelog/page.tsx       Public changelog (server)
+src/app/mothermode/changelog/ChangelogList.tsx  expandable release cards (client)
+src/app/admin/AdminSidebar.tsx              NAV: Help Center + Help Docs
+src/app/admin/layout.tsx                    renders the contextual HelpIcon
+scripts/seed-help-center.cjs                seeder (TS-compiled on the fly)
+tests/lib/help-mappers.test.ts              Row->type mapper unit tests (+audience)
 ```
 
 ---

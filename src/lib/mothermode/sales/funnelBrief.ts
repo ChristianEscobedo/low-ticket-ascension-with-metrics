@@ -29,7 +29,7 @@
  */
 
 import type { OfferStack, SalesAiIntake } from './aiIntake';
-import { normalizeOfferStack } from './aiIntake';
+import { normalizeOfferStack, splitVisualList } from './aiIntake';
 
 export const FUNNEL_BRIEF_VERSION = 1;
 
@@ -297,10 +297,11 @@ export function funnelBriefOfferFromStack(stack: OfferStack): FunnelBriefOffer {
 /**
  * Derive as much of the brief as the intake actually supports.
  *
- * Everything the intake genuinely knows is copied across. Everything it does
- * not — identity, mechanism name, objections, the whole visual block — is left
- * empty for the AI pass or the admin to fill. That emptiness is the point: it
- * is what the coverage audit can see and count.
+ * Everything the intake genuinely knows is copied across — including, since the
+ * visual block landed on the intake, art direction. Everything it does not —
+ * identity, mechanism name, objections — is left empty for the AI pass or the
+ * admin to fill. That emptiness is the point: it is what the coverage audit can
+ * see and count.
  */
 export function funnelBriefFromIntake(
   intake: SalesAiIntake,
@@ -330,6 +331,16 @@ export function funnelBriefFromIntake(
       primaryPromise: offer.promise || intake.magnetPromise,
     },
     voice: { ...brief.voice, toneNotes: intake.toneNotes },
+    // Art direction, verbatim. Still no invention: an unstated field stays
+    // empty and the image builder reports it in `assumedVisualFields`.
+    visual: {
+      subject: intake.visualSubject || '',
+      palette: splitVisualList(intake.visualPalette),
+      styleKeywords: splitVisualList(intake.visualStyleKeywords),
+      lighting: intake.visualLighting || '',
+      composition: intake.visualComposition || '',
+      avoid: splitVisualList(intake.visualAvoid),
+    },
     offer: {
       ...offer,
       name: offer.name || intake.offerName,

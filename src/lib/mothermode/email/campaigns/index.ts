@@ -81,11 +81,11 @@ export const EMAIL_CAMPAIGN_SPECS: Record<EmailCampaignType, EmailCampaignSpec> 
     emailRoles: ['welcome', 'onboard', 'teach', 'proof', 'bridge'],
     defaultTiming: ['+0h', '+1d', '+3d', '+5d', '+7d'],
     frameworkByRole: {
-      welcome: 'founder-note',
+      welcome: 'buyer-welcome',
       onboard: 'quick-win',
       teach: 'value-longform',
       proof: 'case-study',
-      bridge: 'story-lesson',
+      bridge: 'ascension-bridge',
     },
     strategyNote:
       'Confirm the buyer made a great decision, get them to a first win fast, and ' +
@@ -96,19 +96,38 @@ export const EMAIL_CAMPAIGN_SPECS: Record<EmailCampaignType, EmailCampaignSpec> 
     label: 'Webinar / event',
     goal: 'Register, remind, and follow up for a live or recorded event.',
     expectsContext: ['offer', 'high-ticket-kit'],
-    emailRoles: ['invite', 'teach', 'reminder', 'reminder', 'replay', 'offer'],
-    defaultTiming: ['-5d', '-3d', '-1d', '+0h', '+1d', '+2d'],
+    /* Deep event nurture (10 emails): a full pre-event week that sells the    */
+    /* transformation before the logistics, live-day coverage, and a proper    */
+    /* replay -> proof -> offer tail so the event keeps converting after it    */
+    /* ends. Every event nurture blueprint runs 7-14 emails by design.         */
+    emailRoles: [
+      'invite',
+      'teach',
+      'story',
+      'proof',
+      'reminder',
+      'reminder',
+      'reminder',
+      'replay',
+      'proof',
+      'offer',
+    ],
+    defaultTiming: ['-7d', '-5d', '-4d', '-3d', '-2d', '-1d', '+0h', '+1d', '+2d', '+3d'],
     frameworkByRole: {
       invite: 'pas',
       teach: 'value-longform',
+      story: 'story-lesson',
+      proof: 'case-study',
       reminder: 'quick-win',
       replay: 'founder-note',
       offer: 'pas',
     },
     strategyNote:
-      'Sell the transformation the event delivers, not the event logistics. Drive ' +
-      'registrations, keep the date top of mind, and convert attendees and ' +
-      'replay-watchers into buyers with a clear post-event offer.',
+      'Sell the transformation the event delivers, not the event logistics. Warm ' +
+      'the week before with teaching, story, and proof so registrations arrive ' +
+      'pre-sold, keep the date top of mind with short reminders, then convert ' +
+      'attendees and replay-watchers into buyers with proof and a clear ' +
+      'post-event offer.',
   },
   'community-onboarding': {
     label: 'Community onboarding',
@@ -132,8 +151,38 @@ export const EMAIL_CAMPAIGN_SPECS: Record<EmailCampaignType, EmailCampaignSpec> 
     label: 'Event nurture',
     goal: 'Keep a long runway warm before a launch or event date.',
     expectsContext: ['offer', 'high-ticket-kit', 'lead-gen-kit'],
-    emailRoles: ['nurture', 'teach', 'story', 'proof', 'bridge', 'invite'],
-    defaultTiming: ['-14d', '-11d', '-8d', '-5d', '-3d', '-1d'],
+    /* Deep event nurture (12 emails): a four-week runway that alternates      */
+    /* story, teaching, and proof so no two consecutive emails do the same     */
+    /* job, then bridges into the invite. Every event nurture blueprint runs   */
+    /* 7-14 emails by design.                                                  */
+    emailRoles: [
+      'nurture',
+      'teach',
+      'story',
+      'teach',
+      'story',
+      'proof',
+      'teach',
+      'nurture',
+      'proof',
+      'bridge',
+      'invite',
+      'reminder',
+    ],
+    defaultTiming: [
+      '-25d',
+      '-22d',
+      '-19d',
+      '-16d',
+      '-13d',
+      '-11d',
+      '-9d',
+      '-7d',
+      '-5d',
+      '-4d',
+      '-2d',
+      '-1d',
+    ],
     frameworkByRole: {
       nurture: 'story-lesson',
       teach: 'value-longform',
@@ -141,10 +190,14 @@ export const EMAIL_CAMPAIGN_SPECS: Record<EmailCampaignType, EmailCampaignSpec> 
       proof: 'case-study',
       bridge: 'story-lesson',
       invite: 'pas',
+      reminder: 'founder-note',
     },
     strategyNote:
-      'Spread value across the runway so anticipation builds naturally. Each email ' +
-      'seeds the theme of the event, so by invite day the reader already wants in.',
+      'Spread value across the whole runway so anticipation builds naturally. ' +
+      'Alternate story, teaching, and proof so no two emails in a row do the ' +
+      'same job, seed the theme of the event early, and let the bridge email ' +
+      'connect the runway to the event so the invite and final reminder land ' +
+      'as the natural next step, not a pivot.',
   },
   reengagement: {
     label: 'Re-engagement / win-back',

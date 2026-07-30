@@ -61,6 +61,14 @@ export const EMAIL_FRAMEWORKS = [
   'case-study',
   'objection-crusher',
   'listicle',
+  /* Round 5 (email ascension): buyer + OTO nurture, ascension, and the   */
+  /* goal-driven / postscript structures, mirrored from the prompt bank. */
+  'buyer-welcome',
+  'ascension-bridge',
+  'deep-nurture',
+  'oto-ascend',
+  'goal-driven',
+  'ps-close',
 ] as const;
 export type EmailFramework = (typeof EMAIL_FRAMEWORKS)[number];
 
@@ -309,6 +317,14 @@ export interface EmailMessage {
    * split — every existing email is valid without it.
    */
   abTest?: EmailAbTest;
+  /**
+   * Optional prompt-bank recipe id (round 5: email- / emlf- / embuy- / emgoal-)
+   * steering this email's expand pass. When set, the generator injects the
+   * recipe's craft block alongside (never replacing) the per-email framework
+   * guidance. Absent/undefined = framework-only generation, as before. Rides
+   * inside the sequence JSONB; normalized present-only like abTest.
+   */
+  frameworkRecipeId?: string;
 }
 
 /** Stable id generator for A/B variants. */
@@ -528,6 +544,9 @@ export function normalizeEmail(value: unknown): EmailMessage {
       ? e.images.filter((s): s is string => typeof s === 'string' && !!s.trim())
       : [],
     ...(normalizeAbTest(e.abTest) ? { abTest: normalizeAbTest(e.abTest) } : {}),
+    ...(typeof e.frameworkRecipeId === 'string' && e.frameworkRecipeId.trim()
+      ? { frameworkRecipeId: e.frameworkRecipeId.trim() }
+      : {}),
   };
 }
 

@@ -175,3 +175,31 @@ Also note: token cost and latency will rise materially — a full-funnel generat
 copy + images + scripts across ~10 page shapes. Decide whether generation is per-page
 on-demand or one long job with progress, and reuse the in-flight/`disabled` guard pattern
 from `fix-page-regen-disabled.cjs` so a second job cannot be fired over the first.
+
+## 2026-07-25 — Visual direction: the brief finally has a writer
+
+**What shipped**
+
+`SalesAiIntake` gained six flat art-direction fields — `visualSubject`,
+`visualPalette`, `visualStyleKeywords`, `visualLighting`, `visualComposition`,
+`visualAvoid` — and `funnelBriefFromIntake` now maps them onto
+`FunnelBrief.visual`. Before this, nothing in `src/` wrote a single `visual.*`
+field: the mapper spread `blankFunnelBrief()` and set only identity, audience,
+promise, voice and offer. Every funnel's 16 image slots therefore rendered the
+neutral fallback and `assumedVisualFields` returned all five names. The slots
+agreed with each other; they did not agree with any brand.
+
+Flat string fields, not a nested block, on purpose: the intake already stores
+flat `upsell1Name`/`upsell1Price` pairs, the admin setter is
+`setIntakeField(key, value)` keyed on `keyof SalesAiIntake`, and the AI-fill
+merge copies an allowlist of scalar keys. A nested object would have needed all
+three changed; flat fields ride plumbing that already exists and is already
+tested. The list-ish fields are comma separated and split in exactly one place,
+`splitVisualList`.
+
+
+**Effect on coverage.** Six new intake fields are now AI-fillable and
+admin-editable, and one previously unreachable brief block (`visual`, five
+reported paths) now has a path from input to output. Anyone re-running
+`scripts/audit-ai-fill-coverage.cjs` should expect the totals to move; the
+numbers recorded earlier in this doc predate these fields.

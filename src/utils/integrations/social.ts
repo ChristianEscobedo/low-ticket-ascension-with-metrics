@@ -28,6 +28,15 @@ export interface CreatePostInput {
   mediaUrls?: string[];
   /** ISO timestamp. When present the post is scheduled; otherwise published. */
   scheduleDate?: string;
+  /**
+   * What GHL should do with the post.
+   *
+   * Omit and it derives from `scheduleDate`, which is the behaviour every
+   * existing caller relies on. Pass 'draft' to park the post in the Social
+   * Planner *with* its date but without it firing — that is the one combination
+   * the date alone cannot express, and the reason this field exists.
+   */
+  status?: 'draft' | 'scheduled' | 'published';
   /** Native post type. */
   type?: 'post' | 'story' | 'reel';
 }
@@ -110,7 +119,7 @@ export async function createSocialPost(
     accountIds: input.accountIds,
     summary: input.summary,
     type: input.type ?? 'post',
-    status: input.scheduleDate ? 'scheduled' : 'published',
+    status: input.status ?? (input.scheduleDate ? 'scheduled' : 'published'),
   };
   if (input.scheduleDate) body.scheduleDate = input.scheduleDate;
   if (media.length > 0) body.media = media;
@@ -128,7 +137,18 @@ export async function createSocialPost(
     }
     const post = (json.post ?? json) as Record<string, unknown>;
     const id = post?.id ? String(post.id) : post?._id ? String(post._id) : undefined;
-    return { ok: true, data: { id, scheduled: Boolean(input.scheduleDate) } };
+    // `scheduled` means "GHL will fire this itself", so a draft is false even
+    // though it has a date. Reporting a draft as scheduled here is exactly the
+    // lie the planner's Draft chip exists to prevent.
+    return {
+      ok: true,
+      data: {
+        id,
+        scheduled: input.status
+          ? input.status === 'scheduled'
+          : Boolean(input.scheduleDate),
+      },
+    };
   } catch (err) {
     console.error('createSocialPost failed', err);
     return { ok: false, status: 502, error: 'Could not reach GoHighLevel' };

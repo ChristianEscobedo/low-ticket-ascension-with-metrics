@@ -40,6 +40,7 @@ import { stripDashes } from '@/lib/mothermode/content/compliance';
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getGoogleKey,
   getImageModelOverride,
   getTextModelOverride,
@@ -52,10 +53,26 @@ import {
   variationDimensionById,
   type VariationDimensionId,
 } from '@/lib/mothermode/content/variationLab';
+import {
+  recipeCraftBlock,
+  recipeInputsBlock,
+  frameworkRotation,
+  rotationAssignmentLines,
+  type PromptRecipe,
+} from '@/lib/mothermode/content/promptBank';
+import { imageRecipeCraftBlock } from '@/lib/mothermode/content/imagePromptBank';
+import {
+  resolveEnabledRecipes,
+  resolveRecipeById,
+  resolveImageRecipeById,
+} from '@/lib/mothermode/content/promptBankStore';
+import { AUTO_STYLE } from '@/lib/mothermode/content/promptStyles';
+
 
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -64,6 +81,7 @@ const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 /** Default text models per provider. Both are current frontier writers. */
 const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 const DEFAULT_ANTHROPIC_TEXT_MODEL = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT_TEXT_MODEL = 'kimi-k3';
 
 export type AiResult<T> =
   | { ok: true; data: T }
@@ -96,9 +114,18 @@ export interface RewriteInput {
   context?: { theme?: string; tone?: string; platform?: string; format?: string };
   /** Optional text model id from the selector. Empty/unknown means Auto. */
   model?: string;
+  /** Optional prompt-bank framework id: restructure the text to execute it. */
+  framework?: string;
+  /**
+   * Filled custom inputs for the framework, keyed by field id. Injected as
+   * user-supplied material right after the craft block; blank values are
+   * skipped and generation runs from the offer facts as before.
+   */
+  recipeInputs?: Record<string, string>;
 }
 
 /** OpenAI key: an enabled in-app integration wins, else OPENAI_API_KEY. */
+
 async function apiKey(): Promise<string | null> {
   return getOpenAiKey();
 }
@@ -106,6 +133,11 @@ async function apiKey(): Promise<string | null> {
 /** Anthropic key: an enabled in-app integration wins, else ANTHROPIC_API_KEY. */
 async function anthropicKey(): Promise<string | null> {
   return getAnthropicKey();
+}
+
+/** Moonshot key for the Kimi text models (env-configured). */
+async function moonshotKey(): Promise<string | null> {
+  return getMoonshotKey();
 }
 
 /**
@@ -117,11 +149,14 @@ async function anthropicKey(): Promise<string | null> {
 async function availableTextProvider(
   preferred?: string | null,
 ): Promise<TextProvider> {
-  const [oa, an] = await Promise.all([apiKey(), anthropicKey()]);
+  const [oa, an, mo] = await Promise.all([apiKey(), anthropicKey(), moonshotKey()]);
   const pref = preferred?.toLowerCase();
   if (pref === 'anthropic' && an) return 'anthropic';
   if (pref === 'openai' && oa) return 'openai';
+  if (pref === 'moonshot' && mo) return 'moonshot';
   if (an) return 'anthropic';
+  if (oa) return 'openai';
+  if (mo) return 'moonshot';
   return 'openai';
 }
 
@@ -142,7 +177,9 @@ async function textConfig(): Promise<{ provider: TextProvider; model: string }> 
     const key =
       overridePick.provider === 'anthropic'
         ? await anthropicKey()
-        : await apiKey();
+        : overridePick.provider === 'moonshot'
+          ? await moonshotKey()
+          : await apiKey();
     if (key) return { provider: overridePick.provider, model: overridePick.id };
   }
 
@@ -150,7 +187,9 @@ async function textConfig(): Promise<{ provider: TextProvider; model: string }> 
   const model =
     provider === 'anthropic'
       ? DEFAULT_ANTHROPIC_TEXT_MODEL
-      : DEFAULT_OPENAI_TEXT_MODEL;
+      : provider === 'moonshot'
+        ? DEFAULT_MOONSHOT_TEXT_MODEL
+        : DEFAULT_OPENAI_TEXT_MODEL;
   return { provider, model };
 }
 
@@ -167,7 +206,11 @@ async function resolveTextModel(requested?: string): Promise<{
   const picked = getTextModel(requested?.trim() || undefined);
   if (picked) {
     const key =
-      picked.provider === 'anthropic' ? await anthropicKey() : await apiKey();
+      picked.provider === 'anthropic'
+        ? await anthropicKey()
+        : picked.provider === 'moonshot'
+          ? await moonshotKey()
+          : await apiKey();
     if (key) return { provider: picked.provider, model: picked.id };
   }
   return textConfig();
@@ -554,16 +597,26 @@ export async function rewriteContentText(
   const changeLine = input.instructions?.trim()
     ? `Apply these requested changes: ${input.instructions.trim()}`
     : '';
+  const bankRecipe = await resolveRecipeById(input.framework);
+  const frameworkLine = bankRecipe
+    ? `Restructure the text so it executes this proven framework (keep the offer facts intact):\n${recipeCraftBlock(bankRecipe)}`
+    : '';
+  const inputsLine = bankRecipe
+    ? recipeInputsBlock(bankRecipe, input.recipeInputs)
+    : '';
   const current = input.text.trim()
     ? `Current text:\n"""\n${input.text.trim()}\n"""`
     : 'There is no current text. Write it fresh.';
   const system = `You are the MotherMode brand copywriter. MotherMode helps mothers reclaim time and offload the mental load. ${VOICE_RULES} Output ONLY the ${input.field} text. No quotes, no labels, no preamble.`;
-  const user = [task, ctxLine, changeLine, current].filter(Boolean).join('\n\n');
+  const user = [task, ctxLine, changeLine, frameworkLine, inputsLine, current]
+    .filter(Boolean)
+    .join('\n\n');
+
 
   const { provider, model } = await resolveTextModel(input.model);
   return provider === 'anthropic'
     ? anthropicRewrite(system, user, model)
-    : openAiRewrite(system, user, model);
+    : openAiRewrite(system, user, model, provider);
 }
 
 export interface TextVariationsInput {
@@ -638,7 +691,7 @@ export async function generateTextVariations(
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const items = parseVariationItems(raw.data)
     .map((v) => ({
@@ -698,11 +751,13 @@ async function openAiRewrite(
   system: string,
   user: string,
   model: string,
+  provider: TextProvider = 'openai',
 ): Promise<AiResult<string>> {
-  const key = await apiKey();
-  if (!key) return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
+  const moonshot = provider === 'moonshot';
+  const key = moonshot ? await moonshotKey() : await apiKey();
+  if (!key) return { ok: false, status: 501, error: moonshot ? 'MOONSHOT_API_KEY is not configured' : 'OPENAI_API_KEY is not configured' };
   try {
-    const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    const res = await fetch(`${moonshot ? MOONSHOT_BASE : OPENAI_BASE}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -830,6 +885,64 @@ export interface BatchInput {
   model?: string;
   /** Prompt style id from the Generate drawer. Empty/auto resolves server-side. */
   style?: string;
+  /**
+   * Optional image-bank recipe id (imagePromptBank.ts). When set and the
+   * format is visual, every media.prompt in the batch executes that image
+   * creative framework instead of the default scene brief.
+   */
+  imageFramework?: string;
+  /**
+   * Values for the explicit recipe's custom input fields (recipe.inputs),
+   * keyed by field id. Filled in the Test lab or the Generate drawer when an
+   * admin picks a framework that asks for real material (a story, a lesson).
+   * Empty/missing values are skipped; Auto rotation never carries them.
+   */
+  recipeInputs?: Record<string, string>;
+}
+
+/**
+ * The prompt-bank wiring for one batch: the explicit framework pick (when the
+ * style id names a bank recipe) or the Auto rotation that assigns a different
+ * proven framework to every piece in a distinct-posts run.
+ */
+export interface BatchBank {
+  /** Set when `input.style` resolves to an enabled bank recipe. */
+  explicit?: PromptRecipe;
+  /** One framework per piece, in order, for Auto batch runs. */
+  rotation: PromptRecipe[];
+  /** Set when `input.imageFramework` resolves to an enabled image recipe. */
+  imageRecipe?: PromptRecipe;
+}
+
+/**
+ * Resolve the bank for a batch. An explicit recipe id in `style` always wins.
+ * Otherwise, Auto + batch mode rotates enabled frameworks across pieces so
+ * "distinct posts" means distinct proven structures, not rewords of one angle.
+ * The pool comes from the DB-merged bank and degrades to the code registry.
+ */
+async function resolveBankForBatch(
+  input: BatchInput,
+  count: number,
+): Promise<BatchBank> {
+  const pool = await resolveEnabledRecipes();
+  const styleId = input.style?.trim();
+  // Text picks only: an image recipe id in `style` never shapes copy.
+  const explicit =
+    styleId && styleId !== AUTO_STYLE
+      ? pool.find((r) => r.id === styleId && r.group !== 'image')
+      : undefined;
+  const imageId = input.imageFramework?.trim();
+  const imageRecipe = imageId
+    ? pool.find((r) => r.id === imageId && r.group === 'image')
+    : undefined;
+  if (explicit) return { explicit, rotation: [], imageRecipe };
+  if (input.mode !== 'batch') return { rotation: [], imageRecipe };
+  const frameworks = pool.filter((r) => r.group === 'framework');
+  if (frameworks.length === 0) return { rotation: [], imageRecipe };
+  return {
+    rotation: frameworkRotation(input.platform, input.format, count, frameworks),
+    imageRecipe,
+  };
 }
 
 /**
@@ -842,18 +955,20 @@ export async function generateContentBatch(
 ): Promise<AiResult<{ pieces: ContentPiece[]; model: string }>> {
   const count = Math.max(1, Math.min(10, Math.round(input.count || 0)));
   const { provider, model } = await resolveTextModel(input.model);
+  const bank = await resolveBankForBatch(input, count);
   const system = buildBatchSystem(input);
-  const user = buildBatchUser(input, count);
+  const user = buildBatchUser(input, count, bank);
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
-  const pieces = normalizeBatch(raw.data, input, count);
+  const pieces = normalizeBatch(raw.data, input, count, bank);
   if (pieces.length === 0)
     return { ok: false, status: 502, error: 'No usable pieces were returned' };
   return { ok: true, data: { pieces, model } };
 }
+
 
 /** The brand + offer-fact system prompt that grounds the whole batch. */
 function buildBatchSystem(input: BatchInput): string {
@@ -909,6 +1024,7 @@ function needsImagePrompt(format: ContentFormat): boolean {
   return (
     format === 'feed' ||
     format === 'carousel' ||
+    format === 'slideshow' ||
     format === 'story' ||
     format === 'reel' ||
     format === 'video' ||
@@ -937,6 +1053,14 @@ function formatFieldGuide(format: ContentFormat, kind: ContentKind): string {
       'body (5-10 substantial paragraphs), seo {metaTitle, metaDescription, keywords[], questions:[{q,a}] with 4-8 pairs}. Direct, citable, still human and specific.',
     carousel:
       'slides (8-12 items, each {text, sub, visual}), caption (long-form caption, 4-8 short paragraphs as one string with line breaks). Slide 1 stops the scroll; middle slides teach; final slide permission + soft CTA.',
+    colorblock:
+      'No body, no media. This is the native Facebook big-text-on-color post. hook is the ONLY text on the block, so make it punchy and under 130 characters (the native ceiling). Fill colorBlock: { bg: "#RRGGBB" } using one of the brand backgrounds (#532B3C aubergine, #1C1917 charcoal, #B08D57 brass, #F4F0E8 bone, #A3B18A sage, #E8B4B8 rose) and optionally gradient: ["#RRGGBB", "#RRGGBB"] for a two-stop fade. cta is one short line pointing to the comments link. Keep the hook a complete felt moment, not a fragment.',
+    textpost:
+      'No body, no media. This is the native viral text-overlay post: big bold text on a plain brand background, the kind that fills a reel, TikTok slide, story, or feed square. hook is the ONLY text on the screen, so keep it under 220 characters, one or two short lines, a complete felt moment with real weight. Fill textPost: { bg: "#RRGGBB" } using one of the brand backgrounds (#1C1917 charcoal, #532B3C aubergine, #B08D57 brass, #F4F0E8 bone) and aspect: "9:16" (reel/slide/story) or "1:1" (feed). cta is one short line pointing to the link.',
+    tweet:
+      'No body, no media. This is a Twitter screen-grab card: the tweet text IS the post, screenshot-worthy and standalone. hook is the tweet itself: under 280 characters, one sharp, plain-spoken idea a real person would screenshot and share. No hashtags in the tweet. cta is one short line pointing to the link (it lives in the surrounding caption, not the card).',
+    slideshow:
+      'slides (4-8 items, each {text, sub, visual}), caption (2-4 sentences, native lowercase TikTok voice), media. This is TikTok photo-mode: a swipeable multi-image post. Slide 1 is the cover that stops the scroll; each middle slide lands one concrete item, step, or truth with a short bold text (the on-slide line) and a quieter sub; the final slide is the soft bio CTA. Each slide.text is short enough to read in under 3 seconds. media.prompt is the cover-slide photographic scene (real light, lived-in, object-led, negative space up top for big text).',
     story:
       'slides (5-8 frames, each {text, sub, visual}), caption. Each frame advances a mini-arc; not decorative.',
     idea:
@@ -974,8 +1098,15 @@ function sourceSummary(p: ContentPiece): string {
   return lines.join('\n');
 }
 
-/** The user prompt: intent, format, theme, guides, source, and JSON shape. */
-function buildBatchUser(input: BatchInput, count: number): string {
+/** The user prompt: intent, format, theme, guides, source, and JSON shape.
+ *  When the bank assigns an explicit framework or an Auto rotation, the
+ *  matching craft blocks and per-piece assignments are injected here. */
+function buildBatchUser(
+  input: BatchInput,
+  count: number,
+  bank?: BatchBank,
+): string {
+
   const fmt = `platform ${input.platform}, format ${input.format}, kind ${input.kind}, tone register ${input.tone}`;
   const theme = input.theme?.trim() ? `Theme/angle: ${input.theme.trim()}.` : '';
   const guides = input.guides?.trim()
@@ -994,8 +1125,24 @@ function buildBatchUser(input: BatchInput, count: number): string {
       ? `Adapt this post from ${input.source.platform} to ${input.platform}. Keep the core message and the MotherMode voice, but reshape the style, cultural conventions, and structure to be native to the target. ${PLATFORM_NORMS[input.platform]} Remap the format to ${input.format}.`
       : '';
   const platformNorm = PLATFORM_NORMS[input.platform] ?? '';
-  const styleLine = styleCraftLine(input.style, input.platform, input.format);
+  const styleLine = bank?.explicit
+    ? recipeCraftBlock(bank.explicit, input.platform)
+    : styleCraftLine(input.style, input.platform, input.format);
+  const inputsLine = bank?.explicit
+    ? recipeInputsBlock(bank.explicit, input.recipeInputs)
+    : '';
+  const rotationLine = bank?.rotation.length
+    ? [
+        'FRAMEWORK ROTATION (strict): each piece executes a DIFFERENT proven framework below, in order. Piece i must fully execute its framework structure, not just borrow its surface style.',
+        rotationAssignmentLines(bank.rotation, input.platform),
+      ].join('\n')
+    : '';
+  const visualLine =
+    bank?.imageRecipe && needsImagePrompt(input.format)
+      ? `VISUAL CREATIVE FRAMEWORK (strict): compose every media.prompt by executing this proven image creative framework. Anchor it to the piece's primary hook; the scene stays wordless (words are overlaid later):\n${imageRecipeCraftBlock(bank.imageRecipe, input.platform)}`
+      : '';
   const persp = perspectiveLine(input.perspective);
+
   const soph = sophisticationLine(input.sophistication);
   const antiGeneric =
     'Anti-generic bar: no "you have got this", no bath bombs, no planner pep talks, no corporate filler. Open on a felt moment. Name the system. Teach something real. Soft CTA only at the end.';
@@ -1003,12 +1150,19 @@ function buildBatchUser(input: BatchInput, count: number): string {
     'Value-forward mandate: at least 70% of each piece must be insight, scene, reframe, or usable method. Product mention is brief and earned. If a reader never clicked the CTA, she should still feel smarter and more seen.';
   const lengthBar =
     'Length mandate: hit the UPPER half of every length range in the format guide. Thin posts are failures. Prefer one deep piece over a shallow one.';
+  const frameworkRule = bank?.explicit
+    ? `"framework" MUST be "${bank.explicit.id}" on every piece.`
+    : bank?.rotation.length
+      ? '"framework" is REQUIRED on every piece: the id of the rotation framework that piece executed.'
+      : '';
   const schema = [
     'Respond with this exact JSON shape:',
-    '{ "pieces": [ { "title": string, "theme": string, "hook": string, "hooks": [string, string, string, string, string], "cta": string, "hashtags": string[], "visual": string, "media": { "type": "image"|"video", "alt": string, "prompt": string } } ] }',
+    '{ "pieces": [ { "title": string, "theme": string, "framework": string, "hook": string, "hooks": [string, string, string, string, string], "cta": string, "hashtags": string[], "visual": string, "media": { "type": "image"|"video", "alt": string, "prompt": string } } ] }',
     `Each piece is for ${fmt}. Fill these format-specific fields: ${formatFieldGuide(input.format, input.kind)}`,
     'Omit fields that do not apply.',
+    frameworkRule,
     '"title" is a short internal label.',
+
     '"hooks" MUST be exactly 5 distinct openers to A/B. Different angles, not rewords. The first equals "hook".',
     '"cta" moves her to the next step without stuffing a URL; the link is added automatically.',
     needsImagePrompt(input.format)
@@ -1020,6 +1174,9 @@ function buildBatchUser(input: BatchInput, count: number): string {
     `Each post is ${fmt}. ${platformNorm}`,
     theme,
     styleLine,
+    inputsLine,
+    rotationLine,
+    visualLine,
     adapt,
     persp,
     soph,
@@ -1034,16 +1191,19 @@ function buildBatchUser(input: BatchInput, count: number): string {
     .join('\n\n');
 }
 
+
 /** OpenAI chat-completions call in JSON mode. */
 async function openAiJson(
   system: string,
   user: string,
   model: string,
+  provider: TextProvider = 'openai',
 ): Promise<AiResult<string>> {
-  const key = await apiKey();
-  if (!key) return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
+  const moonshot = provider === 'moonshot';
+  const key = moonshot ? await getMoonshotKey() : await apiKey();
+  if (!key) return { ok: false, status: 501, error: moonshot ? 'MOONSHOT_API_KEY is not configured' : 'OPENAI_API_KEY is not configured' };
   try {
-    const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    const res = await fetch(`${moonshot ? MOONSHOT_BASE : OPENAI_BASE}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -1227,12 +1387,16 @@ function normalizeQa(raw: unknown): { q: string; a: string }[] | undefined {
   return out.length ? out : undefined;
 }
 
-/** Validate and voice-check one raw piece into a ContentPiece, or drop it. */
+/** Validate and voice-check one raw piece into a ContentPiece, or drop it.
+ *  `frameworkAssigned` is the bank assignment for this slot (explicit pick or
+ *  rotation position); the model's own "framework" field wins when present. */
 function normalizePiece(
   raw: any,
   input: BatchInput,
   id: string,
+  frameworkAssigned?: string,
 ): ContentPiece | null {
+
   if (!raw || typeof raw !== 'object') return null;
   const hooks = toList(raw.hooks);
   const hook = toText(raw.hook) ?? hooks?.[0];
@@ -1252,8 +1416,13 @@ function normalizePiece(
     generated: true,
   };
 
+  // Badge the framework the piece executed (review chips + analytics compare).
+  const frameworkId = toText(raw.framework) ?? frameworkAssigned;
+  if (frameworkId) piece.framework = frameworkId;
+
   // Always store hook variants (at least the primary) so the review UI can A/B.
   piece.hooks = dedupeHooks(hook, hooks ?? []);
+
   const body = toList(raw.body);
   if (body?.length) piece.body = body;
   const caption = toText(raw.caption);
@@ -1326,6 +1495,48 @@ function normalizePiece(
       };
   }
 
+  // FB color-block styling. Validate the bg hex; ignore malformed output.
+  if (raw.colorBlock && typeof raw.colorBlock === 'object') {
+    const bg = toText(raw.colorBlock.bg);
+    const gradient = Array.isArray(raw.colorBlock.gradient)
+      ? raw.colorBlock.gradient
+          .map((g: unknown) => toText(g))
+          .filter((g: string | undefined): g is string => !!g && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(g))
+      : undefined;
+    if (bg && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(bg)) {
+      piece.colorBlock = {
+        bg,
+        gradient: gradient && gradient.length >= 2 ? gradient : undefined,
+      };
+    }
+  }
+
+  // Textpost styling. Validate the bg hex + aspect; ignore malformed output.
+  if (raw.textPost && typeof raw.textPost === 'object') {
+    const bg = toText(raw.textPost.bg);
+    const aspect = toText(raw.textPost.aspect);
+    if (bg && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(bg)) {
+      piece.textPost = {
+        bg,
+        ...(aspect === '9:16' || aspect === '1:1' ? { aspect } : {}),
+      };
+    }
+  }
+
+  // Tweet screen-grab chrome. Identity overrides only; theme/flags default.
+  if (raw.tweetCard && typeof raw.tweetCard === 'object') {
+    const name = toText(raw.tweetCard.name);
+    const handle = toText(raw.tweetCard.handle);
+    const theme = toText(raw.tweetCard.theme);
+    if (name || handle || theme) {
+      piece.tweetCard = {
+        ...(name ? { name } : {}),
+        ...(handle ? { handle } : {}),
+        ...(theme === 'dark' || theme === 'light' ? { theme } : {}),
+      };
+    }
+  }
+
   return piece;
 }
 
@@ -1334,6 +1545,7 @@ function normalizeBatch(
   raw: string,
   input: BatchInput,
   count: number,
+  bank?: BatchBank,
 ): ContentPiece[] {
   const parsed = parseJsonObject(raw);
   const arr = Array.isArray(parsed?.pieces)
@@ -1344,11 +1556,18 @@ function normalizeBatch(
   const batch = randomId();
   const out: ContentPiece[] = [];
   for (let i = 0; i < arr.length && out.length < count; i++) {
-    const piece = normalizePiece(arr[i], input, `gen_${batch}_${out.length + 1}`);
+    const assigned = bank?.explicit?.id ?? bank?.rotation[out.length]?.id;
+    const piece = normalizePiece(
+      arr[i],
+      input,
+      `gen_${batch}_${out.length + 1}`,
+      assigned,
+    );
     if (piece) out.push(piece);
   }
   return out;
 }
+
 
 /** The controls one Amplify text run is built from. */
 export interface AmplifyTextInput {
@@ -1365,7 +1584,12 @@ export interface AmplifyTextInput {
   model?: string;
   /** Existing variants to steer away from, so a run never repeats what we have. */
   avoid?: string[];
+  /** Optional prompt-bank framework id: shape every variant through it. */
+  framework?: string;
+  /** Filled custom inputs for the framework, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }
+
 
 /** One part of a multi-part Refine run: a dimension and how many to write. */
 export interface AmplifyPart {
@@ -1384,10 +1608,15 @@ export interface AmplifyPartsInput {
   guides?: string;
   context?: { theme?: string; tone?: string; platform?: string; format?: string };
   model?: string;
+  /** Optional prompt-bank framework id, applied to every part. */
+  framework?: string;
+  /** Filled custom inputs for the framework, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }
 
 /**
  * Run several single-text parts (hooks, angles, CTAs, bodies) in one pass,
+
  * each as its own JSON-mode call so the output stays clean and parsable, all
  * fired in parallel. Returns a per-dimension map of voice-checked variants and
  * the model used. A part that fails yields an empty list rather than failing
@@ -1412,9 +1641,12 @@ export async function amplifyParts(
         context: input.context,
         model: input.model,
         avoid: p.avoid,
+        framework: input.framework,
+        recipeInputs: input.recipeInputs,
       }),
     ),
   );
+
   const out: Partial<Record<AmplifyTextDimension, string[]>> = {};
   for (let i = 0; i < parts.length; i++) {
     const r = settled[i];
@@ -1440,11 +1672,13 @@ export async function amplifyContent(
     VOICE_RULES,
     'Return ONLY a JSON object. No prose, no code fences.',
   ].join(' ');
-  const user = buildAmplifyUser(input, count);
+  const bankRecipe = await resolveRecipeById(input.framework);
+  const user = buildAmplifyUser(input, count, bankRecipe);
+
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const items = parseAmplifyItems(raw.data);
   if (items.length === 0) {
@@ -1469,6 +1703,14 @@ export interface ImagePromptsInput {
   avoid?: string[];
   /** Optional text model id from the selector. Empty/unknown means Auto. */
   model?: string;
+  /**
+   * Optional image-bank recipe id (imagePromptBank.ts). When set, every scene
+   * executes that image creative framework (FB ad structures, IG organic
+   * stills, YT thumbnail frameworks).
+   */
+  imageFramework?: string;
+  /** Filled custom inputs for the image recipe, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }
 
 /**
@@ -1488,11 +1730,12 @@ export async function amplifyImagePrompts(
     VOICE_RULES,
     'Return ONLY a JSON object. No prose, no code fences.',
   ].join(' ');
-  const user = buildImagePromptsUser(input, count);
+  const imageRecipe = await resolveImageRecipeById(input.imageFramework);
+  const user = buildImagePromptsUser(input, count, imageRecipe);
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const prompts = parseAmplifyItems(raw.data).slice(0, count);
   if (prompts.length === 0) {
@@ -1506,7 +1749,11 @@ export async function amplifyImagePrompts(
 }
 
 /** The user prompt for an image-prompt run: the hook, context, guides, shape. */
-function buildImagePromptsUser(input: ImagePromptsInput, count: number): string {
+function buildImagePromptsUser(
+  input: ImagePromptsInput,
+  count: number,
+  imageRecipe?: PromptRecipe,
+): string {
   const c = input.context;
   const ctxLine = c
     ? `Context: platform ${c.platform ?? 'social'}, format ${c.format ?? 'post'}, tone ${c.tone ?? 'warm'}, theme "${c.theme ?? ''}".`
@@ -1514,6 +1761,12 @@ function buildImagePromptsUser(input: ImagePromptsInput, count: number): string 
   const intent = `Write ${count} distinct photographic scene descriptions for imagery that makes a viewer feel this hook before they read a word: "${input.hook.trim()}". Each scene must take a different setting, object, or moment, never a reword of another.`;
   const rules =
     "Each scene is one or two sentences describing the setting, key objects, light, and mood. No faces unless essential. No text or logos in the scene. Do not include the hook itself or any quotation in the scene text.";
+  const frameworkLine = imageRecipe
+    ? `Execute this proven image creative framework for EVERY scene (its structure and art direction, anchored to the hook; never copy the examples):\n${imageRecipeCraftBlock(imageRecipe, (input.context?.platform as ContentPlatform | undefined) ?? undefined)}`
+    : '';
+  const inputsLine = imageRecipe
+    ? recipeInputsBlock(imageRecipe, input.recipeInputs)
+    : '';
   const guides = input.guides?.trim()
     ? `Follow these prompt guides, but the rules above always win: ${input.guides.trim()}`
     : '';
@@ -1523,7 +1776,9 @@ function buildImagePromptsUser(input: ImagePromptsInput, count: number): string 
     : '';
   const shape =
     'Respond with this exact JSON shape: { "items": [string] } where each string is one scene description.';
-  return [intent, rules, ctxLine, guides, avoid, shape].filter(Boolean).join('\n\n');
+  return [intent, rules, frameworkLine, inputsLine, ctxLine, guides, avoid, shape]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 /** Per-dimension guidance for what each amplified item should be. */
@@ -1536,8 +1791,14 @@ const AMPLIFY_GUIDE: Record<AmplifyTextDimension, string> = {
     'full alternative body versions, each 2 to 5 short paragraphs with a blank line between paragraphs',
 };
 
-/** The user prompt for an Amplify run: intent, context, voice, source, shape. */
-function buildAmplifyUser(input: AmplifyTextInput, count: number): string {
+/** The user prompt for an Amplify run: intent, context, voice, source, shape.
+ *  An optional bank recipe shapes every variant through one framework. */
+function buildAmplifyUser(
+  input: AmplifyTextInput,
+  count: number,
+  recipe?: PromptRecipe,
+): string {
+
   const c = input.context;
   const ctxLine = c
     ? `Context: platform ${c.platform ?? 'social'}, format ${c.format ?? 'post'}, tone ${c.tone ?? 'warm'}, theme "${c.theme ?? ''}".`
@@ -1556,14 +1817,21 @@ function buildAmplifyUser(input: AmplifyTextInput, count: number): string {
     ? `Do not repeat or closely paraphrase these existing items:\n${avoidList.map((s) => `- ${s}`).join('\n')}`
     : '';
   const source = `Amplify this existing post:\n"""\n${sourceSummary(input.source)}\n"""`;
+  const frameworkLine = recipe
+    ? `Shape EVERY item through this proven framework (craft, structure, and opener energy, adapted to the source post):\n${recipeCraftBlock(recipe)}`
+    : '';
+  const inputsLine = recipe
+    ? recipeInputsBlock(recipe, input.recipeInputs)
+    : '';
   const shape =
     input.dimension === 'bodies'
       ? 'Respond with this exact JSON shape: { "items": [string] } where each string is one full body, paragraphs separated by a blank line.'
       : 'Respond with this exact JSON shape: { "items": [string] }. No URLs in the text.';
-  return [intent, ctxLine, persp, soph, guides, avoid, source, shape]
+  return [intent, ctxLine, frameworkLine, inputsLine, persp, soph, guides, avoid, source, shape]
     .filter(Boolean)
     .join('\n\n');
 }
+
 
 /** Keys a model might use for the variant list, in order of preference. */
 const ITEM_LIST_KEYS = [
@@ -1789,7 +2057,7 @@ export async function generateVideoScript(
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   const beats = normalizeVideoBeats(parsed?.beats, durationSec);
@@ -2051,7 +2319,7 @@ export async function generateStoryboardPlan(
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   const boards = normalizeStoryboardBoards(parsed?.boards, count, input.segments);
@@ -2227,7 +2495,7 @@ export async function generateFramePackPlan(
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   const frames = normalizeFramePackFrames(parsed?.frames, count);
@@ -2269,6 +2537,13 @@ export interface VariationBriefInput {
   frameCount?: number;
   guides?: string;
   model?: string;
+  /**
+   * Optional image-bank recipe id (imagePromptBank.ts). When set, the master,
+   * alt, and frame prompts all execute that image creative framework.
+   */
+  imageFramework?: string;
+  /** Filled custom inputs for the image recipe, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }
 
 export interface VariationFrameOut {
@@ -2312,7 +2587,10 @@ export interface VariationPlanOut {
   model: string;
 }
 
-function buildVariationBriefUser(input: VariationBriefInput): string {
+function buildVariationBriefUser(
+  input: VariationBriefInput,
+  imageRecipe?: PromptRecipe,
+): string {
   const altCount = Math.max(1, Math.min(6, Math.round(input.altCount ?? 3)));
   const frameCount = Math.max(0, Math.min(10, Math.round(input.frameCount ?? 0)));
   const multi = frameCount > 1;
@@ -2320,6 +2598,13 @@ function buildVariationBriefUser(input: VariationBriefInput): string {
     `Convert this creative brief into image prompts for ${input.platform ?? 'instagram'} ${input.format ?? 'feed'}.`,
     `Brief:\n"""\n${input.brief.trim()}\n"""`,
   ];
+  if (imageRecipe) {
+    lines.push(
+      `Execute this proven image creative framework for the masterPrompt, every altPrompt, and every frame (its structure and art direction; never copy the examples):\n${imageRecipeCraftBlock(imageRecipe, (input.platform as ContentPlatform | undefined) ?? undefined)}`,
+    );
+    const inputsBlock = recipeInputsBlock(imageRecipe, input.recipeInputs);
+    if (inputsBlock) lines.push(inputsBlock);
+  }
   if (input.hook?.trim()) lines.push(`Primary hook: ${input.hook.trim()}`);
   if (input.theme?.trim()) lines.push(`Theme: ${input.theme.trim()}`);
   if (input.tone?.trim()) lines.push(`Tone: ${input.tone.trim()}`);
@@ -2354,11 +2639,15 @@ export async function generateVariationBrief(
   const frameCount = Math.max(0, Math.min(10, Math.round(input.frameCount ?? 0)));
   const { provider, model } = await resolveTextModel(input.model);
   const system = [VARIATION_BRIEF_SYSTEM, VOICE_RULES].join(' ');
-  const user = buildVariationBriefUser({ ...input, altCount, frameCount });
+  const imageRecipe = await resolveImageRecipeById(input.imageFramework);
+  const user = buildVariationBriefUser(
+    { ...input, altCount, frameCount },
+    imageRecipe,
+  );
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   const masterPrompt = toText(parsed?.masterPrompt) ?? toText(parsed?.prompt);
@@ -2444,7 +2733,7 @@ export async function generateVariationPlan(
   const raw =
     provider === 'anthropic'
       ? await anthropicJson(system, user, model)
-      : await openAiJson(system, user, model);
+      : await openAiJson(system, user, model, provider);
   if (!raw.ok) return raw;
   const parsed = parseJsonObject(raw.data);
   const items: VariationPlanItemOut[] = [];

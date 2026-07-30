@@ -21,6 +21,19 @@ import {
   fmt,
   type PreviewProps,
 } from './shared';
+import {
+  colorBlockBackground,
+  colorBlockFontScale,
+  colorBlockStyleFor,
+  colorBlockTextColor,
+  textPostBackground,
+  textPostFontScale,
+  textPostStyleFor,
+  textPostTextColor,
+  tweetCardFor,
+  tweetThemeColors,
+} from '@/lib/mothermode/content';
+import { BadgeCheck } from 'lucide-react';
 
 /** Header shared by every Facebook surface: name, time, audience glyph. */
 const Head: React.FC = () => (
@@ -216,10 +229,130 @@ const Story: React.FC<PreviewProps> = ({ view }) => {
   );
 };
 
+/**
+ * Facebook color-block surface: the native big-text-on-color post. The header
+ * and engagement rail match the feed card, but the media area is a solid (or
+ * gradient) block with the active hook scaled the way FB scales it natively.
+ */
+const ColorBlock: React.FC<PreviewProps> = ({ view }) => {
+  const { piece } = view;
+  const style = colorBlockStyleFor(piece);
+  const text = view.hook;
+  const scale = colorBlockFontScale(text, style);
+  const fontRem = 1.55 * scale;
+  return (
+    <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+      <Head />
+      <div
+        className="mx-3 mb-2.5 flex aspect-square w-[calc(100%-1.5rem)] items-center justify-center rounded-md px-6 text-center"
+        style={{ background: colorBlockBackground(style) }}
+      >
+        <p
+          className="font-bold leading-tight"
+          style={{ color: colorBlockTextColor(style), fontSize: `${fontRem}rem` }}
+        >
+          {text}
+        </p>
+      </div>
+      <Hairline />
+      <Engagement view={view} />
+    </div>
+  );
+};
+
+/**
+ * Text overlay surface: the viral big-text post on a plain brand background.
+ * The header and engagement rail match the feed card; the media area is the
+ * text block at its surface aspect (square for feed, vertical when styled so).
+ */
+const TextPost: React.FC<PreviewProps> = ({ view }) => {
+  const { piece } = view;
+  const style = textPostStyleFor(piece);
+  const text = view.hook;
+  const scale = textPostFontScale(text, style);
+  const vertical = (style.aspect ?? '1:1') === '9:16';
+  return (
+    <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+      <Head />
+      <div
+        className={`mx-3 mb-2.5 flex items-center justify-center rounded-md px-6 text-center ${
+          vertical ? 'mx-auto aspect-[9/16] w-2/3' : 'aspect-square w-[calc(100%-1.5rem)]'
+        }`}
+        style={{ background: textPostBackground(style) }}
+      >
+        <p
+          className="font-extrabold leading-tight"
+          style={{ color: textPostTextColor(style), fontSize: `${1.55 * scale}rem` }}
+        >
+          {text}
+        </p>
+      </div>
+      <Hairline />
+      <Engagement view={view} />
+    </div>
+  );
+};
+
+/**
+ * Twitter screen-grab surface: the tweet chrome card posted to Facebook. The
+ * header and engagement rail match the feed card; the media area is the
+ * themed tweet card with avatar, name, badge, and text.
+ */
+const TweetGrab: React.FC<PreviewProps> = ({ view }) => {
+  const { piece } = view;
+  const chrome = tweetCardFor(piece);
+  const colors = tweetThemeColors(chrome.theme);
+  return (
+    <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+      <Head />
+      <div className="mx-3 mb-2.5 rounded-md p-3" style={{ background: colors.backdrop }}>
+        <div
+          className="rounded-lg border p-3"
+          style={{ background: colors.card, borderColor: colors.border }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+              style={{ background: colors.avatarBg, color: colors.avatarText }}
+            >
+              {chrome.name.trim().charAt(0).toUpperCase() || 'M'}
+            </span>
+            <div className="min-w-0 leading-tight">
+              <p
+                className="flex items-center gap-1 truncate text-[13px] font-bold"
+                style={{ color: colors.ink }}
+              >
+                {chrome.name}
+                {chrome.verified && (
+                  <BadgeCheck className="h-3.5 w-3.5 shrink-0" style={{ color: colors.badge }} />
+                )}
+              </p>
+              <p className="truncate text-[11px]" style={{ color: colors.sub }}>
+                {chrome.handle}
+              </p>
+            </div>
+          </div>
+          <p
+            className="mt-2 whitespace-pre-wrap text-[14px] leading-snug"
+            style={{ color: colors.ink }}
+          >
+            {view.hook}
+          </p>
+        </div>
+      </div>
+      <Hairline />
+      <Engagement view={view} />
+    </div>
+  );
+};
+
 export const FacebookPreview: React.FC<PreviewProps> = (props) => {
 
   const f = props.view.piece.format;
   if (f === 'story') return <Story {...props} />;
   if (f === 'reel') return <Vertical {...props} />;
+  if (f === 'colorblock') return <ColorBlock {...props} />;
+  if (f === 'textpost') return <TextPost {...props} />;
+  if (f === 'tweet') return <TweetGrab {...props} />;
   return <Feed {...props} />;
 };

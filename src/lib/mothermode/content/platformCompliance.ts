@@ -410,6 +410,135 @@ function clampScore(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+/** Native Facebook color-block big-text ceiling (~130 chars). */
+const COLOR_BLOCK_MAX = 130;
+/** Text overlay big-line ceiling. */
+const TEXT_POST_MAX = 220;
+/** Tweet screen-grab ceiling (the tweet cap itself). */
+const TWEET_MAX = 280;
+/** TikTok photo-mode slide bounds. */
+const SLIDESHOW_MIN = 2;
+const SLIDESHOW_MAX = 35;
+/** TikTok caption ceiling. */
+const TIKTOK_CAPTION_MAX = 2200;
+
+/**
+ * Format-fit issues: native constraints of the new colorblock / slideshow
+ * surfaces that the generic patterns don't cover.
+ */
+function formatIssues(p: ContentPiece): ComplianceIssue[] {
+  const issues: ComplianceIssue[] = [];
+  if (p.format === 'colorblock') {
+    if ((p.hook ?? '').length > COLOR_BLOCK_MAX) {
+      issues.push({
+        id: 'fmt-colorblock-length',
+        severity: 'note',
+        source: 'meta',
+        field: 'hook',
+        message: `Color-block text is ${p.hook.length} chars; Facebook shows the big-text block only up to ~${COLOR_BLOCK_MAX}.`,
+        suggestion: 'Trim the hook to one short felt moment so it stays a color block.',
+        fixable: 'ai',
+      });
+    }
+    if (p.media) {
+      issues.push({
+        id: 'fmt-colorblock-media',
+        severity: 'note',
+        source: 'meta',
+        field: 'media',
+        message: 'Color-block posts are text-only on Facebook; the image is ignored.',
+        suggestion: 'Drop the media, or use the rendered block image instead.',
+        fixable: 'manual',
+      });
+    }
+  }
+  if (p.format === 'textpost') {
+    if ((p.hook ?? '').length > TEXT_POST_MAX) {
+      issues.push({
+        id: 'fmt-textpost-length',
+        severity: 'note',
+        source: 'general',
+        field: 'hook',
+        message: `Overlay text is ${p.hook.length} chars; the big-line surface works up to ~${TEXT_POST_MAX}.`,
+        suggestion: 'Trim to one or two short lines; move the rest to the caption.',
+        fixable: 'ai',
+      });
+    }
+    if (p.media) {
+      issues.push({
+        id: 'fmt-textpost-media',
+        severity: 'note',
+        source: 'general',
+        field: 'media',
+        message: 'Text overlay posts render their own text block; the image is ignored.',
+        suggestion: 'Drop the media, or use the rendered overlay image instead.',
+        fixable: 'manual',
+      });
+    }
+  }
+  if (p.format === 'tweet') {
+    if ((p.hook ?? '').length > TWEET_MAX) {
+      issues.push({
+        id: 'fmt-tweet-length',
+        severity: 'note',
+        source: 'general',
+        field: 'hook',
+        message: `Tweet text is ${p.hook.length} chars; tweets cap at ${TWEET_MAX}.`,
+        suggestion: 'Tighten to a single screenshot-worthy thought.',
+        fixable: 'ai',
+      });
+    }
+    if (p.media) {
+      issues.push({
+        id: 'fmt-tweet-media',
+        severity: 'note',
+        source: 'general',
+        field: 'media',
+        message: 'The screen-grab card renders the tweet chrome; an extra image is ignored.',
+        suggestion: 'Drop the media, or use the rendered card image instead.',
+        fixable: 'manual',
+      });
+    }
+  }
+  if (p.format === 'slideshow') {
+    const n = p.slides?.length ?? 0;
+    if (n > 0 && n < SLIDESHOW_MIN) {
+      issues.push({
+        id: 'fmt-slideshow-count',
+        severity: 'warn',
+        source: 'tiktok',
+        field: 'slides',
+        message: `Photo-mode needs at least ${SLIDESHOW_MIN} photos; this has ${n}.`,
+        suggestion: 'Add another slide.',
+        fixable: 'ai',
+      });
+    }
+    if (n > SLIDESHOW_MAX) {
+      issues.push({
+        id: 'fmt-slideshow-max',
+        severity: 'warn',
+        source: 'tiktok',
+        field: 'slides',
+        message: `TikTok photo-mode caps at ${SLIDESHOW_MAX} photos; this has ${n}.`,
+        suggestion: 'Trim the deck.',
+        fixable: 'manual',
+      });
+    }
+    if ((p.caption ?? '').length > TIKTOK_CAPTION_MAX) {
+      issues.push({
+        id: 'fmt-slideshow-caption',
+        severity: 'note',
+        source: 'tiktok',
+        field: 'caption',
+        message: `Caption is ${p.caption!.length} chars; TikTok caps at ${TIKTOK_CAPTION_MAX}.`,
+        suggestion: 'Tighten the caption.',
+        fixable: 'ai',
+      });
+    }
+  }
+  return issues;
+}
+
 function gradeFromScore(score: number, blocks: number): ComplianceGrade {
   if (blocks > 0 || score < 60) return 'fail';
   if (score < 85) return 'review';
@@ -424,7 +553,8 @@ export function scoreLocalCompliance(p: ContentPiece): ComplianceScorecard {
   const brandReport = checkPiece(p);
   const brand = brandIssuesFromReport(brandReport);
   const platform = checkPlatformHeuristics(p);
-  const issues = [...brand, ...platform];
+  const format = formatIssues(p);
+  const issues = [...brand, ...platform, ...format];
 
   const isAd = p.kind === 'ad';
   const pack = platformPackFor(p.platform);

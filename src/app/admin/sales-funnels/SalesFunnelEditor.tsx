@@ -54,12 +54,24 @@ import {
   type OfferStackUpsell,
   type SalesAiIntake,
 } from '@/lib/mothermode/sales/aiIntake';
+import { funnelBriefFromIntake } from '@/lib/mothermode/sales/funnelBrief';
+import { buildSalesImagePrompts, type SalesImageFormat } from '@/lib/mothermode/sales/imagePrompts';
 import UpsellTab from './parts/UpsellTab';
 import SalesTab from './parts/SalesTab';
 import OfferTab from './parts/OfferTab';
+import ArchitectureTab from './parts/ArchitectureTab';
 import LeadsTab from './parts/LeadsTab';
 import ChromeTab from './parts/ChromeTab';
-import { StatChip } from './parts/ui';
+import {
+  StatChip,
+  btnDanger,
+  btnGhost,
+  btnPrimary,
+  inputClass,
+  labelClass,
+  selectClass,
+} from './parts/ui';
+
 import EmailsTab from './parts/EmailsTab';
 import EmailStatsTab, { type EmailStatsRow } from './parts/EmailStatsTab';
 import { OptinTab, VslTab, CheckoutTab, SuccessTab, AccessTab } from './parts/PageTabs';
@@ -87,17 +99,22 @@ type Busy =
   | 'createMagnet'
   | 'duplicate';
 
-type Tab = 'build' | 'optin' | 'sales' | 'vsl' | 'checkout' | 'upsell1' | 'upsell2' | 'upsell3' | 'upsell4' | 'success' | 'access' | 'footer' | 'leads' | 'emails' | 'emailStats';
+type Tab = 'build' | 'optin' | 'sales' | 'vsl' | 'checkout' | 'upsell1' | 'upsell2' | 'upsell3' | 'upsell4' | 'success' | 'access' | 'footer' | 'leads' | 'emails' | 'emailStats' | 'architecture';
 
-const inputClass = 'w-full rounded-lg bg-ink/40 border border-bone/15 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/40';
-const labelClass = 'block text-xs uppercase tracking-wide text-bone/50 mb-1';
-const btn = 'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
-const btnPrimary = btn + ' bg-brass/[0.14] text-brass border border-brass/30 hover:bg-brass/20';
-const btnGhost = btn + ' text-bone/60 border border-bone/15 hover:text-bone hover:bg-bone/[0.05]';
-const btnDanger = btn + ' text-red-300/80 border border-red-400/20 hover:bg-red-500/10';
+/*
+ * The style constants above are imported from ./parts/ui, not redeclared here.
+ *
+ * This file used to carry its own copies, left behind when the tab bodies were
+ * split out. They had silently drifted: the local `inputClass` never picked up
+ * the `min-w-0 max-w-full` that was added to the shared one, so the fields in
+ * this shell overflowed their grid while the identically-labelled fields inside
+ * the tabs behaved. Two constants with the same name and different values is
+ * the whole bug -- keep them in ui.tsx so a fix can only be applied once.
+ *
+ * `linesToList`/`listToLines` were dropped in the same pass: also duplicates of
+ * the ui.tsx versions, and this file had no remaining callers of either.
+ */
 
-function linesToList(text: string): string[] { return text.split('\n').map((s) => s.trim()).filter(Boolean); }
-function listToLines(list: string[]): string { return list.join('\n'); }
 
 /** One selectable lead-gen kit, flattened for the picker. */
 interface LeadMagnetOption {
@@ -514,10 +531,10 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
 
   function exportLeadsCsv() {
     const rows = selectedId ? leads.filter((l) => l.funnelId === selectedId) : leads;
-    const header = ['email', 'first_name', 'funnel', 'status', 'step_reached', 'purchased', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'];
+    const header = ['email', 'first_name', 'funnel', 'status', 'step_reached', 'purchased', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'created_at'];
     const lines = [header.join(',')];
     for (const l of rows) {
-      const cells = [l.email, l.firstName || '', l.funnelSlug || l.funnelName || '', l.status, l.stepReached, l.purchased ? 'yes' : 'no', l.utmSource || '', l.utmMedium || '', l.utmCampaign || '', l.createdAt].map((c) => '"' + String(c).replace(/"/g, '""') + '"');
+      const cells = [l.email, l.firstName || '', l.funnelSlug || l.funnelName || '', l.status, l.stepReached, l.purchased ? 'yes' : 'no', l.utmSource || '', l.utmMedium || '', l.utmCampaign || '', l.utmContent || '', l.createdAt].map((c) => '"' + String(c).replace(/"/g, '""') + '"');
       lines.push(cells.join(','));
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -662,71 +679,123 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     }
   }
 
-  /** Fill every empty image slot across the funnel in one AI pass. */
+  /**
+   * Fill every empty image slot across the funnel in one AI pass.
+   *
+   * Prompts come from `buildSalesImagePrompts`, which derives them from the same
+   * FunnelBrief the copy generators read. Previously this function inlined
+   * `'Warm dark background, brass and bone palette, calm luxury'` — MotherMode's
+   * look — into every funnel regardless of whose offer it was. That is fixed:
+   * the visual world now belongs to the brief, so copy and images agree.
+   */
   async function onGenerateImages() {
-    const subject = stack.frontEnd.name || intake.offerName || sales.name || 'digital offer';
-    const niche = intake.niche || sales.category || 'online business';
-    const audience = intake.audience || sales.audience || 'busy founders';
-    const base =
-      'Premium editorial product visual for "' +
-      subject +
-      '", a ' +
-      niche +
-      ' offer for ' +
-      audience +
-      '. Warm dark background, brass and bone palette, calm luxury, no text.';
+    const brief = funnelBriefFromIntake(intake, { funnelSlug: slug, brandName: name });
+    const { prompts, assumedVisualFields } = buildSalesImagePrompts(brief, {
+      magnetTitle: optin.magnetTitle || intake.magnetName,
+      checkoutProductName: stack.frontEnd.name,
+      upsellNames: [
+        upsell1.productName || upsell1.headline,
+        upsell2.productName || upsell2.headline,
+        upsell3.productName || upsell3.headline,
+        upsell4.productName || upsell4.headline,
+      ],
+    });
 
-    type ImageSlot = { label: string; current: string; prompt: string; apply: (url: string) => void };
+    type ImageSlot = { label: string; current: string; prompt: string; format: SalesImageFormat; apply: (url: string) => void };
     const slots: ImageSlot[] = [
       {
-        label: 'Optin cover',
+        label: prompts.optinCover.label,
         current: optin.coverImageUrl || '',
-        prompt: base + ' Lead magnet cover mockup for "' + (optin.magnetTitle || intake.magnetName || subject) + '".',
+        prompt: prompts.optinCover.imagePrompt,
+        format: prompts.optinCover.format,
         apply: (url) => setOptinField('coverImageUrl', url),
       },
       {
-        label: 'Sales hero',
+        label: prompts.salesHero.label,
         current: sales.heroImageUrl || '',
-        prompt: base + ' Wide hero image, product in context, aspirational and quiet.',
+        prompt: prompts.salesHero.imagePrompt,
+        format: prompts.salesHero.format,
         apply: (url) => setSalesField('heroImageUrl', url),
       },
       {
-        label: 'Founder photo',
+        label: prompts.salesFounder.label,
         current: sales.founderPhotoUrl || '',
-        prompt: base + ' Editorial portrait-style brand image for the founder note section, soft light, no text.',
+        prompt: prompts.salesFounder.imagePrompt,
+        format: prompts.salesFounder.format,
         apply: (url) => setSalesField('founderPhotoUrl', url),
       },
       {
-        label: 'Checkout product',
+        label: prompts.checkoutProduct.label,
         current: checkout.productImageUrl || '',
-        prompt: base + ' Compact product thumbnail on a clean surface, order-summary style.',
+        prompt: prompts.checkoutProduct.imagePrompt,
+        format: prompts.checkoutProduct.format,
         apply: (url) => setCheckoutField('productImageUrl', url),
       },
       {
-        label: 'Upsell 1 product',
+        label: prompts.upsell1Product.label,
         current: upsell1.imageUrl || '',
-        prompt: base + ' Upsell product mockup for "' + (upsell1.productName || upsell1.headline || 'upgrade') + '".',
+        prompt: prompts.upsell1Product.imagePrompt,
+        format: prompts.upsell1Product.format,
         apply: (url) => setUpsell1Field('imageUrl', url),
       },
       {
-        label: 'Upsell 2 product',
+        label: prompts.upsell2Product.label,
         current: upsell2.imageUrl || '',
-        prompt: base + ' Upsell product mockup for "' + (upsell2.productName || upsell2.headline || 'upgrade') + '".',
+        prompt: prompts.upsell2Product.imagePrompt,
+        format: prompts.upsell2Product.format,
         apply: (url) => setUpsell2Field('imageUrl', url),
       },
       {
-        label: 'Upsell 3 product',
+        label: prompts.upsell3Product.label,
         current: upsell3.imageUrl || '',
-        prompt: base + ' Upsell product mockup for "' + (upsell3.productName || upsell3.headline || 'upgrade') + '".',
+        prompt: prompts.upsell3Product.imagePrompt,
+        format: prompts.upsell3Product.format,
         apply: (url) => setUpsell3Field('imageUrl', url),
       },
       {
-        label: 'Upsell 4 product',
+        label: prompts.upsell4Product.label,
         current: upsell4.imageUrl || '',
-        prompt: base + ' Upsell product mockup for "' + (upsell4.productName || upsell4.headline || 'upgrade') + '".',
+        prompt: prompts.upsell4Product.imagePrompt,
+        format: prompts.upsell4Product.format,
         apply: (url) => setUpsell4Field('imageUrl', url),
       },
+      {
+        label: prompts.upsell1Poster.label,
+        current: upsell1.mediaVideoPoster || '',
+        prompt: prompts.upsell1Poster.imagePrompt,
+        format: prompts.upsell1Poster.format,
+        apply: (url) => setUpsell1Field('mediaVideoPoster', url),
+      },
+      {
+        label: prompts.upsell2Poster.label,
+        current: upsell2.mediaVideoPoster || '',
+        prompt: prompts.upsell2Poster.imagePrompt,
+        format: prompts.upsell2Poster.format,
+        apply: (url) => setUpsell2Field('mediaVideoPoster', url),
+      },
+      {
+        label: prompts.upsell3Poster.label,
+        current: upsell3.mediaVideoPoster || '',
+        prompt: prompts.upsell3Poster.imagePrompt,
+        format: prompts.upsell3Poster.format,
+        apply: (url) => setUpsell3Field('mediaVideoPoster', url),
+      },
+      {
+        label: prompts.upsell4Poster.label,
+        current: upsell4.mediaVideoPoster || '',
+        prompt: prompts.upsell4Poster.imagePrompt,
+        format: prompts.upsell4Poster.format,
+        apply: (url) => setUpsell4Field('mediaVideoPoster', url),
+      },
     ];
+
+    // An empty `visual` block does not block generation, but it does mean the
+    // images are generic rather than on-brand. Say so instead of pretending.
+    const visualWarning = assumedVisualFields.length
+      ? ' Visual direction missing (' +
+        assumedVisualFields.join(', ') +
+        ') — images use a neutral look until the brief fills in.'
+      : '';
 
     const pending = slots.filter((s) => !s.current.trim());
     if (pending.length === 0) {
@@ -737,12 +806,12 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
 
     setBusy('generateImages');
     setError(null);
-    setNotice('Generating ' + pending.length + ' image' + (pending.length === 1 ? '' : 's') + '…');
+    setNotice('Generating ' + pending.length + ' image' + (pending.length === 1 ? '' : 's') + '…' + visualWarning);
     const failed: string[] = [];
     let done = 0;
     for (const slot of pending) {
       try {
-        const url = await aiGenerateImage(slot.prompt, 'feed');
+        const url = await aiGenerateImage(slot.prompt, slot.format);
         if (url) {
           slot.apply(url);
           done += 1;
@@ -759,7 +828,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
       setNotice('Generated ' + done + ' of ' + pending.length + '. Save when ready.');
       setError('Image generation failed for: ' + failed.join(', '));
     } else {
-      setNotice('Generated ' + done + ' image' + (done === 1 ? '' : 's') + '. Save to persist.');
+      setNotice('Generated ' + done + ' image' + (done === 1 ? '' : 's') + '. Save to persist.' + visualWarning);
     }
   }
 
@@ -858,12 +927,16 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     { id: 'success', label: 'Success' },
     { id: 'access', label: 'Access' },
   ];
+  const OFFER_TABS: { id: Tab; label: string }[] = [
+    { id: 'build', label: 'Build' },
+    { id: 'architecture', label: 'Architecture' },
+  ];
   const EMAIL_TABS: { id: Tab; label: string }[] = [
     { id: 'emails', label: 'Kits' },
     { id: 'emailStats', label: 'Analytics' },
   ];
   const GROUPS: { id: string; label: string; tabs: Tab[] }[] = [
-    { id: 'offer', label: 'Offer', tabs: ['build'] },
+    { id: 'offer', label: 'Offer', tabs: OFFER_TABS.map((t) => t.id) },
     { id: 'pages', label: 'Pages', tabs: PAGE_TABS.map((t) => t.id) },
     { id: 'emails', label: 'Emails', tabs: EMAIL_TABS.map((t) => t.id) },
     { id: 'chrome', label: 'Chrome', tabs: ['footer'] },
@@ -878,7 +951,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <aside className="space-y-3">
         <button type="button" onClick={resetToNew} className={btnPrimary + ' w-full'}>+ New funnel</button>
-        <div className="rounded-xl border border-bone/10 bg-ink/30 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto">
+        <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto">
           {funnels.length === 0 && <div className="p-4 text-sm text-bone/45">No funnels yet. Create one.</div>}
           {funnels.map((f) => (
             <button key={f.id} type="button" onClick={() => loadFunnel(f)} className={'w-full text-left px-3 py-3 transition-colors ' + (selectedId === f.id ? 'bg-brass/[0.12]' : 'hover:bg-bone/[0.04]')}>
@@ -892,8 +965,25 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
           ))}
         </div>
       </aside>
-      <div className="space-y-5">
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+      {/*
+       * `min-w-0` is load-bearing on this column, same as on the Field wrappers.
+       *
+       * This is the `1fr` track of `lg:grid-cols-[280px_1fr]`. A grid track sized
+       * `1fr` resolves to `minmax(auto, 1fr)`, so its floor is the intrinsic
+       * min-content width of everything inside it -- every nested `grid-cols-2`
+       * of inputs, every long slug. Without `min-w-0` the track cannot shrink to
+       * its share of the row: it grows past the container instead, so the editor
+       * column overflows the right edge and its panel border renders alongside
+       * the page border as a doubled sliver.
+       *
+       * Note the failure direction. The `min-w-0` on `inputClass`/`Field` stops
+       * columns crowding INWARD into each other; this one stops the whole column
+       * pushing OUTWARD past the shell. Fixing only the leaf inputs does not fix
+       * this, which is what made the earlier primitive-level fix look ineffective.
+       */}
+      <div className="min-w-0 space-y-5">
+
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">{selectedId ? 'Edit funnel' : 'New funnel'}</div>
             <div className="flex flex-wrap gap-2">
@@ -916,9 +1006,12 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div><label className={labelClass}>Name</label><input className={inputClass} value={name} onChange={(e) => { const v = e.target.value; setName(v); if (!slugTouched) setSlug(slugifySalesName(v)); }} placeholder="Brain Dump Sales Funnel" /></div>
-            <div><label className={labelClass}>Slug (URL)</label><input className={inputClass} value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value); }} placeholder="brain-dump-sales" /></div>
-            <div><label className={labelClass}>Status</label><select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+            {/* The `min-w-0` on each wrapper is what `Field` gives you for free;
+                these three are hand-rolled, so they have to carry it themselves. */}
+            <div className="min-w-0"><label className={labelClass}>Name</label><input className={inputClass} value={name} onChange={(e) => { const v = e.target.value; setName(v); if (!slugTouched) setSlug(slugifySalesName(v)); }} placeholder="Brain Dump Sales Funnel" /></div>
+            <div className="min-w-0"><label className={labelClass}>Slug (URL)</label><input className={inputClass} value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value); }} placeholder="brain-dump-sales" /></div>
+            <div className="min-w-0"><label className={labelClass}>Status</label><select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+
           </div>
           {selectedId && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -945,6 +1038,13 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <button key={g.id} type="button" onClick={() => setTab(g.tabs[0])} className={'rounded-lg px-3 py-1.5 text-sm transition-colors ' + (activeGroup.id === g.id ? 'bg-brass/[0.14] text-brass font-semibold border border-brass/30' : 'text-bone/55 hover:text-bone border border-transparent')}>{g.label}</button>
           ))}
         </div>
+        {activeGroup.id === 'offer' && (
+          <div className="flex flex-wrap gap-1">
+            {OFFER_TABS.map((t) => (
+              <button key={t.id} type="button" onClick={() => setTab(t.id)} className={'rounded-md px-2.5 py-1 text-xs transition-colors ' + (tab === t.id ? 'bg-bone/10 text-bone font-semibold border border-bone/20' : 'text-bone/45 hover:text-bone/80 border border-transparent')}>{t.label}</button>
+            ))}
+          </div>
+        )}
         {activeGroup.id === 'pages' && (
           <div className="flex flex-wrap gap-1">
             {PAGE_TABS.map((t) => (
@@ -992,6 +1092,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             setProductId={setProductId}
           />
         )}
+        {tab === 'architecture' && <ArchitectureTab intake={intake} />}
         {tab === 'optin' && <OptinTab optin={optin} setField={setOptinField} onRegenerate={() => onGeneratePage('optin')} busy={busy === 'generatePage'} disabled={busy !== null} />}
         {tab === 'sales' && (
           <SalesTab

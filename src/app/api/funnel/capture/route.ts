@@ -238,6 +238,9 @@ export async function POST(request: NextRequest) {
       utmSource: typeof body.utmSource === 'string' ? body.utmSource : null,
       utmMedium: typeof body.utmMedium === 'string' ? body.utmMedium : null,
       utmCampaign: typeof body.utmCampaign === 'string' ? body.utmCampaign : null,
+      // utm_content carries the planner piece id, so a lead can be traced back
+      // to the individual post rather than just the campaign.
+      utmContent: typeof body.utmContent === 'string' ? body.utmContent : null,
       referrer: typeof body.referrer === 'string' ? body.referrer : null,
       userAgent: ua || null,
       ipHash,

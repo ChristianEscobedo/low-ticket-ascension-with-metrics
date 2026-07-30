@@ -260,3 +260,17 @@ so the misdiagnosis is recorded rather than reading as intentional. Idempotent;
 
 **Note for anyone touching these grids:** adding a wrapper element around a grid
 child reintroduces the bug unless the wrapper also carries `min-w-0`.
+
+## 2026-07-25 — Visual direction: the brief finally has a writer
+
+`OfferTab.tsx` gained a "Visual direction (drives generated images)" group of
+six inputs below the tone notes field, and an amber pre-flight line beside
+"Generate missing images" that names the visual fields still unset. Both use the
+existing `Field` component and the existing `setIntakeField` prop — no new
+props, no editor-level state, so the tab's contract with
+`SalesFunnelEditor.tsx` is unchanged.
+
+The warning derives its text from `missingIntakeVisualFields(intake)`, the same
+function the tests pin against `assumedVisualFields`, so the message before a
+run and the notice after one cannot disagree. Verified by typecheck, not in a
+browser.

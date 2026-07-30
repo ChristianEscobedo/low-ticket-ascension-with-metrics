@@ -69,3 +69,36 @@ Then Task C fills `visual`, and Task D reads the brief into
   `normalizeFunnelBrief` on garbage input.
 - Not exported from `src/lib/mothermode/sales/index.ts` — deliberate, since
   nothing consumes it. Add the re-export with step 1.
+
+## 2026-07-25 — Visual direction: the brief finally has a writer
+
+**What shipped**
+
+`SalesAiIntake` gained six flat art-direction fields — `visualSubject`,
+`visualPalette`, `visualStyleKeywords`, `visualLighting`, `visualComposition`,
+`visualAvoid` — and `funnelBriefFromIntake` now maps them onto
+`FunnelBrief.visual`. Before this, nothing in `src/` wrote a single `visual.*`
+field: the mapper spread `blankFunnelBrief()` and set only identity, audience,
+promise, voice and offer. Every funnel's 16 image slots therefore rendered the
+neutral fallback and `assumedVisualFields` returned all five names. The slots
+agreed with each other; they did not agree with any brand.
+
+Flat string fields, not a nested block, on purpose: the intake already stores
+flat `upsell1Name`/`upsell1Price` pairs, the admin setter is
+`setIntakeField(key, value)` keyed on `keyof SalesAiIntake`, and the AI-fill
+merge copies an allowlist of scalar keys. A nested object would have needed all
+three changed; flat fields ride plumbing that already exists and is already
+tested. The list-ish fields are comma separated and split in exactly one place,
+`splitVisualList`.
+
+
+**Correction to earlier text in this doc.** Anywhere above that says the visual
+block is always left empty for the AI pass or the admin, that was accurate when
+written and is no longer. `funnelBriefFromIntake` now populates
+`brief.visual` from the intake. The doc comment above the function in
+`funnelBrief.ts` was updated in the same commit rather than left to rot.
+
+What has *not* changed is the principle the emptiness served: the mapper still
+invents nothing. An unstated visual field maps to `''` or `[]` and is reported
+downstream by `assumedVisualFields`, so the coverage audit can still see and
+count the gaps.

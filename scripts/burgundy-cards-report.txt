@@ -1,0 +1,90 @@
+MODE: write (files updated)
+files touched:  10
+card shells:    29
+src\app\admin\brand-bible\BrandBibleEditor.tsx
+    -  rounded-xl border border-bone/10 bg-bone/[0.02] p-5
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-5
+src\app\admin\community\CommunityEditor.tsx
+    -  rounded-xl border border-bone/10 bg-bone/[0.02] p-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4
+src\app\admin\high-ticket\HighTicketEditor.tsx
+    -  rounded-xl border border-bone/10 bg-bone/[0.02] p-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4
+src\app\admin\lead-gen\LeadGenEditor.tsx
+    -  rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\lead-gen\LeadGenEditor.tsx
+    -  rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\lead-gen\LeadGenEditor.tsx
+    -  rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\lead-gen\LeadGenEditor.tsx
+    -  rounded-xl border border-bone/15 overflow-hidden
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-bone/10 bg-ink/30 p-4
+    +  grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-4
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  scroll-mt-24 rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3 transition
+    +  scroll-mt-24 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3 transition
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  flex flex-wrap items-center gap-2 rounded-xl border border-bone/10 bg-ink/30 p-4
+    +  flex flex-wrap items-center gap-2 rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4
+src\app\admin\email-marketing\EmailKitEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 space-y-3
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\funnels\OptinFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 overflow-hidden
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden
+src\app\admin\sales-funnels\parts\LeadsTab.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 overflow-hidden
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden
+src\app\admin\sales-funnels\parts\ui.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5
+src\app\admin\sales-funnels\parts\ui.tsx
+    -  rounded-xl border border-bone/10 bg-ink/20
+    +  rounded-xl border border-brass/10 bg-ink/40
+src\app\admin\sales-funnels\parts\UpsellTab.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4
+src\app\admin\sales-funnels\SalesFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto
+src\app\admin\sales-funnels\SalesFunnelEditor.tsx
+    -  rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4
+    +  rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4

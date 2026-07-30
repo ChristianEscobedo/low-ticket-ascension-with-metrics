@@ -187,6 +187,15 @@ export async function POST(request: NextRequest) {
       : undefined,
     model: str(body.model),
     style: str(body.style),
+    imageFramework: str(body.imageFramework),
+    recipeInputs:
+      body.recipeInputs && typeof body.recipeInputs === 'object'
+        ? Object.fromEntries(
+            Object.entries(body.recipeInputs as Record<string, unknown>)
+              .filter(([, v]) => typeof v === 'string' && v.trim())
+              .map(([k, v]) => [k, (v as string).trim()]),
+          )
+        : undefined,
   };
 
   const result = await generateContentBatch(input);

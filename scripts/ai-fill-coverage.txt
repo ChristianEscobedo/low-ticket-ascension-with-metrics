@@ -9,7 +9,7 @@ Legend  MEDIA=image/video slot (Task C)  SCHEMA=prompt asks for it
 page      interface            total  MEDIA SCHEMA  DERIV  DEFLT  ALIAS   GAP
 -----------------------------------------------------------------------------
 optin     SalesOptinContent       17      2     15      0      0      0     0
-sales     SalesPageContent        90      3     71      0     15      0     1
+sales     SalesPageContent        90      3     87      0      0      0     0
 vsl       VslPageContent          10      1      9      0      0      0     0
 checkout  CheckoutContent         16      1     15      0      0      0     0
 upsell1   UpsellContent           38      4     34      0      0      0     0
@@ -18,43 +18,21 @@ upsell3   UpsellContent           38      4     34      0      0      0     0
 upsell4   UpsellContent           38      4     34      0      0      0     0
 success   SuccessContent          14      0     14      0      0      0     0
 access    AccessContent           17      1     16      0      0      0     0
-footer    SalesFooterContent       5      0      0      0      4      0     1
+footer    SalesFooterContent       5      0      5      0      0      0     0
 -----------------------------------------------------------------------------
-TOTAL                            321     24    276      0     19      0     2
+TOTAL                            321     24    297      0      0      0     0
 
-HEADLINE NUMBER: the AI schema or post-fill covers 276 of 297 non-media fields (93%). 2 fields render blank; 19 render a hardcoded default.
+HEADLINE NUMBER: the AI schema or post-fill covers 297 of 297 non-media fields (100%). 0 fields render blank; 0 render a hardcoded default.
 
 --- GAP: never requested, no default (fix these in Task B) ---
-sales (1): pricingStackTotalLabel
-footer (1): links
+(none)
 
 --- DEFAULT: renders a hardcoded literal if the model stays silent ---
 (not blank, but not written for this funnel either: brand-voice risk)
-sales (15):
-    soldSeparatelyLabel       'Sold separately'
-    todayLabel                'Today'
-    savingsLabel              'You save {amount} today'
-    foundingPriceLabel        'Founding price'
-    timerNote                 'Founding price holds while the timer runs.'
-    resourcesInstantLabel     '{count} resources. Yours instantly.'
-    secureCheckoutLabel       'Secure checkout. Instant digital delivery.'
-    guaranteeNote             '14 days, no friction.'
-    proofEyebrow              'In her words'
-    brandLine                 'Motherhood, Redesigned.'
-    conversionLine            'Reclaim more.'
-    generationalLine          'So our daughters will not have to.'
-    categoryLine              'The OS for modern motherhood.'
-    founderName               'Loni Brown'
-    founderRole               'Founder of MotherMode'
-footer (4):
-    enabled                   true
-    brandLine                 'MotherMode'
-    disclaimer                'This page may contain affiliate links. We may…
-    copyright                 `© ${new Date(
 
 --- PROMPT DRIFT: full-funnel vs per-page regenerate ---
 optin: asked by per-page but NOT full-funnel (17)  [NOT REAL DRIFT: full-funnel schema is by reference, keys not enumerated]: eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, audience, benefits, ctaText, badgeText, magnetTitle, magnetDescription, coverImageUrl, heroVideoUrl, emailPlaceholder, namePlaceholder, collectName, privacyNote
-sales: asked by full-funnel but NOT per-page (74)  [NOT REAL DRIFT: per-page schema is by reference, keys not enumerated]: name, tagline, category, priceCents, originalPriceCents, priceLabel, originalPriceLabel, priceDescription, ctaText, ctaSubtext, guaranteeTitle, guaranteeText, heroImageUrl, heroVideoUrl, founderPhotoUrl, eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, audience, promise, problemHeading, problemIntro, problemScene, problemPoints, problemCost, problemBody, originEyebrow, originHeading, originParagraphs, whatIsHeading, whatIsParagraphs, solutionHeading, solutionBody, mechanismEyebrow, mechanismHeading, mechanismLabel, mechanismParagraphs, mechanismPoints, insideHeading, insideSubheading, insideLead, insideItems, featuresHeading, features, methodHeading, methodSubheading, methodSteps, methodCloser, oldWayHeading, oldWayItems, newWayHeading, newWayItems, proof, testimonialsHeading, testimonials, bonusesEyebrow, bonusesHeading, bonusesIntro, bonusesItems, bonusesTotalValue, bonusesCloser, founderEyebrow, founderHeading, founderGreeting, founderParagraphs, founderSignoff, founderPs, faqHeading, faqs, finalCtaHeading, finalCtaBody, bumps
+sales: asked by full-funnel but NOT per-page (90)  [NOT REAL DRIFT: per-page schema is by reference, keys not enumerated]: name, tagline, category, priceCents, originalPriceCents, priceLabel, originalPriceLabel, priceDescription, ctaText, ctaSubtext, guaranteeTitle, guaranteeText, heroImageUrl, heroVideoUrl, founderPhotoUrl, eyebrow, headline, headlineEmphasis, headlineSuffix, subheadline, audience, promise, problemHeading, problemIntro, problemScene, problemPoints, problemCost, problemBody, originEyebrow, originHeading, originParagraphs, whatIsHeading, whatIsParagraphs, solutionHeading, solutionBody, mechanismEyebrow, mechanismHeading, mechanismLabel, mechanismParagraphs, mechanismPoints, insideHeading, insideSubheading, insideLead, insideItems, featuresHeading, features, methodHeading, methodSubheading, methodSteps, methodCloser, oldWayHeading, oldWayItems, newWayHeading, newWayItems, proof, testimonialsHeading, testimonials, bonusesEyebrow, bonusesHeading, bonusesIntro, bonusesItems, bonusesTotalValue, bonusesCloser, founderEyebrow, founderHeading, founderGreeting, founderParagraphs, founderSignoff, founderPs, faqHeading, faqs, finalCtaHeading, finalCtaBody, soldSeparatelyLabel, todayLabel, savingsLabel, foundingPriceLabel, pricingStackTotalLabel, timerNote, resourcesInstantLabel, secureCheckoutLabel, guaranteeNote, proofEyebrow, brandLine, conversionLine, generationalLine, categoryLine, founderName, founderRole, bumps
 checkout: asked by per-page but NOT full-funnel (3): productImageUrl, timerLabel, brandLabel
 upsell1: asked by per-page but NOT full-funnel (21)  [NOT REAL DRIFT: full-funnel schema is by reference, keys not enumerated]: productId, billingType, interval, metadataType, pageType, timerLabel, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, headlineEmphasis, headlineSuffix, letter, stackEyebrow, stackHeading, features, totalValueLabel, bigIdea, guaranteeTitle, guaranteeBody
 upsell2: asked by per-page but NOT full-funnel (21)  [NOT REAL DRIFT: full-funnel schema is by reference, keys not enumerated]: productId, billingType, interval, metadataType, pageType, timerLabel, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, headlineEmphasis, headlineSuffix, letter, stackEyebrow, stackHeading, features, totalValueLabel, bigIdea, guaranteeTitle, guaranteeBody
@@ -62,7 +40,6 @@ upsell3: asked by per-page but NOT full-funnel (21)  [NOT REAL DRIFT: full-funne
 upsell4: asked by per-page but NOT full-funnel (21)  [NOT REAL DRIFT: full-funnel schema is by reference, keys not enumerated]: productId, billingType, interval, metadataType, pageType, timerLabel, mediaVideo, mediaVideoPoster, galleryEyebrow, galleryAspect, gallery, headlineEmphasis, headlineSuffix, letter, stackEyebrow, stackHeading, features, totalValueLabel, bigIdea, guaranteeTitle, guaranteeBody
 success: asked by per-page but NOT full-funnel (6): inboxNote, deliverySectionHeading, deliverySectionIntro, nextEyebrow, nextHeading, nextBody
 access: asked by per-page but NOT full-funnel (9): badgeText, onboardingEyebrow, onboardingHeading, libraryEyebrow, libraryHeading, libraryIntro, communityBody, supportHeading, supportBody
-footer: NO AI SCHEMA AT ALL (neither generator can produce this block)
 
 --- SCHEMA BY REFERENCE (prompt points elsewhere instead of listing keys) ---
 optin [full-funnel]: ... same as optin funnel optin block ... },
@@ -89,7 +66,7 @@ video script (sales)                        ABSENT
 bump / OTO copy                             FOUND in types, aiIntake, openaiSales
 thank-you equivalent (success/access)       FOUND in types, defaults, openaiSales
 onboarding / intake questions               FOUND in types, defaults, openaiSales
-shared funnel brief (congruence substrate)  ABSENT
+shared funnel brief (congruence substrate)  FOUND in openaiSales
 
 --- reuse targets (present: wrap, do not rebuild) ---
 present  src/lib/mothermode/content/scriptStoryboard.ts  (94 lines)
@@ -98,3 +75,5 @@ present  src/lib/mothermode/sales/emailPlan.ts  (323 lines)
 present  src/lib/mothermode/sales/emailAutobuild.ts  (217 lines)
 present  src/lib/mothermode/sales/fromOffer.ts  (401 lines)
 present  src/components/mothermode/sales/VslPage.tsx  (292 lines)
+
+wrote scripts/ai-fill-coverage.txt

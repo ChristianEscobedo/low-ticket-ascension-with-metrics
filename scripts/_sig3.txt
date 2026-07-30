@@ -1,0 +1,149 @@
+export function auditIntakeFunnel(
+  intake: SalesAiIntake,
+  options: IntakeFunnelMapOptions = {},
+): IntakeFunnelAudit {
+  const { input, notes } = funnelMapInputFromIntake(intake, options);
+  const placements = compareDownsellPlacements(input.rungs);
+
+  let bestPlacement: DownsellPlacement = 'none';
+  PLACEMENT_PREFERENCE.forEach((p) => {
+    if (placements[p].total > placements[bestPlacement].total) bestPlacement = p;
+  });
+
+  return {
+    rungs: input.rungs,
+    notes,
+    issues: validateAscension(input.rungs),
+    placements,
+    bestPlacement,
+    map: buildFunnelMap(
+--- barrel
+export * from './types';
+export * from './store';
+export { offerToSalesContent, salesContentToOffer } from './fromOffer';
+export { ascensionToUpsellContent, upsellContentToAscension } from './fromAscension';
+export {
+  SALES_EVENT_CAMPAIGN_MAP,
+  boundSalesEmailEvents,
+  buildSalesEmailPlan,
+  planSalesEmailKit,
+  type SalesEmailKitPlan,
+} from './emailPlan';
+
+// Funnel architecture. The ascension model and the map were pure, unreachable
+// modules until `intakeAscension` gave them a real funnel to read; they are
+// exported together so callers get the adapter and the model it feeds.
+export {
+  ASCENSION_STAGES,
+  compareDownsellPlacements,
+  projectAov,
+  suggestAscension,
+  validateAscension,
+  type AovProjection,
+  type AscensionIssue,
+  type AscensionIssueCode,
+  type AscensionRung,
+  type AscensionStage,
+  type DownsellPlacement,
+  type EscalationAxis,
+} from './ascension';
+export {
+  ATTENTION_DECAY,
+  buildFunnelMap,
+  orphanedEmails,
+  toAsciiMap,
+  toMermaid,
+  type FunnelMap,
+  type FunnelMapInput,
+} from './funnelMap';
+export {
+  ESCALATION_KEYWORDS,
+  UPSELL_STAGES,
+  auditIntakeFunnel,
+  buildFunnelMapFromIntake,
+  funnelMapInputFromIntake,
+  inferEscalationAxes,
+  intakeToAscension,
+  intakeToAscensionRungs,
+  parseIntakePrice,
+  type IntakeAscension,
+  type IntakeAscensionNote,
+  type IntakeAscensionNoteCode,
+  type IntakeFunnelAudit,
+  type IntakeFunnelMapOptions,
+} from './intakeAscension';
+
+--- ui exports
+export const inputClass =
+export const selectClass = inputClass + ' h-[38px] cursor-pointer';
+export const labelClass = 'block text-xs uppercase tracking-wide text-bone/50 mb-1';
+export const btn = 'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+export const btnPrimary = btn + ' bg-brass/[0.14] text-brass border border-brass/30 hover:bg-brass/20';
+export const btnGhost = btn + ' text-bone/60 border border-bone/15 hover:text-bone hover:bg-bone/[0.05]';
+export const btnDanger = btn + ' text-red-300/80 border border-red-400/20 hover:bg-red-500/10';
+export const panelClass = 'rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5';
+export function linesToList(text: string): string[] {
+export function listToLines(list: string[]): string {
+export function Field({
+export function Area({
+export function NumberField({
+export function StatChip({ label, value }: { label: string; value: string }) {
+export function Collapse({
+export function RegenerateBar({
+--- editor anchors
+48|   blankSalesAiIntake,
+49|   normalizeSalesAiIntake,
+55|   type SalesAiIntake,
+173|   const [intake, setIntake] = useState<SalesAiIntake>(blankSalesAiIntake());
+360|     setFooter(defaultMotherModeSalesFooter()); setIntake(blankSalesAiIntake());
+361|     setSlugTouched(false); setError(null); setNotice(null); setTab('build');
+375|     setError(null); setNotice(null); setTab('build');
+435|       const magnetName = intake.magnetName || stack.frontEnd.name || name || 'Lead magnet';
+436|       const paidName = stack.frontEnd.name || intake.offerName || 'the paid offer';
+438|         topic: intake.magnetName || intake.niche,
+439|         audience: intake.audience,
+441|         transformation: intake.magnetPromise || stack.frontEnd.promise,
+443|         tone: intake.toneNotes,
+446|         notes: intake.pain ? 'Core pain: ' + intake.pain : '',
+452|         body: JSON.stringify({ action: 'generate', intake: leadIntake, format: 'guide' }),
+469|           intake: leadIntake,
+592|         body: JSON.stringify({ action: 'fillIntake', intake }),
+595|       if (!res.ok || !data?.success) throw new Error(data?.error || 'Fill intake failed (HTTP ' + res.status + ')');
+596|       const next = normalizeSalesAiIntake(data.intake);
+603|       setError(err instanceof Error ? err.message : 'Fill intake failed');
+612|       const synced = syncIntakeStack(intake);
+617|         body: JSON.stringify({ action: 'generate', intake: synced }),
+639|       setTab('optin');
+652|       const synced = syncIntakeStack(intake);
+657|         body: JSON.stringify({ action: 'generatePage', page, intake: synced }),
+691|     const brief = funnelBriefFromIntake(intake, { funnelSlug: slug, brandName: name });
+693|       magnetTitle: optin.magnetTitle || intake.magnetName,
+834|   function setIntakeField<K extends keyof SalesAiIntake>(key: K, value: SalesAiIntake[K]) {
+915|   const stack = intake.offerStack;
+917|   const PAGE_TABS: { id: Tab; label: string }[] = [
+929|   const EMAIL_TABS: { id: Tab; label: string }[] = [
+935|     { id: 'pages', label: 'Pages', tabs: PAGE_TABS.map((t) => t.id) },
+936|     { id: 'emails', label: 'Emails', tabs: EMAIL_TABS.map((t) => t.id) },
+941|   // handlers jumping straight to a page (onGenerate -> setTab('optin')) still
+1033|             <button key={g.id} type="button" onClick={() => setTab(g.tabs[0])} className={'rounded-lg px-3 py-1.5 text-sm transition-colors ' + (activ
+1038|             {PAGE_TABS.map((t) => (
+1039|               <button key={t.id} type="button" onClick={() => setTab(t.id)} className={'rounded-md px-2.5 py-1 text-xs transition-colors ' + (tab === 
+1045|             {EMAIL_TABS.map((t) => (
+1046|               <button key={t.id} type="button" onClick={() => setTab(t.id)} className={'rounded-md px-2.5 py-1 text-xs transition-colors ' + (tab === 
+1050|         {tab === 'build' && (
+1051|           <OfferTab
+1052|             intake={intake}
+1083|         {tab === 'optin' && <OptinTab optin={optin} setField={setOptinField} onRegenerate={() => onGeneratePage('optin')} busy={busy === 'generatePage
+1084|         {tab === 'sales' && (
+1093|         {tab === 'vsl' && <VslTab vsl={vsl} setField={setVslField} onRegenerate={() => onGeneratePage('vsl')} busy={busy === 'generatePage'} disabled=
+1094|         {tab === 'checkout' && <CheckoutTab checkout={checkout} setField={setCheckoutField} onRegenerate={() => onGeneratePage('checkout')} busy={busy
+1095|         {tab === 'upsell1' && <UpsellTab label="Upsell 1" upsell={upsell1} setField={setUpsell1Field} onRegenerate={() => onGeneratePage('upsell1')} r
+1096|         {tab === 'upsell2' && <UpsellTab label="Upsell 2" upsell={upsell2} setField={setUpsell2Field} onRegenerate={() => onGeneratePage('upsell2')} r
+1097|         {tab === 'upsell3' && <UpsellTab label="Upsell 3" upsell={upsell3} setField={setUpsell3Field} onRegenerate={() => onGeneratePage('upsell3')} r
+1098|         {tab === 'upsell4' && <UpsellTab label="Upsell 4" upsell={upsell4} setField={setUpsell4Field} onRegenerate={() => onGeneratePage('upsell4')} r
+1099|         {tab === 'success' && <SuccessTab success={successBlock} setField={setSuccessField} onRegenerate={() => onGeneratePage('success')} busy={busy 
+1100|         {tab === 'access' && <AccessTab access={access} setField={setAccessField} onRegenerate={() => onGeneratePage('access')} busy={busy === 'genera
+1101|         {tab === 'emails' && (
+1116|         {tab === 'emailStats' && (
+1124|         {tab === 'footer' && <ChromeTab footer={footer} setField={setFooterField} />}
+1125|         {tab === 'leads' && <LeadsTab leads={leads} selectedId={selectedId} onExportCsv={exportLeadsCsv} />}

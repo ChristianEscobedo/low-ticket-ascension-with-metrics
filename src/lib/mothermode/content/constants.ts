@@ -258,7 +258,11 @@ export const PLATFORM_LABEL: Record<ContentPlatform, string> = {
 
 export const FORMAT_LABEL: Record<ContentFormat, string> = {
   feed: 'Feed post',
+  colorblock: 'Color block post',
+  textpost: 'Text overlay post',
+  tweet: 'Twitter screen grab',
   carousel: 'Carousel',
+  slideshow: 'Photo slideshow',
   story: 'Story',
   reel: 'Reel',
   thread: 'Thread',
@@ -281,10 +285,10 @@ export const KIND_LABEL: Record<ContentKind, string> = {
 /** The native formats worth offering per platform, so combos stay valid. Shared
  *  by the Generate drawer and the Amplify cross-platform picker. */
 export const PLATFORM_FORMATS: Record<ContentPlatform, ContentFormat[]> = {
-  facebook: ['feed', 'carousel', 'story', 'reel'],
-  instagram: ['feed', 'carousel', 'story', 'reel'],
+  facebook: ['feed', 'colorblock', 'textpost', 'tweet', 'carousel', 'story', 'reel'],
+  instagram: ['feed', 'textpost', 'tweet', 'carousel', 'story', 'reel'],
   x: ['feed', 'thread', 'article'],
-  tiktok: ['video'],
+  tiktok: ['video', 'slideshow', 'textpost', 'tweet'],
   youtube: ['long', 'reel'],
   linkedin: ['feed', 'carousel', 'article', 'video'],
   email: ['email'],
@@ -302,4 +306,65 @@ export const TONE_LABEL: Record<ToneRegister, string> = {
   movement: 'The Movement',
   system: 'The System',
 };
+
+/**
+ * Brand backgrounds for Facebook color-block posts, swatch-first. Kept to the
+ * palette so the big-text surface reads as MotherMode at a glance.
+ */
+export interface ColorBlockSwatch {
+  id: string;
+  label: string;
+  /** Solid background hex (#RRGGBB). */
+  bg: string;
+  /** Optional gradient stops (2+) that win over `bg`. */
+  gradient?: string[];
+  /** Text color that stays legible on this background. */
+  text: string;
+}
+
+export const COLOR_BLOCK_SWATCHES: ColorBlockSwatch[] = [
+  { id: 'aubergine', label: 'Aubergine', bg: '#532B3C', text: '#FFFFFF' },
+  {
+    id: 'aubergine-rose',
+    label: 'Aubergine fade',
+    bg: '#532B3C',
+    gradient: ['#532B3C', '#8A5468'],
+    text: '#FFFFFF',
+  },
+  { id: 'charcoal', label: 'Charcoal', bg: '#1C1917', text: '#F4F0E8' },
+  { id: 'brass', label: 'Aged brass', bg: '#B08D57', text: '#1C1917' },
+  { id: 'bone', label: 'Bone', bg: '#F4F0E8', text: '#1C1917' },
+  { id: 'rose', label: 'Rose', bg: '#E8B4B8', text: '#1C1917' },
+  { id: 'sage', label: 'Sage', bg: '#A3B18A', text: '#1C1917' },
+  {
+    id: 'dusk',
+    label: 'Dusk gradient',
+    bg: '#2E2230',
+    gradient: ['#2E2230', '#532B3C'],
+    text: '#FFFFFF',
+  },
+];
+
+/** Default swatch id used when a color-block piece carries no explicit style. */
+export const DEFAULT_COLOR_BLOCK_SWATCH = 'aubergine';
+
+/** Native FB shows the big-text surface only up to about 130 characters. */
+export const COLOR_BLOCK_MAX_CHARS = 130;
+
+/**
+ * Text overlay posts stay thumb-stopping by keeping the big line short: the
+ * viral one-to-three-breath read. Longer copy belongs in the caption.
+ */
+export const TEXT_POST_MAX_CHARS = 220;
+
+/** Tweets cap at 280 characters; the screen-grab card honors the same ceiling. */
+export const TWEET_MAX_CHARS = 280;
+
+/** Default identity for the tweet screen-grab card (editable per piece). */
+export const DEFAULT_TWEET_NAME = 'MotherMode';
+export const DEFAULT_TWEET_HANDLE = '@mothermode';
+
+/** TikTok photo-mode slide bounds (platform allows up to 35 photos). */
+export const SLIDESHOW_MIN_SLIDES = 2;
+export const SLIDESHOW_MAX_SLIDES = 35;
 

@@ -1,0 +1,8 @@
+MODE: dry run (no files written)
+files touched:    0
+class strings:    0
+cards promoted:   0
+
+
+--- leftover legacy tokens (after pass) ---
+  (none)

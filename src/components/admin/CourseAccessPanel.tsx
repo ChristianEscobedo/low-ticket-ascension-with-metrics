@@ -95,7 +95,7 @@ export default function CourseAccessPanel() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-white/50 p-6">
+      <div className="flex items-center gap-2 text-bone/50 p-6">
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading grants…
       </div>
@@ -106,14 +106,14 @@ export default function CourseAccessPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">Course Access</h2>
-          <p className="text-sm text-white/50 mt-1">
+          <h2 className="text-xl font-semibold text-bone">Course Access</h2>
+          <p className="text-sm text-bone/50 mt-1">
             Manually grant or revoke course access for specific users.
           </p>
         </div>
         <button
           onClick={() => setShowGrant(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-black transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-brass hover:bg-brass/90 text-ink transition-colors"
         >
           <UserPlus className="w-4 h-4" />
           Grant access
@@ -126,9 +126,9 @@ export default function CourseAccessPanel() {
         </div>
       )}
       {toast && (
-        <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 text-amber-200 text-sm px-3 py-2 flex items-center justify-between">
+        <div className="rounded-lg border border-brass/30 bg-brass/10 text-brass text-sm px-3 py-2 flex items-center justify-between">
           <span>{toast}</span>
-          <button onClick={() => setToast(null)} className="text-amber-200/70 hover:text-amber-100">
+          <button onClick={() => setToast(null)} className="text-brass/70 hover:text-bone">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -162,16 +162,16 @@ function GrantsTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-black/30 p-8 text-center text-white/50 text-sm">
-        No course grants yet. Click <span className="text-amber-200">Grant access</span> to add one.
+      <div className="rounded-xl border border-bone/10 bg-bone/[0.02] p-8 text-center text-bone/50 text-sm">
+        No course grants yet. Click <span className="text-brass">Grant access</span> to add one.
       </div>
     );
   }
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/30">
+    <div className="overflow-x-auto rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-white/50 text-xs uppercase tracking-wide">
+          <tr className="border-b border-bone/10 text-bone/50 text-xs uppercase tracking-wide">
             <th className="text-left py-2.5 px-3 font-medium">User</th>
             <th className="text-left py-2.5 px-3 font-medium">Course</th>
             <th className="text-left py-2.5 px-3 font-medium">Source</th>
@@ -183,32 +183,32 @@ function GrantsTable({
           {rows.map((row) => {
             const u = users[row.user_id];
             return (
-              <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+              <tr key={row.id} className="border-b border-bone/5 hover:bg-bone/[0.02]">
                 <td className="py-2 px-3">
-                  <div className="font-medium text-white">
+                  <div className="font-medium text-bone">
                     {u?.full_name || u?.email || row.user_id.slice(0, 8)}
                   </div>
                   {u?.email && u.full_name && (
-                    <div className="text-xs text-white/40">{u.email}</div>
+                    <div className="text-xs text-bone/40">{u.email}</div>
                   )}
                 </td>
-                <td className="py-2 px-3 text-white/80">
+                <td className="py-2 px-3 text-bone/80">
                   {row.courses?.title || row.course_id.slice(0, 8)}
                 </td>
                 <td className="py-2 px-3">
                   <span
                     className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                       row.access_type === 'admin'
-                        ? 'bg-amber-500/20 text-amber-200'
+                        ? 'bg-brass/20 text-brass'
                         : row.access_type === 'purchase'
                           ? 'bg-emerald-500/20 text-emerald-200'
-                          : 'bg-white/10 text-white/60'
+                          : 'bg-bone/10 text-bone/60'
                     }`}
                   >
                     {row.access_type}
                   </span>
                 </td>
-                <td className="py-2 px-3 text-white/50">
+                <td className="py-2 px-3 text-bone/50">
                   {new Date(row.granted_at).toLocaleDateString()}
                 </td>
                 <td className="py-2 px-3 text-right">
@@ -290,13 +290,13 @@ function GrantModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl border border-amber-200/20 bg-gradient-to-br from-gray-950 to-black p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl border border-brass/20 bg-gradient-to-br from-mode-deep to-ink p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Grant course access</h3>
+          <h3 className="text-lg font-semibold text-bone">Grant course access</h3>
           <button
             onClick={onClose}
-            className="p-1 text-white/50 hover:text-white"
+            className="p-1 text-bone/50 hover:text-bone"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -304,15 +304,15 @@ function GrantModal({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/60">User</label>
+          <label className="block text-xs font-medium text-bone/60">User</label>
           {picked ? (
-            <div className="flex items-center justify-between rounded-lg border border-amber-300/30 bg-amber-500/10 px-3 py-2">
+            <div className="flex items-center justify-between rounded-lg border border-brass/30 bg-brass/10 px-3 py-2">
               <div>
-                <div className="text-sm font-medium text-white">
+                <div className="text-sm font-medium text-bone">
                   {picked.full_name || picked.email}
                 </div>
                 {picked.email && picked.full_name && (
-                  <div className="text-xs text-white/50">{picked.email}</div>
+                  <div className="text-xs text-bone/50">{picked.email}</div>
                 )}
               </div>
               <button
@@ -320,24 +320,24 @@ function GrantModal({
                   setPicked(null);
                   setQuery('');
                 }}
-                className="text-xs text-white/60 hover:text-white"
+                className="text-xs text-bone/60 hover:text-bone"
               >
                 Change
               </button>
             </div>
           ) : (
             <div className="relative">
-              <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-bone/40 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by email…"
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-black/40 border border-white/10 text-white placeholder-white/30 focus:border-amber-300/40 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg bg-ink/60 border border-bone/10 text-bone placeholder-bone/30 focus:border-brass/40 focus:outline-none"
               />
               {(results.length > 0 || searching) && (
-                <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-gray-950 shadow-xl">
+                <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-bone/10 bg-ink shadow-xl">
                   {searching && (
-                    <div className="px-3 py-2 text-xs text-white/40 flex items-center gap-2">
+                    <div className="px-3 py-2 text-xs text-bone/40 flex items-center gap-2">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Searching…
                     </div>
@@ -346,11 +346,11 @@ function GrantModal({
                     <button
                       key={u.id}
                       onClick={() => setPicked(u)}
-                      className="w-full text-left px-3 py-2 hover:bg-white/5 border-b border-white/5 last:border-0"
+                      className="w-full text-left px-3 py-2 hover:bg-bone/5 border-b border-bone/5 last:border-0"
                     >
-                      <div className="text-sm text-white">{u.email}</div>
+                      <div className="text-sm text-bone">{u.email}</div>
                       {u.full_name && (
-                        <div className="text-xs text-white/50">{u.full_name}</div>
+                        <div className="text-xs text-bone/50">{u.full_name}</div>
                       )}
                     </button>
                   ))}
@@ -361,11 +361,11 @@ function GrantModal({
         </div>
 
         <div className="space-y-2">
-          <label className="block text-xs font-medium text-white/60">Course</label>
+          <label className="block text-xs font-medium text-bone/60">Course</label>
           <select
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
-            className="w-full px-3 py-2 text-sm rounded-lg bg-black/40 border border-white/10 text-white focus:border-amber-300/40 focus:outline-none"
+            className="w-full px-3 py-2 text-sm rounded-lg bg-ink/60 border border-bone/10 text-bone focus:border-brass/40 focus:outline-none"
           >
             <option value="">Select course…</option>
             {courses.map((c) => (
@@ -386,14 +386,14 @@ function GrantModal({
         <div className="flex items-center justify-end gap-2 pt-2">
           <button
             onClick={onClose}
-            className="px-3 py-2 text-sm text-white/60 hover:text-white"
+            className="px-3 py-2 text-sm text-bone/60 hover:text-bone"
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={saving || !picked || !courseId}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-brass hover:bg-brass/90 text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
             {saving ? 'Granting…' : 'Grant access'}

@@ -15,27 +15,34 @@ import {
   pieceToText,
   PLATFORM_LABEL,
   FORMAT_LABEL,
-  type ContentPiece,
+  type ContentPiece
 } from '@/lib/mothermode/content';
 import {
   clampIndex,
   reviewImages,
   reviewHooks,
   type PieceEdits,
-  type PieceReview,
+  type PieceReview
 } from '@/lib/mothermode/content/review';
 import {
   loadReviews,
   getReview,
   saveReview,
   setReviewImages,
-  subscribeReviews,
+  subscribeReviews
 } from './reviewClient';
 
 import { PlatformPreview, buildView } from './previews/PlatformPreview';
 import { EditForm, MetricsForm } from './SheetForms';
+import { SlideTextPanel } from './SlideTextPanel';
+import { ColorBlockPanel } from './ColorBlockPanel';
+import { TextPostPanel } from './TextPostPanel';
+import { TweetPanel } from './TweetPanel';
 import { SchedulePanel } from './SchedulePanel';
 import { AmplifyCard } from './AmplifyCard';
+import { PieceLinkPanel } from './PieceLinkPanel';
+import { PieceClickMetrics } from './PieceClickMetrics';
+
 import { CompliancePanel } from './CompliancePanel';
 
 type Tab =
@@ -53,12 +60,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'notes', label: 'Notes' },
   { id: 'metrics', label: 'Metrics' },
   { id: 'schedule', label: 'Schedule' },
-  { id: 'amplify', label: 'Amplify' },
+  { id: 'amplify', label: 'Amplify' }
 ];
 
 /** How long each frame holds before autoplay advances (ms). */
 const FRAME_MS = 3500;
-
 
 /**
  * A small chip selector shown above the preview so the reviewer can switch the
@@ -135,7 +141,6 @@ export const ContentSheet: React.FC<{
     setHovering(false);
   }, [piece.id]);
 
-
   // Hydrate + live-subscribe so primary/gallery updates without refresh.
 
   useEffect(() => {
@@ -152,7 +157,6 @@ export const ContentSheet: React.FC<{
     };
   }, [offerSlug, piece.id]);
 
-
   // Persist a patch; the store returns the merged review so the preview reflects
   // it immediately.
   const apply = (patch: Partial<PieceReview>) =>
@@ -168,6 +172,7 @@ export const ContentSheet: React.FC<{
   const isDeck =
     piece.format === 'story' ||
     piece.format === 'carousel' ||
+    piece.format === 'slideshow' ||
     piece.format === 'idea';
   const isVertical = piece.format === 'reel' || piece.platform === 'tiktok';
   const frameCount = isDeck
@@ -178,16 +183,12 @@ export const ContentSheet: React.FC<{
   // otherwise the persisted choice. Clamped to the live frame count.
   const effectiveIndex = clampIndex(
     previewIndex ?? view.imageIndex,
-    Math.max(frameCount, 1),
+    Math.max(frameCount, 1)
   );
   // Autoplay runs only on the Preview tab, when eligible, not hovered, and the
   // viewer hasn't asked to reduce motion.
   const running =
-    autoplay &&
-    canAutoplay &&
-    !hovering &&
-    !reducedMotion &&
-    tab === 'preview';
+    autoplay && canAutoplay && !hovering && !reducedMotion && tab === 'preview';
   // Render the preview against the effective frame without persisting it.
   const previewReview: PieceReview = { ...review, imageIndex: effectiveIndex };
 
@@ -216,9 +217,7 @@ export const ContentSheet: React.FC<{
     // but optimistically show them immediately.
     const cur = reviewImages(getReview(offerSlug, piece.id));
     const merged = [...cur, ...urls];
-    setReview(
-      setReviewImages(offerSlug, piece.id, merged, cur.length),
-    );
+    setReview(setReviewImages(offerSlug, piece.id, merged, cur.length));
     void (async () => {
       try {
         const { aiHostImage } = await import('./aiClient');
@@ -230,7 +229,7 @@ export const ContentSheet: React.FC<{
             } catch {
               return u;
             }
-          }),
+          })
         );
         if (hosted.every((h, i) => h === urls[i])) return;
         const latest = reviewImages(getReview(offerSlug, piece.id));
@@ -244,7 +243,7 @@ export const ContentSheet: React.FC<{
         }
         const activeIdx = clampIndex(
           getReview(offerSlug, piece.id).imageIndex,
-          next.length,
+          next.length
         );
         setReview(setReviewImages(offerSlug, piece.id, next, activeIdx));
       } catch {
@@ -262,8 +261,8 @@ export const ContentSheet: React.FC<{
         offerSlug,
         piece.id,
         next,
-        Math.min(idx, Math.max(0, next.length - 1)),
-      ),
+        Math.min(idx, Math.max(0, next.length - 1))
+      )
     );
   };
   const setImageIndex = (index: number) => {
@@ -277,7 +276,6 @@ export const ContentSheet: React.FC<{
     else apply({ imageIndex: index });
   };
 
-
   // Hook variants: switch the active one, promoting catalog hooks into the
   // edits first so a bare selection still persists.
   const setHookIndex = (index: number) => {
@@ -289,9 +287,13 @@ export const ContentSheet: React.FC<{
   // replace the body with an accepted version. Both flow through the edits store
   // so the preview reflects them at once.
   const appendHooks = (incoming: string[]) => {
-    const base = reviewHooks(review.edits).length > 0 ? reviewHooks(review.edits) : view.hooks;
+    const base =
+      reviewHooks(review.edits).length > 0
+        ? reviewHooks(review.edits)
+        : view.hooks;
     const merged = [...base];
-    for (const h of incoming) if (h.trim() && !merged.includes(h)) merged.push(h);
+    for (const h of incoming)
+      if (h.trim() && !merged.includes(h)) merged.push(h);
     applyEdits({ hooks: merged });
   };
   const useBody = (body: string) => applyEdits({ body });
@@ -304,7 +306,9 @@ export const ContentSheet: React.FC<{
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(pieceToText(piece, view.hook, offerUrl));
+      await navigator.clipboard.writeText(
+        pieceToText(piece, view.hook, offerUrl)
+      );
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -319,7 +323,16 @@ export const ContentSheet: React.FC<{
         onClick={onClose}
         className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
       />
-      <aside className="relative flex h-full w-full max-w-xl flex-col bg-bone shadow-2xl">
+      {/*
+        40rem rather than Tailwind's max-w-xl (36rem). The jump to max-w-2xl
+        (42rem) was too much — the platform previews are fixed-width phone
+        frames, so extra width becomes dead margin around them rather than a
+        bigger preview. 40rem is the width at which the Metrics tab fits the
+        measured strip and the hand-entered field grid without the three cells
+        wrapping, which was the actual reason for widening.
+      */}
+      <aside className="relative flex h-full w-full max-w-[40rem] flex-col bg-bone shadow-2xl">
+
         <header className="flex items-start gap-3 border-b border-ink/10 px-5 py-4">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.18em] text-brass">
@@ -333,7 +346,11 @@ export const ContentSheet: React.FC<{
             onClick={copy}
             className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-mode px-3 py-1.5 text-xs font-semibold text-bone hover:bg-mode-deep"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-brass" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-brass" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
             {copied ? 'Copied' : 'Copy'}
           </button>
           <button
@@ -376,8 +393,9 @@ export const ContentSheet: React.FC<{
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <Selector
                     label={isDeck ? 'Frame' : 'Image variant'}
-                    items={Array.from({ length: frameCount }, (_, i) =>
-                      `${i + 1}`,
+                    items={Array.from(
+                      { length: frameCount },
+                      (_, i) => `${i + 1}`
                     )}
                     active={effectiveIndex}
                     // A manual pick pauses autoplay and persists the choice.
@@ -443,35 +461,102 @@ export const ContentSheet: React.FC<{
                   frameDurationMs={FRAME_MS}
                 />
               </div>
+            </div>
+          )}
 
+          {/*
+            Tracked link lives on the Preview tab because that's where you decide
+            the post is ready to go out — the moment you need its link. Minting
+            here refreshes the shared piece→link cache, so the next export carries
+            it without a page reload.
+          */}
+          {tab === 'preview' && (
+            <div className="pb-2">
+              <PieceLinkPanel
+                piece={piece}
+                offerSlug={offerSlug}
+                offerUrl={offerUrl}
+              />
             </div>
           )}
 
           {tab === 'edit' && (
-            <EditForm
-              piece={piece}
-              review={review}
-              offerSlug={offerSlug}
-              onUploadImage={onUploadImage}
-              onAddImages={addImages}
-              onRemoveImage={removeImage}
-              onSetImageIndex={setImageIndex}
-              onEditPatch={applyEdits}
-              onReviewChange={(next) => {
-                // Helpers like setReviewVideoScript already persisted; overlay
-                // and compliance may pass a full next object — merge via save.
-                const cached = getReview(offerSlug, piece.id);
-                if (next === cached) {
-                  setReview(next);
-                  return;
-                }
-                // Prefer fields that differ from cache so we don't clobber
-                // concurrent image gallery writes with a stale review prop.
-                setReview(saveReview(offerSlug, piece.id, next));
-              }}
-            />
-          )}
+            <div className="space-y-6">
+              <EditForm
+                piece={piece}
+                review={review}
+                offerSlug={offerSlug}
+                onUploadImage={onUploadImage}
+                onAddImages={addImages}
+                onRemoveImage={removeImage}
+                onSetImageIndex={setImageIndex}
+                onEditPatch={applyEdits}
+                onReviewChange={(next) => {
+                  // Helpers like setReviewVideoScript already persisted; overlay
+                  // and compliance may pass a full next object — merge via save.
+                  const cached = getReview(offerSlug, piece.id);
+                  if (next === cached) {
+                    setReview(next);
+                    return;
+                  }
+                  // Prefer fields that differ from cache so we don't clobber
+                  // concurrent image gallery writes with a stale review prop.
+                  setReview(saveReview(offerSlug, piece.id, next));
+                }}
+              />
 
+              {/* FB color-block composer: palette + render to gallery. */}
+              {piece.format === 'colorblock' && (
+                <div className="border-t border-ink/10 pt-5">
+                  <ColorBlockPanel
+                    piece={piece}
+                    review={review}
+                    offerSlug={offerSlug}
+                    hook={view.hook}
+                    onReviewChange={(next) => setReview(next)}
+                  />
+                </div>
+              )}
+
+              {/* Text overlay composer: background + aspect + render to gallery. */}
+              {piece.format === 'textpost' && (
+                <div className="border-t border-ink/10 pt-5">
+                  <TextPostPanel
+                    piece={piece}
+                    review={review}
+                    offerSlug={offerSlug}
+                    hook={view.hook}
+                    onReviewChange={(next) => setReview(next)}
+                  />
+                </div>
+              )}
+
+              {/* Tweet screen-grab composer: identity + theme + render to gallery. */}
+              {piece.format === 'tweet' && (
+                <div className="border-t border-ink/10 pt-5">
+                  <TweetPanel
+                    piece={piece}
+                    review={review}
+                    offerSlug={offerSlug}
+                    hook={view.hook}
+                    onReviewChange={(next) => setReview(next)}
+                  />
+                </div>
+              )}
+
+              {/* TikTok photo-mode text editing: per-slide styled text. */}
+              {(piece.format === 'slideshow' || piece.format === 'carousel') && (
+                <div className="border-t border-ink/10 pt-5">
+                  <SlideTextPanel
+                    piece={piece}
+                    review={review}
+                    offerSlug={offerSlug}
+                    onReviewChange={(next) => setReview(next)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {tab === 'compliance' && (
             <CompliancePanel
@@ -482,13 +567,12 @@ export const ContentSheet: React.FC<{
               onReviewChange={(next) =>
                 setReview(
                   saveReview(offerSlug, piece.id, {
-                    compliance: next.compliance,
-                  }),
+                    compliance: next.compliance
+                  })
                 )
               }
             />
           )}
-
 
           {tab === 'notes' && (
             <label className="block">
@@ -505,14 +589,31 @@ export const ContentSheet: React.FC<{
             </label>
           )}
           {tab === 'metrics' && (
-            <MetricsForm
+            <div className="space-y-4">
+              {/*
+                Measured numbers first, hand-entered ones below. Reversed, the
+                typed fields would read as the primary record of performance and
+                the measured clicks as an afterthought — but the typed ones are
+                the numbers that go stale the moment nobody updates them.
+              */}
+              <PieceClickMetrics piece={piece} offerSlug={offerSlug} />
+              <MetricsForm
+                piece={piece}
+                review={review}
+                onMetric={(field, value) =>
+                  apply({ metrics: { [field]: value } })
+                }
+              />
+            </div>
+          )}
+
+          {tab === 'schedule' && (
+            <SchedulePanel
               piece={piece}
               review={review}
-              onMetric={(field, value) => apply({ metrics: { [field]: value } })}
+              offerUrl={offerUrl}
+              offerSlug={offerSlug}
             />
-          )}
-          {tab === 'schedule' && (
-            <SchedulePanel piece={piece} review={review} offerUrl={offerUrl} />
           )}
           {tab === 'amplify' && (
             <AmplifyCard

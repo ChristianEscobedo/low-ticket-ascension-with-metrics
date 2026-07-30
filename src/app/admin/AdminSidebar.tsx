@@ -7,17 +7,25 @@ import { clsx } from 'clsx';
 const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/assets', label: 'Asset Hub' },
+  { href: '/admin/content', label: 'Content Hub' },
+  { href: '/admin/prompt-bank', label: 'Prompt Bank' },
+
   { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/brand-bible', label: 'Brand Bible' },
   { href: '/admin/deliverables', label: 'Deliverables' },
   { href: '/admin/help', label: 'Help Center' },
+  { href: '/admin/help-docs', label: 'Help Docs' },
   { href: '/admin/community', label: 'Community Kit' },
   { href: '/admin/high-ticket', label: 'High Ticket Kit' },
   { href: '/admin/lead-gen', label: 'Lead Gen Kit' },
   { href: '/admin/email-marketing', label: 'Email Marketing Kit' },
-  { href: '/admin/funnels', label: 'Funnels' },
+  { href: '/admin/funnels', label: 'Lead Gen Funnels' },
+
   { href: '/admin/sales-funnels', label: 'Sales Funnels' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
+  { href: '/admin/planner', label: 'Planner' },
+  { href: '/admin/research', label: 'Research Lab' },
+
 
 
   { href: '/admin/purchases', label: 'Purchases' },

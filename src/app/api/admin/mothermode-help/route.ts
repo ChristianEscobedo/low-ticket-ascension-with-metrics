@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       body,
       published,
       sortOrder,
+      audience,
     } = await request.json();
 
     if (!slug || typeof slug !== 'string' || !slug.trim()) {
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const aud = audience === 'buyer' ? 'buyer' : 'admin';
     await upsertArticle({
       id: id ?? null,
       slug: slug.trim(),
@@ -67,11 +69,14 @@ export async function POST(request: NextRequest) {
       body,
       published: Boolean(published),
       sortOrder: Number.isFinite(sortOrder) ? Number(sortOrder) : 0,
+      audience: aud,
       updatedBy: guard.email,
     });
 
+    // Buyer articles show on the public help center; admin docs show in admin.
     revalidatePath('/mothermode/help');
     revalidatePath(`/mothermode/help/${slug.trim()}`);
+    revalidatePath('/admin/help-docs');
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Save failed';

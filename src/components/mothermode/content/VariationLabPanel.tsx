@@ -40,6 +40,7 @@ import {
   type AiVariationPlanItem,
 } from './aiClient';
 import { AiError, Spinner, aiBtnGhost, aiBtnSolid, useAiAction } from './AiControls';
+import { FrameworkPicker } from './FrameworkPicker';
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
 const chipBase =
@@ -69,6 +70,11 @@ export const VariationLabPanel: React.FC<{
   const [frameCount, setFrameCount] = useState(multi ? 5 : 0);
   const [textModel, setTextModel] = useState(AUTO_MODEL);
   const [imageModel, setImageModel] = useState(AUTO_MODEL);
+  /** Image-bank steering for the brief stage (image recipes only). */
+  const [briefFramework, setBriefFramework] = useState('');
+  const [briefRecipeInputs, setBriefRecipeInputs] = useState<
+    Record<string, string>
+  >({});
   const [masterPrompt, setMasterPrompt] = useState('');
   const [altPrompts, setAltPrompts] = useState<string[]>([]);
   const [frames, setFrames] = useState<AiVariationFrame[]>([]);
@@ -179,6 +185,8 @@ export const VariationLabPanel: React.FC<{
         frameCount: multi ? frameCount : 0,
         guides: guides.trim() || undefined,
         model: textModel || undefined,
+        imageFramework: briefFramework || undefined,
+        recipeInputs: briefFramework ? briefRecipeInputs : undefined,
       });
       setMasterPrompt(out.masterPrompt);
       setAltPrompts(out.altPrompts);
@@ -335,6 +343,15 @@ export const VariationLabPanel: React.FC<{
               className="mt-1.5 w-full rounded-xl border border-ink/15 bg-white/70 px-3 py-2 text-sm text-ink placeholder:text-ink/35 focus:border-mode focus:outline-none"
             />
           </div>
+          <FrameworkPicker
+            groups={['image']}
+            platform={piece.platform}
+            format={piece.format}
+            value={briefFramework}
+            onChange={setBriefFramework}
+            inputValues={briefRecipeInputs}
+            onInputValues={setBriefRecipeInputs}
+          />
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">
               <span className={labelCls}>Alts</span>

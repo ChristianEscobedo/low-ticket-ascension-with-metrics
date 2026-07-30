@@ -64,7 +64,53 @@ export async function listGeneratedPieces(): Promise<ContentPiece[]> {
     .filter((p): p is ContentPiece => !!p && typeof p.id === 'string');
 }
 
+/** A single generated-content row, metadata only (no full piece payload). */
+export interface GeneratedContentRow {
+  id: string;
+  batchId: string | null;
+  offerSlug: string | null;
+  platform: string | null;
+  format: string | null;
+  kind: string | null;
+  title: string | null;
+  status: string | null;
+  createdAt: string | null;
+}
+
+/**
+ * Row-level listing for the Asset Hub: every generated piece's metadata, newest
+ * first, without hydrating the `piece` JSONB. Archived rows are included so the
+ * hub can show them with an Archived pill. Returns [] on any failure so a
+ * missing table never breaks the page.
+ */
+export async function listGeneratedRows(opts?: {
+  limit?: number;
+}): Promise<GeneratedContentRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('id, batch_id, offer_slug, platform, format, kind, title, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(opts?.limit ?? 500);
+    if (error || !data) return [];
+    return (data as Record<string, unknown>[]).map((r) => ({
+      id: String(r.id ?? ''),
+      batchId: (r.batch_id as string) ?? null,
+      offerSlug: (r.offer_slug as string) ?? null,
+      platform: (r.platform as string) ?? null,
+      format: (r.format as string) ?? null,
+      kind: (r.kind as string) ?? null,
+      title: (r.title as string) ?? null,
+      status: (r.status as string) ?? null,
+      createdAt: (r.created_at as string) ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** Delete a single generated piece by id. */
+
 export async function deleteGeneratedPiece(id: string): Promise<void> {
   const { error } = await supabase.from(TABLE).delete().eq('id', id);
   if (error) throw new Error(error.message);

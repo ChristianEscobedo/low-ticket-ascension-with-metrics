@@ -1,0 +1,68 @@
+=== src\app\admin\planner\page.tsx  (18 lines)
+  -- imports:
+     import PlannerWorkspace from './PlannerWorkspace';
+  -- className strings:
+     (none)
+
+=== src\app\admin\planner\PlannerWorkspace.tsx  (590 lines)
+  -- imports:
+     import { useCallback, useEffect, useMemo, useState } from 'react';
+  -- className strings:
+     className="p-6 text-sm text-neutral-400"
+     className="space-y-4 p-6"
+     className="flex flex-wrap items-center gap-3"
+     className="text-xl font-semibold text-white"
+     className="text-xs text-neutral-400"
+     className="ml-auto rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
+     className="rounded border border-red-800 bg-red-950/50 p-3 text-sm text-red-200"
+     className="flex gap-2 border-b border-neutral-800"
+     className={`px-3 py-2 text-sm ${ tab === t.id ? 'border-b-2 border-white font-medium text-white' : 'text-neutral-400 hover:text-neutral-200' }`}
+     className="space-y-3"
+     className="flex items-center gap-2"
+     className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
+     className="text-sm text-neutral-200"
+     className="grid grid-cols-7 gap-1"
+     className="p-1 text-xs uppercase text-neutral-500"
+     className={`min-h-[84px] rounded border border-neutral-800 p-1 ${ dim ? 'opacity-40' : '' }`}
+     className="text-[10px] text-neutral-500"
+     className="mt-1 cursor-grab truncate rounded bg-neutral-800 px-1 py-0.5 text-[11px] text-neutral-100"
+     className="mb-1 text-sm font-medium text-neutral-200"
+     className="flex flex-wrap gap-2"
+     className="cursor-grab rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-200"
+     className="text-xs text-neutral-500"
+     className="flex gap-3 overflow-x-auto pb-2"
+     className="min-w-[220px] flex-1 rounded border border-neutral-800 p-2"
+     className="mb-2 flex items-center gap-2 text-xs uppercase text-neutral-400"
+     className="mb-2 cursor-grab rounded bg-neutral-800 p-2 text-xs text-neutral-100"
+     className="font-medium"
+     className="text-[11px] text-neutral-400"
+     className="mt-1 text-[11px] text-red-300"
+     className="mb-2 text-xs uppercase text-neutral-400"
+     className="text-neutral-500"
+     className="mt-1 text-[11px] text-sky-300"
+     className="space-y-6"
+     className="rounded border border-neutral-800 p-3"
+     className="mb-2 text-sm font-medium capitalize text-neutral-200"
+     className="space-y-2"
+     className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100"
+     className="w-20 rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100"
+     className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300"
+     className="mt-3 flex gap-2"
+     ...and 3 more
+
+=== src\app\admin\courses\page.tsx  (18 lines)
+  -- imports:
+     import CoursesPanel from '@/components/admin/CoursesPanel';
+  -- className strings:
+     className="mb-6"
+     className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2"
+     className="font-display text-3xl sm:text-4xl font-semibold tracking-tight"
+
+=== src\app\admin\course-access\page.tsx  (18 lines)
+  -- imports:
+     import CourseAccessPanel from '@/components/admin/CourseAccessPanel';
+  -- className strings:
+     className="mb-6"
+     className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2"
+     className="font-display text-3xl sm:text-4xl font-semibold tracking-tight"
+

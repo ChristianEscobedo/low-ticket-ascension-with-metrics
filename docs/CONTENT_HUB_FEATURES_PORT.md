@@ -301,3 +301,48 @@ These live on `main` but are **not** part of the content-hub creative wave:
 - Funnel / receipts / email sequences
 
 Port those separately if the clone needs them.
+
+## Piece sheet: tracked links and measured results
+
+**Preview tab — `PieceLinkPanel`.** Mint, view, copy, and read the results of
+this piece's tracked link. It lives on Preview because that's the tab you're on
+when you decide a post is ready to go out, which is the moment you need its link.
+`utm_content` is rendered as read-only fact, never as an input: it *is* the piece
+id, so a free-text box would eventually be typed into and produce a link that
+looks perfect and attributes nothing. Minting refreshes the shared piece→link
+cache, so the next CSV export carries the link with no page reload.
+
+Destination is a three-way discriminator — sales funnel / lead magnet / custom
+URL. Not one merged dropdown: the two funnel types don't share a step vocabulary
+(`checkout`/`upsell1` don't exist on an opt-in funnel; `oto`/`thank-you`
+don't exist on a sales funnel), so a merged list would offer a step the chosen
+destination lacks and mint a link that only 404s in production. Switching kind
+resets the step to `optin`, the one name both vocabularies share.
+
+The results strip renders **only once a link exists** — before that there is
+nothing that could have been clicked, and three zeros beside "create a tracked
+link" reads as a bug rather than as an accurate empty history.
+
+**Metrics tab — `PieceClickMetrics` above `MetricsForm`.** The tab now shows
+two kinds of number, and the distinction is load-bearing:
+
+- **Measured** (boxed, captioned "Measured"): clicks, opt-ins, purchases, and
+  clicks-per-purchase, counted server-side from the tracked link.
+- **Hand-entered** (the existing field grid): likes, views, saves — read off the
+  platform and typed in by an admin.
+
+They are visually separated because side by side with no distinction, a typed
+`views` and a measured `clicks` read as equally trustworthy — and the typed one
+is the one that silently goes stale the moment somebody stops updating it. The
+measured block is placed first for the same reason.
+
+When the roll-up returns 0 **and** no tracked link exists, the block says the
+zeros aren't a verdict on the post because nothing was being counted. That line
+waits for the link map to actually load, since guessing "no link yet" mid-flight
+would send an admin off to mint a duplicate.
+
+**Sheet width: `max-w-[40rem]`** (was `max-w-xl` = 36rem). Not `max-w-2xl`
+(42rem): the platform previews are fixed-width phone frames, so past ~40rem the
+extra width becomes dead margin around the preview instead of a bigger preview.
+40rem is where the Metrics tab fits the measured strip and the hand-entered grid
+without the three cells wrapping, which was the reason for widening at all.

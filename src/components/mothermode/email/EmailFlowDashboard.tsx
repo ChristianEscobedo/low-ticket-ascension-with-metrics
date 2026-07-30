@@ -50,6 +50,7 @@ import {
   computeFlowOverlay,
   type FlowOverlay,
 } from '@/lib/mothermode/email/flowOverlay';
+import { triggerRecipeFamilyLabel } from '@/lib/mothermode/content/promptBankActions';
 import {
   dropoffByEmail,
   activeSubscribers,
@@ -528,6 +529,11 @@ export default function EmailFlowDashboard({
                             ? ` · ${node.triggerBinding || bindingLine}`
                             : ''}
                         </p>
+                        {triggerRecipeFamilyLabel(triggerEvent) ? (
+                          <p className="line-clamp-1 pl-1.5 text-[10px] text-brass/70">
+                            {triggerRecipeFamilyLabel(triggerEvent)}
+                          </p>
+                        ) : null}
                       </button>
                     );
                   }

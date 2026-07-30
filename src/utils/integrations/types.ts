@@ -7,7 +7,10 @@ export type IntegrationProvider =
   | 'stripe'
   | 'openai'
   | 'anthropic'
-  | 'email';
+  | 'email'
+  | 'monid'
+  | 'rapidapi'
+  | 'apify';
 
 export const PAGE_TYPES = ['fe', 'oto1', 'oto2', 'oto3', 'oto4'] as const;
 export type PageType = (typeof PAGE_TYPES)[number];
@@ -57,6 +60,43 @@ export interface EmailConfig {
   reply_to?: string;
   subject_prefix?: string;
   bcc?: string;
+}
+
+/**
+ * Monid (monid.ai) — the discover/inspect/run scraping gateway the Research
+ * Lab uses for social data. The `endpoint_*` keys optionally pin an endpoint
+ * id per platform so the agent skips discovery; blank means "discover at run
+ * time".
+ */
+export interface MonidConfig {
+  api_key?: string;
+  base_url?: string;
+  endpoint_x?: string;
+  endpoint_tiktok?: string;
+  endpoint_instagram?: string;
+  endpoint_reddit?: string;
+  endpoint_youtube?: string;
+}
+
+/**
+ * RapidAPI — one key covers every marketplace API. The Research Lab's Amazon
+ * tools default to the real-time-amazon-data host; override `amazon_host` to
+ * point the same code at a different Amazon API subscription.
+ */
+export interface RapidApiConfig {
+  api_key?: string;
+  amazon_host?: string;
+}
+
+/**
+ * Apify — the fallback engine for the Research Lab's Amazon review mining
+ * (mature actors with proxy rotation built in). `reviews_actor` defaults to
+ * 'apify/amazon-reviews-scraper'; if that actor 404s, pick any reviews actor
+ * from apify.com/store and paste its id here.
+ */
+export interface ApifyConfig {
+  api_token?: string;
+  reviews_actor?: string;
 }
 
 export interface IntegrationRow<TConfig = Record<string, unknown>> {

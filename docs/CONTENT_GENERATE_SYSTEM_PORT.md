@@ -8,7 +8,7 @@ Use this to copy the upgraded MotherMode **Generate** drawer into a sibling code
 |------|----------------|
 | UI | Generate drawer: **compose** → **review** (select / preview / save) |
 | Prompt styles | Curated viral craft recipes (11pm text, Storytime, Short-form script, etc.) |
-| Writer model | Explicit selector over `TEXT_MODELS` (Claude Opus / GPT-5.5 / Auto) |
+| Writer model | Explicit selector over `TEXT_MODELS` (Claude Opus 5 / Fable 5 / Opus 4.8, GPT-5.5, Kimi K3, Auto) |
 | Brand voice | Full brand-system voice rules (not a 4-line stub) |
 | Offer context | Rich offer-page facts (scene, mechanism, method, old/new way, outcomes) |
 | Short-form | Script craft for `video` / `reel` (hook → relate → reframe → soft CTA) |
