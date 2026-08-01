@@ -10,6 +10,8 @@ import {
   markLeadOto,
   recordOptinEvent,
 } from '@/lib/mothermode/optin/store';
+import { triggerAutoPersonalization } from '@/lib/mothermode/personalize/generate';
+
 
 
 /**
@@ -140,7 +142,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Kick 1:1 personalization for this lead (fire-and-forget; no-op unless
+    // the funnel has personalization enabled in admin).
+    triggerAutoPersonalization({
+      kind: 'optin',
+      funnelId: funnel.id,
+      email: lead.email,
+      firstName: lead.firstName,
+    });
+
     const redirectTo = funnel.oto.enabled ? 'oto' : 'thank-you';
+
 
     return NextResponse.json({
       success: true,

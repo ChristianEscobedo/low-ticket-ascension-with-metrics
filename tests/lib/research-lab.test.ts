@@ -4,6 +4,7 @@ import {
   rowToResearchSession,
   rowToResearchMessage,
   rowToResearchArtifact,
+  rowToResearchArtifactVersion,
   sessionTitleFrom,
   normalizeToolCalls,
   normalizeHandedOffTo,
@@ -13,6 +14,7 @@ import {
   normalizeOfferBrief,
   handoffTargetsFor,
   isResearchArtifactType,
+  shouldBumpArtifactVersion,
 } from '@/lib/mothermode/research/types';
 import {
   buildCacheKey,
@@ -289,5 +291,96 @@ describe('cacheFresh', () => {
     expect(cacheFresh(new Date(Date.now() - 60_000).toISOString())).toBe(false);
     expect(cacheFresh('not-a-date')).toBe(false);
     expect(cacheFresh(null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Artifact envelopes v2 (roadmap 1.4): lineage + provenance + versions
+// ---------------------------------------------------------------------------
+
+describe('artifact lineage fields', () => {
+  it('maps version/parent/createdBy and degrades a pre-lineage row', () => {
+    const full = rowToResearchArtifact({
+      id: 'a1',
+      session_id: 's1',
+      type: 'notes',
+      title: 't',
+      markdown: 'm',
+      structured: {},
+      status: 'draft',
+      handed_off_to: null,
+      version: 3,
+      parent_id: 'p1',
+      created_by: 'research',
+      created_at: null,
+      updated_at: null,
+    });
+    expect(full.version).toBe(3);
+    expect(full.parentId).toBe('p1');
+    expect(full.createdBy).toBe('research');
+
+    const legacy = rowToResearchArtifact({
+      id: 'a2',
+      session_id: 's1',
+      type: 'notes',
+      title: 't',
+      markdown: 'm',
+      structured: {},
+      status: 'draft',
+      handed_off_to: null,
+      created_at: null,
+      updated_at: null,
+    });
+    expect(legacy.version).toBe(1);
+    expect(legacy.parentId).toBe('');
+    expect(legacy.createdBy).toBe('agent');
+  });
+
+  it('maps a version snapshot row', () => {
+    const v = rowToResearchArtifactVersion({
+      id: 'v1',
+      artifact_id: 'a1',
+      version: 2,
+      type: 'notes',
+      title: 'old title',
+      markdown: 'old md',
+      structured: { x: 1 },
+      created_by: 'owner',
+      created_at: 'when',
+    });
+    expect(v.artifactId).toBe('a1');
+    expect(v.version).toBe(2);
+    expect(v.createdBy).toBe('owner');
+    expect(v.structured).toEqual({ x: 1 });
+  });
+});
+
+describe('shouldBumpArtifactVersion', () => {
+  const prev = {
+    type: 'notes' as const,
+    title: 't',
+    markdown: 'm',
+    structured: { a: 1 },
+  };
+
+  it('content changes bump: type, title, markdown, structured', () => {
+    expect(shouldBumpArtifactVersion(prev, { markdown: 'm2' })).toBe(true);
+    expect(shouldBumpArtifactVersion(prev, { title: 't2' })).toBe(true);
+    expect(shouldBumpArtifactVersion(prev, { type: 'research-brief' })).toBe(
+      true,
+    );
+    expect(shouldBumpArtifactVersion(prev, { structured: { a: 2 } })).toBe(
+      true,
+    );
+  });
+
+  it('metadata-only and unchanged updates never bump', () => {
+    expect(shouldBumpArtifactVersion(prev, {})).toBe(false);
+    expect(shouldBumpArtifactVersion(prev, { markdown: 'm' })).toBe(false);
+    expect(shouldBumpArtifactVersion(prev, { structured: { a: 1 } })).toBe(
+      false,
+    );
+    // Status/handoff flips aren't part of the content contract at all.
+    expect(shouldBumpArtifactVersion(prev, { title: 't' })).toBe(false);
   });
 });

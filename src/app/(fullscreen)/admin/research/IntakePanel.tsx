@@ -286,14 +286,14 @@ export default function IntakePanel({
         <span className="text-[11px] text-bone/40">
           the seeds the agent searches with, so it never burns runs on the offer name
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {previousBriefs.length > 0 && (
-            <div className="flex items-center gap-1.5 rounded-lg border border-bone/15 px-2 py-1">
-              <BookOpen className="h-3.5 w-3.5 text-brass/80" />
+            <div className="flex max-w-[190px] items-center gap-1.5 overflow-hidden rounded-lg border border-bone/15 px-2 py-1">
+              <BookOpen className="h-3.5 w-3.5 shrink-0 text-brass/80" />
               <select
                 value=""
                 onChange={(e) => loadPrevious(e.target.value)}
-                className="bg-transparent text-xs text-bone/70 outline-none"
+                className="w-full min-w-0 truncate bg-transparent text-xs text-bone/70 outline-none"
                 title="Load a brief from a previous session"
               >
                 <option value="">Load previous brief…</option>

@@ -4,11 +4,14 @@
  */
 import type {
   ResearchArtifact,
+  ResearchArtifactVersion,
   ResearchMessage,
   ResearchSession,
   ToolCallRecord,
   HandedOffRef,
 } from '@/lib/mothermode/research/types';
+import type { ResearchEvidence } from '@/lib/mothermode/research/evidence';
+import type { PhraseBankRow } from '@/lib/mothermode/research/phraseBank';
 import type { ResearchIntake } from '@/lib/mothermode/research/intake';
 
 const CRUD = '/api/admin/mothermode-research';
@@ -38,6 +41,9 @@ export async function loadSession(id: string): Promise<{
   session: ResearchSession;
   messages: ResearchMessage[];
   artifacts: ResearchArtifact[];
+  evidence: ResearchEvidence[];
+  phraseBank: PhraseBankRow[];
+  usage: { paidRunsToday: number; estCostCentsToday: number };
 }> {
   const res = await fetch(`${CRUD}?id=${encodeURIComponent(id)}`, {
     cache: 'no-store',
@@ -94,6 +100,74 @@ export async function deleteArtifact(id: string): Promise<void> {
   await readJson(res);
 }
 
+/** Pin selected text into the evidence base with its provenance. */
+export async function pinEvidence(input: {
+  sessionId: string;
+  artifactId?: string;
+  offerSlug?: string;
+  kind?: string;
+  body: string;
+  sourceUrl?: string;
+  sourceTool?: string;
+  expert?: string;
+}): Promise<ResearchEvidence> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'pin-evidence', ...input }),
+  });
+  const json = await readJson<{ evidence: ResearchEvidence }>(res);
+  return json.evidence;
+}
+
+/** Semantic evidence search (4.7): ranked rows with scores. */
+export async function searchEvidence(
+  sessionId: string,
+  query: string,
+): Promise<Array<{ evidence: ResearchEvidence; score: number }>> {
+  const res = await fetch(
+    `${CRUD}?id=${encodeURIComponent(sessionId)}&evidenceSearch=${encodeURIComponent(query)}`,
+    { cache: 'no-store' },
+  );
+  const json = await readJson<{
+    results: Array<{ evidence: ResearchEvidence; score: number }>;
+  }>(res);
+  return json.results;
+}
+
+/** Backfill embeddings for a session's evidence (4.7). */
+export async function embedEvidence(
+  sessionId: string,
+): Promise<{ embedded: number }> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'embed-evidence', sessionId }),
+  });
+  return readJson(res);
+}
+
+export async function deleteEvidence(id: string): Promise<void> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'delete-evidence', id }),
+  });
+  await readJson(res);
+}
+
+/** An artifact's version history (append-only snapshots), newest first. */
+export async function listArtifactVersions(
+  artifactId: string,
+): Promise<ResearchArtifactVersion[]> {
+  const res = await fetch(
+    `${CRUD}?artifactVersions=${encodeURIComponent(artifactId)}`,
+    { cache: 'no-store' },
+  );
+  const json = await readJson<{ versions: ResearchArtifactVersion[] }>(res);
+  return json.versions;
+}
+
 // ---------------------------------------------------------------------------
 // Intake engines (suggest from offer / find research context)
 // ---------------------------------------------------------------------------
@@ -114,6 +188,46 @@ export async function runIntakeEngine(input: {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
+  });
+  return readJson(res);
+}
+
+/** Re-verify the session's research brief: one fresh turn, then the diff. */
+export async function reverifySession(sessionId: string): Promise<{
+  summary: string;
+  diff: { added: string[]; removed: string[]; held: number };
+  artifactId: string;
+}> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'reverify', sessionId }),
+  });
+  return readJson(res);
+}
+
+/** Post-publish learning (4.6): the analyst's outcome digest, lineage-linked
+ *  to the research that produced the work. */
+export async function runOutcomeDigest(sessionId: string): Promise<{
+  artifactId: string;
+  parentArtifactId: string;
+}> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'outcome', sessionId }),
+  });
+  return readJson(res);
+}
+
+/** Distill the session's learnings into cross-session memory. */
+export async function distillSession(sessionId: string): Promise<{
+  learnings: string[];
+}> {
+  const res = await fetch(CRUD, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ entity: 'distill', sessionId }),
   });
   return readJson(res);
 }
@@ -163,7 +277,8 @@ export type ResearchStreamEvent =
   | { type: 'artifact'; artifact: ResearchArtifact }
   | { type: 'message'; message: ResearchMessage }
   | { type: 'done' }
-  | { type: 'error'; error: string };
+  | { type: 'error'; error: string }
+  | { type: 'text-delta'; text: string };
 
 /**
  * POST one user message and stream the turn. `onEvent` fires for every SSE

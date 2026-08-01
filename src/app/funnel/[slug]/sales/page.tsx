@@ -2,10 +2,13 @@ import type { Metadata } from 'next';
 import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import { loadSalesFunnelPage } from '@/lib/mothermode/sales/loadFunnelPage';
 import SalesPage from '@/components/mothermode/sales/SalesPage';
+import GatedPage from '@/components/mothermode/personalize/GatedPage';
 
 interface Props {
   params: { slug: string };
+  searchParams: { pp?: string };
 }
+
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,7 +30,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * Editable long-form sales page driven by funnel.sales JSON.
  * Admins get the floating Edit page toolbar (same pattern as optin).
  */
-export default async function FunnelSalesRoute({ params }: Props) {
-  const { funnel, isAdmin } = await loadSalesFunnelPage(params.slug, 'sales_view');
+export default async function FunnelSalesRoute({ params, searchParams }: Props) {
+  const { funnel, isAdmin, gated } = await loadSalesFunnelPage(params.slug, 'sales_view', {
+    pp: searchParams?.pp,
+  });
+  if (gated) return <GatedPage />;
   return <SalesPage funnel={funnel} isAdmin={isAdmin} />;
 }
+
+

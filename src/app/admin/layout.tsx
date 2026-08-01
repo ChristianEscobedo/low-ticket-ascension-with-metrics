@@ -4,7 +4,9 @@ import { createClient } from '@/utils/supabase/server';
 import { getUser } from '@/utils/supabase/queries';
 import AdminSidebar from './AdminSidebar';
 import HelpIcon from './help-docs/HelpIcon';
+import CommandPalette from './CommandPalette';
 import Footer8 from '@/components/footer-8';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +55,9 @@ export default async function AdminLayout({ children }: PropsWithChildren) {
         </div>
       </div>
       <Footer8 />
+      <CommandPalette />
     </section>
   );
 }
+
+

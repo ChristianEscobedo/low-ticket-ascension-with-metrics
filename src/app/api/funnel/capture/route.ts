@@ -15,6 +15,8 @@ import {
   resolveEmailKitIdForEvent,
 } from '@/lib/mothermode/sales/store';
 import type { SalesEmailEvent } from '@/lib/mothermode/sales/types';
+import { triggerAutoPersonalization } from '@/lib/mothermode/personalize/generate';
+
 
 type UpsellKey = 'upsell1' | 'upsell2' | 'upsell3' | 'upsell4';
 
@@ -262,6 +264,16 @@ export async function POST(request: NextRequest) {
       await maybeEnroll(funnel, 'optin', lead);
     }
 
+    // Kick 1:1 personalization for this lead. Fire-and-forget and fully
+    // gated by the funnel's own settings — a no-op unless the admin turned
+    // personalization on for this funnel. Never blocks the revenue path.
+    triggerAutoPersonalization({
+      kind: 'sales',
+      funnelId: funnel.id,
+      email: lead.email,
+      firstName: lead.firstName,
+    });
+
     return NextResponse.json({
       success: true,
       redirectTo: 'sales',
@@ -269,6 +281,7 @@ export async function POST(request: NextRequest) {
       isNew,
       funnelSlug: funnel.slug,
     });
+
   } catch (err) {
     console.error('[funnel/capture] failed:', err);
     return NextResponse.json(

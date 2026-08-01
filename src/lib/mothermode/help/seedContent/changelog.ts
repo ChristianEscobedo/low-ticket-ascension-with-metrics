@@ -244,4 +244,43 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '1.2.0',
+    releasedOn: '2026-11-13',
+    entryType: 'added',
+    title: 'Agent Recipes: 16 plays, the expert crew, and the in-chat Plays rail',
+    body: cl([
+      '<p>The Research Lab became a crew. Eight experts (research, strategy, copy, lead magnets, email, design, compliance, analyst) run declarative plays end to end: Low-Ticket Launch and Full System, the builder fleet (Bulk Content Engine, Full Funnel Build, Paid Launch System, Email Sequence Build, Repurpose Engine, Launch Week), and the deep research set — Influencer Panel, Comment Mining Sweep, Cross-Channel Sweep, Reddit Rabbit Hole, Video Deep Dive, and The Audience Mosaic.</p>',
+      '<p>Deep plays dive multiple influencers, rank posts by real engagement, and mine the comments under the winners across X, TikTok, Instagram, Reddit, and YouTube, with cited web passes on LinkedIn and Facebook. Gates pause for your approval before anything builds downstream. Runs work in the background with live step progress in /admin/recipes or the Plays rail inside the research chat, and the Watch weekly toggle re-runs a play every week.</p>',
+      '<p><strong>Where to start:</strong> Planning / Agent Recipes, in this Help Center.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '1.3.0',
+    releasedOn: '2026-11-18',
+    entryType: 'added',
+    title: 'Agent Skills, run sharing, and Mission Control',
+    body: cl([
+      '<p>The crew learned new tricks and got a home screen. Agent Skills (/admin/skills) are declarative HTTP tools — an allowlisted URL template with declared inputs and secrets that only ever resolve in headers — that any expert or play can call. Drafts save imperfect; activation requires a clean validation, and a 5-failure breaker auto-pauses a dead endpoint before it burns the daily call budget.</p>',
+      '<p>Recipe runs can now be shared as read-only public links (/share/run/<token>), the chat live-follows a running play step by step with the crew labeled on every turn, and per-call cost + citation tracking lands fleet-wide.</p>',
+      '<p>Mission Control moved onto /admin: gates waiting on you, today\'s fleet spend, the job lane, active watches, and who is working on what, refreshed live. /admin/gates is the phone-first approve-or-cancel screen, and the new Command Palette jumps anywhere from the keyboard.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '1.4.0',
+    releasedOn: '2026-11-19',
+    entryType: 'added',
+    title: '1:1 Personalization: every lead gets their own page',
+    body: cl([
+      '<p>One funnel now serves a different page to every lead. A signed link from your email (?pp=) tells the funnel who is visiting, and the page renders copy written for them — headline, benefits, problem scene, CTA, checkout — merged server-side before render, so there is no flicker and nothing sensitive in the URL. Price, Stripe ids, and links can never be touched by the AI: the merge is copy-only by construction.</p>',
+      '<p>Per funnel in /admin/personalization: overlay mode personalizes signed-link visitors while everyone else sees the generic page; gated mode hides the offer from everyone without a valid key (competitors get a polite decoy). Payloads generate automatically at opt-in and can be regenerated or reviewed per lead, with the AI\'s intent read on each one.</p>',
+      '<p>Bonus: per-recipient email images. Embed one signed image URL in your ESP and every opener sees their own first name rendered in the creative, generated at open time and cached at the edge.</p>',
+      '<p><strong>Where to start:</strong> set a funnel to overlay in /admin/personalization, generate, mint a link, and put it in your next send.</p>',
+    ]),
+    published: true,
+  },
 ];
+
+

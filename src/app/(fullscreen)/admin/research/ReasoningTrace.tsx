@@ -21,6 +21,11 @@ import {
 } from 'lucide-react';
 import type { ToolCallRecord } from '@/lib/mothermode/research/types';
 import {
+  summarizeCalls,
+  formatSpendLine,
+} from '@/lib/mothermode/research/agent/cost';
+import { isCachedSummary } from '@/lib/mothermode/research/freshness';
+import {
   PlatformIcon,
   PLATFORM_BRAND,
 } from '@/components/mothermode/content/PlatformIcon';
@@ -98,6 +103,11 @@ export default function ReasoningTrace({
         <span className="text-bone/40">
           {calls.length} step{calls.length === 1 ? '' : 's'}
         </span>
+        {calls.length > 0 && (
+          <span className="text-bone/30">
+            · {formatSpendLine(summarizeCalls(calls))}
+          </span>
+        )}
         {live && <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-brass" />}
       </button>
       {open && (
@@ -145,6 +155,12 @@ export default function ReasoningTrace({
                       <AlertTriangle className="mr-1 inline h-3 w-3" />
                     )}
                     {call.resultSummary}
+                    {/* 0.4: the cache badge — a cached call cost nothing. */}
+                    {isCachedSummary(call.resultSummary) && (
+                      <span className="ml-1 rounded bg-brass/15 px-1 py-px text-[9px] font-semibold uppercase text-brass/80">
+                        cached
+                      </span>
+                    )}
                     {call.ms > 0 && (
                       <span className="ml-1 text-bone/30">
                         ({(call.ms / 1000).toFixed(1)}s)

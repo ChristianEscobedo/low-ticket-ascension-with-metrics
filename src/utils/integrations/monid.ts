@@ -47,6 +47,11 @@ import {
   rollUpCommentLanguage,
   type CommentLanguageRollup,
 } from '@/lib/mothermode/research/commentLanguage';
+import {
+  listEndpointStats,
+  rankEndpoints,
+  recordEndpointOutcome,
+} from '@/lib/mothermode/research/endpointStats';
 
 export {
   mapMonidInputs,
@@ -122,13 +127,20 @@ async function monidFetch(
   }
 }
 
-/** Discover endpoints by natural-language query (e.g. "tiktok search posts"). */
+/** Discover endpoints by natural-language query (e.g. "tiktok search posts").
+ *  Results are ordered WINNER-FIRST (4.3): the endpoint that has been
+ *  succeeding lately leads the pool; a dead stats table keeps the
+ *  discovered order. */
 export async function discoverMonid(
   query: string,
 ): Promise<MonidResult<MonidEndpointRef[]>> {
   const res = await monidFetch('/v1/discover', { query });
   if (!res.ok) return res as MonidResult<MonidEndpointRef[]>;
-  return { ok: true, data: normalizeDiscovered(res.data) };
+  const found = normalizeDiscovered(res.data);
+  if (found.length < 2) return { ok: true, data: found };
+  const stats = await listEndpointStats();
+  if (stats.length === 0) return { ok: true, data: found };
+  return { ok: true, data: rankEndpoints(found, stats) };
 }
 
 /**
@@ -254,7 +266,9 @@ async function pollMonidRun(
   };
 }
 
-/** Run an endpoint with inputs (polls async runs to completion). */
+/** Run an endpoint with inputs (polls async runs to completion). Every
+ *  outcome is recorded per endpoint (4.3, best-effort — stats never break
+ *  a scrape) so discovery learns which endpoints actually work. */
 export async function runMonid(
   endpoint: string,
   input: Record<string, unknown>,
@@ -265,10 +279,18 @@ export async function runMonid(
     provider: provider || 'apify',
     input,
   });
-  if (!ran.ok) return ran;
+  if (!ran.ok) {
+    await recordEndpointOutcome(endpoint, 'fail');
+    return ran;
+  }
   const runId = asyncRunId(ran.data);
-  if (!runId) return ran;
-  return pollMonidRun(runId);
+  if (!runId) {
+    await recordEndpointOutcome(endpoint, 'ok');
+    return ran;
+  }
+  const polled = await pollMonidRun(runId);
+  await recordEndpointOutcome(endpoint, polled.ok ? 'ok' : 'fail');
+  return polled;
 }
 
 /**

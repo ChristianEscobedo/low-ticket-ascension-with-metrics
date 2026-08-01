@@ -2,10 +2,13 @@ import type { Metadata } from 'next';
 import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import { loadSalesFunnelPage } from '@/lib/mothermode/sales/loadFunnelPage';
 import UpsellPage from '@/components/mothermode/sales/UpsellPage';
+import GatedPage from '@/components/mothermode/personalize/GatedPage';
 
 interface Props {
   params: { slug: string };
+  searchParams: { pp?: string };
 }
+
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,7 +30,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * OTO3 — editable funnel upsell driven by funnel.upsell3 JSON.
  * Renders the exact MotherMode OTO layout with admin hover-to-edit.
  */
-export default async function FunnelUpsell3Route({ params }: Props) {
-  const { funnel, isAdmin } = await loadSalesFunnelPage(params.slug);
+export default async function FunnelUpsell3Route({ params, searchParams }: Props) {
+  const { funnel, isAdmin, gated } = await loadSalesFunnelPage(params.slug, undefined, {
+    pp: searchParams?.pp,
+  });
+  if (gated) return <GatedPage />;
   return <UpsellPage funnel={funnel} upsellKey="upsell3" isAdmin={isAdmin} />;
 }
+
+

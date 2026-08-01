@@ -109,9 +109,24 @@ function deepToolDefs(): AgentToolDef[] {
  * eight; deep sessions get those plus the paid performance/comment lane. The
  * executor in tools.ts ALSO gates the deep tools on depth, so a stale def
  * list can never spend deep money on a standard session.
+ *
+ * `policy` is the expert's tool allowlist (roadmap 1.3): an intersection
+ * applied AFTER the lane — a policy can only NARROW the lane, never widen
+ * it (a Copy expert on a standard session can lose the scrapers; it cannot
+ * gain deep tools the session didn't grant). Empty/absent = the full lane.
  */
+export function filterToolDefs(
+  defs: AgentToolDef[],
+  policy: string[] | undefined,
+): AgentToolDef[] {
+  if (!policy || policy.length === 0) return defs;
+  const allow = new Set(policy.map((t) => t.trim()).filter(Boolean));
+  if (allow.size === 0) return defs;
+  return defs.filter((d) => allow.has(d.name));
+}
+
 export function buildResearchToolDefs(
-  opts: { deep?: boolean } = {},
+  opts: { deep?: boolean; policy?: string[]; extra?: AgentToolDef[] } = {},
 ): AgentToolDef[] {
   const defs: AgentToolDef[] = [
     {
@@ -280,5 +295,8 @@ export function buildResearchToolDefs(
     },
   ];
   if (opts.deep) defs.push(...deepToolDefs());
-  return defs;
+  // Declarative skills (Phase 3): the active set joins the lane BEFORE the
+  // policy filter — an expert's policy narrows skills exactly like tools.
+  if (opts.extra && opts.extra.length > 0) defs.push(...opts.extra);
+  return filterToolDefs(defs, opts.policy);
 }

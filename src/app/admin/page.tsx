@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getOverviewStats } from '@/utils/supabase/admin';
+import MissionControl from './MissionControl';
 import {
   getClickRollupsSafe,
   getPieceAttributionSafe,
@@ -78,6 +79,10 @@ export default async function AdminOverviewPage() {
       <p className="mt-2 text-bone/60">
         High-level view of revenue, subscriptions, and recent activity.
       </p>
+
+      {/* the loop as the home screen: what the crew is doing right now,
+          what it spent today, and what's waiting on your yes */}
+      <MissionControl />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         <StatCard

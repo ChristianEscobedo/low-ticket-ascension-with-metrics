@@ -20,7 +20,22 @@ import {
 } from '@/utils/integrations/monid';
 import { amazonReviewDigest } from '@/utils/integrations/amazon-rapidapi';
 import { commentLanguageBlock } from '../commentLanguage';
+import { checkPostUrl } from '../urlSafety';
 import { buildResearchToolDefs } from './toolDefs';
+import { isSkillToolName, runSkillTool } from './skillBridge';
+import { fenceIfExternal } from './fencing';
+
+import {
+  postsCard,
+  commentsCard,
+  reviewsCard,
+  type LiveResultCard,
+} from '../liveCards';
+import {
+  expertAllowsArtifact,
+  DEFAULT_RESEARCH_EXPERT,
+  type ResearchExpert,
+} from '../experts/types';
 import { readInternalMetrics } from '../metrics';
 import { upsertArtifact } from '../store';
 import {
@@ -41,7 +56,9 @@ import type { ContextRef } from '@/lib/mothermode/context';
 // loop's import surface.
 // ---------------------------------------------------------------------------
 
-export function researchToolDefs(opts: { deep?: boolean } = {}): AgentToolDef[] {
+export function researchToolDefs(
+  opts: { deep?: boolean; policy?: string[]; extra?: AgentToolDef[] } = {},
+): AgentToolDef[] {
   return buildResearchToolDefs(opts);
 }
 
@@ -56,6 +73,8 @@ export interface ToolRunOutcome {
   inputSummary: string;
   /** One line for the reasoning trace (`47 posts via twitter-posts-search`). */
   resultSummary: string;
+  /** The structured, pinnable result (roadmap 2.2) for data tools. */
+  cards?: LiveResultCard[];
   /** Set when a create_artifact call persisted an artifact. */
   artifact?: ResearchArtifact;
 }
@@ -82,15 +101,34 @@ function deepBlocked(name: string, inputSummary: string): ToolRunOutcome {
   };
 }
 
-export async function runResearchTool(opts: {
+/** The raw executor. Do NOT export — every caller goes through the fencing
+ *  wrapper below so external results reach the model behind the fence. */
+async function runResearchToolRaw(opts: {
   name: string;
   input: Record<string, unknown>;
   session: ResearchSession;
+  /** The expert running this turn (default: the research config). */
+  expert?: ResearchExpert;
 }): Promise<ToolRunOutcome> {
   const { name, input, session } = opts;
+
+  const expert = opts.expert ?? DEFAULT_RESEARCH_EXPERT;
   // The session's tool lane. Defense in depth: even if a stale def list let a
   // deep tool through, a standard session never spends deep money here.
   const deep = session.intake.depth === 'deep';
+  // The expert's tool policy. Same defense-in-depth: a stale def list never
+  // runs a tool the expert wasn't granted.
+  if (
+    expert.tools.length > 0 &&
+    !expert.tools.includes(name) &&
+    name !== 'create_artifact'
+  ) {
+    return {
+      content: `${name} is not in the ${expert.name} expert's tool policy (granted: ${expert.tools.join(', ')}). Use a granted tool.`,
+      inputSummary: '',
+      resultSummary: 'blocked: outside policy',
+    };
+  }
 
   // ------------------------------------------------------------- web_search
   if (name === 'web_search') {
@@ -185,7 +223,13 @@ export async function runResearchTool(opts: {
     return {
       content: lines.filter(Boolean).join('\n'),
       inputSummary,
-      resultSummary: `${d.posts.length} posts, ${d.commentsOn} with comments`,
+      resultSummary: `${d.posts.length} posts, ${d.commentsOn} with comments${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        postsCard(
+          `@${d.handle} on ${d.platform} · ${d.posts.length} posts ranked`,
+          d.posts,
+        ),
+      ],
     };
   }
 
@@ -237,6 +281,12 @@ export async function runResearchTool(opts: {
       content: lines.filter(Boolean).join('\n'),
       inputSummary,
       resultSummary: `${d.posts.length} posts ranked${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        postsCard(
+          `${platform} "${oneLine(d.query, 40)}" · ${d.posts.length} posts ranked`,
+          d.posts,
+        ),
+      ],
     };
   }
 
@@ -247,6 +297,15 @@ export async function runResearchTool(opts: {
     const limit = num(input.limit, 10);
     const inputSummary = `${platform}: ${oneLine(url, 52)}`;
     if (!deep) return deepBlocked(name, inputSummary);
+    // The SSRF gate (2.5): only real platform post URLs reach the scraper.
+    const urlCheck = checkPostUrl(platform, url);
+    if (!urlCheck.ok) {
+      return {
+        content: `post_comments blocked: ${urlCheck.reason}`,
+        inputSummary,
+        resultSummary: 'blocked: url not allowed',
+      };
+    }
     const res = await postComments({ platform, url, limit });
     if (!res.ok) {
       return {
@@ -274,6 +333,12 @@ export async function runResearchTool(opts: {
       content: lines.join('\n'),
       inputSummary,
       resultSummary: `${d.comments.length} comments${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        commentsCard(
+          `${platform} · ${d.comments.length} top comments`,
+          d.comments,
+        ),
+      ],
     };
   }
 
@@ -330,7 +395,13 @@ export async function runResearchTool(opts: {
     return {
       content: lines.filter(Boolean).join('\n'),
       inputSummary,
-      resultSummary: `${d.posts.length} posts, ${d.commentsOn} mined, ${d.language.phrases.length} phrases`,
+      resultSummary: `${d.posts.length} posts, ${d.commentsOn} mined, ${d.language.phrases.length} phrases${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        postsCard(
+          `@${d.handle} deep dive · ${d.posts.length} posts ranked`,
+          d.posts,
+        ),
+      ],
     };
   }
 
@@ -391,7 +462,21 @@ export async function runResearchTool(opts: {
     return {
       content: lines.join('\n'),
       inputSummary,
-      resultSummary: `${d.threads.length} threads, ${totalComments} comments`,
+      resultSummary: `${d.threads.length} threads, ${totalComments} comments${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        postsCard(
+          `reddit "${oneLine(d.query, 36)}" · ${d.threads.length} threads`,
+          d.threads.map((t) => ({
+            caption: t.text ? `${t.title} — ${t.text}` : t.title,
+            likes: t.score,
+            comments: t.numComments,
+            views: null,
+            engagement: null,
+            url: t.url,
+            topComments: t.comments,
+          })),
+        ),
+      ],
     };
   }
 
@@ -429,7 +514,13 @@ export async function runResearchTool(opts: {
     return {
       content: lines.join('\n'),
       inputSummary,
-      resultSummary: `${d.reviews.length} reviews on "${oneLine(d.product.title || d.product.asin, 32)}"`,
+      resultSummary: `${d.reviews.length} reviews on "${oneLine(d.product.title || d.product.asin, 32)}"${res.cached ? ' (cached)' : ''}`,
+      cards: [
+        reviewsCard(
+          `${oneLine(d.product.title || d.product.asin, 44)} · ${d.reviews.length} reviews (low-star first)`,
+          d.reviews,
+        ),
+      ],
     };
   }
 
@@ -492,6 +583,16 @@ export async function runResearchTool(opts: {
         resultSummary: 'failed',
       };
     }
+    // The expert's artifact contract (roadmap 1.2): an empty contract allows
+    // every type; a set one rejects with a readable, model-correctable reason.
+    const contract = expertAllowsArtifact(expert, type);
+    if (!contract.allowed) {
+      return {
+        content: `create_artifact failed: ${contract.reason}.`,
+        inputSummary,
+        resultSummary: 'blocked: outside contract',
+      };
+    }
     if (!title || !markdown.trim()) {
       return {
         content: 'create_artifact failed: title and markdown are required.',
@@ -505,6 +606,8 @@ export async function runResearchTool(opts: {
       title,
       markdown,
       structured,
+      // Provenance (roadmap 1.4): the expert that wrote it, not a person.
+      createdBy: expert.slug,
     });
     return {
       content: `Artifact saved (${artifact.id}): ${type} "${title}". It is visible in the artifacts panel now; the user can hand it off from there.`,
@@ -514,9 +617,48 @@ export async function runResearchTool(opts: {
     };
   }
 
+  // --------------------------------------------------------- declarative skills
+  // Phase 3: `skill_<slug>` dispatches through the audited runner (the
+  // allowlist / per-day limit / breaker all live there). The expert's
+  // policy check above already narrowed the lane; a skill's OWN guards
+  // are its row, so the session's deep/standard lane doesn't apply here.
+  if (isSkillToolName(name)) {
+    const outcome = await runSkillTool({ name, input });
+    return {
+      content: outcome.content,
+      inputSummary: oneLine(JSON.stringify(input).slice(0, 80), 80),
+      resultSummary: outcome.resultSummary,
+    };
+  }
+
   return {
     content: `Unknown tool "${name}".`,
     inputSummary: '',
     resultSummary: 'failed',
   };
 }
+
+/**
+ * THE executor every caller uses (loop, recipes, tests). Fencing v1
+ * (./fencing.ts): a tool result carrying STRANGER text (the scrape lane,
+ * and every skill — arbitrary HTTP by definition) reaches the model
+ * behind the fence markers, sanitized; house-internal results
+ * (internal_metrics, get_context, the create_artifact confirmation) pass
+ * through byte-identical. The trace fields, cards, and artifact are
+ * never touched — only the model-facing content.
+ */
+export async function runResearchTool(opts: {
+  name: string;
+  input: Record<string, unknown>;
+  session: ResearchSession;
+  /** The expert running this turn (default: the research config). */
+  expert?: ResearchExpert;
+}): Promise<ToolRunOutcome> {
+  const outcome = await runResearchToolRaw(opts);
+  return {
+    ...outcome,
+    content: fenceIfExternal(opts.name, outcome.content),
+  };
+}
+
+

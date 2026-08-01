@@ -22,9 +22,14 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/funnels', label: 'Lead Gen Funnels' },
 
   { href: '/admin/sales-funnels', label: 'Sales Funnels' },
+  { href: '/admin/personalization', label: 'Personalization' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
+
   { href: '/admin/planner', label: 'Planner' },
   { href: '/admin/research', label: 'Research Lab' },
+  { href: '/admin/experts', label: 'Experts' },
+  { href: '/admin/recipes', label: 'Recipes' },
+  { href: '/admin/skills', label: 'Skills' },
 
 
 

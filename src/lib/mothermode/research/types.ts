@@ -26,6 +26,7 @@ import {
   normalizeResearchIntake,
   type ResearchIntake,
 } from './intake';
+import { normalizeCards, type LiveResultCard } from './liveCards';
 
 // ---------------------------------------------------------------------------
 // Sessions
@@ -111,6 +112,9 @@ export interface ToolCallRecord {
   /** One line: `47 posts, top theme: time scarcity`. */
   resultSummary: string;
   ms: number;
+  /** The structured, pinnable result (roadmap 2.2): post ladders, comment
+   *  threads, review tables. Absent on calls without card-worthy data. */
+  cards?: LiveResultCard[];
 }
 
 export interface ResearchMessage {
@@ -121,6 +125,13 @@ export interface ResearchMessage {
   toolCalls: ToolCallRecord[];
   /** The model id that wrote it ('' for user turns). */
   model: string;
+  /** Provenance: the expert config that produced this turn ('' = the owner
+   *  typing, or a row from before the provenance migration). */
+  expertSlug: string;
+  /** Provenance: the recipe run + step this turn belongs to ('' / null =
+   *  an ordinary chat turn). */
+  recipeRunId: string;
+  recipeStepIndex: number | null;
   createdAt: string | null;
 }
 
@@ -131,6 +142,11 @@ export interface ResearchMessageRow {
   content: string | null;
   tool_calls: unknown;
   model: string | null;
+  /** Optional at the DB boundary: a checkout running ahead of the
+   *  provenance migration selects without these columns. */
+  expert_slug?: string | null;
+  recipe_run_id?: string | null;
+  recipe_step_index?: number | null;
   created_at: string | null;
 }
 
@@ -151,6 +167,7 @@ export function normalizeToolCalls(value: unknown): ToolCallRecord[] {
     const rec = raw as Record<string, unknown>;
     const name = str(rec.name).trim();
     if (!name) continue;
+    const cards = normalizeCards(rec.cards);
     out.push({
       id: str(rec.id) || `call_${out.length + 1}`,
       name,
@@ -158,6 +175,7 @@ export function normalizeToolCalls(value: unknown): ToolCallRecord[] {
       status: rec.status === 'error' ? 'error' : 'ok',
       resultSummary: str(rec.resultSummary),
       ms: num(rec.ms),
+      ...(cards.length > 0 ? { cards } : {}),
     });
   }
   return out;
@@ -171,6 +189,16 @@ export function rowToResearchMessage(row: ResearchMessageRow): ResearchMessage {
     content: str(row.content),
     toolCalls: normalizeToolCalls(row.tool_calls),
     model: str(row.model),
+    // Provenance columns are nullable + absent pre-migration: both degrade
+    // to "plain chat turn" ('' / '' / null).
+    expertSlug: str(row.expert_slug).trim(),
+    recipeRunId: str(row.recipe_run_id).trim(),
+    recipeStepIndex:
+      typeof row.recipe_step_index === 'number' &&
+      Number.isFinite(row.recipe_step_index) &&
+      row.recipe_step_index >= 0
+        ? Math.floor(row.recipe_step_index)
+        : null,
     createdAt: row.created_at,
   };
 }
@@ -231,6 +259,12 @@ export interface ResearchArtifact {
   structured: Record<string, unknown>;
   status: ResearchArtifactStatus;
   handedOffTo: HandedOffRef | null;
+  /** Bumps on every content-changing upsert (1 on creation). */
+  version: number;
+  /** The artifact this one was derived from ('' = none; recipes stamp it). */
+  parentId: string;
+  /** The expert slug that created it ('research' today), or 'owner'. */
+  createdBy: string;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -244,8 +278,36 @@ export interface ResearchArtifactRow {
   structured: unknown;
   status: string | null;
   handed_off_to: unknown;
+  version?: number | null;
+  parent_id?: string | null;
+  created_by?: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+/** One append-only snapshot (the version history of an artifact). */
+export interface ResearchArtifactVersion {
+  id: string;
+  artifactId: string;
+  version: number;
+  type: ResearchArtifactType;
+  title: string;
+  markdown: string;
+  structured: Record<string, unknown>;
+  createdBy: string;
+  createdAt: string | null;
+}
+
+export interface ResearchArtifactVersionRow {
+  id: string;
+  artifact_id: string;
+  version: number | null;
+  type: string | null;
+  title: string | null;
+  markdown: string | null;
+  structured: unknown;
+  created_by: string | null;
+  created_at: string | null;
 }
 
 export function isResearchArtifactType(v: unknown): v is ResearchArtifactType {
@@ -297,9 +359,64 @@ export function rowToResearchArtifact(
         : {},
     status: toResearchArtifactStatus(row.status),
     handedOffTo: normalizeHandedOffTo(row.handed_off_to),
+    // Optional at the DB boundary: a checkout running ahead of the lineage
+    // migration degrades to v1, no parent, 'agent'.
+    version:
+      typeof row.version === 'number' && Number.isFinite(row.version) && row.version > 0
+        ? Math.floor(row.version)
+        : 1,
+    parentId: str(row.parent_id),
+    createdBy: str(row.created_by) || 'agent',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export function rowToResearchArtifactVersion(
+  row: ResearchArtifactVersionRow,
+): ResearchArtifactVersion {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    version:
+      typeof row.version === 'number' && Number.isFinite(row.version)
+        ? Math.floor(row.version)
+        : 1,
+    type: isResearchArtifactType(row.type) ? row.type : 'research-brief',
+    title: str(row.title),
+    markdown: str(row.markdown),
+    structured:
+      row.structured && typeof row.structured === 'object' && !Array.isArray(row.structured)
+        ? (row.structured as Record<string, unknown>)
+        : {},
+    createdBy: str(row.created_by) || 'agent',
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Does this upsert CHANGE the content (and therefore bump the version and
+ * snapshot)? Status/handoff flips and parent stamps are metadata — they
+ * touch the row but not the document, so they never bump.
+ */
+export function shouldBumpArtifactVersion(
+  prev: Pick<ResearchArtifact, 'type' | 'title' | 'markdown' | 'structured'>,
+  next: Partial<
+    Pick<ResearchArtifact, 'type' | 'title' | 'markdown' | 'structured'>
+  >,
+): boolean {
+  if (next.type !== undefined && next.type !== prev.type) return true;
+  if (next.title !== undefined && next.title !== prev.title) return true;
+  if (next.markdown !== undefined && next.markdown !== prev.markdown) {
+    return true;
+  }
+  if (
+    next.structured !== undefined &&
+    JSON.stringify(next.structured) !== JSON.stringify(prev.structured)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

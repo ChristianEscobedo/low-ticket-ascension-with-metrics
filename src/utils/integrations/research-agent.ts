@@ -369,6 +369,217 @@ function parseOpenAi(json: any, model: string, provider: TextProvider): AgentMod
 }
 
 // ---------------------------------------------------------------------------
+// Token streaming (roadmap 0.2)
+//
+// When callAgentModel receives onTextDelta, the request streams: text
+// deltas fire as they land, and the resolved result is identical to the
+// non-streamed contract. A streamed response that fails on the network
+// falls back to a normal request — streaming is an enhancement, never a
+// new failure mode.
+// ---------------------------------------------------------------------------
+
+/** Read one SSE body, calling onEvent per parsed `data:` payload. */
+async function readSse(
+  res: Response,
+  onEvent: (payload: any) => void,
+): Promise<void> {
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const flush = (chunk: string) => {
+    buffer += chunk;
+    let idx: number;
+    while ((idx = buffer.indexOf('\n')) !== -1) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        onEvent(JSON.parse(data));
+      } catch {
+        /* a malformed frame is skipped, not fatal */
+      }
+    }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    flush(decoder.decode(value, { stream: true }));
+  }
+}
+
+/** Anthropic streamed call: text deltas out, full result assembled. */
+async function callAnthropicStreamed(opts: {
+  key: string;
+  model: string;
+  system: string;
+  messages: AgentMessage[];
+  tools: AgentToolDef[];
+  maxTokens: number;
+  onTextDelta: (delta: string) => void;
+}): Promise<AgentModelResult | null> {
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    max_tokens: opts.maxTokens,
+    system: opts.system,
+    messages: toAnthropicMessages(opts.messages),
+    stream: true,
+  };
+  if (opts.tools.length > 0) {
+    body.tools = opts.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema,
+    }));
+  }
+  const res = await fetch(`${ANTHROPIC_BASE}/messages`, {
+    method: 'POST',
+    headers: {
+      'x-api-key': opts.key,
+      'anthropic-version': ANTHROPIC_VERSION,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+
+  const textParts: string[] = [];
+  const toolUses = new Map<number, { id: string; name: string; json: string }>();
+  await readSse(res, (event) => {
+    if (event?.type === 'content_block_start') {
+      const block = event.content_block;
+      if (block?.type === 'tool_use') {
+        toolUses.set(event.index, {
+          id: typeof block.id === 'string' ? block.id : `call_${event.index}`,
+          name: typeof block.name === 'string' ? block.name : '',
+          json: '',
+        });
+      }
+    } else if (event?.type === 'content_block_delta') {
+      const delta = event.delta;
+      if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+        opts.onTextDelta(delta.text);
+        textParts.push(delta.text);
+      } else if (
+        delta?.type === 'input_json_delta' &&
+        typeof delta.partial_json === 'string'
+      ) {
+        const use = toolUses.get(event.index);
+        if (use) use.json += delta.partial_json;
+      }
+    }
+  });
+
+  const toolCalls: AgentToolCall[] = [];
+  const uses = Array.from(toolUses.entries()).sort((a, b) => a[0] - b[0]);
+  for (const [, use] of uses) {
+    let input: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(use.json || '{}');
+      if (parsed && typeof parsed === 'object') input = parsed;
+    } catch {
+      /* malformed args -> the tool's own validation reports it */
+    }
+    toolCalls.push({ id: use.id, name: use.name, input });
+  }
+  return {
+    text: textParts.join('').trim(),
+    toolCalls: toolCalls.filter((tc) => tc.name),
+    model: opts.model,
+    provider: 'anthropic',
+  };
+}
+
+/** OpenAI/Moonshot streamed call: content deltas out, full result assembled. */
+async function callOpenAiStreamed(opts: {
+  base: string;
+  key: string;
+  model: string;
+  provider: TextProvider;
+  system: string;
+  messages: AgentMessage[];
+  tools: AgentToolDef[];
+  maxTokens: number;
+  onTextDelta: (delta: string) => void;
+}): Promise<AgentModelResult | null> {
+  const res = await fetch(`${opts.base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${opts.key}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      max_tokens: opts.maxTokens,
+      stream: true,
+      messages: [
+        { role: 'system', content: opts.system },
+        ...toOpenAiMessages(opts.messages),
+      ],
+      ...(opts.tools.length > 0
+        ? {
+            tools: opts.tools.map((t) => ({
+              type: 'function',
+              function: {
+                name: t.name,
+                description: t.description,
+                parameters: t.inputSchema,
+              },
+            })),
+            tool_choice: 'auto',
+          }
+        : {}),
+    }),
+  });
+  if (!res.ok) return null;
+
+  const textParts: string[] = [];
+  const chunks = new Map<number, { id: string; name: string; args: string }>();
+  await readSse(res, (event) => {
+    const delta = event?.choices?.[0]?.delta;
+    if (typeof delta?.content === 'string' && delta.content) {
+      opts.onTextDelta(delta.content);
+      textParts.push(delta.content);
+    }
+    for (const tc of delta?.tool_calls ?? []) {
+      const index = typeof tc?.index === 'number' ? tc.index : 0;
+      const cur = chunks.get(index) ?? { id: '', name: '', args: '' };
+      if (typeof tc?.id === 'string') cur.id = tc.id;
+      if (typeof tc?.function?.name === 'string') cur.name = tc.function.name;
+      if (typeof tc?.function?.arguments === 'string') {
+        cur.args += tc.function.arguments;
+      }
+      chunks.set(index, cur);
+    }
+  });
+
+  const toolCalls: AgentToolCall[] = [];
+  const parts = Array.from(chunks.entries()).sort((a, b) => a[0] - b[0]);
+  for (const [index, cur] of parts) {
+    let input: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(cur.args || '{}');
+      if (parsed && typeof parsed === 'object') input = parsed;
+    } catch {
+      /* malformed args -> the tool's own validation reports it */
+    }
+    toolCalls.push({
+      id: cur.id || `call_${index}`,
+      name: cur.name,
+      input,
+    });
+  }
+  return {
+    text: textParts.join('').trim(),
+    toolCalls: toolCalls.filter((tc) => tc.name),
+    model: opts.model,
+    provider: opts.provider,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The one entry point
 // ---------------------------------------------------------------------------
 
@@ -378,6 +589,8 @@ export async function callAgentModel(opts: {
   messages: AgentMessage[];
   tools: AgentToolDef[];
   maxTokens?: number;
+  /** When set, the request streams and text deltas fire as they land (0.2). */
+  onTextDelta?: (delta: string) => void;
 }): Promise<AgentResult<AgentModelResult>> {
   const resolved = await resolveAgentModel(opts.model);
   if (!resolved) {
@@ -392,6 +605,41 @@ export async function callAgentModel(opts: {
     1024,
     Math.min(16000, Math.round(opts.maxTokens ?? 8000)),
   );
+
+  // Token streaming (0.2): when the caller wants deltas, try the streamed
+  // lane first. A streamed failure falls back to the normal request —
+  // streaming is an enhancement, never a new failure mode.
+  if (opts.onTextDelta) {
+    try {
+      const base =
+        resolved.provider === 'moonshot' ? MOONSHOT_BASE : OPENAI_BASE;
+      const streamed =
+        resolved.provider === 'anthropic'
+          ? await callAnthropicStreamed({
+              key: resolved.key,
+              model: resolved.model,
+              system: opts.system,
+              messages: opts.messages,
+              tools: opts.tools,
+              maxTokens,
+              onTextDelta: opts.onTextDelta,
+            })
+          : await callOpenAiStreamed({
+              base,
+              key: resolved.key,
+              model: resolved.model,
+              provider: resolved.provider,
+              system: opts.system,
+              messages: opts.messages,
+              tools: opts.tools,
+              maxTokens,
+              onTextDelta: opts.onTextDelta,
+            });
+      if (streamed) return { ok: true, data: streamed };
+    } catch {
+      /* fall through to the normal lane */
+    }
+  }
 
   try {
     if (resolved.provider === 'anthropic') {

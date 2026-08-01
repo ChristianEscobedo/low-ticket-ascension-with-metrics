@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
-import { getSession } from '@/lib/mothermode/research/store';
+import {
+  appendMessage,
+  getArtifact,
+  getSession,
+} from '@/lib/mothermode/research/store';
 import {
   runHandoff,
   type HandoffTarget,
 } from '@/lib/mothermode/research/handoff';
+import { handoffNotice } from '@/lib/mothermode/research/recipes/crew';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,21 +70,54 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     );
   }
+  // The artifact, for the notice trail's title (+ an honest early 404).
+  const artifact = await getArtifact(artifactId);
+  if (!artifact || artifact.sessionId !== session.id) {
+    return NextResponse.json(
+      { ok: false, error: 'artifact not found' },
+      { status: 404 },
+    );
+  }
+
+  const generate = body.generate === true;
+  const kind = target as HandoffTarget;
+  /** The chat trail: initiated -> completed/failed, so the owner watches
+   *  the build start and land in the session feed. Best-effort — a notice
+   *  never breaks the handoff it announces. */
+  const notice = (phase: 'initiated' | 'completed' | 'failed', detail?: string) =>
+    appendMessage({
+      sessionId: session.id,
+      role: 'assistant',
+      content: handoffNotice({
+        phase,
+        target: kind,
+        generate,
+        artifactTitle: artifact.title,
+        detail,
+      }),
+      expertSlug:
+        artifact.createdBy === 'owner' || artifact.createdBy === 'agent'
+          ? ''
+          : artifact.createdBy,
+    }).catch(() => {});
 
   try {
+    await notice('initiated');
     const result = await runHandoff({
       artifactId,
-      target: target as HandoffTarget,
+      target: kind,
       session,
-      generate: body.generate === true,
+      generate,
       updatedBy: guard.email,
     });
     if (!result.ok) {
+      await notice('failed', result.error);
       return NextResponse.json(
         { ok: false, error: result.error },
         { status: result.status },
       );
     }
+    await notice('completed', result.handedOffTo.label);
     return NextResponse.json({
       ok: true,
       handedOffTo: result.handedOffTo,

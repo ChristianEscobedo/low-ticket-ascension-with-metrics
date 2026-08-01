@@ -17,7 +17,7 @@ codebase, in dependency order.
 | Piece | Where |
 |-------|-------|
 | Full-viewport chat UI with reasoning trace + artifacts rail | `src/app/(fullscreen)/admin/research/` (`page.tsx`, `ResearchWorkspace.tsx`, `ReasoningTrace.tsx`, `ArtifactView.tsx`, `Markdown.tsx`, `researchClient.ts`) + `src/app/(fullscreen)/layout.tsx` (same auth gate, no admin chrome) |
-| Agent loop (max 8 tool rounds, SSE events) | `src/lib/mothermode/research/agent/loop.ts` |
+| Agent loop (max 8 tool rounds, PARALLEL tool calls per round, SSE events) | `src/lib/mothermode/research/agent/loop.ts` |
 | System prompt + artifact contract (+ deep-mode addendum) | `src/lib/mothermode/research/agent/prompt.ts` |
 | Tool definitions, pure (8 core + 3 deep-only, filtered per session) | `src/lib/mothermode/research/agent/toolDefs.ts` |
 | Tool executor (deep gate + depth-scaled caps) | `src/lib/mothermode/research/agent/tools.ts` |
@@ -26,14 +26,33 @@ codebase, in dependency order.
 | Amazon reviews via RapidAPI | `src/utils/integrations/amazon-rapidapi.ts` |
 | Pure scraper normalizers (no service imports) | `src/lib/mothermode/research/scrapeNormalize.ts` |
 | Pure comment-language rollup (phrases + questions, deterministic) | `src/lib/mothermode/research/commentLanguage.ts` |
+| Evidence base (pinned quotes/phrases/metrics + provenance) | `src/lib/mothermode/research/evidence.ts` (+ store functions in `store.ts`) |
+| Live result cards (post ladders, comment threads, review tables on the trace) | `src/lib/mothermode/research/liveCards.ts` + `LiveCards.tsx` |
+| Phrase bank (windowed n-gram rollup + trend deltas, computed on read) | `src/lib/mothermode/research/phraseBank.ts` |
 | Internal metrics rollup for the agent | `src/lib/mothermode/research/metrics.ts` |
-| Sessions/messages/artifacts store + scraper cache | `src/lib/mothermode/research/store.ts`, `cache.ts` |
+| Sessions/messages/artifacts store + scraper cache + call telemetry | `src/lib/mothermode/research/store.ts`, `cache.ts` |
+| Pure spend estimates (cached/failed = free, shared server+client) | `src/lib/mothermode/research/agent/cost.ts` |
+| Budgets + kill switch (per-round/daily caps, readable refusals) | `src/lib/mothermode/research/agent/budget.ts` (+ `readCallUsage` in `store.ts`) |
+| SSRF allowlist for URL tools (http(s) + platform-host match) | `src/lib/mothermode/research/urlSafety.ts` |
+| Expert config model (persona, model, tool policy, artifact contract) + the no-op default | `src/lib/mothermode/research/experts/types.ts` |
+| Experts store (reads degrade to the code default) + upsert/seed | `src/lib/mothermode/research/experts/store.ts`, `experts/seed.ts`, `scripts/seed-research-experts.cjs` |
+| Expert admin (crew editor + CRUD route) | `src/app/admin/experts/page.tsx`, `src/app/api/admin/mothermode-experts/route.ts` |
+| Agent Recipes (declarative step lists + the sequential interpreter) | `src/lib/mothermode/research/recipes/{types,run,store,seed}.ts`, `src/app/api/admin/mothermode-recipes/route.ts`, `scripts/seed-agent-recipes.cjs` |
+| Background job lane (queued recipe runs + the tick worker) | `src/lib/mothermode/research/recipes/jobs.ts`, `src/app/api/admin/mothermode-jobs/route.ts` |
+| Watchlists + the weekly digest (cron-auth, due rule, watch toggle) | `src/lib/mothermode/research/watchlists.ts`, `vercel.json` (daily 8am cron) |
+| Endpoint learning (per-endpoint outcome stats + winner-first discovery) | `src/lib/mothermode/research/endpointStats.ts` (wired in `monid.ts`) |
+| Cross-session memory (distilled learnings + the prompt block) | `src/lib/mothermode/research/{learnings,distill}.ts` |
+| Re-verify with diff (fresh turn + the computed artifact diff) | `src/lib/mothermode/research/reverify.ts` (+ route entity 'reverify', workspace button + diff card) |
+| Post-publish learning (analyst outcome digest, lineage-linked) | `src/lib/mothermode/research/outcome.ts` (+ route entity 'outcome', workspace button + notice) |
+| Semantic evidence search (OpenAI embeddings + JS cosine ranking) | `src/lib/mothermode/research/embeddings.ts` (+ rail search box, 'embed-evidence' backfill) |
+| Freshness + cache badges (evidence age, [cached] on the trace) | `src/lib/mothermode/research/freshness.ts` |
+| Mission UI (recipe cards, runs feed, gate actions) + the in-chat Plays rail (session runs, live steps, gates, start-in-session) | `src/app/admin/recipes/page.tsx` (+ sidebar link), `src/app/(fullscreen)/admin/research/RecipeRunsPanel.tsx` |
 | Handoffs | `src/lib/mothermode/research/handoff.ts` + `src/app/api/admin/mothermode-research/handoff/route.ts` |
 | Chat SSE route | `src/app/api/mothermode/research/chat/route.ts` |
 | Session/artifact CRUD | `src/app/api/admin/mothermode-research/route.ts` |
-| Migration (4 tables) | `supabase/migrations/20261101000000_mothermode_research_lab.sql` |
+| Migrations (4 tables + call log + experts + lineage + evidence + recipes + jobs + watchlists + endpoint stats + learnings + embeddings) | `supabase/migrations/20261101000000_mothermode_research_lab.sql`, `20261103000000_research_agent_call_log.sql`, `20261104000000_mothermode_experts.sql`, `20261105000000_artifact_lineage.sql`, `20261106000000_research_evidence.sql`, `20261107000000_mothermode_recipes.sql`, `20261108000000_agent_jobs.sql`, `20261109000000_research_watchlists.sql`, `20261110000000_monid_endpoint_stats.sql`, `20261111000000_research_learnings.sql`, `20261112000000_research_evidence_embeddings.sql` |
 | Integration cards (Monid, RapidAPI) | `src/app/admin/integrations/page.tsx` ("Research Lab sources"), `actions.ts` (`VALID_PROVIDERS` + `CONFIG_KEYS`), `utils/integrations/types.ts`, `runtime-config.ts` |
-| Tests | `tests/lib/research-lab.test.ts`, `research-metrics.test.ts`, `research-integrations.test.ts`, `research-intake.test.ts`, `research-deep.test.ts` (77 tests) |
+| Tests | `tests/lib/research-{lab,metrics,integrations,intake,deep,cost,experts,evidence,live-cards,phrase-bank,budget,url-safety,recipes,jobs,watchlists,endpoint-stats,learnings,reverify,outcome,embeddings,freshness}.test.ts` (194) + `tests/evals/research-loop.eval.test.ts` (19) — 213 total |
 | Help article | `src/lib/mothermode/help/seedContent/researchLab.ts` |
 
 ## 2. Onboarding (the research brief)
@@ -112,9 +131,30 @@ the other admin kits):
 - `mothermode_research_artifacts` — type (research-brief | offer-brief |
   content-plan | lead-magnet | ad-angles | email-outline | notes), title,
   markdown, `structured` JSONB (the handoff payload), status,
-  `handed_off_to` JSONB.
+  `handed_off_to` JSONB, plus the envelope-v2 fields (migration
+  `20261105000000`): `version` (bumps on content change only),
+  `parent_id` (lineage; recipes stamp it), `created_by` (expert slug, or
+  'owner' for hand edits).
+- `mothermode_research_artifact_versions` — append-only snapshots
+  (artifact_id, version, content, created_by, created_at). Every creation
+  and every content bump appends one; the live row keeps its stable id so
+  handoffs never move. `listArtifactVersions` powers the History view.
 - `mothermode_research_cache` — `cache_key` PK, payload, `expires_at`. Monid
   and RapidAPI bill per run; every scraper call reads/writes this first.
+- `mothermode_research_call_log` (migration `20261103000000`) — one row per
+  tool call: tool, summaries, status, ms, `cached`, `est_cost_cents`. The
+  loop writes it best-effort per settled call (failures swallowed —
+  telemetry never breaks a turn); the trace header renders the same numbers
+  from the pure `agent/cost.ts` model (`formatSpendLine(summarizeCalls)`).
+  Raw material for budgets and the provider health dashboard.
+- `mothermode_research_evidence` (migration `20261106000000`) — the
+  compounding asset: pinned quotes/phrases/metrics/notes, verbatim body
+  plus provenance (source_url, source_tool, expert, created_by, offer_slug,
+  artifact_id, session cascade). The workspace pins from any chat text
+  selection (kind inferred by `inferEvidenceKind`: ≤4 words = phrase,
+  digit-carrying line = metric, longer = quote); the Evidence rail lists
+  and deletes. The phrase bank, watchlists, re-verify, and semantic search
+  are all read-models over this table.
 
 ## 3. Environment / credentials
 
@@ -145,9 +185,26 @@ OpenAI `web_search_options`).
 3. Resolve the session's ContextRefs (+ scoped offer) into clamped packs and
    build the system prompt (`agent/prompt.ts`), which carries the artifact
    structured-payload contract the handoffs parse.
-4. Up to 8 rounds of `callAgentModel` → run each tool call → feed results
-   (9k char cap each) back. Each call emits SSE events:
-   `status | tool | artifact | message | done | error`.
+4. Up to 8 rounds of `callAgentModel` → run the round's tool calls IN
+   PARALLEL (`Promise.all`; events stream as each call lands) → feed results
+   back in CALL order (9k char cap each), so the transcript and the
+   persisted trace are deterministic. SSE events:
+   `status | tool | artifact | message | done | error | text-delta` — the
+   text-delta events (0.2) stream the assistant's text as it lands
+   (`callAgentModel({onTextDelta})`: Anthropic content_block_delta /
+   OpenAI delta.content, tool chunks assembled to the identical contract,
+   a streamed failure falling back to the normal lane; the workspace
+   renders the accumulated text in the streaming card). The loop contracts
+   (round order, parallel start, event streaming, failure honesty, round
+   cap, depth steering) are pinned by the eval suite
+   (`tests/evals/research-loop.eval.test.ts`, scripted model + mocked tools).
+   **The budget gate (2.4)** rides each round: paid calls check today's
+   usage (read once per turn from the call log) against the caps in
+   `agent/budget.ts` — kill switch (`RESEARCH_PAID_TOOLS_OFF`) first, then
+   the per-round cap (6), then the daily caps (25 runs / ~$2.00). Blocked
+   calls return a readable `blocked: budget` outcome and the model
+   self-corrects; free tools never gate; estimates reserve into the next
+   round.
 5. Persist the assistant turn WITH the trace so the reasoning UI survives
    reload.
 
@@ -180,7 +237,7 @@ The gateway rejects runs through THREE channels, all handled:
 2. **HTTP 400/5xx** — `runWithVariants` cycles CLEAN input pairs: `{query}`, `{q}`, `{searchTerm}`, `{searchTerms:[...]}`, `{hashtags:[...]}`, `{keyword}`, `{searchQuery}`. Strict actors 400 on ANY unknown field, so **platform rides along ONLY on the unified surf endpoint** (`isUnifiedEndpoint`), plural query fields go as ARRAYS, and every failure lists `(input shapes tried: ...)`.
 3. **200-with-FAILED-body** — `failedPayloadError` detects `{status:"FAILED"}` payloads that transport checks sail past.
 
-Plus: **pullpush.io fallback** for reddit (reddit.com JSON 403s datacenter IPs; pullpush works — empty results try the full query then its first word), **no caching of empty digests** (a 7-day "nothing found" pins a recovered source), the **Apify dual-engine** for Amazon (`getAmazonEngine` = `rapidapi.engine`, default rapidapi-first with Apify fallback), and the **529 backoff retry** on Anthropic overload.
+Plus: **pullpush.io fallback** for reddit (reddit.com JSON 403s datacenter IPs; pullpush works — empty results try the full query then its first word), **no caching of empty digests** (a 7-day "nothing found" pins a recovered source), the **Apify dual-engine** for Amazon (`getAmazonEngine` = `rapidapi.engine`, default rapidapi-first with Apify fallback), the **529 backoff retry** on Anthropic overload, and **winner-first discovery** (4.3: every run records its outcome in `mothermode_monid_endpoint_stats`; `discoverMonid` orders the pool by successes minus failures, recent-3-day failures costing double — the admin pin still wins outright).
 
 ## 5.2 Integrations persistence rules
 
@@ -241,6 +298,47 @@ Spend honesty: a voice_deep_dive is 1 posts run + up to 6 comment runs
 (default 5). That is why the lane is opt-in per session, and why the prompt
 tells the agent to say what a dive costs.
 
+## 5.4 The expert runtime (the generalized chassis)
+
+Every agent turn runs through ONE config-driven loop. An **Expert** is a row
+(`mothermode_experts`, migration `20261104000000`): persona, model
+preference, tool policy, context refs, artifact contract, handoff manners.
+The research agent is expert #1 as the code-level `DEFAULT_RESEARCH_EXPERT`
+— every field the empty default — so an empty table is byte-identical to
+the pre-experts behavior, and store reads DEGRADE to it (`getExpert`
+returns null on missing/inactive/error).
+
+The wiring (`agent/loop.ts`): resolve `expert ?? expertSlug ?? DEFAULT`,
+then three narrowings, each enforced in two places:
+
+1. **Persona** — `roleOverride` swaps ONLY the ROLE block
+   (`SEARCH_DISCIPLINE` was extracted so query discipline, the artifact
+   contract, and evidence modes survive a persona swap unchanged). The
+   expert's `model` beats the caller's when set.
+2. **Tool policy** — `filterToolDefs` intersects AFTER the lane
+   (`buildResearchToolDefs({deep, policy})`): a policy narrows, never
+   widens (a standard session never gains deep tools through a policy).
+   The executor re-blocks out-of-policy calls (`blocked: outside policy`).
+3. **Artifact contract** — `expertAllowsArtifact`: an empty contract
+   allows all types; a set one rejects `create_artifact` with a readable,
+   model-correctable reason (`blocked: outside contract`).
+
+The crew (roadmap 1.5 + 3.5): seeded via `experts/seed.ts` +
+`scripts/seed-research-experts.cjs` (idempotent by slug) — **research**
+(the no-op default in row form), **Atlas/strategist** (offer briefs from
+evidence; tools: internal_metrics, get_context, web_search,
+create_artifact), **Wren/copy** (hooks and plans from evidence language;
+tools: get_context, create_artifact only), **Nova/leadmagnet** (lead
+magnets bridging to the offer), **Ember/email** (sequences from evidence
+phrases), **Pixel/design** (visual direction notes), **Rook/compliance**
+(claims flags with safer rewrites), **Sage/analyst** (internal_metrics
+digests). Every persona NAMES its actual tool lane because the shared
+TOOL_GUIDANCE block describes the research lane; the seed shapes are
+validated in tests (registry names, artifact types, persona lanes). The
+`/admin/experts` editor manages them through
+`/api/admin/mothermode-experts`. HOUSE VOICE lives in SEARCH_DISCIPLINE
+(extracted from ROLE), so the voice rules survive any persona swap.
+
 ## 6. Handoffs (Draft, Build, and the Full System builder)
 
 `handoff.ts runHandoff({artifactId, target, session, generate?})` —
@@ -263,7 +361,45 @@ a Lead Gen Kit (built), an opt-in funnel (linked `leadGenSlug` + `offerSlug`),
 a nurture Email Kit (built, research-context stamped), a sales funnel draft,
 and planner cards (one per angle). The manifest (`SystemBuildPart[]`) is
 persisted on the artifact's `structured.systemManifest`; `handed_off_to`
-gets `kind: 'system'`.
+gets `kind: 'system'`. All five targets are valid recipe step handoffs
+(`RecipeStepHandoff.target`), so a gated recipe step can fan the approved
+offer brief out into the whole machine.
+
+## 6.1 The house recipe fleet
+
+Sixteen seeded plays (`recipes/seed.ts`, mirrored in
+`scripts/seed-agent-recipes.cjs`, idempotent by slug). The four originals:
+**low-ticket-launch** (research → strategist gate → copy), **full-system**
+(strategist gate → sales-funnel draft; leadmagnet → kit Build; email → kit
+Build; copy → planner), and the two UNGATED watchers that back the weekly
+digest, **niche-watch** and **voice-check**. The deep research fleet —
+UNGATED and artifact-only like the watchers (intelligence producers, safe
+unattended or weekly; Deep sessions get the full lane, the instructions
+name the standard fallback; LinkedIn/Facebook ride cited web_search
+passes, honestly labeled since no scrape lane exists):
+
+| Slug | Chain | Budget |
+|------|-------|--------|
+| `influencer-panel` | research: voices 1-2 deep-dived, comments mined → research: voices 3-4 + post_comments on the standouts → copy: cross-creator hook bank → ad-angles | ~$2.50 |
+| `comment-mining-sweep` | research: top_posts across keywords (TikTok/X/IG) → research: post_comments on the 5-8 winners → copy: hooks verbatim from the comments → ad-angles | ~$2.50 |
+| `cross-channel-sweep` | research: X/TikTok/IG, one keyword each + LinkedIn web pass → research: YouTube/Reddit + Facebook web pass → copy: platform-angle map → ad-angles | ~$2.50 |
+| `reddit-rabbit-hole` | research: reddit_deep_dive in EVERY brief subreddit, comments included → copy: objections ranked + questions → ad-angles | ~$1.50 |
+| `video-deep-dive` | research: TikTok/YouTube top_posts + post_comments → research: 1-2 creator dives → copy: video content-plan | ~$2.50 |
+| `audience-mosaic` | research × 3 (channels → panel → reddit/youtube) → strategist: unified themes map → copy: master hook bank (gate → planner) | ~$4.50 |
+
+The builder fleet (gates sit
+where money or judgment matters; design/compliance advisory steps run auto
+AFTER the handoffs so the assets exist AND the session holds the direction
+and flags; compliance always runs last):
+
+| Slug | Chain | Budget |
+|------|-------|--------|
+| `bulk-content-engine` | research → copy: 30-day plan, 20-30 dated items (gate → planner) → design → compliance | ~$2.50 |
+| `full-funnel-build` | research → strategist (gate → **system** fan-out) → email: post-purchase outline → kit Build → compliance | ~$3.00 |
+| `paid-launch-system` | research → strategist (gate → sales funnel) → copy: 5 paid angles/platform (gate → paid cards) → design → compliance | ~$3.50 |
+| `email-sequence-build` | research → email: nurture (kit Build) → email: launch (gate → second kit Build) → compliance | ~$2.50 |
+| `repurpose-engine` | analyst (our numbers, top winners) → copy: 15-20 re-cuts (gate → planner) → design | ~$1.50 |
+| `launch-week` | research → strategist (gate → **system**) → copy: paid angles (gate → paid cards) → copy: organic calendar → planner → email: cart open-close → kit Build → design → compliance | ~$4.50 |
 
 The **research-context preset** (`researchContextRefs(session)`): the offer
 ref plus the session's research brief as an inline text pack, stamped onto
@@ -280,7 +416,7 @@ research language, not just the target intake.
    getters, `actions.ts` (`VALID_PROVIDERS`, `CONFIG_KEYS`), and the page cards.
 6. Wire the target stores for handoffs (planner, leadgen, email, sales) — or
    delete the targets you don't have.
-7. `tests/lib/research-*.test.ts` (77 tests) should pass: `npx vitest run tests/lib/research-*`.
+7. `tests/lib/research-*.test.ts` + `tests/evals/research-loop.eval.test.ts` (213 tests) should pass: `npx vitest run tests/lib/research- tests/evals`.
 
 ## 8. Standing rules (do not regress)
 
@@ -308,3 +444,8 @@ research language, not just the target intake.
   the same prompt it always had — no deep tool leaks in, and comment/phrase
   counts are always computed in code (`commentLanguage.ts`), never estimated
   by the model.
+- **Data safety.** Tool results are DATA, never instructions (the prompt
+  says so for every expert). post_comments only runs on http(s) URLs whose
+  host matches the platform's allowlist (`urlSafety.ts` — lookalike hosts
+  blocked). Quote the audience's words, never their names: no author fields
+  ride the cards or the evidence rail.
