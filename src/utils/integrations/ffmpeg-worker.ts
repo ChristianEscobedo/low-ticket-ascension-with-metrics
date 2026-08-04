@@ -43,28 +43,20 @@ function findInstallerBinary(): string | null {
   const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
   const platArch = `${process.platform}-${process.arch}`;
   const cwd = process.cwd();
-  const candidates: string[] = [
-    // pnpm virtual store: .pnpm/@ffmpeg-installer+ffmpeg@*/node_modules/@ffmpeg-installer/ffmpeg/<plat>-<arch>/ffmpeg
-    join(cwd, 'node_modules', '.pnpm'),
-    // npm/yarn flat: node_modules/@ffmpeg-installer/ffmpeg/<plat>-<arch>/ffmpeg
-    join(cwd, 'node_modules', '@ffmpeg-installer', 'ffmpeg', platArch, exe),
-    // the (incorrect but kept for safety) bare scoped dir
-    join(cwd, 'node_modules', '@ffmpeg-installer', platArch, exe),
-  ];
 
-  // 1) exact flat layouts
-  for (let i = 1; i < candidates.length; i++) {
-    if (existsSync(candidates[i])) return candidates[i];
-  }
+  // Flat layouts first (npm/yarn): node_modules/@ffmpeg-installer/<plat>-<arch>/ffmpeg
+  const flat = join(cwd, 'node_modules', '@ffmpeg-installer', platArch, exe);
+  if (existsSync(flat)) return flat;
 
-  // 2) walk the pnpm virtual store for the installer package dir. The binary
-  //    lives at <entry>/node_modules/@ffmpeg-installer/<plat>-<arch>/ffmpeg —
-  //    the platform dir is a SIBLING of the `ffmpeg` package, directly under
-  //    `@ffmpeg-installer` (NOT inside `@ffmpeg-installer/ffmpeg/`).
-  const pnpmDir = candidates[0];
+  // pnpm virtual store: scan EVERY @ffmpeg-installer+... entry. The binary for
+  // the CURRENT platform lives at <entry>/node_modules/@ffmpeg-installer/
+  // <plat>-<arch>/ffmpeg — and @ffmpeg-installer/linux-x64 (the package Vercel
+  // needs) lands as its OWN .pnpm entry (@ffmpeg-installer+linux-x64@VERSION),
+  // not under the @ffmpeg-installer+ffmpeg@ one. Walk all of them.
+  const pnpmDir = join(cwd, 'node_modules', '.pnpm');
   if (existsSync(pnpmDir)) {
     for (const entry of readdirSync(pnpmDir)) {
-      if (!entry.startsWith('@ffmpeg-installer+ffmpeg@')) continue;
+      if (!entry.startsWith('@ffmpeg-installer+')) continue;
       const binPath = join(
         pnpmDir,
         entry,
@@ -78,6 +70,7 @@ function findInstallerBinary(): string | null {
   }
   return null;
 }
+
 
 
 export function resolveFfmpegPath(): string {
