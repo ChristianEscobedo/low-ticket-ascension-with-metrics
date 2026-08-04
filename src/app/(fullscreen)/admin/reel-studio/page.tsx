@@ -6405,6 +6405,17 @@ export default function ReelStudioPage() {
                 >
                   {geneStrip ? '??? genes' : 'genes ???'}
                 </button>
+                <button
+                  onClick={() => setPreviewMode((m) => (m === 'remotion' ? 'edit' : 'remotion'))}
+                  className={clsx(
+                    'rounded-md border px-2 py-1 text-[9px] font-semibold',
+                    previewMode === 'remotion' ? 'border-brass/50 bg-brass/10 text-brass' : 'border-bone/15 text-bone/40',
+                  )}
+                  title={previewMode === 'remotion' ? 'TRUE render preview (what you see IS what exports)' : 'Edit mode (scrub/trim canvas)'}
+                >
+                  {previewMode === 'remotion' ? 'Remotion' : 'Edit'}
+                </button>
+
                 <span className="text-[9px] font-semibold uppercase tracking-wide text-bone/30">
                   target
                 </span>
@@ -6546,7 +6557,18 @@ export default function ReelStudioPage() {
                     })()}
                   </div>
                 )}
-                {previewSrc ? (
+                {previewMode === 'remotion' && project.clips.length > 0 ? (
+                  <div
+                    className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
+                    style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
+                  >
+                    <RemotionPreview
+                      project={project}
+                      aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
+
+                    />
+                  </div>
+                ) : previewSrc ? (
                   <div
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
@@ -6555,6 +6577,7 @@ export default function ReelStudioPage() {
                     {/* R25: ONE element, driven 100% by the playback clock (no src prop,
                         no fences ??? the clock swaps + seeks it; it never decides anything). */}
                     <video
+
                       ref={previewRef}
                       data-clip-url=""
                       onClick={togglePlay}
