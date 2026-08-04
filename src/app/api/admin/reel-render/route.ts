@@ -62,8 +62,13 @@ export async function POST(request: NextRequest) {
   if (!id) {
     return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 });
   }
-  if (!isRemotionConfigured()) {
-    return NextResponse.json({ success: false, error: remotionSetupHint() }, { status: 400 });
+
+  const workerUrl = (process.env.RENDER_WORKER_URL || '').trim();
+  if (!workerUrl) {
+    return NextResponse.json(
+      { success: false, error: 'RENDER_WORKER_URL is not set. Deploy the render-worker (Railway/Fly) and set its URL.' },
+      { status: 400 },
+    );
   }
 
   const project = await getReelProject(id);
@@ -83,18 +88,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: errors.join(' ') }, { status: 400 });
   }
 
-  const started = await startReelRender(plan);
-  if (!started.ok) {
-    return NextResponse.json({ success: false, error: started.error }, { status: 502 });
+  // POST to the render worker (Railway/Fly Docker container with Chromium + ffmpeg)
+  const workerRes = await fetch(`${workerUrl.replace(/\/$/, '')}/render`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ plan, reelId: id }),
+  });
+  const workerJson = await workerRes.json();
+  if (!workerJson.success) {
+    return NextResponse.json(
+      { success: false, error: workerJson.error || 'Render worker failed' },
+      { status: 502 },
+    );
   }
 
   return NextResponse.json({
     success: true,
-    renderId: started.data.renderId,
-    bucketName: started.data.bucketName,
-    region: started.data.region,
+    url: workerJson.url,
+    renderId: workerJson.renderId,
     durationSec: estimateRenderSeconds(plan),
     words: plan.words.length,
     clips: plan.clips.length,
   });
 }
+
+

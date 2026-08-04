@@ -1,0 +1,93 @@
+/**
+ * The Remotion render worker. One job: accept a RenderPlan, render the MP4,
+ * upload to Supabase storage, return the public URL.
+ *
+ * Runs on Railway/Fly as a persistent Docker container. The Next.js app POSTs
+ * here instead of calling Remotion Lambda — no IAM, no S3, no function names.
+ *
+ * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PORT (default 8080).
+ */
+const express = require('express');
+const { bundle } = require('@remotion/bundler');
+const { renderMedia, selectComposition } = require('@remotion/renderer');
+const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+
+const PORT = process.env.PORT || 8080;
+const BUCKET = 'reel-renders';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+);
+
+// Bundle the composition ONCE at startup — renders reuse it.
+let bundled = null;
+async function getBundle() {
+  if (bundled) return bundled;
+  const entry = path.join(__dirname, 'remotion-project', 'index.ts');
+  console.log('[worker] bundling', entry);
+  bundled = await bundle(entry);
+  console.log('[worker] bundled OK');
+  return bundled;
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled }));
+
+app.post('/render', async (req, res) => {
+  const { plan, reelId } = req.body || {};
+  if (!plan || !plan.clips || !plan.clips.length) {
+    return res.status(400).json({ success: false, error: 'Invalid plan — no clips.' });
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-render-'));
+  const outPath = path.join(tmpDir, 'out.mp4');
+
+  try {
+    const serveUrl = await getBundle();
+    const composition = await selectComposition({
+      serveUrl,
+      id: 'ReelComposition',
+      inputProps: { plan },
+    });
+
+    console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: 'h264',
+      outputLocation: outPath,
+      inputProps: { plan },
+      onProgress: ({ progress }) => {
+        if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
+      },
+    });
+
+    // Upload to Supabase storage
+    const fileName = `${reelId || 'reel'}-${Date.now()}.mp4`;
+    const fileBuffer = fs.readFileSync(outPath);
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(fileName, fileBuffer, { contentType: 'video/mp4', upsert: true });
+    if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+    console.log(`[worker] done → ${urlData.publicUrl}`);
+    res.json({ success: true, url: urlData.publicUrl, renderId: fileName });
+  } catch (err) {
+    console.error('[worker] render failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// Pre-bundle on startup so the first render isn't slow
+getBundle().catch((e) => console.error('[worker] pre-bundle failed:', e.message));
+
+app.listen(PORT, () => console.log(`[worker] listening on :${PORT}`));
