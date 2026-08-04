@@ -13,7 +13,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { clsx } from 'clsx';
+
+// The TRUE render preview — the same ReelComposition + buildRenderPlan the
+// Remotion Lambda renderer uses. Browser-only, so load it client-side.
+const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
+
 import {
   ArrowLeft,
   ArrowLeftCircle,
@@ -3742,6 +3748,14 @@ export default function ReelStudioPage() {
 
   const [ccOn, setCcOn] = useState(true);
   const [previewTime, setPreviewTime] = useState(0);
+  /**
+   * THE preview engine. 'remotion' = the TRUE render (the same ReelComposition
+   * + buildRenderPlan the Lambda renderer uses — what you see IS what exports).
+   * 'edit' = the legacy scrub/trim canvas (the playback clock) for frame-level
+   * cutting. Default to 'remotion' so the preview always matches the export.
+   */
+  const [previewMode, setPreviewMode] = useState<'remotion' | 'edit'>('remotion');
+
   /** R27 fancy subtitles (veed) ??? the settings the burn runs with. */
   const [fancy, setFancy] = useState<{
     subtitleType: 'word' | 'line';
