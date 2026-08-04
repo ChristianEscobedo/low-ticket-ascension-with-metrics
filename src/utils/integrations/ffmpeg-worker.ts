@@ -16,11 +16,12 @@
  */
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   buildSplitScreenFilter,
+
   parseSceneCutTimes,
   sceneSelectExpr,
   spriteFpsValue,
@@ -28,43 +29,88 @@ import {
 import { buildAssCaptions, type AssCaptionStyle } from '@/lib/mothermode/reel/assCaptions';
 import type { ReelWord } from '@/lib/mothermode/reel/types';
 
+/**
+ * Locate a REAL ffmpeg binary on disk. On Vercel the serverless bundle traces
+ * `require('@ffmpeg-installer/ffmpeg')` but the binary file itself lives in
+ * pnpm's virtual store (the .pnpm/@ffmpeg-installer+ffmpeg@VERSION subtree),
+ * which the resolver's naive `join(cwd,'node_modules','@ffmpeg-installer',<plat>-<arch>)` never
+
+ * finds — so it used to fall through to a non-existent ffmpeg-static path and
+ * spawn() ENOENTs. This walks the actual install trees and returns the first
+ * binary that exists.
+ */
+function findInstallerBinary(): string | null {
+  const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  const platArch = `${process.platform}-${process.arch}`;
+  const cwd = process.cwd();
+  const candidates: string[] = [
+    // pnpm virtual store: .pnpm/@ffmpeg-installer+ffmpeg@*/node_modules/@ffmpeg-installer/ffmpeg/<plat>-<arch>/ffmpeg
+    join(cwd, 'node_modules', '.pnpm'),
+    // npm/yarn flat: node_modules/@ffmpeg-installer/ffmpeg/<plat>-<arch>/ffmpeg
+    join(cwd, 'node_modules', '@ffmpeg-installer', 'ffmpeg', platArch, exe),
+    // the (incorrect but kept for safety) bare scoped dir
+    join(cwd, 'node_modules', '@ffmpeg-installer', platArch, exe),
+  ];
+
+  // 1) exact flat layouts
+  for (let i = 1; i < candidates.length; i++) {
+    if (existsSync(candidates[i])) return candidates[i];
+  }
+
+  // 2) walk the pnpm virtual store for the installer package dir. The binary
+  //    lives at <entry>/node_modules/@ffmpeg-installer/<plat>-<arch>/ffmpeg —
+  //    the platform dir is a SIBLING of the `ffmpeg` package, directly under
+  //    `@ffmpeg-installer` (NOT inside `@ffmpeg-installer/ffmpeg/`).
+  const pnpmDir = candidates[0];
+  if (existsSync(pnpmDir)) {
+    for (const entry of readdirSync(pnpmDir)) {
+      if (!entry.startsWith('@ffmpeg-installer+ffmpeg@')) continue;
+      const binPath = join(
+        pnpmDir,
+        entry,
+        'node_modules',
+        '@ffmpeg-installer',
+        platArch,
+        exe,
+      );
+      if (existsSync(binPath)) return binPath;
+    }
+  }
+  return null;
+}
+
+
 export function resolveFfmpegPath(): string {
   const env = (process.env.FFMPEG_PATH || '').trim();
   if (env) return env;
 
-  // 1) @ffmpeg-installer/ffmpeg — the SERVERLESS-SAFE binary. It ships the
-  //    platform ffmpeg as a static package file (no postinstall download, so
-  //    pnpm/Vercel never strips it), and its `path` points at the real file.
-  //    This is what fixes "spawn …/ffmpeg-static/ffmpeg ENOENT" on Vercel,
-  //    where ffmpeg-static's postinstall (which downloads the binary) is
-  //    blocked by pnpm's build-script policy and the file never lands.
+  // 1) @ffmpeg-installer/ffmpeg — the SERVERLESS-SAFE binary. Ships the
+  //    platform ffmpeg as a static package file (no postinstall download).
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const inst = require('@ffmpeg-installer/ffmpeg') as { path?: string };
-    if (inst && typeof inst.path === 'string' && inst.path && !inst.path.includes('[')) {
-      if (existsSync(inst.path)) return inst.path;
+    if (
+      inst &&
+      typeof inst.path === 'string' &&
+      inst.path &&
+      !inst.path.includes('[') &&
+      existsSync(inst.path)
+    ) {
+      return inst.path;
     }
   } catch {
     /* installer package not resolvable in this runtime */
   }
 
-  // 2) On-disk fallback inside the installer package dir (covers bundled
-  //    serverless layouts where require() returns a virtual path).
-  try {
-    const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-    const installerOnDisk = join(
-      process.cwd(),
-      'node_modules',
-      '@ffmpeg-installer',
-      process.platform + '-' + process.arch,
-      exe,
-    );
-    if (existsSync(installerOnDisk)) return installerOnDisk;
-  } catch {
-    /* cwd unavailable */
-  }
+  // 2) Walk the real install trees (pnpm virtual store + flat npm) for the
+  //    installer binary — the layout the serverless bundle actually leaves on
+  //    disk. THIS is what stops the ffmpeg-static ENOENT on Vercel.
+  const found = findInstallerBinary();
+  if (found) return found;
 
-  // 3) Legacy ffmpeg-static — kept for local dev where its postinstall ran.
+  // 3) Legacy ffmpeg-static — local dev only, and ONLY if the binary truly
+  //    exists (never return the package's .path blindly: its postinstall is
+  //    blocked on Vercel, so .path points at a file that never landed).
   try {
     const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
     const onDisk = join(process.cwd(), 'node_modules', 'ffmpeg-static', exe);
@@ -75,13 +121,13 @@ export function resolveFfmpegPath(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bin = require('ffmpeg-static') as string | null;
-    // guard: bundled virtual paths contain '[' segments — never spawn those
-    if (bin && !bin.includes('[')) return bin;
+    if (bin && !bin.includes('[') && existsSync(bin)) return bin;
   } catch {
     /* package not resolvable in this runtime */
   }
   return 'ffmpeg'; // last resort: hope it's on PATH
 }
+
 
 
 function runFfmpeg(args: string[], timeoutMs: number): Promise<void> {
