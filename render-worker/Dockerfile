@@ -15,13 +15,15 @@ ENV CHROME_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# Install deps first (layer cache)
-COPY render-worker/package.json render-worker/package-lock.json* ./
+# Install deps first (layer cache). The build context IS render-worker/ (when
+# Railway's Root Directory is set), so paths are relative to it — no
+# render-worker/ prefix.
+COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-# The worker source (includes remotion-project/ — copied in so the build
-# context finds it when Root Directory is render-worker)
-COPY render-worker/ ./
+# The worker source (includes remotion-project/ — copied in so it's self-contained)
+COPY . ./
+
 
 
 EXPOSE 8080
