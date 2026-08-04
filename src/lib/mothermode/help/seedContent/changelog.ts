@@ -334,6 +334,22 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '1.9.0',
+    releasedOn: '2026-08-04',
+    entryType: 'added',
+    title: 'Remotion caption rendering: preview IS the export',
+
+    body: cl([
+      '<p>Captions now render EXACTLY as they preview — same words, same timings, same animations, same styles. The editor\'s Remotion Player and the Railway render worker use the SAME ReelComposition + CaptionLayer + buildRenderPlan, so what you see IS what exports. No more "the captions look different in the MP4."</p>',
+      '<p>The old path had two caption renderers that never matched: a browser preview with CSS karaoke (word-timed highlight, scale pops, blur-in, elastic squash, glitch, box-grow highlights, gradient fills, power words) and an ffmpeg burn that could only draw flat text. Now ONE composition serves both — the preview component and the render component are literally the same component.</p>',
+      '<p>Every caption feature renders identically: word-timed karaoke, per-word scale pops, blur-in, elastic squash, glitch, box-grow highlights, gradient fills, power words, emoji, custom fonts, stroke + shadow, drag-to-move position, multi-row captions, and Ken-Burns/pan/zoom motion per clip.</p>',
+      '<p>The render worker is a persistent Docker container on Railway (Node + Chromium + ffmpeg + Remotion). The Next.js app POSTs a RenderPlan to it; the worker renders the MP4 and uploads it to Supabase storage. No IAM, no S3 serve URLs, no Lambda function names.</p>',
+      '<p><strong>Where to start:</strong> open /admin/reel-studio, pick a reel with clips + captions, and the stage shows the Remotion Player (the "Remotion" toggle is active by default). Hit Render video in the Post tab — the MP4 matches the preview exactly.</p>',
+    ]),
+    published: true,
+  },
 ];
+
 
 
