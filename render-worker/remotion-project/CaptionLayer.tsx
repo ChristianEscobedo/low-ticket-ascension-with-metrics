@@ -18,7 +18,8 @@ import {
   emojiFor,
   isPowerWord,
 } from '../src/lib/mothermode/reel/captions';
-import type { RenderPlan } from '../src/lib/mothermode/reel/render/plan';
+import type { RenderPlan } from './constants';
+
 
 /** The index of the word being spoken on this frame, or -1 between words. */
 export function activeWordIndex(words: RenderPlan['words'], frame: number): number {

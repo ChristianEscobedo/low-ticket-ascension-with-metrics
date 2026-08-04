@@ -12,7 +12,8 @@
 import React from 'react';
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
 import { CaptionLayer } from './CaptionLayer';
-import type { RenderClip, RenderPlan } from '../src/lib/mothermode/reel/render/plan';
+import type { RenderClip, RenderPlan } from './constants';
+
 
 /** Tolerant read of a motion keyframe — field names differ by preset vintage. */
 type MotionLike = {

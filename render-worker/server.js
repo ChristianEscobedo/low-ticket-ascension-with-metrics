@@ -21,10 +21,19 @@ app.use(express.json({ limit: '10mb' }));
 const PORT = process.env.PORT || 8080;
 const BUCKET = 'reel-renders';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-);
+// Lazy Supabase client — created on first use, NOT at module load. The worker
+// starts and serves /health even without env vars; it only fails on /render if
+// they're missing (which is the right behavior — the client tells you why).
+let _supabase = null;
+function supabase() {
+  if (_supabase) return _supabase;
+  const url = (process.env.SUPABASE_URL || '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (Railway Variables).');
+  _supabase = createClient(url, key);
+  return _supabase;
+}
+
 
 // Bundle the composition ONCE at startup — renders reuse it.
 let bundled = null;
@@ -71,12 +80,13 @@ app.post('/render', async (req, res) => {
     // Upload to Supabase storage
     const fileName = `${reelId || 'reel'}-${Date.now()}.mp4`;
     const fileBuffer = fs.readFileSync(outPath);
-    const { error: upErr } = await supabase.storage
+    const { error: upErr } = await supabase().storage
       .from(BUCKET)
       .upload(fileName, fileBuffer, { contentType: 'video/mp4', upsert: true });
     if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
 
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+    const { data: urlData } = supabase().storage.from(BUCKET).getPublicUrl(fileName);
+
     console.log(`[worker] done → ${urlData.publicUrl}`);
     res.json({ success: true, url: urlData.publicUrl, renderId: fileName });
   } catch (err) {

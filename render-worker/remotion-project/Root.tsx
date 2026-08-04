@@ -8,7 +8,8 @@
 import React from 'react';
 import { Composition } from 'remotion';
 import { ReelComposition } from './ReelComposition';
-import { DEFAULT_FPS, RENDER_SIZES, type RenderPlan } from '../src/lib/mothermode/reel/render/plan';
+import { DEFAULT_FPS, RENDER_SIZES, type RenderPlan } from './constants';
+
 
 /** Shown in `remotion studio` when no real plan is passed. */
 const previewPlan: RenderPlan = {
