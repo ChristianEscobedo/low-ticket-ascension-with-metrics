@@ -97,28 +97,13 @@ export function resolveFfmpegPath(): string {
 
   // 2) Walk the real install trees (pnpm virtual store + flat npm) for the
   //    installer binary — the layout the serverless bundle actually leaves on
-  //    disk. THIS is what stops the ffmpeg-static ENOENT on Vercel.
+  //    disk. THIS is what stops the ENOENT on Vercel.
   const found = findInstallerBinary();
   if (found) return found;
 
-  // 3) Legacy ffmpeg-static — local dev only, and ONLY if the binary truly
-  //    exists (never return the package's .path blindly: its postinstall is
-  //    blocked on Vercel, so .path points at a file that never landed).
-  try {
-    const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-    const onDisk = join(process.cwd(), 'node_modules', 'ffmpeg-static', exe);
-    if (existsSync(onDisk)) return onDisk;
-  } catch {
-    /* cwd unavailable */
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const bin = require('ffmpeg-static') as string | null;
-    if (bin && !bin.includes('[') && existsSync(bin)) return bin;
-  } catch {
-    /* package not resolvable in this runtime */
-  }
-  return 'ffmpeg'; // last resort: hope it's on PATH
+  // Last resort: hope ffmpeg is on PATH (local dev with a system install).
+  return 'ffmpeg';
+
 }
 
 
