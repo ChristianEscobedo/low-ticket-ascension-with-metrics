@@ -7,6 +7,10 @@ import { clsx } from 'clsx';
 const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/assets', label: 'Asset Hub' },
+  { href: '/admin/media-library', label: 'Media Library' },
+  { href: '/admin/content', label: 'Content Hub' },
+  { href: '/admin/reel-studio', label: 'Clipping Studio' },
+  { href: '/admin/prompt-bank', label: 'Prompt Bank' },
   { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/brand-bible', label: 'Brand Bible' },
   { href: '/admin/deliverables', label: 'Deliverables' },
@@ -18,8 +22,6 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/funnels', label: 'Funnels' },
   { href: '/admin/sales-funnels', label: 'Sales Funnels' },
   { href: '/admin/funnel-stats', label: 'Funnel Stats' },
-
-
   { href: '/admin/purchases', label: 'Purchases' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },
   { href: '/admin/customers', label: 'Customers' },

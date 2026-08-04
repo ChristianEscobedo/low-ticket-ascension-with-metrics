@@ -113,12 +113,13 @@ async function sleep(ms: number) {
 }
 
 /**
- * Compose the reel via the fal queue. Submits the tracks payload, polls until
- * COMPLETED (or timeout), and returns the composed clip URL. Mirrors the
- * smart-resize lifecycle exactly so behavior is predictable.
+ * Compose a pre-built tracks payload via the fal queue. This is the low-level
+ * variant for callers whose timeline does not fit AssembleReelInput (per-clip
+ * trims, audio offsets) — e.g. the Reel Studio, which builds its own payload
+ * with buildStudioComposePayload. Same queue lifecycle as assembleReel.
  */
-export async function assembleReel(
-  input: AssembleReelInput,
+export async function assembleTracks(
+  body: Record<string, unknown>,
   opts?: { timeoutMs?: number; pollMs?: number },
 ): Promise<AiResult<{ videoUrl: string }>> {
   const key = falKey();
@@ -131,24 +132,9 @@ export async function assembleReel(
     };
   }
 
-  const clips = (input.clips ?? []).filter(
-    (c) => c && isHttpUrl(c.url) && typeof c.durationSec === 'number',
-  );
-  if (clips.length === 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'At least one rendered clip URL is required to assemble a reel.',
-    };
-  }
-
-  const body = buildComposePayload({
-    clips,
-    audioUrl: isHttpUrl(input.audioUrl) ? input.audioUrl!.trim() : undefined,
-  });
-
   const timeoutMs = opts?.timeoutMs ?? 300_000;
   const pollMs = opts?.pollMs ?? 2000;
+
   const started = Date.now();
 
   let submitRes: Response;
@@ -262,3 +248,33 @@ export async function assembleReel(
 
   return { ok: false, status: 504, error: 'fal reel assembly timed out' };
 }
+
+/**
+ * Compose the reel via the fal queue. Submits the tracks payload, polls until
+ * COMPLETED (or timeout), and returns the composed clip URL. Mirrors the
+ * smart-resize lifecycle exactly so behavior is predictable.
+ */
+export async function assembleReel(
+  input: AssembleReelInput,
+  opts?: { timeoutMs?: number; pollMs?: number },
+): Promise<AiResult<{ videoUrl: string }>> {
+  const clips = (input.clips ?? []).filter(
+    (c) => c && isHttpUrl(c.url) && typeof c.durationSec === 'number',
+  );
+  if (clips.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'At least one rendered clip URL is required to assemble a reel.',
+    };
+  }
+
+  const body = buildComposePayload({
+    clips,
+    audioUrl: isHttpUrl(input.audioUrl) ? input.audioUrl!.trim() : undefined,
+  });
+
+  return assembleTracks(body, opts);
+}
+
+
