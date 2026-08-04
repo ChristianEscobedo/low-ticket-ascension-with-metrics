@@ -19,11 +19,10 @@ WORKDIR /app
 COPY render-worker/package.json render-worker/package-lock.json* ./
 RUN npm ci --omit=dev
 
-# The worker source
+# The worker source (includes remotion-project/ — copied in so the build
+# context finds it when Root Directory is render-worker)
 COPY render-worker/ ./
 
-# The composition it renders (shared with the Next.js preview — same component)
-COPY remotion-project/ ./remotion-project/
 
 EXPOSE 8080
 CMD ["node", "server.js"]
