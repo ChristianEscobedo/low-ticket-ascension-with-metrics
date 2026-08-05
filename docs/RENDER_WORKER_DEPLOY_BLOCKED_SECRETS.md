@@ -1,5 +1,32 @@
 # Render worker deploy blocked by GitHub push protection — FINDING
 
+> ## RESOLVED. The deploy is not blocked. Do not act on this document.
+>
+> Measured against the live worker, `commit ef518dd`:
+>
+> ```
+> curl https://…up.railway.app/health
+>   {"ok":true,"bundled":true,"build":{"commit":"ef518dd",…}}
+> curl https://…up.railway.app/render/probe123
+>   {"success":false,"error":"Unknown job id — the render worker restarted…"}
+> curl -X POST -d '{}' https://…up.railway.app/render
+>   {"success":false,"error":"Invalid plan — no clips."}   HTTP 400
+> ```
+>
+> Both error strings are the **exact literals in current `server.js`**, em-dash and all,
+> so the async job API is deployed and has been for some time. The push completed with no
+> secret-scanning challenge; `origin/main` had already advanced past the commits this doc
+> describes as stuck.
+>
+> **Why this doc was wrong, and it is worth naming precisely.** The "not deployed" verdict
+> was inferred from a 404 on `GET /render/:jobId`. But a 404 there is the *documented,
+> intended* response for an unknown job id — it is what a correctly deployed worker returns.
+> The observation was compatible with both hypotheses and was read as confirming only one.
+> That is the same error as reading "0 failures" from a suite where 0 tests ran.
+>
+> `/health` now echoes `RAILWAY_GIT_COMMIT_SHA`, so deploy freshness is a value you read
+> rather than a state you infer from error-page shapes. **Check `build.commit` first.**
+
 **Correction to the first version of this doc.** It claimed three real credentials
 were committed. That was wrong, and it overstated the problem. Verified below:
 **one** real credential, two false positives.
