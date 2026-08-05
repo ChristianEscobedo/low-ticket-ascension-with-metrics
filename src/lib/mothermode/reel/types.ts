@@ -14,6 +14,11 @@
  * Mappers are pure and defensive, house style.
  */
 
+// The caption preset registry. This is a VALUE import, while captions.ts imports
+// only TYPES from this file (`import type { CaptionPreset, ReelWord }`) — type
+// imports are erased, so there is no runtime cycle.
+import { captionDefFor } from './captions';
+
 // ---------------------------------------------------------------------------
 // Clips + audio
 // ---------------------------------------------------------------------------
@@ -64,16 +69,54 @@ export interface ReelWord {
   end: number;
 }
 
-/** R3 caption presets — the on-stage karaoke layer's look (rides the project JSON). */
-export type CaptionPreset = 'karaoke' | 'beast' | 'hormozi' | 'minimal';
+/**
+ * R3 caption presets — the on-stage caption layer's look (rides the project JSON).
+ *
+ * This is a preset *id*, not a closed union, because the gallery in captions.ts is
+ * the registry and it grows. It used to be the union
+ * `'karaoke' | 'beast' | 'hormozi' | 'minimal'` with a matching four-item
+ * whitelist below, and that combination silently destroyed every other preset —
+ * see normalizeCaptionPreset.
+ */
+export type CaptionPreset = string;
 
-const CAPTION_PRESET_IDS = new Set<string>(['karaoke', 'beast', 'hormozi', 'minimal']);
-
-/** Defensive: unknown/missing values fall back to the default karaoke look. */
+/**
+ * Defensive: unknown/missing values fall back to the default karaoke look.
+ *
+ * THE BUG THIS FIXES
+ * ------------------
+ * This used to validate against a hardcoded four-id set:
+ *
+ *   new Set(['karaoke', 'beast', 'hormozi', 'minimal'])
+ *
+ * `CAPTION_STYLE_DEFS` has **41** presets. So 38 of them — every Hormozi
+ * variant, every creator look, every modern animation (`hormozi3`, `devin`,
+ * `neon-pulse`, `bounce-box`, …) — failed the check and were rewritten to
+ * `'karaoke'`.
+ *
+ * That ran on both sides of the caption pipeline:
+ *   - `projectToJson` → so picking a preset SAVED 'karaoke' to the database;
+ *   - `normalizeProjectJson`, which `/api/admin/reel-render` runs over the
+ *     posted project → so the RenderPlan got 'karaoke' too.
+ *
+ * The studio stage never called it — it renders `captionDefFor(project.captionStyle)`
+ * off live state — so the preview showed the preset you picked while the export
+ * showed karaoke, every single time, on every reel. That is the "render keeps
+ * using the same style even though the preview changed" report, and it was NOT
+ * the caption layer: the layer faithfully drew the style it was handed.
+ *
+ * The fix is to stop maintaining a second, hand-written list of preset ids. The
+ * registry in captions.ts is the only list; anything in it (or reachable through
+ * its legacy-id aliases) round-trips unchanged. The import is type-only in the
+ * other direction, so this does not create a runtime cycle.
+ */
 export function normalizeCaptionPreset(raw: unknown): CaptionPreset {
-  return typeof raw === 'string' && CAPTION_PRESET_IDS.has(raw)
-    ? (raw as CaptionPreset)
-    : 'karaoke';
+  if (typeof raw !== 'string' || !raw) return 'karaoke';
+  // captionDefFor resolves real ids AND legacy aliases, and falls back to
+  // karaoke. Comparing its result's id to karaoke tells us whether `raw` was
+  // actually recognized, without duplicating the id list here.
+  const resolved = captionDefFor(raw);
+  return resolved.id === 'karaoke' && raw !== 'karaoke' ? 'karaoke' : raw;
 }
 
 export interface ReelProject {
