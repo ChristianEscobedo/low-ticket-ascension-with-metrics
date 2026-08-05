@@ -19,8 +19,23 @@ import {
 import type { RenderPlan } from './constants';
 
 
-/** The index of the word being spoken on this frame, or -1 between words. */
-export function activeWordIndex(words: RenderPlan['words'], frame: number): number {
+/**
+ * The index of the word being spoken on this frame, or -1 when nothing shows.
+ *
+ * `holdFrames` is how long the FINAL word lingers after it ends. Without a
+ * bound, the "never blink" hold below runs to the end of the composition: once
+ * the transcript is exhausted this returned `words.length - 1` for every
+ * remaining frame, freezing the last caption on screen for the rest of the
+ * reel. If the transcript covers only part of the timeline (an untranscribed
+ * clip, or words dropped by a trim) that reads as captions "getting stuck
+ * partway through" — which is exactly the burned-MP4 bug this fixes. The
+ * preview never showed it because the editor stage stops at the last word.
+ */
+export function activeWordIndex(
+  words: RenderPlan['words'],
+  frame: number,
+  holdFrames = 0,
+): number {
   for (let i = 0; i < words.length; i += 1) {
     if (frame >= words[i].fromFrame && frame < words[i].toFrame) return i;
   }
@@ -29,6 +44,11 @@ export function activeWordIndex(words: RenderPlan['words'], frame: number): numb
   for (let i = 0; i < words.length; i += 1) {
     if (words[i].fromFrame <= frame) last = i;
     else break;
+  }
+  if (last < 0) return -1;
+  // Past the end of the transcript, clear instead of freezing the final word.
+  if (last === words.length - 1 && frame >= words[last].toFrame + holdFrames) {
+    return -1;
   }
   return last;
 }
@@ -84,7 +104,9 @@ export const CaptionLayer: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
   const layout = plan.captionLayout as unknown as CaptionLayoutShape;
   if (!words.length) return null;
 
-  const activeIdx = activeWordIndex(words, frame);
+  // Let the closing word settle, then clear — see activeWordIndex.
+  const HOLD_SEC = 0.6;
+  const activeIdx = activeWordIndex(words, frame, Math.round(plan.fps * HOLD_SEC));
   if (activeIdx < 0) return null;
 
   const css = captionCssFor(def);
