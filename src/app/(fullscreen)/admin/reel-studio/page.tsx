@@ -27,6 +27,15 @@ const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: fals
 // than this preview. See docs/CAPTION_FONT_MISSING_IN_RENDER_FINDING.md.
 import { captionFontsFor } from '@/lib/mothermode/reel/captionFonts';
 
+// THE caption layer — the same component the render worker draws the MP4 with.
+// The stage renders this, not a look-alike. See StageCaptions below.
+import {
+  CaptionLayerFrame,
+  type CaptionPlanLike,
+} from '@/lib/mothermode/reel/render/captionLayer';
+import { DEFAULT_FPS } from '@/lib/mothermode/reel/render/plan';
+
+
 import {
   ArrowLeft,
   ArrowLeftCircle,
@@ -727,11 +736,29 @@ function useCaptionFonts(def: { font?: string; fontUrl?: string }) {
 }
 
 /**
- * Karaoke caption block: the current row of words with the spoken word lit,
- * plus (when rows > 1) the UPCOMING rows stacked under it — the Submagic look.
- * R17: renders from the structured def; R20: wordsPerRow + rows + drag-to-move.
+ * Karaoke caption block for the PLATFORM MOCK SWATCHES ONLY.
+ *
+ * ⚠️ This is NOT the stage and NOT the render. It is a decorative, scaled-down
+ * caption drawn inside the fake TikTok/Reels phone frames, where the box is a
+ * `w-max` chip rather than a video frame.
+ *
+ * It USED to draw the editor stage as well, and that is the third copy that made
+ * "the render doesn't match the preview" survive two rounds of fixes to the
+ * Remotion layers. It differs from the real layer in ways that change both the
+ * look and the line breaks:
+ *
+ *   - `fontSize: layout.sizePx` RAW — no `/ CAPTION_STAGE_W * frameWidth` scale,
+ *     so the type size bears no relation to the exported size;
+ *   - no 86%-wide centred block, so text wraps at a different width (or not at
+ *     all) and the rows break across different words;
+ *   - active word chosen from CLIP-LOCAL source seconds and held forever;
+ *   - inactive rows dimmed with `opacity-70`, which the render never does.
+ *
+ * The stage now renders <StageCaptions>, which is the SAME component the MP4 is
+ * drawn with. Do not reintroduce this on a video frame.
  */
 function KaraokeLine({
+
   words,
   timeSec,
   preset = 'karaoke',
@@ -807,8 +834,73 @@ function KaraokeLine({
   );
 }
 
+/**
+ * The stage's captions — THE render component, on the editor canvas.
+ *
+ * This is the fix for "the render and the preview show two totally different
+ * captions". The Edit-mode stage used to draw <KaraokeLine>, a third caption
+ * implementation that shared only `captionCssFor` with the MP4. It sized type in
+ * raw stage px, wrapped inside a `w-max` chip, dimmed idle rows, and picked the
+ * active word off clip-local seconds. Every one of those changes where the lines
+ * break and where the block sits, so the two surfaces genuinely could not agree.
+ *
+ * Now both stages and the worker render <CaptionLayerFrame>:
+ *
+ *   Remotion stage → remotion-project/CaptionLayer.tsx → CaptionLayerFrame
+ *   Edit stage     → this component                    → CaptionLayerFrame
+ *   MP4            → render-worker/.../CaptionLayer.tsx → CaptionLayerFrame
+ *
+ * `stageW` is the stage's CSS pixel width, standing in for the render's
+ * `plan.width`. The layer scales `sizePx / CAPTION_STAGE_W * width`, so passing
+ * the real box width makes the caption occupy the SAME FRACTION of the frame as
+ * it will at 1080 — which is what makes the wrap points match.
+ */
+function StageCaptions({
+  words,
+  timeSec,
+  stageW,
+  fps = DEFAULT_FPS,
+  preset = 'karaoke',
+  overrides,
+}: {
+  /** The clip's words, in CLIP-LOCAL source seconds (what project.captions holds). */
+  words: ReelWord[];
+  /** Playhead in the same clip-local seconds. */
+  timeSec: number;
+  stageW: number;
+  fps?: number;
+  preset?: CaptionPreset;
+  overrides?: CaptionOverrides;
+}) {
+  const def = resolveCaptionStyle(captionDefFor(preset), overrides);
+  const layout = captionLayoutFor(def, overrides);
+  useCaptionFonts(def);
+
+  // The layer thinks in FRAMES (so it matches the renderer exactly); the stage
+  // thinks in seconds. Convert here, once, rather than teaching the layer a
+  // second time model.
+  const plan: CaptionPlanLike = useMemo(
+    () => ({
+      fps,
+      width: Math.max(1, stageW),
+      words: words.map((w) => ({
+        text: w.word,
+        fromFrame: Math.round(w.start * fps),
+        toFrame: Math.round(w.end * fps),
+      })),
+      captionStyle: def,
+      captionLayout: layout,
+      powerWords: overrides?.powerWords ?? [],
+    }),
+    [words, fps, stageW, def, layout, overrides?.powerWords],
+  );
+
+  return <CaptionLayerFrame plan={plan} frame={Math.round(timeSec * fps)} />;
+}
+
 /** R7 platform target labels for the canvas chip. */
 const PLATFORM_LABEL: Record<string, string> = {
+
   youtube: 'YouTube Shorts',
   tiktok: 'TikTok',
   instagram: 'Reels',
@@ -2778,6 +2870,11 @@ export default function ReelStudioPage() {
    */
   const renderJob = useRenderJob({
     getReelId: () => project?.id ?? null,
+    // Hand the render the timeline as it stands RIGHT NOW. Without this the
+    // server rebuilt the plan from the saved row, so a split (or trim, or
+    // reorder, or caption restyle) made since the last save never reached the
+    // MP4 — the export came back as the reel from before the edit.
+    getProject: () => project ?? null,
     onRendered: (url) => {
       patch({ composedUrl: url });
       setNote('Render done — captions and animations are burned in. Save to keep the link.');
@@ -4684,18 +4781,12 @@ export default function ReelStudioPage() {
             >
               <Film className="h-3.5 w-3.5" /> Compose
             </button>
-            <button
-              onClick={() => void burnCaptions()}
-              disabled={busy || Object.keys(project.captions ?? {}).length === 0}
-              title="Burn the karaoke captions INTO the MP4 (word-accurate with the stage) — downloads the captioned video"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brass/40 bg-brass/[0.07] px-3 py-1.5 text-xs font-semibold text-brass hover:bg-brass/15 disabled:opacity-40"
-            >
-              <Zap className="h-3.5 w-3.5" /> Caption MP4
-            </button>
-            {/* The Remotion render, next to the ffmpeg burn it's often confused
-                with. Different paths: `Caption MP4` burns captions onto an
-                existing compose, this renders the whole composition frame by
-                frame so the MP4 matches the stage. */}
+            {/* THE export. `Caption MP4` used to sit here — an ffmpeg pass that
+                burned captions onto an existing compose. It's gone: it drew the
+                same captions a second, worse way (no per-word motion, its own
+                font resolution), so it was a permanent source of "why doesn't
+                the MP4 match the preview?". Remotion renders the real caption
+                components frame by frame; one export path, one answer. */}
             <RenderButton job={renderJob} />
             <button
               onClick={() => void duplicateAsVariant()}
@@ -6624,7 +6715,10 @@ export default function ReelStudioPage() {
                     <RemotionPreview
                       project={project}
                       aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
-
+                      // The timeline drives the frame. Without this the Player ran
+                      // its own clock and the ruler moved nothing: captions (React
+                      // state) tracked the playhead while the video sat still.
+                      playheadSec={playheadSec}
                     />
                     {/* The Remotion branch paints captions inside the Player, so the
                         drag handle has to ride ABOVE it as its own layer. Without
@@ -6715,64 +6809,42 @@ export default function ReelStudioPage() {
                         }}
                       />
                     )}
-                    {/* karaoke captions overlay (Whisper word timings, live on stage).
-                        R20: DRAGGABLE — grab it to move the captions anywhere on the frame. */}
+                    {/* Karaoke captions on the EDIT stage — the SAME layer the MP4
+                        is drawn with (StageCaptions → CaptionLayerFrame), positioned
+                        by the layer itself from xPct/positionPct.
+
+                        This used to be a hand-rolled overlay wrapping <KaraokeLine>
+                        in a `w-max` box, i.e. a THIRD caption implementation with its
+                        own type scale, its own wrap width, and its own idea of the
+                        active word. That is why the MP4 still showed different
+                        captions after both Remotion layers were unified: the surface
+                        being compared against was never one of them. */}
                     {ccOn &&
                       stageClip &&
-                      (project.captions[stageClip.id]?.length ?? 0) > 0 &&
-                      (() => {
-                        const ov = project.captionOverrides ?? {};
-                        const x = ov.xPct ?? 50;
-                        const y = ov.positionPct ?? 12;
-                        return (
-                          <div
-                            className="absolute z-20 w-max max-w-full cursor-move select-none px-3"
-                            style={{
-                              left: `${x}%`,
-                              bottom: `${y}%`,
-                              transform: 'translateX(-50%)',
-                              pointerEvents: 'auto',
-                            }}
-                            title="Drag to move the captions"
-                            onPointerDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const el = e.currentTarget as HTMLElement;
-                              const stage = el.parentElement as HTMLElement;
-                              el.setPointerCapture(e.pointerId);
-                              let last = { x, y };
-                              const move = (ev: PointerEvent) => {
-                                const r = stage.getBoundingClientRect();
-                                const newX = Math.round(
-                                  Math.max(2, Math.min(98, ((ev.clientX - r.left) / r.width) * 100)),
-                                );
-                                // bottom-anchored: distance from the frame's bottom edge.
-                                const newY = Math.round(
-                                  Math.max(0, Math.min(92, 100 - ((ev.clientY - r.top) / r.height) * 100)),
-                                );
-                                last = { x: newX, y: newY };
-                                // LOCAL only mid-drag — buttery smooth, no network per frame.
-                                setCaptionOverridesLocal({ xPct: newX, positionPct: newY });
-                              };
-                              const up = () => {
-                                el.removeEventListener('pointermove', move);
-                                el.removeEventListener('pointerup', up);
-                                // ONE persist on release.
-                                void setCaptionOverrides({ xPct: last.x, positionPct: last.y });
-                              };
-                              el.addEventListener('pointermove', move);
-                              el.addEventListener('pointerup', up);
-                            }}
-                          >
-                            <KaraokeLine
+                      (project.captions[stageClip.id]?.length ?? 0) > 0 && (
+                        <>
+                          <div className="pointer-events-none absolute inset-0 z-20">
+                            <StageCaptions
                               words={project.captions[stageClip.id]}
                               timeSec={previewTime + (stageClip.trimStartSec ?? 0)}
+                              stageW={stageBox.w}
                               preset={project.captionStyle}
                               overrides={project.captionOverrides}
                             />
                           </div>
-                        );
-                      })()}
+                          {/* Placement uses the SAME puck as the Remotion branch, so
+                              dragging behaves identically on both previews. */}
+                          <CaptionDragLayer
+                            xPct={project.captionOverrides?.xPct ?? 50}
+                            yPct={project.captionOverrides?.positionPct ?? 12}
+                            onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
+                            onCommit={(x, y) => {
+                              void setCaptionOverrides({ xPct: x, positionPct: y });
+                            }}
+                          />
+                        </>
+                      )}
+
                     {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
                     {lensMode === 'platform' && aspect === '9:16' && (
                       <PlatformLensOverlay

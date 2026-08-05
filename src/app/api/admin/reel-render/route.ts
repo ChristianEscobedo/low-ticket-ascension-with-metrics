@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import { getReelProject } from '@/lib/mothermode/reel/store';
+import { normalizeProjectJson } from '@/lib/mothermode/reel/types';
 import {
   buildRenderPlan,
   estimateRenderSeconds,
@@ -145,10 +146,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const project = await getReelProject(id);
-  if (!project) {
+  const saved = await getReelProject(id);
+  if (!saved) {
     return NextResponse.json({ success: false, error: 'Reel not found' }, { status: 404 });
   }
+
+  /**
+   * Render what the EDITOR is showing, not what the database last saw.
+   *
+   * This used to build the plan from `saved` alone. But the studio's timeline
+   * and its Remotion preview both call buildRenderPlan() against the *live*
+   * in-memory project, while this route called it against the *persisted* row.
+   * Same function, different input — so the comments claiming "preview ===
+   * render, by construction" were true of the code path and false of the data.
+   *
+   * The visible result: split a clip, hit Render, and the MP4 came back as the
+   * pre-split reel with captions ending where the old timeline ended. Any edit
+   * not yet flushed to the DB — a split, a trim, a reorder, a caption restyle —
+   * was silently dropped from the export, which is why chasing this inside the
+   * caption layer never found it.
+   *
+   * So the client now posts its project and we render THAT, normalized through
+   * the same parser the store uses (never trusted raw). We merge over the saved
+   * row so server-owned fields survive, and fall back to the row when no
+   * project is sent, which keeps older callers working unchanged.
+   */
+  const postedRaw = body.project && typeof body.project === 'object' ? body.project : null;
+  const project = postedRaw ? { ...saved, ...normalizeProjectJson(postedRaw) } : saved;
 
   const aspect = body.aspect === 'square' || body.aspect === 'landscape' ? body.aspect : 'vertical';
   const size = RENDER_SIZES[aspect];

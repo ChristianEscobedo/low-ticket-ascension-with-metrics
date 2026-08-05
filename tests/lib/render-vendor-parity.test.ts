@@ -33,7 +33,22 @@ const VENDORED: ReadonlyArray<readonly [string, string]> = [
     'src/lib/mothermode/reel/render/plan.ts',
     'render-worker/src/lib/mothermode/reel/render/plan.ts',
   ],
+  /**
+   * The caption LAYER, not just the caption styles. This used to be two
+   * hand-written components — remotion-project/CaptionLayer.tsx and
+   * render-worker/remotion-project/CaptionLayer.tsx — and they disagreed on the
+   * stage-width divisor (390 preview vs 360 worker). Font size drives text
+   * width, text width drives where rows wrap, so the caption block sat somewhere
+   * else and broke across different words in the MP4 than on the stage. Both
+   * compositions are now four-line wrappers around this one file, and this row is
+   * what keeps the copy honest.
+   */
+  [
+    'src/lib/mothermode/reel/render/captionLayer.tsx',
+    'render-worker/src/lib/mothermode/reel/render/captionLayer.tsx',
+  ],
 ];
+
 
 /** Normalise line endings only — content differences must still fail. */
 function read(rel: string): string {
@@ -64,5 +79,10 @@ describe('vendored render-path modules stay identical to the app copies', () => 
     const guarded = new Set(VENDORED.map(([, workerPath]) => workerPath));
     expect(guarded.has('render-worker/src/lib/mothermode/reel/captions.ts')).toBe(true);
     expect(guarded.has('render-worker/src/lib/mothermode/reel/render/plan.ts')).toBe(true);
+    expect(
+      guarded.has('render-worker/src/lib/mothermode/reel/render/captionLayer.tsx'),
+      'the shared caption layer is the file whose geometry the MP4 is drawn with',
+    ).toBe(true);
   });
+
 });

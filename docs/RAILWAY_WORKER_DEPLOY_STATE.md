@@ -32,9 +32,15 @@ Read this before touching deploys. A prior session (mine) got this wrong twice.
 RENDER_WORKER_URL=https://low-ticket-ascension-with-metrics-production.up.railway.app
 ```
 
-## Deploy staleness (as of this writing)
+## Deploy staleness — RESOLVED
 
-Deployed worker is at `8720531`; local `HEAD` is **2 commits ahead**:
+**Pushed and confirmed deployed.** `git push origin main` moved `8720531..c5f83c7`, Railway
+auto-rebuilt, and `/health` was polled until it reported `commit: c5f83c7, bundled: true`
+(~80s). The push was *not* blocked — no secret-scanning rejection, and `.env.local` is
+covered by `.gitignore:42` (`.env*.local`), so nothing sensitive went up.
+
+The worker had been at `8720531`, two commits behind:
+
 
 - `d876bc7` fix(render): stop captions freezing on the last word for the rest of the reel
 - `4c17111` fix(reel-studio): restore caption drag on the Remotion preview
@@ -42,9 +48,9 @@ Deployed worker is at `8720531`; local `HEAD` is **2 commits ahead**:
 Diff touches exactly `render-worker/remotion-project/CaptionLayer.tsx` (+28/−3) and
 `render-worker/src/lib/mothermode/reel/render/plan.ts` (+11).
 
-Since `8720531` is already on `main`, the push is **not** globally blocked the way
-`PUSH_BLOCKED_SECRET_CLEANUP_HANDOFF.md` implies. Pushing those two commits should be
-enough for the worker to rebuild itself.
+`PUSH_BLOCKED_SECRET_CLEANUP_HANDOFF.md` and `RENDER_WORKER_DEPLOY_BLOCKED_SECRETS.md` are
+**stale as of this date** — the push went through with no secret-scanning rejection. Treat
+their "push is blocked" framing as historical, not current.
 
 ## Still unproven
 

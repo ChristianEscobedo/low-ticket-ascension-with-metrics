@@ -11,9 +11,9 @@
  * Both @remotion/player and the composition are browser-only, so they're loaded
  * with next/dynamic ssr:false.
  */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Player } from '@remotion/player';
+import { Player, type PlayerRef } from '@remotion/player';
 import { buildRenderPlan, DEFAULT_FPS, RENDER_SIZES } from '@/lib/mothermode/reel/render/plan';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
 
@@ -27,6 +27,7 @@ export default function RemotionPreview({
   project,
   aspect = 'vertical',
   fps = DEFAULT_FPS,
+  playheadSec,
 }: {
   project: Pick<
     ReelProject,
@@ -34,8 +35,20 @@ export default function RemotionPreview({
   >;
   aspect?: keyof typeof RENDER_SIZES;
   fps?: number;
+  /**
+   * The studio timeline's playhead, in seconds. Omit for a standalone player.
+   *
+   * Without this the Player is an ISLAND: it was mounted with `controls` and
+   * nothing else, so it owned a private clock the editor could not reach.
+   * Dragging the timeline moved `previewTime` state — which is what the caption
+   * overlay reads — while the Player kept showing whatever frame it was already
+   * on. That's the "captions move but the video doesn't" split: two clocks, one
+   * of them invisible to the ruler.
+   */
+  playheadSec?: number;
 }) {
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
+  const playerRef = useRef<PlayerRef>(null);
 
   // The SAME plan the renderer builds. When the editor state changes, the plan
   // (and therefore the preview) recomputes — identical to what gets rendered.
@@ -43,6 +56,26 @@ export default function RemotionPreview({
     () => buildRenderPlan(project, { fps, width: size.width, height: size.height }),
     [project, fps, size.width, size.height],
   );
+
+  /**
+   * Follow the timeline. Seek only on a real difference (>1 frame) so we never
+   * fight the Player's own playback: while it plays it advances itself, and a
+   * seek every render would stutter it back. Rounding to whole frames is what
+   * keeps a dragged playhead landing on the same frame the render would emit.
+   */
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || playheadSec == null || !Number.isFinite(playheadSec)) return;
+    const target = Math.max(
+      0,
+      Math.min(plan.durationInFrames - 1, Math.round(playheadSec * plan.fps)),
+    );
+    try {
+      if (Math.abs(p.getCurrentFrame() - target) > 1) p.seekTo(target);
+    } catch {
+      // The Player isn't mounted yet on the first paint; the next effect run seeks.
+    }
+  }, [playheadSec, plan.fps, plan.durationInFrames]);
 
   if (plan.clips.length === 0) {
     return (
@@ -54,6 +87,7 @@ export default function RemotionPreview({
 
   return (
     <Player
+      ref={playerRef}
       component={ReelComposition as React.ComponentType<{ plan: typeof plan }>}
       inputProps={{ plan }}
       durationInFrames={plan.durationInFrames}

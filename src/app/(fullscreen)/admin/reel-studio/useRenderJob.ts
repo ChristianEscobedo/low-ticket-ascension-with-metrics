@@ -93,6 +93,7 @@ export function formatElapsed(sec: number): string {
 
 export function useRenderJob({
   getReelId,
+  getProject,
   onRendered,
 }: {
   /**
@@ -107,6 +108,19 @@ export function useRenderJob({
    * Returns null when no reel is open; `start` then no-ops.
    */
   getReelId: () => string | null;
+  /**
+   * The LIVE project, read at click time — what the timeline actually holds.
+   *
+   * Without this the server rebuilt the plan from the saved database row, so
+   * anything not yet flushed (a split, a trim, a reorder, a caption restyle)
+   * never reached the MP4: you'd split a clip and the export came back as the
+   * reel from before the split. Same thunk reasoning as getReelId — read late,
+   * never captured early.
+   *
+   * Optional so callers that only have an id keep working; those simply get
+   * the saved row, exactly as before.
+   */
+  getProject?: () => unknown;
   /** Called once with the finished URL so the page can persist it. */
   onRendered?: (videoUrl: string) => void;
 }): RenderJob {
@@ -223,7 +237,7 @@ export function useRenderJob({
         const res = await fetch('/api/admin/reel-render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: reelId, aspect }),
+          body: JSON.stringify({ id: reelId, aspect, project: getProject?.() ?? null }),
         });
         const json = await res.json();
         if (!json?.success) {
@@ -242,7 +256,7 @@ export function useRenderJob({
         setBusy(false);
       }
     })();
-  }, [aspect, busy, getReelId, poll]);
+  }, [aspect, busy, getReelId, getProject, poll]);
 
   return {
     available,

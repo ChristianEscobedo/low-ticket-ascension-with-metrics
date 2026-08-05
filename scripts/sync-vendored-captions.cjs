@@ -1,58 +1,67 @@
 #!/usr/bin/env node
 /**
- * Sync the render worker's VENDORED copy of the caption engine.
+ * Sync the render worker's VENDORED copies of the caption/render modules.
  *
  * WHY THIS EXISTS
  * ---------------
- * There are TWO copies of the caption engine, and the second one is easy to
- * miss:
+ * `render-worker/Dockerfile` does a plain `COPY . ./` with render-worker/ as the
+ * build context, so the Remotion bundle Railway builds cannot reach up into the
+ * Next app. Every module the worker's composition needs therefore exists twice:
  *
  *   src/lib/mothermode/reel/captions.ts               <- the app (canonical)
  *   render-worker/src/lib/mothermode/reel/captions.ts <- the VENDORED copy
+ *   ... and one row per file in FILES below.
  *
- * `render-worker/remotion-project/CaptionLayer.tsx` imports
- * `'../src/lib/mothermode/reel/captions'`, which resolves to the vendored copy —
- * NOT the app's. `render-worker/Dockerfile` then does a plain `COPY . ./`, so
- * Railway builds whatever is in the vendored file. Every burned MP4 is styled by
- * the vendored copy; the app file only ever drives the editor preview.
+ * `render-worker/remotion-project/*` imports `'../src/lib/...'`, which resolves
+ * to the VENDORED copy — NOT the app's. So every burned MP4 is produced by the
+ * vendored files; the app files only ever drive the editor preview.
  *
  * That makes drift SILENT and RENDER-PATH-ONLY: the preview looks right, the
- * tests (which import the app file via `@/`) pass, and the MP4 is wrong. It has
- * already bitten twice — the truthy `wordSpacing` gate plus the missing
- * `whiteSpace`, and then a stale `captionRows` that pinned the highlight to the
- * top row in multi-row captions.
+ * tests (which import the app files via `@/`) pass, and the MP4 is wrong. It has
+ * bitten repeatedly — the truthy `wordSpacing` gate plus the missing
+ * `whiteSpace`; a stale `captionRows` pinning the highlight to the top row; a
+ * `plan.ts` missing the `fonts` field; and worst of all TWO hand-written caption
+ * layers whose stage-width divisors disagreed (390 vs 360), which changed the
+ * font size, which changed where rows wrapped, which moved the whole caption
+ * block in the export. That last one is why captionLayer.tsx is on this list
+ * instead of being a second component: there is now ONE caption layer, copied by
+ * this script and checked by CI.
  *
  * THE INVARIANT
  * -------------
- * The vendored file is a LITERAL copy — byte-for-byte. That is stronger than
- * "the two produce the same `captionCssFor` output", and it costs nothing to
- * enforce, so it catches drift in every other shared export too (`captionRows`,
- * `captionWindow`, `captionLayoutFor`, `isPowerWord`, `emojiFor`…).
+ * Each vendored file is a LITERAL copy — byte-for-byte. That is stronger than
+ * "the two produce the same output", and it costs nothing to enforce, so it
+ * catches drift in every export for free.
  *
- * Do NOT hand-edit the vendored file. Edit the app file, then run this script.
+ * Do NOT hand-edit the vendored files. Edit the app file, then run this script.
  *
  * USAGE
  *   node scripts/sync-vendored-captions.cjs          # copy app -> vendored
  *   node scripts/sync-vendored-captions.cjs --check  # verify only, exit 1 on drift
  *
- * `tests/lib/caption-vendor-parity.test.ts` enforces the same invariant in CI.
+ * `tests/lib/render-vendor-parity.test.ts` enforces the same invariant in CI.
  */
 const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const SOURCE = path.join(ROOT, 'src', 'lib', 'mothermode', 'reel', 'captions.ts');
-const VENDORED = path.join(
-  ROOT,
-  'render-worker',
-  'src',
-  'lib',
-  'mothermode',
-  'reel',
-  'captions.ts',
-);
 
-const rel = (p) => path.relative(ROOT, p).split(path.sep).join('/');
+/**
+ * Every module the worker vendors, as repo-relative paths. Add a row whenever a
+ * new file is imported by render-worker/remotion-project/* from '../src/...'.
+ * A vendored file with no row here is unguarded, which is how plan.ts drifted.
+ */
+const FILES = [
+  'src/lib/mothermode/reel/captions.ts',
+  'src/lib/mothermode/reel/render/plan.ts',
+  // The ONE caption layer, shared by the preview composition and the worker's.
+  'src/lib/mothermode/reel/render/captionLayer.tsx',
+];
+
+/** app path -> vendored path (the worker mirrors the app's src/ tree). */
+const vendoredPathFor = (appRel) => path.join('render-worker', appRel);
+
+const abs = (rel) => path.join(ROOT, rel);
 
 /** The first line number where the two texts differ, or -1 if identical. */
 function firstDiffLine(a, b) {
@@ -67,37 +76,56 @@ function firstDiffLine(a, b) {
 
 function main() {
   const check = process.argv.includes('--check');
+  let drifted = 0;
+  let synced = 0;
 
-  if (!fs.existsSync(SOURCE)) {
-    console.error(`[sync-vendored-captions] missing source: ${rel(SOURCE)}`);
-    process.exit(1);
-  }
+  for (const appRel of FILES) {
+    const workerRel = vendoredPathFor(appRel);
 
-  const source = fs.readFileSync(SOURCE, 'utf8');
-  const vendored = fs.existsSync(VENDORED) ? fs.readFileSync(VENDORED, 'utf8') : null;
+    if (!fs.existsSync(abs(appRel))) {
+      console.error(`[sync-vendored-captions] missing source: ${appRel}`);
+      process.exit(1);
+    }
 
-  if (vendored === source) {
-    console.log(`[sync-vendored-captions] in sync — ${rel(VENDORED)} matches ${rel(SOURCE)}`);
-    return;
-  }
+    const source = fs.readFileSync(abs(appRel), 'utf8');
+    const vendored = fs.existsSync(abs(workerRel))
+      ? fs.readFileSync(abs(workerRel), 'utf8')
+      : null;
 
-  if (check) {
+    if (vendored === source) {
+      console.log(`[sync-vendored-captions] in sync — ${workerRel}`);
+      continue;
+    }
+
     const line = vendored === null ? 1 : firstDiffLine(source, vendored);
-    console.error('[sync-vendored-captions] DRIFT DETECTED');
-    console.error(`  canonical: ${rel(SOURCE)}`);
-    console.error(`  vendored:  ${rel(VENDORED)}${vendored === null ? ' (missing)' : ''}`);
-    console.error(`  first difference at line ${line}`);
+
+    if (check) {
+      drifted += 1;
+      console.error(`[sync-vendored-captions] DRIFT: ${workerRel}`);
+      console.error(`  canonical: ${appRel}`);
+      console.error(`  vendored:  ${vendored === null ? '(missing)' : workerRel}`);
+      console.error(`  first difference at line ${line}`);
+      continue;
+    }
+
+    fs.mkdirSync(path.dirname(abs(workerRel)), { recursive: true });
+    fs.writeFileSync(abs(workerRel), source, 'utf8');
+    synced += 1;
+    console.log(`[sync-vendored-captions] synced ${appRel} -> ${workerRel}`);
+    console.log(`  (was ${vendored === null ? 'missing' : `drifted from line ${line}`})`);
+  }
+
+  if (check && drifted > 0) {
     console.error('');
-    console.error('  The vendored copy is what Railway builds and what styles every MP4.');
+    console.error(`  ${drifted} vendored file(s) drifted.`);
+    console.error('  The vendored copies are what Railway builds and what produce every MP4.');
     console.error('  Edit the app file, then run: node scripts/sync-vendored-captions.cjs');
     process.exit(1);
   }
 
-  fs.mkdirSync(path.dirname(VENDORED), { recursive: true });
-  fs.writeFileSync(VENDORED, source, 'utf8');
-  const line = vendored === null ? 1 : firstDiffLine(source, vendored);
-  console.log(`[sync-vendored-captions] synced ${rel(SOURCE)} -> ${rel(VENDORED)}`);
-  console.log(`  (was drifted from line ${line})`);
+  if (!check) {
+    console.log(`[sync-vendored-captions] done — ${synced} written, ${FILES.length} tracked.`);
+  }
 }
 
 main();
