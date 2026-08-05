@@ -11,8 +11,6 @@
 import React from 'react';
 import { useCurrentFrame } from 'remotion';
 import {
-  captionAnimCss,
-  captionAnimKeyframes,
   captionCssFor,
   captionRows,
   emojiFor,
@@ -35,9 +33,55 @@ export function activeWordIndex(words: RenderPlan['words'], frame: number): numb
   return last;
 }
 
+/**
+ * The active word's entrance, expressed as plain style values for a given
+ * progress `e` (0 = just spoken, 1 = settled).
+ *
+ * This deliberately does NOT use a CSS `animation`. renderMedia screenshots one
+ * discrete frame at a time and the CSS animation clock does not advance between
+ * those screenshots, so a keyframe animation renders frozen at its first frame
+ * for the whole video — which is exactly why the burned captions had no motion
+ * while the editor preview (a real, playing browser) looked fine.
+ */
+function entranceStyle(anim: string, e: number): React.CSSProperties {
+  switch (anim) {
+    case 'fade':
+      return { opacity: e };
+    case 'slide':
+      return { transform: `translateY(${(1 - e) * 0.35}em)`, opacity: e };
+    case 'flip':
+      return { transform: `perspective(600px) rotateX(${(1 - e) * -90}deg)`, opacity: e };
+    case 'spin':
+      return { transform: `rotate(${(1 - e) * -25}deg) scale(${0.7 + e * 0.3})`, opacity: e };
+    case 'none':
+      return {};
+    case 'pop':
+    default:
+      // Slight overshoot then settle, the classic caption "pop".
+      return { transform: `scale(${1 + Math.sin(e * Math.PI) * 0.18})` };
+  }
+}
+
+/**
+ * constants.ts types the plan's caption fields loosely (Record<string, unknown>
+ * / unknown) because it mirrors JSON off the wire. Recover the real shapes here
+ * from the functions that consume them, so this file type-checks honestly
+ * instead of every access being `unknown`.
+ */
+type CaptionDef = Parameters<typeof captionCssFor>[0];
+type CaptionLayoutShape = {
+  xPct: number;
+  positionPct: number;
+  sizePx: number;
+  wordsPerRow: number;
+  rows: number;
+};
+
 export const CaptionLayer: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
   const frame = useCurrentFrame();
-  const { words, captionStyle: def, captionLayout: layout, powerWords } = plan;
+  const { words, powerWords } = plan;
+  const def = plan.captionStyle as unknown as CaptionDef;
+  const layout = plan.captionLayout as unknown as CaptionLayoutShape;
   if (!words.length) return null;
 
   const activeIdx = activeWordIndex(words, frame);
@@ -45,12 +89,21 @@ export const CaptionLayer: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
 
   const css = captionCssFor(def);
   const rows = captionRows(words.length, activeIdx, layout.wordsPerRow, layout.rows);
-  const anim = def.anim ?? 'pop';
-  const keyframes = captionAnimKeyframes(anim);
+  const anim = (def as { anim?: string }).anim ?? 'pop';
 
-  // Font size is authored against the 1080-wide preview canvas, so scale it to
-  // the real frame — otherwise captions render tiny in a 1080×1920 export.
-  const fontSize = (layout.sizePx / 390) * plan.width;
+  // How far into the active word's entrance we are, in frames. Driving this off
+  // useCurrentFrame() is what makes the motion actually appear in the render.
+  const ENTER_SEC = 0.18;
+  const enterFrames = Math.max(1, Math.round(plan.fps * ENTER_SEC));
+  const since = frame - words[activeIdx].fromFrame;
+  const linear = Math.min(1, Math.max(0, since / enterFrames));
+  const enterT = 1 - Math.pow(1 - linear, 3); // ease-out cubic
+
+  // sizePx is authored against the 360px-wide editor stage, so scale it to the
+  // real frame width. (The ASS path does the same with an explicit 1080/360.)
+  // This was dividing by 390, which rendered every caption ~8% too small.
+  const STAGE_W = 360;
+  const fontSize = (layout.sizePx / STAGE_W) * plan.width;
 
   return (
     <div
@@ -67,7 +120,6 @@ export const CaptionLayer: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
         fontSize,
       }}
     >
-      {keyframes ? <style>{keyframes}</style> : null}
       {rows.map((row, rowIdx) => (
         <p key={`${row.from}-${rowIdx}`} style={{ ...css.line, fontSize: 'inherit' }}>
           {words.slice(row.from, row.to).map((w, i) => {
@@ -79,7 +131,7 @@ export const CaptionLayer: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
             const style: React.CSSProperties = {
               ...base,
               display: 'inline-block',
-              ...(isActive && anim ? { animation: captionAnimCss(anim) } : {}),
+              ...(isActive ? entranceStyle(anim, enterT) : {}),
             };
             return (
               <span key={`${idx}-${w.text}`} style={style}>
