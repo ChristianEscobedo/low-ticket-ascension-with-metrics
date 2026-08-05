@@ -20,6 +20,11 @@ import { clsx } from 'clsx';
 // Remotion Lambda renderer uses. Browser-only, so load it client-side.
 const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
 
+// The SAME font resolver the render plan uses. Two resolvers = two things that
+// drift, which is exactly how the burned MP4 ended up on a different typeface
+// than this preview. See docs/CAPTION_FONT_MISSING_IN_RENDER_FINDING.md.
+import { captionFontsFor } from '@/lib/mothermode/reel/captionFonts';
+
 import {
   ArrowLeft,
   ArrowLeftCircle,
@@ -691,20 +696,32 @@ function WaveformLane({ url }: { url: string }) {
   );
 }
 
-/** R17: load the Google fonts a preset needs (one <link>, deduped by family). */
-function useGoogleFont(family: string) {
+/**
+ * R17: load the Google fonts a preset needs (one <link> per family, deduped).
+ *
+ * R31: the URLs now come from `captionFontsFor()` — the same helper the render
+ * plan ships to the worker. This hook used to build its own css2 URL, which is
+ * how the preview could look right while the MP4 burned a fallback face: two
+ * resolvers, one of them wrong. It also unconditionally requested
+ * `wght@400;600;700;800;900`, and css2 returns HTTP 400 for a weight a family
+ * doesn't publish (Anton ships 400 only) — so the "load the font" link could
+ * itself be the reason no font loaded. captionFontsFor only asks for axes a
+ * family actually has.
+ */
+function useCaptionFonts(def: { font?: string; fontUrl?: string }) {
+  const fonts = useMemo(() => captionFontsFor(def), [def.font, def.fontUrl]);
   useEffect(() => {
-    if (!family || typeof document === 'undefined') return;
-    const id = `gf-${family.replace(/\s+/g, '-').toLowerCase()}`;
-    if (document.getElementById(id)) return;
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(
-      family,
-    )}:wght@400;600;700;800;900&display=swap`;
-    document.head.appendChild(link);
-  }, [family]);
+    if (typeof document === 'undefined') return;
+    for (const f of fonts) {
+      const id = `gf-${f.family.replace(/\s+/g, '-').toLowerCase()}`;
+      if (document.getElementById(id)) continue;
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = f.cssUrl;
+      document.head.appendChild(link);
+    }
+  }, [fonts]);
 }
 
 /**
@@ -725,7 +742,7 @@ function KaraokeLine({
 }) {
   const def = resolveCaptionStyle(captionDefFor(preset), overrides);
   const style = captionCssFor(def);
-  useGoogleFont(def.font);
+  useCaptionFonts(def);
   const layout = captionLayoutFor(def, overrides);
   // The ACTIVE word = the one whose [start, end] window CONTAINS the playhead.
   // Each word must play its full span before the highlight moves on (the old

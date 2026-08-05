@@ -12,6 +12,7 @@
 import React from 'react';
 import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
 import { CaptionLayer } from './CaptionLayer';
+import { FontLoader } from './FontLoader';
 import type { RenderClip, RenderPlan } from './constants';
 
 
@@ -83,6 +84,11 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
   const muteClips = plan.audio !== null;
 
   return (
+    // FontLoader wraps everything and holds the render open (delayRender) until
+    // the caption webfonts are usable. Without it Chromium paints a fallback
+    // face into the first frames and burns it into the MP4 permanently — the
+    // fonts are not in the container image, they are fetched at render time.
+    <FontLoader plan={plan}>
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
       {plan.clips.map((clip) => (
         <Sequence
@@ -115,5 +121,6 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
       {/* Captions live at the top of the stack, timed in absolute frames. */}
       <CaptionLayer plan={plan} />
     </AbsoluteFill>
+    </FontLoader>
   );
 };

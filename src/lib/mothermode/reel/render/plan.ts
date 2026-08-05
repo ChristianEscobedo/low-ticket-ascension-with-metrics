@@ -27,6 +27,7 @@ import {
   type CaptionLayout,
   type CaptionStyleDef,
 } from '../captions';
+import { captionFontsFor, type CaptionFont } from '../captionFonts';
 import type { MotionKey } from '../motion';
 import { effectiveClipDuration, MIN_CLIP_SECONDS } from '../timeline';
 import type { ReelProject, ReelWord } from '../types';
@@ -86,6 +87,15 @@ export interface RenderPlan {
   captionLayout: CaptionLayout;
   /** Words that render in the active style even when idle. */
   powerWords: string[];
+  /**
+   * Webfonts the renderer must fetch *before* drawing frame 0. The render
+   * container ships only Noto, so without this the caption font silently
+   * falls back and burns in wrong. Resolved here rather than in the worker
+   * because caption styles are user-editable — the worker cannot know which
+   * families to fetch, it can only load what it is told.
+   * See docs/CAPTION_FONT_MISSING_IN_RENDER_FINDING.md.
+   */
+  fonts: CaptionFont[];
 }
 
 export interface RenderPlanOptions {
@@ -234,6 +244,7 @@ export function buildRenderPlan(
     captionStyle,
     captionLayout,
     powerWords: project.captionOverrides?.powerWords ?? [],
+    fonts: captionFontsFor(captionStyle),
   };
 }
 
