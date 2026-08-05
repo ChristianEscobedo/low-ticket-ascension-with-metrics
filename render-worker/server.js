@@ -62,15 +62,48 @@ function supabase() {
 }
 
 
-// Bundle the composition ONCE at startup — renders reuse it.
+/**
+ * Bundle the composition ONCE at startup — renders reuse it.
+ *
+ * We serve the bundle ourselves and hand Remotion an explicit http:// URL,
+ * rather than handing it the output DIRECTORY and letting it serve the bundle
+ * for us. That distinction is the whole fix for this error:
+ *
+ *   Visited http://localhost:3000/index.html but got no response
+ *
+ * Given a local path, Remotion starts its own static server on a port it
+ * chooses (3000 by default). Nothing in this file picked that port, nothing
+ * verified it bound, and nothing logged it — so when headless Chrome could not
+ * reach it, the only artifact was a bare "no response" mentioning a port that
+ * appears nowhere in our code. That sent three sessions hunting for a
+ * misconfigured localhost in the app, on Vercel, and in RENDER_WORKER_URL. The
+ * URL was never ours; it was Remotion's implicit server inside this container.
+ *
+ * Express is already listening on PORT and already proven reachable by /health,
+ * so mounting the bundle on it removes the implicit server, makes the serve URL
+ * an explicit logged value, and means a serve failure now surfaces as a normal
+ * HTTP status we can curl instead of a dead end.
+ */
 let bundled = null;
+let bundleServeUrl = null;
+const BUNDLE_ROUTE = '/__bundle';
+
 async function getBundle() {
-  if (bundled) return bundled;
+  if (bundleServeUrl) return bundleServeUrl;
   const entry = path.join(__dirname, 'remotion-project', 'index.ts');
   console.log('[worker] bundling', entry);
-  bundled = await bundle(entry);
-  console.log('[worker] bundled OK');
-  return bundled;
+  const outDir = await bundle(entry);
+  bundled = outDir;
+
+  // Serve the freshly built bundle off our own listener.
+  app.use(BUNDLE_ROUTE, express.static(outDir));
+
+  // Loopback is correct here and is NOT the bug this replaces: Chrome runs in
+  // this same container, so it and Express share a network namespace.
+  bundleServeUrl = `http://127.0.0.1:${PORT}${BUNDLE_ROUTE}/index.html`;
+  console.log('[worker] bundled OK ->', outDir);
+  console.log('[worker] serveUrl', bundleServeUrl);
+  return bundleServeUrl;
 }
 
 /**
