@@ -19,6 +19,8 @@ import { clsx } from 'clsx';
 // The TRUE render preview — the same ReelComposition + buildRenderPlan the
 // Remotion Lambda renderer uses. Browser-only, so load it client-side.
 const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
+/** Caption placement, shared by BOTH preview branches so neither can lose it. */
+const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: false });
 
 // The SAME font resolver the render plan uses. Two resolvers = two things that
 // drift, which is exactly how the burned MP4 ended up on a different typeface
@@ -6624,6 +6626,21 @@ export default function ReelStudioPage() {
                       aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
 
                     />
+                    {/* The Remotion branch paints captions inside the Player, so the
+                        drag handle has to ride ABOVE it as its own layer. Without
+                        this the caption is unmovable on the preview that actually
+                        matches the render — which is the one people reach for. */}
+                    {ccOn &&
+                      Object.values(project.captions ?? {}).some((w) => (w?.length ?? 0) > 0) && (
+                        <CaptionDragLayer
+                          xPct={project.captionOverrides?.xPct ?? 50}
+                          yPct={project.captionOverrides?.positionPct ?? 12}
+                          onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
+                          onCommit={(x, y) => {
+                            void setCaptionOverrides({ xPct: x, positionPct: y });
+                          }}
+                        />
+                      )}
                   </div>
                 ) : previewSrc ? (
                   <div
