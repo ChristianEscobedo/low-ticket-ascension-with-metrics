@@ -1,4 +1,9 @@
-FROM node:20-bookworm
+# Node 22, not 20. @supabase/supabase-js requires a native global WebSocket for
+# its realtime client; Node 20 has none, so `createClient` throws
+# "Node.js detected but native WebSocket not found" at the storage-upload step —
+# after the render has already finished. Node 22 ships WebSocket globally.
+FROM node:22-bookworm
+
 
 # Chromium + ffmpeg for Remotion's headless render + encoding
 RUN apt-get update && apt-get install -y \
