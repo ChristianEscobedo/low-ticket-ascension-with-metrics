@@ -7,12 +7,7 @@ import {
   renderPlanErrors,
   RENDER_SIZES,
 } from '@/lib/mothermode/reel/render/plan';
-import {
-  isRemotionConfigured,
-  reelRenderProgress,
-  remotionSetupHint,
-  startReelRender,
-} from '@/utils/integrations/remotion-render';
+import { reelRenderProgress } from '@/utils/integrations/remotion-render';
 
 /**
  * The render endpoint — start + poll, never block.
@@ -30,10 +25,18 @@ export const maxDuration = 60;
 export async function GET() {
   const guard = await requireAdminRoute();
   if (!guard.ok) return guard.response!;
+  // Report on what POST actually uses: the render worker. This previously
+  // reported isRemotionConfigured() — the five REMOTION_AWS_* Lambda vars —
+  // which is dead weight now that rendering goes through the self-hosted
+  // worker. It told admins to deploy an AWS Lambda nothing calls, while the
+  // one value that IS required (RENDER_WORKER_URL) went unmentioned.
+  const workerUrl = (process.env.RENDER_WORKER_URL || '').trim();
   return NextResponse.json({
     success: true,
-    configured: isRemotionConfigured(),
-    hint: remotionSetupHint(),
+    configured: !!workerUrl,
+    hint: workerUrl
+      ? null
+      : 'Rendering is not configured — deploy render-worker/ (Railway or Fly) and set RENDER_WORKER_URL to its public URL. See docs/RENDER_WORKER_RAILWAY_SETUP.md.',
   });
 }
 
