@@ -21,6 +21,33 @@ app.use(express.json({ limit: '10mb' }));
 const PORT = process.env.PORT || 8080;
 const BUCKET = 'reel-renders';
 
+/**
+ * Job registry. A render takes minutes; an HTTP request does not get to live
+ * that long (Vercel caps the calling function at 60s, and proxies in between
+ * cut idle connections sooner). So /render no longer renders inside the
+ * request — it registers a job, returns an id immediately, and does the work
+ * in the background. Callers poll GET /render/:jobId.
+ *
+ * In-memory on purpose: a job is only meaningful while the container that is
+ * doing the work is alive. If the worker restarts mid-render the job is gone,
+ * and the poller sees a 404 — which is the truth, and better than a job row in
+ * a database that claims "rendering" forever with nothing behind it.
+ */
+const jobs = new Map();
+const JOB_TTL_MS = 60 * 60 * 1000; // keep finished jobs an hour so slow pollers still get the URL
+
+function newJobId() {
+  return `job_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pruneJobs() {
+  const cutoff = Date.now() - JOB_TTL_MS;
+  for (const [id, job] of jobs) {
+    if (job.status !== 'rendering' && job.updatedAt < cutoff) jobs.delete(id);
+  }
+}
+
+
 // Lazy Supabase client — created on first use, NOT at module load. The worker
 // starts and serves /health even without env vars; it only fails on /render if
 // they're missing (which is the right behavior — the client tells you why).
@@ -48,17 +75,67 @@ async function getBundle() {
 
 app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled }));
 
-app.post('/render', async (req, res) => {
+app.post('/render', (req, res) => {
   const { plan, reelId } = req.body || {};
   if (!plan || !plan.clips || !plan.clips.length) {
     return res.status(400).json({ success: false, error: 'Invalid plan — no clips.' });
   }
 
+  pruneJobs();
+  const jobId = newJobId();
+  jobs.set(jobId, {
+    status: 'rendering',
+    progress: 0,
+    stage: 'starting',
+    url: null,
+    error: null,
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  // Answer in milliseconds. The render continues on the event loop after this.
+  res.status(202).json({ success: true, jobId, status: 'rendering' });
+
+  runRender(jobId, plan, reelId).catch((err) => {
+    const job = jobs.get(jobId);
+    if (job) Object.assign(job, { status: 'failed', error: err.message, updatedAt: Date.now() });
+  });
+});
+
+/**
+ * Poll a job. A 404 here is meaningful, not an error to paper over: it means
+ * the worker restarted and the render died with it, so the caller should stop
+ * polling and start again rather than wait forever.
+ */
+app.get('/render/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'Unknown job id — the render worker restarted. Start the render again.' });
+  }
+  res.json({
+    success: true,
+    status: job.status,
+    progress: job.progress,
+    stage: job.stage,
+    url: job.url,
+    error: job.error,
+    elapsedSec: Math.round((Date.now() - job.startedAt) / 1000),
+  });
+});
+
+async function runRender(jobId, plan, reelId) {
+  const job = jobs.get(jobId);
+  const touch = (patch) => Object.assign(job, patch, { updatedAt: Date.now() });
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-render-'));
   const outPath = path.join(tmpDir, 'out.mp4');
 
   try {
+    touch({ stage: 'bundling' });
     const serveUrl = await getBundle();
+
     // This id must match the <Composition id="..."> in remotion-project/Root.tsx
     // exactly. It is "Reel" — the COMPONENT is named ReelComposition, which is
     // the name this used to ask for, and that mismatch failed every render.
@@ -92,6 +169,7 @@ app.post('/render', async (req, res) => {
     });
 
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
+    touch({ stage: 'rendering' });
     await renderMedia({
       composition,
       serveUrl,
@@ -99,12 +177,17 @@ app.post('/render', async (req, res) => {
       outputLocation: outPath,
       inputProps: { plan },
       onProgress: ({ progress }) => {
+        // Report every frame batch to the job (cheap, in-memory) but keep the
+        // log at every ~10% so the deploy logs stay readable.
+        touch({ progress });
         if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
       },
     });
 
     // Upload to Supabase storage
+    touch({ stage: 'uploading', progress: 1 });
     const fileName = `${reelId || 'reel'}-${Date.now()}.mp4`;
+
     const fileBuffer = fs.readFileSync(outPath);
     const { error: upErr } = await supabase().storage
       .from(BUCKET)
@@ -114,14 +197,15 @@ app.post('/render', async (req, res) => {
     const { data: urlData } = supabase().storage.from(BUCKET).getPublicUrl(fileName);
 
     console.log(`[worker] done → ${urlData.publicUrl}`);
-    res.json({ success: true, url: urlData.publicUrl, renderId: fileName });
+    touch({ status: 'done', stage: 'done', progress: 1, url: urlData.publicUrl, renderId: fileName });
   } catch (err) {
     console.error('[worker] render failed:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    touch({ status: 'failed', stage: 'failed', error: err.message });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-});
+}
+
 
 // Pre-bundle on startup so the first render isn't slow
 getBundle().catch((e) => console.error('[worker] pre-bundle failed:', e.message));

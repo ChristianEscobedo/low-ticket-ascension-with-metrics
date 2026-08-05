@@ -4,8 +4,9 @@
  * Render panel — the only UI that produces a final MP4.
  *
  * Contract with the server (see src/app/api/admin/reel-render/route.ts):
- *   1. POST { id, aspect }            → { renderId, bucketName }
- *   2. POST { renderId, bucketName }  → { done, progress, videoUrl, errorMessage }
+ *   1. POST { id, aspect }  → { jobId }
+ *   2. POST { jobId }       → { done, progress, stage, elapsedSec, videoUrl, errorMessage }
+
  *
  * Two rules this component exists to enforce:
  *  - The browser NEVER waits on an open request for a render. We start, then
@@ -24,6 +25,41 @@ const ASPECTS: { value: Aspect; label: string; hint: string }[] = [
 ];
 
 const POLL_MS = 3000;
+
+/**
+ * Turn a worker stage into a sentence a human can act on.
+ *
+ * The percentage alone is misleading: it only moves during frame rendering.
+ * Bundling happens before the first frame and uploading after the last, so a
+ * bare "0%" or "100%" can sit still for a long time on a render that is
+ * perfectly healthy. Say which phase we're in, and how long it's been.
+ */
+function describeStage(stage: unknown, progress: unknown, elapsedSec: unknown): string {
+  const secs = typeof elapsedSec === 'number' && elapsedSec > 0 ? ` · ${formatElapsed(elapsedSec)}` : '';
+  const pct = typeof progress === 'number' ? Math.round(progress * 100) : 0;
+
+  switch (stage) {
+    case 'starting':
+    case 'bundling':
+      return `Preparing the composition…${secs}`;
+    case 'uploading':
+      return `Uploading the MP4…${secs}`;
+    case 'waiting':
+      return `Waiting on the render worker…${secs}`;
+    case 'rendering':
+      return `Rendering… ${pct}%${secs}`;
+    default:
+      return `Rendering… ${pct}%${secs}`;
+  }
+}
+
+function formatElapsed(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
 
 export default function RenderPanel({
   reelId,
@@ -77,13 +113,13 @@ export default function RenderPanel({
   }, []);
 
   const poll = useCallback(
-    async (renderId: string, bucketName: string) => {
+    async (jobId: string) => {
       if (cancelled.current) return;
       try {
         const res = await fetch('/api/admin/reel-render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ renderId, bucketName }),
+          body: JSON.stringify({ jobId }),
         });
         const json = await res.json();
 
@@ -98,10 +134,6 @@ export default function RenderPanel({
           return;
         }
 
-        const pct = Math.round(Number(json.progress ?? 0) * 100);
-        setProgress(pct);
-        setStatus(`Rendering… ${pct}%`);
-
         if (json.done && json.videoUrl) {
           setVideoUrl(json.videoUrl);
           setProgress(100);
@@ -110,15 +142,27 @@ export default function RenderPanel({
           onRendered?.(json.videoUrl);
           return;
         }
+
+        // Show what the worker is actually doing. A render spends real time
+        // in stages that report no frame progress — bundling before the first
+        // frame, uploading after the last — and a bar frozen at 0% or 100%
+        // during those looks broken. Naming the stage is the difference
+        // between "it's working" and "it's hung".
+        setStatus(describeStage(json.stage, json.progress, json.elapsedSec));
+        if (typeof json.progress === 'number') {
+          setProgress(Math.round(json.progress * 100));
+        }
+
         // Not finished — check again shortly.
-        timer.current = setTimeout(() => void poll(renderId, bucketName), POLL_MS);
+        timer.current = setTimeout(() => void poll(jobId), POLL_MS);
       } catch {
         // A dropped poll is not a failed render; keep watching.
-        timer.current = setTimeout(() => void poll(renderId, bucketName), POLL_MS);
+        timer.current = setTimeout(() => void poll(jobId), POLL_MS);
       }
     },
     [onRendered],
   );
+
 
   const start = useCallback(async () => {
     setBusy(true);
@@ -140,7 +184,11 @@ export default function RenderPanel({
         return;
       }
       setStatus(`Queued · ${json.clips} clips · ${json.words} words · ~${json.durationSec}s`);
-      timer.current = setTimeout(() => void poll(json.renderId, json.bucketName), POLL_MS);
+      // Poll straight away rather than after a full interval — the first tick
+      // is what replaces "Queued" with a real stage, and 3s of nothing right
+      // after a click is exactly when this feels broken.
+      void poll(json.jobId);
+
     } catch {
       setError('Could not reach the render service.');
       setBusy(false);
@@ -185,13 +233,19 @@ export default function RenderPanel({
       </button>
 
       {busy ? (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full bg-emerald-400 transition-all"
-            style={{ width: `${Math.max(3, progress)}%` }}
-          />
+        <div className="space-y-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full bg-emerald-400 transition-all duration-500"
+              style={{ width: `${Math.max(3, progress)}%` }}
+            />
+          </div>
+          {/* Repeat the status under the bar. The button label is truncated by
+              its own width on narrow panels, and this is the line people watch. */}
+          <p className="text-[11px] tabular-nums text-white/60">{status || 'Starting…'}</p>
         </div>
       ) : null}
+
 
       {/* The real reason it can't run, not a generic error. */}
       {available === false && hint ? <p className="text-[11px] text-white/50">{hint}</p> : null}

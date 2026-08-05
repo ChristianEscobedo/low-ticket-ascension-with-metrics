@@ -12,15 +12,32 @@ import { reelRenderProgress } from '@/utils/integrations/remotion-render';
 /**
  * The render endpoint — start + poll, never block.
  *
- * GET                       → is rendering available, and why not.
- * POST { id, aspect?, fps? } → build the plan, start a Lambda render, return ids.
- * POST { renderId, bucketName } → progress (0–1) and the finished URL.
+ * GET                        → is rendering available, and why not.
+ * POST { id, aspect?, fps? }  → build the plan, start the render, return a jobId.
+ * POST { jobId }              → progress (0–1), stage, and the finished URL.
  *
  * The request returns in well under a second in every case. That's deliberate:
- * the old compose route tried to finish a render inside the HTTP request and
- * died on the function timeout for anything longer than a few seconds.
+ * a render takes minutes, and no HTTP request survives that. The worker keeps
+ * the job; this route only starts it and reports on it.
+
  */
 export const maxDuration = 60;
+
+/**
+ * Railway and Fly both DISPLAY the worker domain without a scheme, so pasting
+ * it verbatim into RENDER_WORKER_URL is the natural thing to do — and then
+ * fetch() dies with "Failed to parse URL from <host>/render" before a single
+ * byte leaves the process. That reads like the worker is down when the worker
+ * is perfectly healthy. Normalize instead: a bare host gets https://, except
+ * loopback, which is plain http in local dev.
+ */
+function workerBase(raw: string): string {
+  const bareHost = !/^https?:\/\//i.test(raw);
+  const isLoopback = /^(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(raw);
+  const base = bareHost ? `${isLoopback ? 'http' : 'https'}://${raw}` : raw;
+  return base.replace(/\/$/, '');
+}
+
 
 export async function GET() {
   const guard = await requireAdminRoute();
@@ -51,8 +68,62 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // ---- Progress poll -----------------------------------------------------
+  // ---- Progress poll (render worker job) ---------------------------------
+  // The worker renders in the background and reports progress per frame. This
+  // branch is a thin proxy onto GET /render/:jobId.
+  const jobId = typeof body.jobId === 'string' ? body.jobId.trim() : '';
+  if (jobId) {
+    const url = (process.env.RENDER_WORKER_URL || '').trim();
+    if (!url) {
+      return NextResponse.json({ success: false, error: 'RENDER_WORKER_URL is not set.' }, { status: 400 });
+    }
+
+    let pollRes: Response;
+    try {
+      pollRes = await fetch(`${workerBase(url)}/render/${encodeURIComponent(jobId)}`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      // A dropped poll is not a failed render. Report "still working" so the
+      // client keeps watching instead of declaring a healthy render dead.
+      return NextResponse.json({ success: true, done: false, progress: null, stage: 'waiting' });
+    }
+
+    if (pollRes.status === 404) {
+      return NextResponse.json({
+        success: true,
+        done: true,
+        errorMessage: 'The render worker restarted and lost this job. Start the render again.',
+      });
+    }
+
+    const job = (await pollRes.json().catch(() => null)) as {
+      status?: string;
+      progress?: number;
+      stage?: string;
+      url?: string | null;
+      error?: string | null;
+      elapsedSec?: number;
+    } | null;
+
+    if (!job) {
+      return NextResponse.json({ success: true, done: false, progress: null, stage: 'waiting' });
+    }
+
+    return NextResponse.json({
+      success: true,
+      done: job.status === 'done',
+      progress: typeof job.progress === 'number' ? job.progress : 0,
+      videoUrl: job.url || '',
+      errorMessage: job.status === 'failed' ? job.error || 'Render failed.' : '',
+      stage: job.stage || '',
+      elapsedSec: job.elapsedSec ?? 0,
+    });
+  }
+
+  // ---- Progress poll (legacy Lambda path) --------------------------------
   const renderId = typeof body.renderId === 'string' ? body.renderId.trim() : '';
+
   const bucketName = typeof body.bucketName === 'string' ? body.bucketName.trim() : '';
   if (renderId && bucketName) {
     const prog = await reelRenderProgress({ renderId, bucketName });
@@ -100,26 +171,17 @@ export async function POST(request: NextRequest) {
   // body — which is what "Could not reach the render service" was hiding. The
   // caller can't tell "not deployed" from "asleep" from "crashed", so surface
   // the actual reason and keep the status codes meaningful.
-  // Railway and Fly both DISPLAY the worker domain without a scheme, so
-  // pasting it verbatim into RENDER_WORKER_URL is the natural thing to do —
-  // and then fetch() dies with "Failed to parse URL from <host>/render"
-  // before a single byte leaves the process. That reads like the worker is
-  // down when the worker is perfectly healthy. Normalize instead: a bare host
-  // gets https://, except loopback, which is plain http in local dev.
-  const bareHost = !/^https?:\/\//i.test(workerUrl);
-  const isLoopback = /^(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(workerUrl);
-  const base = bareHost ? `${isLoopback ? 'http' : 'https'}://${workerUrl}` : workerUrl;
-  const endpoint = `${base.replace(/\/$/, '')}/render`;
+  const endpoint = `${workerBase(workerUrl)}/render`;
 
-
+  // This call now only *starts* the render — the worker registers a job and
+  // answers in milliseconds, so 45s of patience is no longer needed to cover
+  // the render itself. It only has to cover a cold start.
   let workerRes: Response;
   try {
     workerRes = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ plan, reelId: id }),
-      // A sleeping container can take ~30s to wake. Bound it below the 60s
-      // function limit so we return a real message instead of being killed.
       signal: AbortSignal.timeout(45_000),
     });
   } catch (err) {
@@ -131,7 +193,8 @@ export async function POST(request: NextRequest) {
   }
 
   const raw = await workerRes.text();
-  let workerJson: { success?: boolean; error?: string; url?: string; renderId?: string };
+  let workerJson: { success?: boolean; error?: string; jobId?: string };
+
   try {
     workerJson = JSON.parse(raw);
   } catch {
@@ -157,14 +220,21 @@ export async function POST(request: NextRequest) {
   }
 
 
+  if (!workerJson.jobId) {
+    return NextResponse.json(
+      { success: false, error: 'The render worker did not return a job id. It may be running an old build.' },
+      { status: 502 },
+    );
+  }
+
   return NextResponse.json({
     success: true,
-    url: workerJson.url,
-    renderId: workerJson.renderId,
+    jobId: workerJson.jobId,
     durationSec: estimateRenderSeconds(plan),
     words: plan.words.length,
     clips: plan.clips.length,
   });
+
 }
 
 
