@@ -14,6 +14,11 @@
  * Mappers are pure and defensive, house style.
  */
 
+// The caption preset registry. This is a VALUE import, while captions.ts imports
+// only TYPES from this file (`import type { CaptionPreset, ReelWord }`) — type
+// imports are erased, so there is no runtime cycle.
+import { captionDefFor, CAPTION_ANIMS } from './captions';
+
 // ---------------------------------------------------------------------------
 // Clips + audio
 // ---------------------------------------------------------------------------
@@ -57,23 +62,146 @@ export interface ReelAudioTrack {
   durationSec: number | null;
 }
 
+/**
+ * A per-word style mark — the "this word does its own thing" slot.
+ *
+ * Words are transcript DATA (they carry start/end), so a word is the one place
+ * per-beat styling may live: rows are derived (they'd drift) and letters are
+ * derived (they'd orphan). The mark is optional and additive — a word without
+ * one inherits the preset, so every existing reel keeps working. The caption
+ * layer renders it (`CaptionWordMark` mirrors this shape there, structurally,
+ * because the render worker doesn't vendor this file).
+ */
+export interface ReelWordMark {
+  /** Entrance anim for THIS word instead of the preset's. */
+  anim?: string;
+  /** Color override — the word carries it even when idle. */
+  color?: string;
+  /** Extra scale multiplier for THIS word (the "shout" beat). */
+  scale?: number;
+  /** Per-letter cascade delay in seconds for THIS word. */
+  stagger?: number;
+}
+
 /** One spoken word with its timing inside a clip (Whisper word granularity). */
 export interface ReelWord {
   word: string;
   start: number;
   end: number;
+  /** Optional per-word styling (see ReelWordMark). */
+  mark?: ReelWordMark;
 }
 
-/** R3 caption presets — the on-stage karaoke layer's look (rides the project JSON). */
-export type CaptionPreset = 'karaoke' | 'beast' | 'hormozi' | 'minimal';
+/**
+ * Per-cue styling — where the fly-in sits and how it's framed. Every field is
+ * optional; a cue without one renders the house default (the top-right card:
+ * 34% wide at x=60/y=16, 16px rounded, shadowed). Percents are of the frame,
+ * px are at 1080 wide (the render scales with the frame).
+ */
+export interface ReelMediaCueStyle {
+  /** Box width as % of frame width. Default 34. */
+  widthPct?: number;
+  /** Box top-left position, % of frame. Defaults x=60, y=16 (the house top-right). */
+  xPct?: number;
+  yPct?: number;
+  /** Corner radius px at 1080w. Default 16. */
+  radiusPx?: number;
+  /** Outline color (CSS) + width px. Omit = no outline. */
+  borderColor?: string;
+  borderPx?: number;
+  /** Drop shadow on/off (the house card has one). Default on. */
+  shadow?: boolean;
+  /**
+   * Ambient motion while the cue is on screen (frame-driven, like the caption
+   * `float` blockFx): 'float' = a gentle vertical bob, 'wiggle' = a soft
+   * rotational sway. Omit = still. Composes ON TOP of the entrance and any
+   * motion track, and eases in/out with the cue so it never pops.
+   */
+  ambient?: 'float' | 'wiggle';
+}
 
-const CAPTION_PRESET_IDS = new Set<string>(['karaoke', 'beast', 'hormozi', 'minimal']);
+/**
+ * A word-triggered media cue: an image that flies in when a specific word is
+ * SAID (the Submagic/Opus b-roll beat). The cue keys on (clipId, wordIndex) —
+ * the stable, transcript-derived address — and the render plan resolves it to
+ * frame timings from the word's own start/end, so a trim or split re-times the
+ * cue automatically instead of stranding it.
+ */
+export interface ReelMediaCue {
+  id: string;
+  /** The clip whose transcript holds the trigger word. */
+  clipId: string;
+  /** Index into captions[clipId] of the trigger word. */
+  wordIndex: number;
+  /**
+   * How long the cue holds after its trigger word ends, in seconds. Omit =
+   * the house default (MEDIA_CUE_HOLD_SEC, 1.0s). The window stays
+   * word-derived — this is the "time on screen" dial, still clamped to the
+   * clip's surviving window at plan time, so a trim can shorten it.
+   */
+  holdSec?: number;
+  /** Public http(s) image URL (from the Media Library). */
+  url: string;
+  /** Optional look (size/position/frame). Omit = the house card. */
+  style?: ReelMediaCueStyle;
+  /**
+   * Keyframed motion — the SAME MotionKey[] shape clips use, sampled by the
+   * same per-frame interpolation. Times are CUE-RELATIVE seconds, and the
+   * cue's window is word-derived: a trim that shortens the window plays less
+   * of the track (same honest behavior as clips). Omit = the default
+   * rise+scale entrance + fade exit.
+   */
+  motion?: import('./motion').MotionKey[];
+}
 
-/** Defensive: unknown/missing values fall back to the default karaoke look. */
+/**
+ * R3 caption presets — the on-stage caption layer's look (rides the project JSON).
+ *
+ * This is a preset *id*, not a closed union, because the gallery in captions.ts is
+ * the registry and it grows. It used to be the union
+ * `'karaoke' | 'beast' | 'hormozi' | 'minimal'` with a matching four-item
+ * whitelist below, and that combination silently destroyed every other preset —
+ * see normalizeCaptionPreset.
+ */
+export type CaptionPreset = string;
+
+/**
+ * Defensive: unknown/missing values fall back to the default karaoke look.
+ *
+ * THE BUG THIS FIXES
+ * ------------------
+ * This used to validate against a hardcoded four-id set:
+ *
+ *   new Set(['karaoke', 'beast', 'hormozi', 'minimal'])
+ *
+ * `CAPTION_STYLE_DEFS` has **41** presets. So 38 of them — every Hormozi
+ * variant, every creator look, every modern animation (`hormozi3`, `devin`,
+ * `neon-pulse`, `bounce-box`, …) — failed the check and were rewritten to
+ * `'karaoke'`.
+ *
+ * That ran on both sides of the caption pipeline:
+ *   - `projectToJson` → so picking a preset SAVED 'karaoke' to the database;
+ *   - `normalizeProjectJson`, which `/api/admin/reel-render` runs over the
+ *     posted project → so the RenderPlan got 'karaoke' too.
+ *
+ * The studio stage never called it — it renders `captionDefFor(project.captionStyle)`
+ * off live state — so the preview showed the preset you picked while the export
+ * showed karaoke, every single time, on every reel. That is the "render keeps
+ * using the same style even though the preview changed" report, and it was NOT
+ * the caption layer: the layer faithfully drew the style it was handed.
+ *
+ * The fix is to stop maintaining a second, hand-written list of preset ids. The
+ * registry in captions.ts is the only list; anything in it (or reachable through
+ * its legacy-id aliases) round-trips unchanged. The import is type-only in the
+ * other direction, so this does not create a runtime cycle.
+ */
 export function normalizeCaptionPreset(raw: unknown): CaptionPreset {
-  return typeof raw === 'string' && CAPTION_PRESET_IDS.has(raw)
-    ? (raw as CaptionPreset)
-    : 'karaoke';
+  if (typeof raw !== 'string' || !raw) return 'karaoke';
+  // captionDefFor resolves real ids AND legacy aliases, and falls back to
+  // karaoke. Comparing its result's id to karaoke tells us whether `raw` was
+  // actually recognized, without duplicating the id list here.
+  const resolved = captionDefFor(raw);
+  return resolved.id === 'karaoke' && raw !== 'karaoke' ? 'karaoke' : raw;
 }
 
 export interface ReelProject {
@@ -92,6 +220,8 @@ export interface ReelProject {
   captionOverrides?: import('./captions').CaptionOverrides;
   /** R25: overlay (b-roll) layers on top of the main track. */
   overlays?: ReelOverlayClip[];
+  /** Word-triggered media cues (image fly-ins keyed to spoken words). */
+  mediaCues?: ReelMediaCue[];
   createdAt: string | null;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -129,26 +259,73 @@ export function makeClipId(): string {
   return `clip-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * The ONE motion-track clamp, shared by clips and media cues: t ≥ 0, scale
+ * 0.2–4, pan ±50, rotate ±45, capped at 40 keys. Returns undefined for
+ * anything shorter than two keys (a single key can't interpolate, so the
+ * default/static case owns it) — the same rule normalizeReelClip always had.
+ */
+function normalizeMotionKeys(raw: unknown): import('./motion').MotionKey[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const keys = raw
+    .map((k) => {
+      const m = k && typeof k === 'object' ? (k as Record<string, unknown>) : {};
+      return {
+        t: Math.max(0, asNumber(m.t, 0)),
+        scale: Math.max(0.2, Math.min(4, asNumber(m.scale, 1))),
+        panX: Math.max(-50, Math.min(50, asNumber(m.panX, 0))),
+        panY: Math.max(-50, Math.min(50, asNumber(m.panY, 0))),
+        rotateDeg: Math.max(-45, Math.min(45, asNumber(m.rotateDeg, 0))),
+      };
+    })
+    .slice(0, 40);
+  return keys.length >= 2 ? keys : undefined;
+}
+
+/**
+ * Per-cue style: clamp each field, drop keys that aren't usable, and when
+ * nothing survived drop the whole style (the cue then renders the house
+ * card). Border needs BOTH a color and a width — a lone width is dropped,
+ * a lone color keeps the default 2px so the pick is never invisible.
+ *
+ * Exported for the reel-cues handoff (the recipe's style hints ride the same
+ * clamp the studio's editor writes through).
+ */
+export function normalizeMediaCueStyle(raw: unknown): ReelMediaCueStyle | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: ReelMediaCueStyle = {};
+  if (typeof o.widthPct === 'number' && Number.isFinite(o.widthPct)) {
+    out.widthPct = Math.max(10, Math.min(90, o.widthPct));
+  }
+  if (typeof o.xPct === 'number' && Number.isFinite(o.xPct)) {
+    out.xPct = Math.max(0, Math.min(95, o.xPct));
+  }
+  if (typeof o.yPct === 'number' && Number.isFinite(o.yPct)) {
+    out.yPct = Math.max(0, Math.min(95, o.yPct));
+  }
+  if (typeof o.radiusPx === 'number' && Number.isFinite(o.radiusPx)) {
+    out.radiusPx = Math.max(0, Math.min(80, o.radiusPx));
+  }
+  if (typeof o.borderColor === 'string' && o.borderColor.trim()) {
+    out.borderColor = o.borderColor.trim().slice(0, 40);
+  }
+  if (typeof o.borderPx === 'number' && Number.isFinite(o.borderPx)) {
+    out.borderPx = Math.max(0, Math.min(12, o.borderPx));
+  }
+  if (out.borderColor && out.borderPx === undefined) out.borderPx = 2;
+  if (typeof o.shadow === 'boolean') out.shadow = o.shadow;
+  if (o.ambient === 'float' || o.ambient === 'wiggle') out.ambient = o.ambient;
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function normalizeReelClip(raw: unknown): ReelClip | null {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const url = asString(o.url).trim();
   if (!isHttpUrl(url)) return null;
   const durationSec = Math.max(0, asNumber(o.durationSec, 0));
   if (durationSec <= 0) return null;
-  const motion = Array.isArray(o.motion)
-    ? o.motion
-        .map((k) => {
-          const m = k && typeof k === 'object' ? (k as Record<string, unknown>) : {};
-          return {
-            t: Math.max(0, asNumber(m.t, 0)),
-            scale: Math.max(0.2, Math.min(4, asNumber(m.scale, 1))),
-            panX: Math.max(-50, Math.min(50, asNumber(m.panX, 0))),
-            panY: Math.max(-50, Math.min(50, asNumber(m.panY, 0))),
-            rotateDeg: Math.max(-45, Math.min(45, asNumber(m.rotateDeg, 0))),
-          };
-        })
-        .slice(0, 40)
-    : undefined;
+  const motion = normalizeMotionKeys(o.motion);
   return {
     id: asString(o.id) || makeClipId(),
     name: asString(o.name).slice(0, 120) || 'Clip',
@@ -184,6 +361,25 @@ export function normalizeReelAudio(raw: unknown): ReelAudioTrack | null {
   };
 }
 
+/** Validate one word mark. Unknown anims DROP the key (the word then inherits
+ *  the preset) — never a silent substitution onto 'pop'. */
+function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: ReelWordMark = {};
+  if (typeof o.anim === 'string' && (CAPTION_ANIMS as string[]).includes(o.anim)) {
+    out.anim = o.anim;
+  }
+  if (typeof o.color === 'string' && o.color.trim()) out.color = o.color.trim().slice(0, 40);
+  if (typeof o.scale === 'number' && Number.isFinite(o.scale)) {
+    out.scale = Math.max(0.5, Math.min(3, o.scale));
+  }
+  if (typeof o.stagger === 'number' && Number.isFinite(o.stagger) && o.stagger > 0) {
+    out.stagger = Math.max(0.005, Math.min(0.5, o.stagger));
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function normalizeReelWords(raw: unknown): ReelWord[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -194,9 +390,39 @@ function normalizeReelWords(raw: unknown): ReelWord[] {
       const start = asNumber(o.start, 0);
       const end = asNumber(o.end, start);
       if (end < start) return null;
-      return { word: word.slice(0, 60), start, end };
+      const mark = normalizeWordMark(o.mark);
+      return { word: word.slice(0, 60), start, end, ...(mark ? { mark } : {}) };
     })
     .filter((w): w is ReelWord => !!w);
+}
+
+/** Media cues: keep only entries that point at a real word of a real clip. */
+function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>): ReelMediaCue[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((c) => {
+      const o = c && typeof c === 'object' ? (c as Record<string, unknown>) : {};
+      const url = asString(o.url).trim();
+      const clipId = asString(o.clipId);
+      const wordIndex = Math.round(asNumber(o.wordIndex, -1));
+      if (!isHttpUrl(url) || !clipId) return null;
+      const words = captions[clipId];
+      if (!words || wordIndex < 0 || wordIndex >= words.length) return null;
+      const style = normalizeMediaCueStyle(o.style);
+      const motion = normalizeMotionKeys(o.motion);
+      const holdSec = asNumber(o.holdSec, NaN);
+      return {
+        id: asString(o.id) || makeClipId(),
+        clipId,
+        wordIndex,
+        url,
+        ...(Number.isFinite(holdSec) ? { holdSec: Math.max(0.2, Math.min(8, holdSec)) } : {}),
+        ...(style ? { style } : {}),
+        ...(motion ? { motion } : {}),
+      };
+    })
+    .filter((c): c is ReelMediaCue => !!c)
+    .slice(0, 60);
 }
 
 /** Project-level fields live at top level; clips/audio/captions ride the JSONB. */
@@ -209,6 +435,7 @@ export function normalizeProjectJson(raw: unknown): {
   captionStyle: CaptionPreset;
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
+  mediaCues?: ReelMediaCue[];
 } {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const clips = (Array.isArray(o.clips) ? o.clips : [])
@@ -224,6 +451,7 @@ export function normalizeProjectJson(raw: unknown): {
       if (normalized.length) captions[key] = normalized;
     }
   }
+  const mediaCues = normalizeMediaCues(o.mediaCues, captions);
   return {
     clips,
     audio: normalizeReelAudio(o.audio),
@@ -235,6 +463,7 @@ export function normalizeProjectJson(raw: unknown): {
       ? { captionOverrides: o.captionOverrides as import('./captions').CaptionOverrides }
       : {}),
     ...(overlays.length ? { overlays } : {}),
+    ...(mediaCues.length ? { mediaCues } : {}),
   };
 }
 
@@ -251,6 +480,7 @@ export function rowToReelProject(row: ReelProjectRow): ReelProject {
     captionStyle: json.captionStyle,
     ...(json.captionOverrides ? { captionOverrides: json.captionOverrides } : {}),
     ...(json.overlays ? { overlays: json.overlays } : {}),
+    ...(json.mediaCues ? { mediaCues: json.mediaCues } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
@@ -267,6 +497,7 @@ export function projectToJson(project: {
   captionStyle?: CaptionPreset;
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
+  mediaCues?: ReelMediaCue[];
 }): Record<string, unknown> {
   return {
     clips: project.clips,
@@ -277,6 +508,7 @@ export function projectToJson(project: {
     captionStyle: normalizeCaptionPreset(project.captionStyle),
     ...(project.captionOverrides ? { captionOverrides: project.captionOverrides } : {}),
     ...(project.overlays && project.overlays.length ? { overlays: project.overlays } : {}),
+    ...(project.mediaCues && project.mediaCues.length ? { mediaCues: project.mediaCues } : {}),
   };
 }
 

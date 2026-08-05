@@ -646,6 +646,25 @@ const SEEDS = [
       },
     ],
   },
+  {
+    slug: 'reel-cue-autopilot',
+    name: 'Reel Cue Autopilot',
+    description:
+      'Reads a reel\'s indexed transcript and proposes image fly-in beats (word + image prompt + style hint), then — after you approve the list — matches the Media Library first (free) and generates what\'s missing, and attaches the cues to the reel. Design (gate → reel-cues).',
+    budget_est_cents: 120,
+    status: 'active',
+    steps: [
+      {
+        expert: 'design',
+        instruction:
+          'The brief is a Reel Studio export: it names the reel project id (REEL_PROJECT_ID) and each scene\'s clip id with its INDEXED transcript (index: word (start–end seconds)). Propose up to 8 image fly-in beats — the Submagic/Opus b-roll beat: pick the STRONG visual words (things, numbers, outcomes, named places — never glue words like "really" or "going"), one beat per word, spread across scenes so they don\'t cluster. Per beat write the image prompt (concrete, photographic, on-brand for a vertical reel card) and an optional style hint (widthPct 15–80, xPct/yPct 0–90 — default is a top-right card at 34% width). Save a reel-cue-plan artifact: { projectId, beats: [{ clipId, wordIndex, word, imagePrompt, style? }] } — wordIndex must be the EXACT index from the transcript line, and clipId the EXACT id from the scene header. The reel export:\n\n{input}',
+        inputFrom: 'brief',
+        outputArtifact: 'reel-cue-plan',
+        gate: 'approve',
+        handoff: { target: 'reel-cues', generate: true },
+      },
+    ],
+  },
 ];
 
 async function main() {

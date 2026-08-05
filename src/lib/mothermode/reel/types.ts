@@ -111,6 +111,13 @@ export interface ReelMediaCueStyle {
   borderPx?: number;
   /** Drop shadow on/off (the house card has one). Default on. */
   shadow?: boolean;
+  /**
+   * Ambient motion while the cue is on screen (frame-driven, like the caption
+   * `float` blockFx): 'float' = a gentle vertical bob, 'wiggle' = a soft
+   * rotational sway. Omit = still. Composes ON TOP of the entrance and any
+   * motion track, and eases in/out with the cue so it never pops.
+   */
+  ambient?: 'float' | 'wiggle';
 }
 
 /**
@@ -126,6 +133,13 @@ export interface ReelMediaCue {
   clipId: string;
   /** Index into captions[clipId] of the trigger word. */
   wordIndex: number;
+  /**
+   * How long the cue holds after its trigger word ends, in seconds. Omit =
+   * the house default (MEDIA_CUE_HOLD_SEC, 1.0s). The window stays
+   * word-derived — this is the "time on screen" dial, still clamped to the
+   * clip's surviving window at plan time, so a trim can shorten it.
+   */
+  holdSec?: number;
   /** Public http(s) image URL (from the Media Library). */
   url: string;
   /** Optional look (size/position/frame). Omit = the house card. */
@@ -301,6 +315,7 @@ export function normalizeMediaCueStyle(raw: unknown): ReelMediaCueStyle | undefi
   }
   if (out.borderColor && out.borderPx === undefined) out.borderPx = 2;
   if (typeof o.shadow === 'boolean') out.shadow = o.shadow;
+  if (o.ambient === 'float' || o.ambient === 'wiggle') out.ambient = o.ambient;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -395,11 +410,13 @@ function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>):
       if (!words || wordIndex < 0 || wordIndex >= words.length) return null;
       const style = normalizeMediaCueStyle(o.style);
       const motion = normalizeMotionKeys(o.motion);
+      const holdSec = asNumber(o.holdSec, NaN);
       return {
         id: asString(o.id) || makeClipId(),
         clipId,
         wordIndex,
         url,
+        ...(Number.isFinite(holdSec) ? { holdSec: Math.max(0.2, Math.min(8, holdSec)) } : {}),
         ...(style ? { style } : {}),
         ...(motion ? { motion } : {}),
       };

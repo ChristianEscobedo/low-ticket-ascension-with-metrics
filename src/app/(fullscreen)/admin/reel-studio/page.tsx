@@ -21,6 +21,8 @@ import { clsx } from 'clsx';
 const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
 /** Caption placement, shared by BOTH preview branches so neither can lose it. */
 const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: false });
+// The media-cue transform box — same overlay pattern, mounted in both previews.
+const CueDragLayer = dynamic(() => import('./CueDragLayer'), { ssr: false });
 
 // The SAME font resolver the render plan uses. Two resolvers = two things that
 // drift, which is exactly how the burned MP4 ended up on a different typeface
@@ -2898,7 +2900,15 @@ export default function ReelStudioPage() {
   const [cueAiBusy, setCueAiBusy] = useState(false);
   const cueImageInput = useRef<HTMLInputElement>(null);
   /** Which attached cue's style editor is open (by cue id; null = closed). */
-  const [cueStyleEditId, setCueStyleEditId] = useState<string | null>(null);
+const [cueStyleEditId, setCueStyleEditId] = useState<string | null>(null);
+// Live drag state for the cue being styled — LOCAL only while dragging
+// (onMove), persisted once on release (onCommit). The same split the caption
+// puck uses, so a drag never hammers the API.
+const [cueDragLocal, setCueDragLocal] = useState<{
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+} | null>(null);
   /** The Reel Cue Autopilot run (the gated recipe) starting up. */
   const [cueAutopilotBusy, setCueAutopilotBusy] = useState(false);
   /** Content Hub generated-video picker state (the bridge in). */
@@ -4187,11 +4197,12 @@ export default function ReelStudioPage() {
     }
   }
 
-  /** The cue's render window in seconds: its word's span + the 1s hold (the
-   *  same math shiftMediaCues resolves it to). Motion presets expand over it. */
+  /** The cue's render window in seconds: its word's span + the hold (the cue's
+   *  own holdSec when set, else the house 1s — the same math shiftMediaCues
+   *  resolves it to). Motion presets expand over it. */
   function cueWindowSec(cue: ReelMediaCue): number {
     const w = project?.captions[cue.clipId]?.[cue.wordIndex];
-    return Math.max(0.5, (w ? w.end - w.start : 0.4) + 1.0);
+    return Math.max(0.5, (w ? w.end - w.start : 0.4) + (cue.holdSec ?? 1.0));
   }
 
   /** Patch one cue's fields and persist (the same save path as attach). */
@@ -5797,6 +5808,11 @@ export default function ReelStudioPage() {
                           const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
                           if (!cue || cue.clipId !== currentClip.id) return null;
                           const windowSec = cueWindowSec(cue);
+                          const cueWord = project.captions[cue.clipId]?.[cue.wordIndex];
+                          const wordSpanSec = cueWord ? cueWord.end - cueWord.start : 0;
+                          // The caption block's bottom edge, top-anchored (positionPct
+                          // is bottom-anchored) — the above/below chips read it.
+                          const captionPct = project.captionOverrides?.positionPct ?? 12;
                           return (
                             <div className="space-y-1 rounded-lg border border-violet-400/25 bg-ink/70 p-1.5">
                               <p className="flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-violet-300/60">
@@ -5804,9 +5820,15 @@ export default function ReelStudioPage() {
                                   fly-in style — "{project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}"
                                 </span>
                                 <button
-                                  onClick={() => void patchCue(cue.id, { style: undefined, motion: undefined })}
+                                  onClick={() =>
+                                    void patchCue(cue.id, {
+                                      style: undefined,
+                                      motion: undefined,
+                                      holdSec: undefined,
+                                    })
+                                  }
                                   className="normal-case text-bone/35 hover:text-bone"
-                                  title="Back to the default card (top-right, rise+scale entrance)"
+                                  title="Back to the default card (top-right, rise+scale entrance, 1s hold)"
                                 >
                                   reset
                                 </button>
@@ -5842,6 +5864,26 @@ export default function ReelStudioPage() {
                                   </span>
                                 </label>
                               ))}
+                              {/* time on screen — the word's span + the hold after it
+                                  (the plan clamps the window to the clip either way) */}
+                              <label className="flex items-center gap-1.5 text-[8px] text-violet-200/50">
+                                <span className="w-8 shrink-0">on screen</span>
+                                <input
+                                  type="range"
+                                  min={0.3}
+                                  max={6}
+                                  step={0.1}
+                                  value={cue.holdSec ?? 1}
+                                  onChange={(e) =>
+                                    void patchCue(cue.id, { holdSec: Number(e.target.value) })
+                                  }
+                                  className="min-w-0 flex-1 accent-violet-400"
+                                  title="How long the image holds after its trigger word ends"
+                                />
+                                <span className="w-9 shrink-0 text-right text-violet-200/60">
+                                  {(wordSpanSec + (cue.holdSec ?? 1)).toFixed(1)}s
+                                </span>
+                              </label>
                               <div className="flex items-center gap-1.5 text-[8px] text-violet-200/50">
                                 <span className="w-8 shrink-0">border</span>
                                 <input
@@ -5884,8 +5926,75 @@ export default function ReelStudioPage() {
                                   />
                                 </label>
                               </div>
+                              {/* ambient feel + quick placement: float/wiggle ride on
+                                  top of the entrance (and any motion track); above/below
+                                  snap yPct relative to the caption block — the dashed
+                                  drag box on the preview is the precise path */}
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                <span className="text-[8px] font-bold uppercase tracking-wide text-violet-300/50">
+                                  feel
+                                </span>
+                                <button
+                                  onClick={() => void patchCueStyle(cue.id, { ambient: undefined })}
+                                  className={clsx(
+                                    'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                    !cue.style?.ambient
+                                      ? 'bg-violet-500 text-white'
+                                      : 'text-violet-200/60 hover:bg-violet-500/15',
+                                  )}
+                                  title="No ambient motion"
+                                >
+                                  still
+                                </button>
+                                {(['float', 'wiggle'] as const).map((a) => (
+                                  <button
+                                    key={a}
+                                    onClick={() => void patchCueStyle(cue.id, { ambient: a })}
+                                    className={clsx(
+                                      'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                      cue.style?.ambient === a
+                                        ? 'bg-violet-500 text-white'
+                                        : 'text-violet-200/60 hover:bg-violet-500/15',
+                                    )}
+                                    title={
+                                      a === 'float'
+                                        ? 'A gentle vertical bob while the image is on screen'
+                                        : 'A soft rotational sway while the image is on screen'
+                                    }
+                                  >
+                                    {a}
+                                  </button>
+                                ))}
+                                <span className="mx-0.5 h-3 w-px bg-violet-400/20" />
+                                <button
+                                  onClick={() =>
+                                    void patchCueStyle(cue.id, {
+                                      yPct: Math.max(2, Math.round(100 - captionPct - 36)),
+                                    })
+                                  }
+                                  className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
+                                  title="Snap above the caption block"
+                                >
+                                  ↑ above text
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    void patchCueStyle(cue.id, {
+                                      yPct: Math.min(90, Math.round(100 - captionPct + 6)),
+                                    })
+                                  }
+                                  className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
+                                  title="Snap below the caption block"
+                                >
+                                  ↓ below text
+                                </button>
+                                <span className="w-full text-[7px] leading-3 text-violet-200/35">
+                                  tip: while this editor is open, the dashed box on the preview
+                                  drags to move · its right edge scales
+                                </span>
+                              </div>
                               {/* motion — the SAME preset chips scenes use, expanded
-                                  over the cue's window (word span + 1s hold) */}
+                                  over the cue's window (word span + the hold) */}
                               <div className="flex flex-wrap items-center gap-1 pt-0.5">
                                 <span className="text-[8px] font-bold uppercase tracking-wide text-violet-300/50">
                                   motion
@@ -7307,6 +7416,50 @@ export default function ReelStudioPage() {
                           }}
                         />
                       )}
+                    {/* The media-cue transform box — the caption puck's pattern
+                        (overlay above the Player, local while dragging, one write
+                        on release), mounted in BOTH preview branches so the cue
+                        is placeable on the preview that matches the render. It
+                        shows while a cue's style editor is open, even outside
+                        the cue's window — it marks where the fly-in lands. */}
+                    {(() => {
+                      const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
+                      if (!cue) return null;
+                      const sx = cue.style?.xPct ?? 60;
+                      const sy = cue.style?.yPct ?? 16;
+                      const sw = cue.style?.widthPct ?? 34;
+                      return (
+                        <CueDragLayer
+                          xPct={cueDragLocal?.xPct ?? sx}
+                          yPct={cueDragLocal?.yPct ?? sy}
+                          widthPct={cueDragLocal?.widthPct ?? sw}
+                          src={cue.url}
+                          word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
+                          onMove={(x, y) =>
+                            setCueDragLocal({
+                              xPct: x,
+                              yPct: y,
+                              widthPct: cueDragLocal?.widthPct ?? sw,
+                            })
+                          }
+                          onCommit={(x, y) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { xPct: x, yPct: y });
+                          }}
+                          onResize={(w) =>
+                            setCueDragLocal({
+                              xPct: cueDragLocal?.xPct ?? sx,
+                              yPct: cueDragLocal?.yPct ?? sy,
+                              widthPct: w,
+                            })
+                          }
+                          onResizeCommit={(w) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { widthPct: w });
+                          }}
+                        />
+                      );
+                    })()}
                   </div>
                 ) : previewSrc ? (
                   <div
@@ -7422,6 +7575,47 @@ export default function ReelStudioPage() {
                         />
                         </>
                       )}
+                    {/* The media-cue transform box on the EDIT stage too — same
+                        overlay, same numbers, so placement agrees across both
+                        previews by construction. */}
+                    {(() => {
+                      const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
+                      if (!cue) return null;
+                      const sx = cue.style?.xPct ?? 60;
+                      const sy = cue.style?.yPct ?? 16;
+                      const sw = cue.style?.widthPct ?? 34;
+                      return (
+                        <CueDragLayer
+                          xPct={cueDragLocal?.xPct ?? sx}
+                          yPct={cueDragLocal?.yPct ?? sy}
+                          widthPct={cueDragLocal?.widthPct ?? sw}
+                          src={cue.url}
+                          word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
+                          onMove={(x, y) =>
+                            setCueDragLocal({
+                              xPct: x,
+                              yPct: y,
+                              widthPct: cueDragLocal?.widthPct ?? sw,
+                            })
+                          }
+                          onCommit={(x, y) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { xPct: x, yPct: y });
+                          }}
+                          onResize={(w) =>
+                            setCueDragLocal({
+                              xPct: cueDragLocal?.xPct ?? sx,
+                              yPct: cueDragLocal?.yPct ?? sy,
+                              widthPct: w,
+                            })
+                          }
+                          onResizeCommit={(w) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { widthPct: w });
+                          }}
+                        />
+                      );
+                    })()}
 
                     {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
                     {lensMode === 'platform' && aspect === '9:16' && (

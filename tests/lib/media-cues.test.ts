@@ -204,6 +204,84 @@ describe('media cues: style + motion (the keyframed fly-in)', () => {
     expect(cues[0]).toMatchObject({ fromFrame: 15, wordText: 'money' });
   });
 
+  it('holdSec drives the window (word end + hold), clamped to the clip', () => {
+    const cues = shiftMediaCues(
+      {
+        clips: [clip('a', 10)],
+        captions: { a: WORDS },
+        mediaCues: [
+          {
+            id: 'c1',
+            clipId: 'a',
+            wordIndex: 1,
+            url: 'https://cdn.example.com/cash.png',
+            holdSec: 3,
+          },
+        ],
+      },
+      30,
+    );
+    // money ends at 0.9s + 3s hold → 3.9s → frame 117; from 15 → 102 frames.
+    expect(cues[0]).toMatchObject({ fromFrame: 15, durationInFrames: 102 });
+  });
+
+  it('holdSec clamps to 0.2–8 and round-trips through save → load', () => {
+    const saved = projectToJson({
+      clips: [clip('a')],
+      audio: null,
+      captions: { a: WORDS },
+      mediaCues: [
+        { id: 'c1', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png', holdSec: 2.5 },
+        { id: 'c2', clipId: 'a', wordIndex: 2, url: 'https://cdn.example.com/online.png', holdSec: 99 },
+      ],
+    });
+    const loaded = normalizeProjectJson(saved);
+    expect(loaded.mediaCues?.[0].holdSec).toBe(2.5);
+    expect(loaded.mediaCues?.[1].holdSec).toBe(8); // clamped
+    // junk drops the key entirely (the default 1s hold owns it)
+    const junked = normalizeProjectJson({
+      clips: [clip('a')],
+      captions: { a: WORDS },
+      mediaCues: [
+        { id: 'c1', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png', holdSec: 'long' },
+      ],
+    });
+    expect(junked.mediaCues?.[0].holdSec).toBeUndefined();
+  });
+
+  it('ambient (float/wiggle) survives normalization and reaches the plan; junk drops', () => {
+    const saved = projectToJson({
+      clips: [clip('a')],
+      audio: null,
+      captions: { a: WORDS },
+      mediaCues: [
+        {
+          id: 'c1',
+          clipId: 'a',
+          wordIndex: 1,
+          url: 'https://cdn.example.com/cash.png',
+          style: { widthPct: 40, ambient: 'wiggle' },
+        },
+        {
+          id: 'c2',
+          clipId: 'a',
+          wordIndex: 2,
+          url: 'https://cdn.example.com/online.png',
+          style: { ambient: 'spin' as never }, // unknown → the key drops
+        },
+      ],
+    });
+    const loaded = normalizeProjectJson(saved);
+    expect(loaded.mediaCues?.[0].style).toEqual({ widthPct: 40, ambient: 'wiggle' });
+    expect(loaded.mediaCues?.[1].style).toBeUndefined(); // nothing usable survived
+
+    const cues = shiftMediaCues(
+      { clips: [clip('a')], captions: { a: WORDS }, mediaCues: loaded.mediaCues },
+      30,
+    );
+    expect(cues[0].style?.ambient).toBe('wiggle');
+  });
+
   it('a cue with no style/motion plans bare (the default card owns the render)', () => {
     const cues = shiftMediaCues(
       {

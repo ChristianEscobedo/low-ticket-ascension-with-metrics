@@ -387,6 +387,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.3.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Fly-ins you can grab: drag to place, set the time on screen, and let them float',
+    body: cl([
+      '<p>Open a fly-in\'s style editor (the ⚙ on its chip) and a dashed box appears on the preview — drag it anywhere (arrow keys nudge), pull the right edge to scale, and the number it writes is the number the MP4 burns. One-click chips snap the card above or below the caption block, and it works identically on the true Remotion preview and the Edit canvas.</p>',
+      '<p>Two new dials in the same editor: <strong>on screen</strong> — how long the image holds after its word ends (0.3–6s, with the total shown) — and <strong>feel</strong>: float (a gentle bob) or wiggle (a soft sway), an ambient motion that rides on top of the entrance and any keyframed track, easing in and out with the cue so it never pops. The window still keys off the spoken word, so a trim or split re-times everything honestly.</p>',
+      '<p><strong>Where to start:</strong> Captions tab in /admin/reel-studio — attach a fly-in, hit ⚙, and drag the violet box on the stage.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

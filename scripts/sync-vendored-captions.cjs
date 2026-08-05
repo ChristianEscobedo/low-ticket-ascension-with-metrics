@@ -53,6 +53,10 @@ const ROOT = path.resolve(__dirname, '..');
  */
 const FILES = [
   'src/lib/mothermode/reel/captions.ts',
+  // plan.ts imports ReelMediaCueStyle/ReelProject/ReelWord from '../types' —
+  // the vendored plan resolves that to the vendored types.ts, so it must be
+  // a literal copy too (cue style/holdSec fields live there).
+  'src/lib/mothermode/reel/types.ts',
   'src/lib/mothermode/reel/render/plan.ts',
   // The ONE caption layer, shared by the preview composition and the worker's.
   'src/lib/mothermode/reel/render/captionLayer.tsx',

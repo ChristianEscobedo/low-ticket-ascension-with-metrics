@@ -113,3 +113,70 @@ suite crashes at load with `supabaseUrl is required`.
   env-dependent set (payments, receipts, redact, fencing, compliance,
   review-logic) — none import the modules this work touches.
 - Vendored copies byte-identical (`scripts/sync-vendored-captions.cjs --check`).
+
+---
+
+## Round 2 (2026-08-05, evening): hold, drag/scale on the stage, and ambient feel
+
+The owner's follow-up after using it: time-on-screen control, grab-the-image
+placement like the caption transform box, a floating wiggle, and one seed
+repair. All four ride the existing shapes — nothing new in the model beyond
+one field on the cue and one on the style.
+
+### holdSec — the time-on-screen dial
+
+`ReelMediaCue.holdSec?: number` — how long the cue holds after its trigger
+word ends. Omit = the house 1.0s (`MEDIA_CUE_HOLD_SEC`). `normalizeMediaCues`
+clamps it 0.2–8 and drops junk; `shiftMediaCues` resolves the window as
+`word.end + (cue.holdSec ?? MEDIA_CUE_HOLD_SEC)`, still clamped to the clip's
+surviving window — the window stays word-derived, so a trim compresses it
+honestly. The studio's `cueWindowSec` mirrors the same math (motion presets
+expand over the new window), and the editor's **on screen** slider shows the
+computed total (word span + hold).
+
+### style.ambient — float / wiggle
+
+`ReelMediaCueStyle.ambient?: 'float' | 'wiggle'`, kept by the same
+`normalizeMediaCueStyle` the handoff rides (unknown values drop). Both
+compositions render it in `MediaCueLayer` as frame math, never a CSS clock:
+float = a ±10px vertical sine at 0.6Hz, wiggle = a ±2.2° rotational sine with
+a slight x sway, both **scaled by min(entrance, exit)** so the bob eases in
+and out WITH the cue and never pops. It composes on top of the entrance AND
+any motion track (appended to the transform string), which is the point: an
+ambient feel that doesn't fight the keyframes.
+
+### CueDragLayer — the transform box for cues
+
+`CueDragLayer.tsx`, the cue counterpart of `CaptionDragLayer` with the same
+contract (overlay above the Player's DOM, local state while dragging, one
+write on release, arrow keys nudge+commit). The differences are derived from
+the cue's own model: top-left anchored (the same left/top/width numbers
+MediaCueLayer reads — no translateX), the EAST handles drive `widthPct` (the
+west/north handles would have to move the anchor, so they don't exist), and
+the box's height comes from the image's real aspect read off the file (the
+model stores width only). Mounted in BOTH preview branches, only while a
+cue's style editor is open, and visible even outside the cue's window — it is
+an editing affordance for where the fly-in lands. The editor also gained
+**above/below text** chips (snap yPct relative to the caption block's
+bottom-anchored positionPct) — the drag box is the precise path.
+
+### The seed repair (the autopilot "not seeded yet" error)
+
+`scripts/seed-agent-recipes.cjs` is a HARDCODED mirror of
+`research/recipes/seed.ts` — round 1 added `reel-cue-autopilot` to the TS
+seed but not the mirror, so the DB never got the play and the bridge route
+404'd. The mirror now carries it (idempotent by slug; re-run seeded all 17).
+Also closed the drift gap it exposed: the worker's vendored `types.ts` was
+unguarded, so it joined `scripts/sync-vendored-captions.cjs`'s FILES list —
+the vendored plan resolves `../types` to that copy, and cue style/holdSec
+live there.
+
+### Verify (round 2)
+
+- `npx tsc --noEmit` clean.
+- media-cues 14 (holdSec window math, clamp + round-trip, ambient
+  round-trip), render-plan 13, reel-cue-autopilot 7, both vendor-parity
+  guards 4+4 — 42/42 across the touched suites.
+- Vendored copies byte-identical, types.ts now included
+  (`scripts/sync-vendored-captions.cjs --check`); the two ReelComposition
+  files identical (ambient math in both).

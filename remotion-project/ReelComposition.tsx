@@ -100,6 +100,8 @@ const ClipLayer: React.FC<{ clip: RenderClip; fps: number; muted?: boolean }> = 
  *     translate/scale/rotate; only the exit fade still applies (so the cue
  *     never hard-cuts). Key times are CUE-RELATIVE seconds, and the window
  *     is word-derived — a trim that shortens it plays less of the track.
+ *   - style.ambient set: an ambient bob/sway (float/wiggle) that rides ON TOP
+ *     of either case, eased in and out with the cue so it never pops.
  * The cue's timing comes from the plan, which resolved it from the word's own
  * start/end — so the fly-in is glued to the audio, not to a guess.
  */
@@ -131,6 +133,19 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
     motionTransform = `translate(${x}%, ${y}%) scale(${scale}) rotate(${rotate}deg)`;
   }
 
+  // Ambient motion (style.ambient): a frame-driven bob/sway that rides on top
+  // of the entrance and any motion track, eased in and out WITH the cue
+  // (× min(e, out)) so it never pops at the edges. Same rule as the caption
+  // `float` blockFx: a sine of the frame, never a CSS clock.
+  const ambK = Math.min(e, out);
+  const tSec = frame / fps;
+  const ambY = style.ambient === 'float' ? Math.sin(tSec * Math.PI * 1.2) * 10 * ambK : 0;
+  const ambX = style.ambient === 'wiggle' ? Math.sin(tSec * Math.PI * 1.1) * 4 * ambK : 0;
+  const ambDeg = style.ambient === 'wiggle' ? Math.sin(tSec * Math.PI * 2.2) * 2.2 * ambK : 0;
+  const ambientTf = style.ambient
+    ? ` translate(${ambX.toFixed(1)}px, ${ambY.toFixed(1)}px) rotate(${ambDeg.toFixed(2)}deg)`
+    : '';
+
   const borderPx = style.borderPx ?? 0;
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
@@ -144,8 +159,8 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
           width: `${style.widthPct ?? 34}%`,
           opacity: hasMotion ? out : Math.min(e, out),
           transform: hasMotion
-            ? motionTransform
-            : `translateY(${((1 - e) * 40).toFixed(1)}px) scale(${(0.82 + e * 0.18).toFixed(3)})`,
+            ? motionTransform + ambientTf
+            : `translateY(${((1 - e) * 40).toFixed(1)}px) scale(${(0.82 + e * 0.18).toFixed(3)})${ambientTf}`,
         }}
       >
         <Img

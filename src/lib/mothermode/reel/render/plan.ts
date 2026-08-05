@@ -73,8 +73,9 @@ export interface RenderWord {
 
 /**
  * A word-triggered media cue, resolved to TIMELINE frames. The image flies in
- * when its trigger word is spoken and holds for MEDIA_CUE_HOLD_SEC after the
- * word ends (clamped to the clip's surviving window).
+ * when its trigger word is spoken and holds after the word ends — the cue's
+ * own holdSec when set, else MEDIA_CUE_HOLD_SEC (clamped to the clip's
+ * surviving window either way).
  */
 export interface RenderMediaCue {
   id: string;
@@ -93,7 +94,7 @@ export interface RenderMediaCue {
   motion?: MotionKey[];
 }
 
-/** How long a media cue holds after its trigger word ends. */
+/** Default hold after the trigger word ends; a cue's holdSec overrides it. */
 export const MEDIA_CUE_HOLD_SEC = 1.0;
 
 export interface RenderPlan {
@@ -214,7 +215,7 @@ export function shiftMediaCues(
       const localEnd = w.end - trimStartSec;
       if (localEnd <= 0 || localStart >= effSec) continue;
       const from = cursor + toFrames(Math.max(0, localStart), fps);
-      const to = cursor + toFrames(Math.min(effSec, localEnd + MEDIA_CUE_HOLD_SEC), fps);
+      const to = cursor + toFrames(Math.min(effSec, localEnd + (cue.holdSec ?? MEDIA_CUE_HOLD_SEC)), fps);
       out.push({
         id: cue.id,
         src: cue.url,
