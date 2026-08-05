@@ -611,7 +611,13 @@ export function captionCssFor(def: CaptionStyleDef): CaptionCss {
       // Spacing is a first-class dial now — presets set it, the customizer
       // overrides it (the "space the words/letters out" ask).
       letterSpacing: `${def.letterSpacingEm ?? (def.upper ? 0.03 : 0.01)}em`,
-      ...(def.wordSpacingEm ? { wordSpacing: `${def.wordSpacingEm}em` } : {}),
+      // `?? 0`, NOT a truthy check. The old `def.wordSpacingEm ? {...} : {}`
+      // dropped the property whenever the value was 0, so you could never dial
+      // spacing back OFF on a preset that ships a nonzero default (Clean Rise
+      // 0.12, Soft Card 0.08, Type Swift 0.1) — the slider moved to 0 and the
+      // preset's spacing stayed. Emit it unconditionally, like letterSpacing.
+      wordSpacing: `${def.wordSpacingEm ?? 0}em`,
+
       textTransform: def.upper ? 'uppercase' : 'none',
       margin: 0,
       transition: 'font-size 120ms ease',
@@ -626,13 +632,24 @@ export function captionCssFor(def: CaptionStyleDef): CaptionCss {
     },
     word: {
       ...wordCss(def, def.wordColor, false),
+      // Both renderers put the separator space INSIDE the word span
+      // (`{text}{' '}`). wordCss sets `display:inline-block` for the box/scale/big
+      // looks, and a trailing space at the end of an inline-block's own line box
+      // gets trimmed — so there was no whitespace left for `word-spacing` (set on
+      // .line and inherited) to act on, and the dial looked completely dead.
+      // `pre-wrap` preserves that space while still allowing wrapping.
+      whiteSpace: 'pre-wrap',
       transition: 'color 120ms ease, transform 120ms ease, background-color 120ms ease',
     },
     active: {
       ...wordCss(def, def.activeColor, true),
+      // Same reason as `word` above — the active span is the one most likely to be
+      // inline-block (it carries the pop/scale), so it needs this most.
+      whiteSpace: 'pre-wrap',
       // The highlight SWEEPS between words (color + a tiny pop) instead of snapping.
       transition: 'color 120ms ease, transform 140ms cubic-bezier(0.2,0.9,0.3,1.2), background-color 120ms ease',
     },
+
     upper: def.upper,
     wordsPerLine: def.wordsPerLine,
     fontFamily: fontStackFor(def),
@@ -695,10 +712,13 @@ export function captionLayoutFor(
 
 /**
  * Slice the word list into display ROWS: `rows` lines, each up to `wordsPerRow`
- * words, ending at the active index. Row 0 is the current line (with the active
- * word); rows 1.. are the upcoming lines (the Submagic "next words" stack).
+ * words. The rows form a PAGE of `rows * wordsPerRow` words that holds still
+ * while the highlight marches through it, then flips to the next page. The
+ * active word can therefore be on ANY row, not just row 0 — callers must locate
+ * it with `from <= activeIdx < to` rather than assuming row 0.
  * Returns each row as [startIdx, endIdx) into `words`.
  */
+
 export function captionRows(
   totalWords: number,
   activeIdx: number,
@@ -708,16 +728,22 @@ export function captionRows(
   const perRow = Math.max(1, Math.round(wordsPerRow));
   const rowCount = Math.max(1, Math.round(rows));
   const idx = Math.max(0, Math.min(activeIdx, Math.max(0, totalWords - 1)));
-  // R22 fix — the current row is the FIXED CHUNK containing the active word.
-  // It used to be `idx - (perRow - 1)`, i.e. a row that always ENDED on the
-  // active word, which parked the highlight on the last slot forever (the
-  // reported "only the last word ever highlights" bug). Chunking makes the lit
-  // word march 0,1,2 across the row before the row flips.
-  const curFrom = Math.floor(idx / perRow) * perRow;
+  // R22 kept the lit word marching across a row instead of parking on the last
+  // slot (`idx - (perRow - 1)`) — that part was right and stays.
+  //
+  // R29 fix — but R22 anchored ROW 0 on the active word's chunk, so rows 1..n
+  // were always the NEXT words and the highlight could never leave the top row
+  // (the reported "active word only stays on the top row"). The window is now a
+  // PAGE of rowCount*perRow words that holds still while the highlight walks
+  // down through every row, then flips. With rowCount === 1 (the default) the
+  // page IS the chunk, so single-row behaviour is byte-for-byte unchanged.
+  const pageSize = perRow * rowCount;
+  const pageFrom = Math.floor(idx / pageSize) * pageSize;
 
   const out: { from: number; to: number }[] = [];
   for (let r = 0; r < rowCount; r += 1) {
-    const from = curFrom + r * perRow;
+    const from = pageFrom + r * perRow;
+
     if (from >= totalWords) break;
     out.push({ from, to: Math.min(totalWords, from + perRow) });
   }
