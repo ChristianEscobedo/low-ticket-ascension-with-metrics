@@ -33,7 +33,9 @@ export async function POST(request: NextRequest) {
   }
 
   // -- DEFAULT: AssemblyAI (no size cap, better timings) -----------------------
-  if (isAssemblyAiConfigured()) {
+  // Async because the key may live in the `integrations` table, not env —
+  // same reason the Whisper branch below resolves through runtime-config.
+  if (await isAssemblyAiConfigured()) {
     try {
       const words = await transcribeUrl(url);
       return NextResponse.json({ success: true, words, provider: 'assemblyai' });

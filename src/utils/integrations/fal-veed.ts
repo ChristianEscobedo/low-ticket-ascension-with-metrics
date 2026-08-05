@@ -87,6 +87,38 @@ export function buildVeedSubtitlePayload(
   return out;
 }
 
+/**
+ * Turn a fal error body into something a human can act on.
+ *
+ * fal runs FastAPI, so a 422 comes back as `detail: [{loc, msg, type}, ...]`
+ * — an ARRAY, not a string. Reading only the string form (which is what the
+ * 500/503 shapes use) silently discarded every validation error and left the
+ * caller staring at "fal veed result failed (422)" with no idea which field
+ * was rejected. Handle both shapes and name the offending field.
+ */
+function falErrorMessage(json: Record<string, unknown>, fallback: string): string {
+  const detail = json.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d) => {
+        if (typeof d === 'string') return d;
+        const o = d as Record<string, unknown>;
+        const msg = typeof o?.msg === 'string' ? o.msg : '';
+        // loc is like ["body", "video_url"] — the last segment is the field.
+        const loc = Array.isArray(o?.loc) ? o.loc.filter((s) => typeof s === 'string') : [];
+        const field = loc.length ? String(loc[loc.length - 1]) : '';
+        if (msg && field) return `${field}: ${msg}`;
+        return msg || field;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join('; ');
+  }
+  if (typeof json.error === 'string' && json.error.trim()) return json.error;
+  if (typeof json.message === 'string' && json.message.trim()) return json.message;
+  return fallback;
+}
+
 /** Pull the rendered video URL out of fal's (varied) result shapes. */
 function readVideoUrl(json: unknown): string {
   const j = json as Record<string, any>;
@@ -159,12 +191,7 @@ export async function veedSubtitles(
   }
 
   if (!submitRes.ok) {
-    const msg =
-      typeof submitJson.detail === 'string'
-        ? submitJson.detail
-        : typeof submitJson.error === 'string'
-          ? submitJson.error
-          : `fal veed submit failed (${submitRes.status})`;
+    const msg = falErrorMessage(submitJson, `fal veed submit failed (${submitRes.status})`);
     return {
       ok: false,
       status: submitRes.status >= 400 ? submitRes.status : 502,
@@ -214,10 +241,7 @@ export async function veedSubtitles(
       }
       const result = (await rRes.json().catch(() => ({}))) as Record<string, unknown>;
       if (!rRes.ok) {
-        const msg =
-          typeof result.detail === 'string'
-            ? result.detail
-            : `fal veed result failed (${rRes.status})`;
+        const msg = falErrorMessage(result, `fal veed result failed (${rRes.status})`);
         return { ok: false, status: 502, error: msg };
       }
       const out = readVideoUrl(result);
@@ -228,10 +252,12 @@ export async function veedSubtitles(
     }
 
     if (status === 'FAILED' || status === 'CANCELLED') {
+      // The status payload usually carries the reason the job died. Dropping
+      // it left "fal veed job failed" as the only clue.
       return {
         ok: false,
         status: 502,
-        error: `fal veed job ${status.toLowerCase()}`,
+        error: falErrorMessage(st, `fal veed job ${status.toLowerCase()}`),
       };
     }
 

@@ -23,7 +23,7 @@ let cache: { at: number; data: ConfigMap } | null = null;
  * never gate whether their key is read — a saved-but-unchecked row silently
  * "not persisting" is exactly the bug this rule answers.
  */
-const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify']);
+const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify', 'assemblyai']);
 
 async function loadAll(): Promise<ConfigMap> {
   const now = Date.now();
@@ -77,6 +77,15 @@ async function resolve(
 export async function getOpenAiKey(): Promise<string | null> {
   return (await resolve('openai', 'api_key', process.env.OPENAI_API_KEY)) ?? null;
 }
+
+/** AssemblyAI key — the DEFAULT karaoke-caption transcriber. Resolved through
+ *  the integrations table first (so /admin/integrations works) and only then
+ *  from env. Reading env directly here is what made a dashboard-saved key
+ *  invisible and silently demoted every transcription to Whisper's 25MB cap. */
+export async function getAssemblyAiKey(): Promise<string | null> {
+  return (await resolve('assemblyai', 'api_key', process.env.ASSEMBLYAI_API_KEY)) ?? null;
+}
+
 
 export async function getAnthropicKey(): Promise<string | null> {
   return (

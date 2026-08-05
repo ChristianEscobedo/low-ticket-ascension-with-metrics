@@ -14,6 +14,7 @@ const VALID_PROVIDERS: IntegrationProvider[] = [
   'stripe',
   'openai',
   'anthropic',
+  'assemblyai',
   'email',
   'monid',
   'rapidapi',
@@ -72,6 +73,7 @@ const CONFIG_KEYS: Record<IntegrationProvider, readonly string[]> = {
   stripe: ['publishable_key', 'secret_key', 'webhook_secret'],
   openai: ['api_key', 'image_model', 'text_model', 'text_provider'],
   anthropic: ['api_key', 'text_model'],
+  assemblyai: ['api_key'],
   email: [
     'provider',
     'resend_api_key',

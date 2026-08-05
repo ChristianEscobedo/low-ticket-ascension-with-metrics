@@ -91,19 +91,71 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: errors.join(' ') }, { status: 400 });
   }
 
-  // POST to the render worker (Railway/Fly Docker container with Chromium + ffmpeg)
-  const workerRes = await fetch(`${workerUrl.replace(/\/$/, '')}/render`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ plan, reelId: id }),
-  });
-  const workerJson = await workerRes.json();
-  if (!workerJson.success) {
+  // POST to the render worker (Railway/Fly Docker container with Chromium + ffmpeg).
+  //
+  // Everything below is defensive on purpose. An unreachable worker makes
+  // fetch() *throw* rather than return a response, and a worker that answers
+  // with an HTML gateway page (Railway 502, cold start, sleeping container)
+  // makes .json() throw. Unguarded, either one escapes as a bare 500 with no
+  // body — which is what "Could not reach the render service" was hiding. The
+  // caller can't tell "not deployed" from "asleep" from "crashed", so surface
+  // the actual reason and keep the status codes meaningful.
+  // Railway and Fly both DISPLAY the worker domain without a scheme, so
+  // pasting it verbatim into RENDER_WORKER_URL is the natural thing to do —
+  // and then fetch() dies with "Failed to parse URL from <host>/render"
+  // before a single byte leaves the process. That reads like the worker is
+  // down when the worker is perfectly healthy. Normalize instead: a bare host
+  // gets https://, except loopback, which is plain http in local dev.
+  const bareHost = !/^https?:\/\//i.test(workerUrl);
+  const isLoopback = /^(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(workerUrl);
+  const base = bareHost ? `${isLoopback ? 'http' : 'https'}://${workerUrl}` : workerUrl;
+  const endpoint = `${base.replace(/\/$/, '')}/render`;
+
+
+  let workerRes: Response;
+  try {
+    workerRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ plan, reelId: id }),
+      // A sleeping container can take ~30s to wake. Bound it below the 60s
+      // function limit so we return a real message instead of being killed.
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (err) {
+    const reason =
+      err instanceof Error && err.name === 'TimeoutError'
+        ? `The render worker did not respond within 45s (${endpoint}). It may be cold-starting — try again in a moment.`
+        : `Could not reach the render worker at ${endpoint}: ${err instanceof Error ? err.message : String(err)}`;
+    return NextResponse.json({ success: false, error: reason }, { status: 502 });
+  }
+
+  const raw = await workerRes.text();
+  let workerJson: { success?: boolean; error?: string; url?: string; renderId?: string };
+  try {
+    workerJson = JSON.parse(raw);
+  } catch {
+    // Not JSON — almost always a proxy/gateway error page. Include a snippet
+    // and the status so the failure is diagnosable from the toast alone.
     return NextResponse.json(
-      { success: false, error: workerJson.error || 'Render worker failed' },
+      {
+        success: false,
+        error: `The render worker returned ${workerRes.status} ${workerRes.statusText} with a non-JSON body: ${raw.slice(0, 200)}`,
+      },
       { status: 502 },
     );
   }
+
+  if (!workerRes.ok || !workerJson.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: workerJson.error || `Render worker failed with ${workerRes.status} ${workerRes.statusText}`,
+      },
+      { status: 502 },
+    );
+  }
+
 
   return NextResponse.json({
     success: true,

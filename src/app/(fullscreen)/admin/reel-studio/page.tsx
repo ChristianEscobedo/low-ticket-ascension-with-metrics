@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * /admin/reel-studio ??? fullscreen light video editor (no admin chrome; see
+ * /admin/reel-studio — fullscreen light video editor (no admin chrome; see
  * (fullscreen)/layout.tsx).
  *
  * Layout follows the simple-editor pattern the user pointed at:
- *   left  ??? tool tabs: Clips (the scenes list), Audio, B-roll
- *   right ??? big preview player with the proportional timeline strip under it
+ *   left  → tool tabs: Clips (the scenes list), Audio, B-roll
+ *   right — big preview player with the proportional timeline strip under it
  * The strip is the clipping surface: drag blocks to reorder, drag a block's
  * right edge to cut, the preview scrubs to the exact cut frame live.
  */
@@ -182,7 +182,7 @@ function probeDuration(url: string): Promise<number> {
   });
 }
 
-/** The REAL platform logos as inline SVGs ??? brand color when selected, grayscale idle. */
+/** The REAL platform logos as inline SVGs — brand color when selected, grayscale idle. */
 function BrandLogo({ id, active }: { id: string; active: boolean }) {
   const color: Record<string, string> = {
     youtube: '#FF0000',
@@ -233,15 +233,15 @@ function BrandLogo({ id, active }: { id: string; active: boolean }) {
 
 
 
-/** The thumbnail URL for a frame ??? shared by the memoized Thumb and the strip prefetcher. */
+/** The thumbnail URL for a frame — shared by the memoized Thumb and the strip prefetcher. */
 function thumbUrl(url: string, t: number): string {
   return `/api/admin/reel-thumbnail?url=${encodeURIComponent(url)}&t=${Math.max(0, t).toFixed(1)}`;
 }
 
 /**
- * CLIENT-side frame capture ??? the fallback when the server ffmpeg binary
+ * CLIENT-side frame capture — the fallback when the server ffmpeg binary
  * isn't available (Vercel ENOENT). Seeks a hidden video element to `t` and
- * draws the frame to a canvas ??? data URL. One per (url, t) so it caches in a
+ * draws the frame to a canvas — data URL. One per (url, t) so it caches in a
  * module-level map and the strip never re-captures.
  */
 const clientThumbCache = new Map<string, Promise<string>>();
@@ -279,7 +279,7 @@ function clientThumb(url: string, t: number): Promise<string> {
         }
       };
       v.onseeked = capture;
-      // hard timeout ??? never leave the strip hanging
+      // hard timeout — never leave the strip hanging
       setTimeout(bail, 8000);
     } catch {
       resolve('');
@@ -312,7 +312,7 @@ const Thumb = memo(function Thumb({ url, t, className }: { url: string; t: numbe
       alive = false;
     };
   }, [url, t]);
-  // Graceful degrade: no thumbnail at all ??? a soft gradient cell.
+  // Graceful degrade: no thumbnail at all — a soft gradient cell.
   if (broken) {
     return <div className={clsx('bg-gradient-to-br from-white/[0.07] to-white/[0.02]', className)} />;
   }
@@ -325,7 +325,7 @@ const Thumb = memo(function Thumb({ url, t, className }: { url: string; t: numbe
   );
 });
 
-/** R4: the 4-frame sprite tile URL for a clip ??? ONE request instead of four. */
+/** R4: the 4-frame sprite tile URL for a clip — ONE request instead of four. */
 function spriteUrl(url: string, durSec: number, frames = 4): string {
   return `/api/admin/reel-sprite?url=${encodeURIComponent(url)}&dur=${Math.max(0.3, durSec).toFixed(1)}&frames=${frames}`;
 }
@@ -441,20 +441,20 @@ function TimelineStrip({
             )}
 
             style={{ width: Math.max(52, eff * pxPerSec) }}
-            title={`${c.name} ??? ${fmtSec(eff)}`}
+            title={`${c.name} — ${fmtSec(eff)}`}
           >
             {/* R14 live drag bubble: exact seconds while trimming */}
             {live != null && (
               <div className="pointer-events-none absolute inset-x-0 top-0 z-30 whitespace-nowrap bg-brass px-1.5 py-0.5 text-center text-[9px] font-bold text-ink">
-                {fmtCs(c.durationSec)} ??? {fmtCs(shownDur)}{' '}
-                {live > 0 && <span>(???{fmtCs(live)})</span>}
+                {fmtCs(c.durationSec)} — {fmtCs(shownDur)}{' '}
+                {live > 0 && <span>(≈{fmtCs(live)})</span>}
               </div>
             )}
             <div className="pointer-events-none flex h-full w-full opacity-75 transition-opacity duration-150 group-hover:opacity-100">
               <SpriteStrip url={c.url} durSec={c.durationSec} className="h-full w-1/4 object-cover" />
             </div>
 
-            {/* R15 keyframe diamonds ??? DRAGGABLE: drag a ??? to move the keyframe in time */}
+            {/* R15 keyframe diamonds — DRAGGABLE: drag a — to move the keyframe in time */}
             {c.motion && c.motion.length >= 2 && (
               <>
                 {c.motion.map((k, ki) => (
@@ -490,14 +490,14 @@ function TimelineStrip({
                       onKeyMove ? 'cursor-ew-resize hover:scale-125' : 'pointer-events-none',
                     )}
                     style={{ left: `${Math.min(97, (k.t / Math.max(eff, 0.01)) * 100)}%` }}
-                    title={`key @ ${k.t.toFixed(2)}s ??? drag to re-time`}
+                    title={`key @ ${k.t.toFixed(2)}s — drag to re-time`}
                   >
-                    ???
+                    —
                   </span>
                 ))}
               </>
             )}
-            {/* floating info chips ??? the modern filmstrip look */}
+            {/* floating info chips — the modern filmstrip look */}
             <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex max-w-[68%] items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 backdrop-blur-[2px]">
               <span className="text-[9px] font-bold text-brass">{i + 1}</span>
               <span className="truncate text-[9px] text-white/85">{c.name}</span>
@@ -707,7 +707,7 @@ function useGoogleFont(family: string) {
 
 /**
  * Karaoke caption block: the current row of words with the spoken word lit,
- * plus (when rows > 1) the UPCOMING rows stacked under it ??? the Submagic look.
+ * plus (when rows > 1) the UPCOMING rows stacked under it — the Submagic look.
  * R17: renders from the structured def; R20: wordsPerRow + rows + drag-to-move.
  */
 function KaraokeLine({
@@ -736,7 +736,7 @@ function KaraokeLine({
       idx = i; // currently being spoken
       break;
     }
-    idx = i; // past it ??? hold it until the next word starts
+    idx = i; // past it — hold it until the next word starts
   }
   if (idx < 0) idx = 0;
   const rowSlices = captionRows(words.length, idx, layout.wordsPerRow, layout.rows);
@@ -746,7 +746,7 @@ function KaraokeLine({
   return (
     <div style={{ fontSize: layout.sizePx }}>
       {/* The active word's ENTER animation (pop/fade/slide/flip/spin by preset) re-fires
-          each time it changes ??? so the highlight sweeps + animates like the subtitle panel. */}
+          each time it changes — so the highlight sweeps + animates like the subtitle panel. */}
       {keyframes ? <style>{keyframes}</style> : null}
       {rowSlices.map((slice, ri) => (
         <p key={ri} style={style.line} className={ri > 0 ? 'opacity-70' : undefined}>
@@ -793,10 +793,10 @@ interface PostTarget {
   type: string;
 }
 /**
- * R26: every post type carries its platform length budget ??? `targetSec` is the
+ * R26: every post type carries its platform length budget — `targetSec` is the
  * sweet spot the timeline measures against (adjustable per reel), `maxSec` is
  * the hard platform cap (0 = no meaningful cap). Sweet spots: Shorts qualify
- * for the shelf at 15???60s (3min max), TikTok/IG/FB reels reward ???60???90s,
+ * for the shelf at 15–60s (3min max), TikTok/IG/FB reels reward ≈60–90s,
  * stories are 15s cards, X caps at 140s.
  */
 const TARGET_GROUPS: {
@@ -828,7 +828,7 @@ const TARGET_GROUPS: {
     label: 'Facebook',
     types: [
       { id: 'fbreels', label: 'Reels', aspect: '9:16', targetSec: 90, maxSec: 90 },
-      { id: 'fbstory', label: 'Story ?? 15s cards', aspect: '9:16', targetSec: 15, maxSec: 15 },
+      { id: 'fbstory', label: 'Story · 15s cards', aspect: '9:16', targetSec: 15, maxSec: 15 },
       { id: 'fbfeed', label: 'Feed', aspect: '16:9', targetSec: 120, maxSec: 240 },
     ],
   },
@@ -842,7 +842,7 @@ const TARGET_GROUPS: {
     label: 'LinkedIn',
     types: [
       { id: 'linkedin', label: 'Feed', aspect: '16:9', targetSec: 120, maxSec: 600 },
-      { id: 'listory', label: 'Story ?? 15s cards', aspect: '9:16', targetSec: 15, maxSec: 15 },
+      { id: 'listory', label: 'Story · 15s cards', aspect: '9:16', targetSec: 15, maxSec: 15 },
     ],
   },
 ];
@@ -869,7 +869,7 @@ function isStoryTarget(t: PostTarget): boolean {
   return t.type === 'fbstory' || t.type === 'listory';
 }
 
-/** R7: the canvas dressed as the target platform ??? rail + caption chrome on the stage. */
+/** R7: the canvas dressed as the target platform — rail + caption chrome on the stage. */
 function PlatformLensOverlay({
   brand,
   title,
@@ -889,7 +889,7 @@ function PlatformLensOverlay({
       ))}
     </div>
   );
-  // R27: anchored to the frame's bottom edge with a TALL fade ??? the old strip
+  // R27: anchored to the frame's bottom edge with a TALL fade — the old strip
   // floated at bottom-14 with a short gradient, which read as a weird shadow
   // mid-frame on tall players.
   const bottom = (handle: string, text: string) => (
@@ -908,7 +908,7 @@ function PlatformLensOverlay({
           </svg>
           <span className="text-[11px] font-bold text-white drop-shadow-md">Shorts</span>
         </div>
-        {rail([['????', '24K'], ['????', ''], ['????', '812'], ['???', 'Share']])}
+        {rail([['❤️', '24K'], ['💬', ''], ['🔖', '812'], ['↪', 'Share']])}
         {bottom('@yourchannel', title)}
       </>
     );
@@ -920,7 +920,7 @@ function PlatformLensOverlay({
           <span>Following</span>
           <span className="text-white underline underline-offset-4">For You</span>
         </div>
-        {rail([['???', '128K'], ['????', '2,041'], ['???', '8,512'], ['???', 'Share']])}
+        {rail([['♥', '128K'], ['💬', '2,041'], ['↻', '8,512'], ['↪', 'Share']])}
         {bottom('@youraccount', caption)}
       </>
     );
@@ -928,7 +928,7 @@ function PlatformLensOverlay({
   if (brand === 'instagram') {
     return (
       <>
-        {rail([['???', '45.2K'], ['????', '986'], ['???', ''], ['???', '']])}
+        {rail([['♥', '45.2K'], ['💬', '986'], ['↻', ''], ['↪', '']])}
         {bottom('youraccount', caption)}
       </>
     );
@@ -941,7 +941,7 @@ function PlatformLensOverlay({
   );
 }
 
-/** R7 gene tree: base reel ??? spun variants with their gene diffs + CTR badges. */
+/** R7 gene tree: base reel — spun variants with their gene diffs + CTR badges. */
 function GeneTreeOverlay({
   baseName,
   rows,
@@ -981,7 +981,7 @@ function GeneTreeOverlay({
             how this reel's descendants recombine hook/body/outro genes
           </span>
           <button onClick={onClose} className="ml-auto rounded-lg p-1.5 text-bone/40 hover:bg-bone/10 hover:text-bone">
-            ???
+            —
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
@@ -993,7 +993,7 @@ function GeneTreeOverlay({
           <div className="mx-auto h-5 w-px bg-bone/20" />
           {rows.length === 0 ? (
             <p className="mx-auto max-w-sm text-center text-[11px] leading-relaxed text-bone/35">
-              No descendants yet ??? hit <strong className="text-brass/80">spin</strong> on the
+              No descendants yet — hit <strong className="text-brass/80">spin</strong> on the
               Scoreboard to recombine this reel with Vault genes, then compose + post the variants.
             </p>
           ) : (
@@ -1017,12 +1017,12 @@ function GeneTreeOverlay({
                       <Thumb url={r.variant.composedUrl} t={0.5} className="h-10 w-14 shrink-0 rounded bg-black object-cover" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold text-bone/85">
-                          {isWinner && <span className="mr-1 text-brass">???</span>}
+                          {isWinner && <span className="mr-1 text-brass">★</span>}
                           {r.projectName}
                         </p>
                         <p className="text-[9px] text-bone/40">
                           {ctr != null
-                            ? `${(ctr * 100).toFixed(1)}% CTR ?? ${r.impressions.toLocaleString()} imp`
+                            ? `${(ctr * 100).toFixed(1)}% CTR · ${r.impressions.toLocaleString()} imp`
                             : 'not posted yet'}
                         </p>
                       </div>
@@ -1047,7 +1047,7 @@ function GeneTreeOverlay({
 }
 
 /**
- * The shared platform mock ??? the SAME pixel-faithful previews the Publish view
+ * The shared platform mock — the SAME pixel-faithful previews the Publish view
  * renders, extracted so the Schedule sheet shows the exact same thing (playable
  * video, karaoke captions, per-platform chrome) instead of a dead static frame.
  */
@@ -1080,7 +1080,7 @@ function PlatformMockView({
     </span>
   );
 
-  /** The mock's video WITH the karaoke captions burned in (live, word-synced) ??? click to play. */
+  /** The mock's video WITH the karaoke captions burned in (live, word-synced) — click to play. */
   const MockVideo = ({ className }: { className?: string }) => {
     const [t, setT] = useState(0);
     return (
@@ -1151,7 +1151,7 @@ function PlatformMockView({
           </div>
           <ActionRail
             className="absolute bottom-24 right-2.5"
-            items={[['????', '24K'], ['????', ''], ['????', '812'], ['???', 'Share'], ['???', '']]}
+            items={[['❤️', '24K'], ['💬', ''], ['🔖', '812'], ['↪', 'Share'], ['⋯', '']]}
           />
           <div className="absolute inset-x-0 bottom-9 bg-gradient-to-t from-black/90 to-transparent p-3 pb-4 pr-16">
             <div className="flex items-center gap-2">
@@ -1181,7 +1181,7 @@ function PlatformMockView({
             <div className="min-w-0 pt-0.5">
               <h3 className="line-clamp-2 text-base font-semibold leading-snug">{T}</h3>
               <p className="mt-1.5 text-xs text-neutral-400">Your Channel</p>
-              <p className="text-xs text-neutral-400">1 view ?? 1 minute ago</p>
+              <p className="text-xs text-neutral-400">1 view · 1 minute ago</p>
             </div>
           </div>
           <div className="mt-3 flex items-start gap-3 border-t border-neutral-800 pt-3">
@@ -1195,11 +1195,11 @@ function PlatformMockView({
         <VerticalFrame>
           <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3">
             <span className="text-sm font-bold text-white drop-shadow">Reels</span>
-            <span className="text-white/80">????</span>
+            <span className="text-white/80">🔖</span>
           </div>
           <ActionRail
             className="absolute bottom-24 right-2.5"
-            items={[['????', '3.4K'], ['????', '210'], ['???', '96'], ['???', '']]}
+            items={[['❤️', '3.4K'], ['💬', '210'], ['↻', '96'], ['↪', '']]}
           />
           <div className="absolute inset-x-0 bottom-9 bg-gradient-to-t from-black/90 to-transparent p-3 pb-4 pr-16">
             <div className="flex items-center gap-2">
@@ -1227,7 +1227,7 @@ function PlatformMockView({
               <p className="text-[11px] font-semibold text-white drop-shadow">Your Page</p>
               <p className="text-[10px] text-white/70">2h</p>
             </div>
-            <span className="ml-auto text-white/80">???</span>
+            <span className="ml-auto text-white/80">⋯</span>
           </div>
           <div className="absolute inset-x-0 bottom-9 bg-gradient-to-t from-black/80 to-transparent p-3 pb-4">
             <p className="mb-2 line-clamp-2 text-xs leading-snug text-white/95 drop-shadow">{C}</p>
@@ -1235,8 +1235,8 @@ function PlatformMockView({
               <span className="flex-1 rounded-full border border-white/60 px-3 py-1.5 text-[11px] text-white/80">
                 Send message
               </span>
-              <span className="text-xl">??????</span>
-              <span className="text-xl">????</span>
+              <span className="text-xl">👍👏</span>
+              <span className="text-xl">💬</span>
             </div>
           </div>
         </VerticalFrame>
@@ -1248,21 +1248,21 @@ function PlatformMockView({
             {avatar}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-[#1877f2]">Your Page</p>
-              <p className="text-xs text-neutral-500">Just now ?? ????</p>
+              <p className="text-xs text-neutral-500">Just now · 🌍</p>
             </div>
-            <span className="text-neutral-500">???</span>
+            <span className="text-neutral-500">⋯</span>
           </div>
           <p className="whitespace-pre-wrap px-3 pb-2.5 text-sm leading-normal">{C}</p>
           <video src={videoUrl} controls playsInline className="w-full object-contain" />
           <div className="flex items-center justify-between border-t border-neutral-200 px-3 py-2 text-[13px] font-semibold text-neutral-600">
-            <span>???? Like</span>
-            <span>???? Comment</span>
-            <span>??? Share</span>
+            <span>👍 Like</span>
+            <span>💬 Comment</span>
+            <span>↪ Share</span>
           </div>
           <div className="flex items-center gap-2 border-t border-neutral-200 px-3 py-2">
             <span className="h-7 w-7 rounded-full bg-neutral-200" />
             <span className="flex-1 rounded-full bg-neutral-100 px-3 py-1.5 text-[13px] text-neutral-500">
-              Write a comment???
+              Write a comment…
             </span>
           </div>
         </div>
@@ -1279,7 +1279,7 @@ function PlatformMockView({
             {avatar}
             <div>
               <p className="text-[11px] font-semibold text-white drop-shadow">Your Name</p>
-              <p className="text-[10px] text-white/70">Founder ?? 1h</p>
+              <p className="text-[10px] text-white/70">Founder · 1h</p>
             </div>
           </div>
           <div className="absolute inset-x-0 bottom-9 bg-gradient-to-t from-black/85 to-transparent p-3 pb-4">
@@ -1307,12 +1307,12 @@ function PlatformMockView({
               Subscribe
             </button>
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-neutral-800 px-4 py-2 text-sm">???? 1.2K</span>
-              <span className="rounded-full bg-neutral-800 px-4 py-2 text-sm">??? Share</span>
+              <span className="rounded-full bg-neutral-800 px-4 py-2 text-sm">👍 1.2K</span>
+              <span className="rounded-full bg-neutral-800 px-4 py-2 text-sm">↪ Share</span>
             </div>
           </div>
           <div className="mt-3 rounded-xl bg-neutral-800/70 p-3 text-sm leading-relaxed text-neutral-200">
-            <p className="mb-1 font-semibold">1 view ?? 1 minute ago</p>
+            <p className="mb-1 font-semibold">1 view · 1 minute ago</p>
             <p className="whitespace-pre-wrap">{D}</p>
           </div>
         </div>
@@ -1329,7 +1329,7 @@ function PlatformMockView({
             <span className="text-white underline underline-offset-4">For You</span>
           </div>
           <div className="absolute bottom-20 right-2 flex flex-col items-center gap-4 text-white">
-            {[['???', '128K'], ['????', '2,041'], ['???', '8,512'], ['???', 'Share']].map(([glyph, count]) => (
+            {[['♥', '128K'], ['💬', '2,041'], ['↻', '8,512'], ['↪', 'Share']].map(([glyph, count]) => (
               <div key={count as string} className="flex flex-col items-center gap-0.5">
                 <span className="text-2xl drop-shadow">{glyph}</span>
                 <span className="text-[10px] font-semibold drop-shadow">{count}</span>
@@ -1340,7 +1340,7 @@ function PlatformMockView({
             <p className="text-sm font-bold text-white">@youraccount</p>
             <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-white/90">{C}</p>
             <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/80">
-              <Music className="h-3 w-3" /> original sound ??? youraccount
+              <Music className="h-3 w-3" /> original sound — youraccount
             </p>
           </div>
         </div>
@@ -1353,7 +1353,7 @@ function PlatformMockView({
         >
           <MockVideo className="h-full w-full object-cover" />
           <div className="absolute bottom-24 right-2 flex flex-col items-center gap-4 text-white">
-            {[['???', '45.2K'], ['????', '986'], ['???', ''], ['???', '']].map(([glyph, count]) => (
+            {[['♥', '45.2K'], ['💬', '986'], ['↻', ''], ['↪', '']].map(([glyph, count]) => (
               <div key={glyph as string} className="flex flex-col items-center gap-0.5">
                 <span className="text-2xl drop-shadow">{glyph}</span>
                 {count && <span className="text-[10px] font-semibold drop-shadow">{count}</span>}
@@ -1386,19 +1386,19 @@ function PlatformMockView({
               <p className="text-[15px]">
                 <span className="font-bold">Your Name</span>{' '}
                 <span className="inline-block h-4 w-4 rounded-full bg-sky-500 align-middle text-center text-[10px] font-bold leading-4 text-white">
-                  ???
+                  ⋯
                 </span>{' '}
-                <span className="text-neutral-500">@youraccount ?? 1m</span>
+                <span className="text-neutral-500">@youraccount · 1m</span>
               </p>
               <p className="mt-1 whitespace-pre-wrap text-[15px] leading-normal">{C}</p>
               <div className="mt-3 overflow-hidden rounded-2xl border border-neutral-800">
                 <video src={videoUrl} controls playsInline className="w-full object-contain" />
               </div>
               <div className="mt-3 flex items-center justify-between text-[13px] text-neutral-500">
-                <span>???? 214</span>
-                <span>???? 1,892</span>
-                <span>??? 12.4K</span>
-                <span>??? 1.2M</span>
+                <span>🔁 214</span>
+                <span>❤️ 1,892</span>
+                <span>♥ 12.4K</span>
+                <span>▶ 1.2M</span>
               </div>
             </div>
           </div>
@@ -1410,9 +1410,9 @@ function PlatformMockView({
           <div className="flex items-start gap-3 p-4 pb-2">
             {avatar}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Your Name <span className="font-normal text-neutral-500">?? 1st</span></p>
-              <p className="text-xs text-neutral-500">Founder ?? helping builders ship</p>
-              <p className="text-xs text-neutral-500">1m ?? ????</p>
+              <p className="text-sm font-semibold">Your Name <span className="font-normal text-neutral-500">· 1st</span></p>
+              <p className="text-xs text-neutral-500">Founder · helping builders ship</p>
+              <p className="text-xs text-neutral-500">1m · 🌍</p>
             </div>
             <button className="rounded-full border border-[#0a66c2] px-3 py-1 text-sm font-semibold text-[#0a66c2]">
               + Follow
@@ -1421,10 +1421,10 @@ function PlatformMockView({
           <p className="whitespace-pre-wrap px-4 pb-3 text-sm leading-normal">{D}</p>
           <video src={videoUrl} controls playsInline className="w-full object-contain" />
           <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-2 text-xs font-semibold text-neutral-500">
-            <span>???? Like</span>
-            <span>???? Comment</span>
-            <span>???? Repost</span>
-            <span>??? Send</span>
+            <span>👍 Like</span>
+            <span>💬 Comment</span>
+            <span>🔁 Repost</span>
+            <span>✉ Send</span>
           </div>
         </div>
       )}
@@ -1433,7 +1433,7 @@ function PlatformMockView({
 }
 
 /**
- * The pre-publish sheet ??? pixel-faithful platform mocks. Editable copy feeds
+ * The pre-publish sheet — pixel-faithful platform mocks. Editable copy feeds
  * the mocks LIVE: type the title, watch the YouTube page update. Left = the
  * platform, right = your copy + copy-to-clipboard.
  */
@@ -1453,18 +1453,18 @@ function PublishSheet({
 }: {
   name: string;
   videoUrl: string;
-  /** Whisper words from the timeline ??? the AI's grounding for copy. */
+  /** Whisper words from the timeline — the AI's grounding for copy. */
   transcript?: string;
   onClose: () => void;
-  /** The canvas's platform lens target ??? Publish view opens where the canvas is pointed. */
+  /** The canvas's platform lens target — Publish view opens where the canvas is pointed. */
   initialBrand?: string;
   initialPlatform?: string;
-  /** The shared copy pool (canvas lens reads it too ??? one pool, two surfaces). */
+  /** The shared copy pool (canvas lens reads it too — one pool, two surfaces). */
   copy?: { title: string; caption: string; desc: string; tags: string };
   onCopyChange?: (next: { title: string; caption: string; desc: string; tags: string }) => void;
   /** R13: opens the Schedule sheet over the Publish view. Passes the current platform context. */
   onSchedule?: (brand: string, typeId: string) => void;
-  /** Timeline-merged Whisper words ??? the karaoke captions ride the mock LIVE. */
+  /** Timeline-merged Whisper words — the karaoke captions ride the mock LIVE. */
   captionWords?: ReelWord[];
   captionPreset?: CaptionPreset;
   captionOverrides?: CaptionOverrides;
@@ -1491,12 +1491,12 @@ function PublishSheet({
         .slice(0, 6)
         .join(', '),
   );
-  const [caption, setCaption] = useState(copy?.caption ?? `${name || 'Untitled reel'} ??? watch to the end.`);
+  const [caption, setCaption] = useState(copy?.caption ?? `${name || 'Untitled reel'} — watch to the end.`);
   /** Same-content-everywhere toggle (default ON) + per-platform overrides when OFF. */
   const [synced, setSynced] = useState(true);
   const [ov, setOv] = useState<Record<string, Partial<Record<'title' | 'caption' | 'desc' | 'tags', string>>>>({});
 
-  /** Which fields each surface actually has ??? the rail shows only these. */
+  /** Which fields each surface actually has — the rail shows only these. */
   const FIELDS: Record<string, ('title' | 'caption' | 'desc' | 'tags')[]> = {
     shorts: ['title', 'desc', 'tags'],
     ytfeed: ['title', 'desc', 'tags'],
@@ -1525,7 +1525,7 @@ function PublishSheet({
       else if (key === 'caption') setCaption(v);
       else if (key === 'desc') setDesc(v);
       else setTags(v);
-      // Mirror into the shared pool ??? the canvas lens reads the same words.
+      // Mirror into the shared pool — the canvas lens reads the same words.
       onCopyChange?.({
         title: key === 'title' ? v : title,
         caption: key === 'caption' ? v : caption,
@@ -1547,7 +1547,7 @@ function PublishSheet({
   }
 
 
-  /** AI context shared by every copy call ??? reel name, platform, and the transcript. */
+  /** AI context shared by every copy call — reel name, platform, and the transcript. */
   const aiCtx = {
     platform: 'tiktok',
     format: 'reel',
@@ -1606,7 +1606,7 @@ function PublishSheet({
     });
 
 
-  /** Platforms with their post-type selector entries (mock id ??? label). */
+  /** Platforms with their post-type selector entries (mock id — label). */
   const PLATFORMS: { id: string; label: string; types: [string, string][] }[] = [
     { id: 'youtube', label: 'YouTube', types: [['shorts', 'Shorts'], ['ytfeed', 'Feed'], ['youtube', 'Watch']] },
     { id: 'tiktok', label: 'TikTok', types: [['tiktok', 'For You']] },
@@ -1627,7 +1627,7 @@ function PublishSheet({
         <div className="flex shrink-0 items-center gap-3 border-b border-bone/10 px-5 py-3">
           <Film className="h-4 w-4 text-brass" />
           <span className="text-sm font-semibold text-bone">Publish view</span>
-          <span className="text-[10px] text-bone/35">edit on the right ??? the mock updates live</span>
+          <span className="text-[10px] text-bone/35">edit on the right — the mock updates live</span>
           <div className="ml-auto flex items-center gap-1.5">
             {/* platform logos */}
             {PLATFORMS.map((p) => (
@@ -1644,7 +1644,7 @@ function PublishSheet({
               </button>
             ))}
             <span className="mx-1 h-5 w-px bg-bone/15" />
-            {/* post-type segmented control ??? 3 FIXED slots so the header never shifts */}
+            {/* post-type segmented control — 3 FIXED slots so the header never shifts */}
             <div className="flex items-center gap-0.5 rounded-full bg-white/[0.05] p-1 ring-1 ring-inset ring-white/10">
               {(() => {
                 const types = PLATFORMS.find((p) => p.id === brand)?.types ?? [];
@@ -1675,7 +1675,7 @@ function PublishSheet({
           </div>
 
           <button onClick={onClose} className="rounded-lg p-1.5 text-bone/40 hover:bg-bone/10 hover:text-bone">
-            ???
+            —
           </button>
         </div>
 
@@ -1694,7 +1694,7 @@ function PublishSheet({
             />
           </div>
 
-          {/* RIGHT: copy rail ??? TipTap fields + AI wands, grounded in the transcript */}
+          {/* RIGHT: copy rail — TipTap fields + AI wands, grounded in the transcript */}
           <div className="flex min-h-0 flex-col gap-3 overflow-y-auto border-l border-bone/10 p-4">
             <button
               onClick={() => void generateAll()}
@@ -1702,14 +1702,14 @@ function PublishSheet({
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brass/40 px-3 py-2 text-xs font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
             >
               {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-              {aiBusy ? 'Generating???' : 'Generate all with AI'}
+              {aiBusy ? 'Generating…' : 'Generate all with AI'}
             </button>
             {transcript?.trim() && (
               <p className="-mt-1 text-[9px] text-bone/30">grounded in the reel's transcript</p>
             )}
             {aiError && <p className="text-[10px] text-red-300">{aiError}</p>}
 
-            {/* same-content-everywhere toggle ??? OFF lets each platform have its own copy */}
+            {/* same-content-everywhere toggle — OFF lets each platform have its own copy */}
             <button
               onClick={() => setSynced((v) => !v)}
               className={clsx(
@@ -1737,7 +1737,7 @@ function PublishSheet({
                 onClick={() => setOv((o) => ({ ...o, [platform]: undefined as never }))}
                 className="-mt-1 text-left text-[9px] text-bone/35 hover:text-brass"
               >
-                ??? reset this platform to the shared copy
+                → reset this platform to the shared copy
               </button>
             )}
 
@@ -1812,7 +1812,7 @@ function PublishSheet({
                 <div className="[&_.tiptap]:!text-bone/90 [&_.tiptap]:caret-brass [&_.tiptap]:text-[11px] [&>div]:!border-bone/15 [&>div]:!bg-ink/60 [&>div]:!rounded-lg [&>div]:focus-within:!border-brass/50 [&_button]:!text-bone/45 [&_button:hover]:!bg-bone/10 [&_button:hover]:!text-bone [&_button[aria-pressed='true']]:!bg-brass/20 [&_button[aria-pressed='true']]:!text-brass [&_svg]:!h-3.5 [&_svg]:!w-3.5">
                   <RichTextField
                     value={C}
-                    placeholder="The caption ??? hook lives on line one"
+                    placeholder="The caption — hook lives on line one"
                     minHeight="4.5rem"
                     onChange={(v) => setVal('caption', v.slice(0, 280))}
                   />
@@ -1872,7 +1872,7 @@ function PublishSheet({
                 className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brass/40 px-3 py-2.5 text-xs font-semibold text-brass hover:bg-brass/10"
                 title="Render the final MP4 and schedule this post to the planner"
               >
-                <Film className="h-3.5 w-3.5" /> Schedule to the planner???
+                <Film className="h-3.5 w-3.5" /> Schedule to the planner…
               </button>
             )}
           </div>
@@ -1940,7 +1940,7 @@ function BulkScheduleSheet({
           body: JSON.stringify({
             action: 'upsertPlan',
             pieceId,
-            title: `${r.projectName} ??? ${platformTypeLabel(r.brand, r.typeId)}`,
+            title: `${r.projectName} — ${platformTypeLabel(r.brand, r.typeId)}`,
             platform: r.brand,
             format: r.typeId,
             stage: 'Scheduled',
@@ -1998,7 +1998,7 @@ function BulkScheduleSheet({
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-bone">Bulk schedule {rows.length} variant(s)</h2>
           <button onClick={onClose} className="text-bone/40 hover:text-bone">
-            ???
+            —
           </button>
         </div>
         {/* per-variant settings checklist */}
@@ -2022,7 +2022,7 @@ function BulkScheduleSheet({
                   .filter((c) => !c.ok)
                   .map((c, i) => (
                     <p key={i} className="mt-0.5 text-[9px] text-amber-300/90">
-                      ??? {c.label}: {c.detail}
+                      → {c.label}: {c.detail}
                     </p>
                   ))}
             </div>
@@ -2030,7 +2030,7 @@ function BulkScheduleSheet({
         </div>
         {!allOk && (
           <p className="mb-3 text-[9px] text-amber-300/80">
-            ??? Some variants fail the settings check ??? they'll still schedule, but the aspect/length
+            → Some variants fail the settings check — they'll still schedule, but the aspect/length
             may need a fix before posting.
           </p>
         )}
@@ -2050,7 +2050,7 @@ function BulkScheduleSheet({
             />
           </div>
           <label className="flex items-center justify-between rounded-lg border border-bone/15 px-2.5 py-2 text-[10px] font-semibold text-bone/60">
-            <span>Tracked links (UTM ??? clicks roll up automatically)</span>
+            <span>Tracked links (UTM — clicks roll up automatically)</span>
             <input
               type="checkbox"
               checked={utm}
@@ -2073,7 +2073,7 @@ function BulkScheduleSheet({
             className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brass px-3 py-2.5 text-xs font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
           >
             {phase === 'scheduling' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {phase === 'scheduling' ? 'Scheduling???' : `Schedule ${rows.length} variant(s)`}
+            {phase === 'scheduling' ? 'Scheduling…' : `Schedule ${rows.length} variant(s)`}
           </button>
         </div>
       </div>
@@ -2082,7 +2082,7 @@ function BulkScheduleSheet({
 }
 
 /**
- * R13 THE Schedule sheet ??? one flow everywhere (Post tab, Publish view, Scoreboard).
+ * R13 THE Schedule sheet — one flow everywhere (Post tab, Publish view, Scoreboard).
  * If there's no composed MP4 yet, it RUNS THE RENDER (fal/ffmpeg compose) first,
  * then creates the planner card, and when UTM is on it mints the tracked link
  * (utm_content = the card's piece id) and wires it to the variant when there is one.
@@ -2099,7 +2099,7 @@ function ScheduleSheet({
   onRender,
   onDone,
   onClose,
-  /** The current cover frame time (seconds) ??? the thumbnail the platform will use. */
+  /** The current cover frame time (seconds) — the thumbnail the platform will use. */
   thumbT,
   /** The video's total duration (for candidate thumbnail frames). */
   videoDurationSec,
@@ -2107,12 +2107,12 @@ function ScheduleSheet({
   offerSlug = '',
 }: {
   name: string;
-  /** Null when the reel has never been composed ??? the sheet renders first. */
+  /** Null when the reel has never been composed — the sheet renders first. */
   videoUrl: string | null;
   /** Scoreboard variants pass theirs so clicks roll up onto that variant. */
   variantId?: string;
   brand: string;
-  /** The post type id (e.g. 'shorts', 'reels') ??? the planner card's format. */
+  /** The post type id (e.g. 'shorts', 'reels') — the planner card's format. */
   typeId: string;
   targetLabel: string;
   /** The reel's actual duration, for settings validation. */
@@ -2123,7 +2123,7 @@ function ScheduleSheet({
   onRender?: () => Promise<string>;
   onDone: (message: string) => void;
   onClose: () => void;
-  /** The current cover frame time (seconds) ??? the thumbnail the platform will use. */
+  /** The current cover frame time (seconds) — the thumbnail the platform will use. */
   thumbT?: number;
   /** The video's total duration (for candidate thumbnail frames). */
   videoDurationSec?: number;
@@ -2138,14 +2138,14 @@ function ScheduleSheet({
   const [utm, setUtm] = useState(true);
   const [phase, setPhase] = useState<'form' | 'rendering' | 'scheduling' | 'done'>('form');
   const [err, setErr] = useState<string | null>(null);
-  /** The minted link from the scheduling flow ??? shown in the "done" phase with a copy button. */
+  /** The minted link from the scheduling flow — shown in the "done" phase with a copy button. */
   const [mintedLink, setMintedLink] = useState<{ code: string; url: string } | null>(null);
-  /** The picked platform + type ??? defaults to the variant's own platform. */
+  /** The picked platform + type — defaults to the variant's own platform. */
   const [pickBrand, setPickBrand] = useState(brand);
   const [pickType, setPickType] = useState(typeId);
-  /** The picked cover frame (seconds) ??? the thumbnail the platform will use. */
+  /** The picked cover frame (seconds) — the thumbnail the platform will use. */
   const [pickThumbT, setPickThumbT] = useState(thumbT ?? 0.5);
-  /** Post assets ??? title, description, tags, caption (like the PublishSheet's copy rail). */
+  /** Post assets — title, description, tags, caption (like the PublishSheet's copy rail). */
   const [title, setTitle] = useState(name);
   const [description, setDescription] = useState(`${name}\n\nMade with the cutting room.\n#shorts #reels`);
   const [tags, setTags] = useState(
@@ -2157,7 +2157,7 @@ function ScheduleSheet({
       .slice(0, 6)
       .join(', '),
   );
-  const [caption, setCaption] = useState(`${name} ??? watch to the end.`);
+  const [caption, setCaption] = useState(`${name} — watch to the end.`);
   /** The Content Hub's link creation flow: funnel / lead magnet / custom URL. */
   const [destKind, setDestKind] = useState<'funnel' | 'optin' | 'url'>('url');
   const [funnelId, setFunnelId] = useState('');
@@ -2173,7 +2173,7 @@ function ScheduleSheet({
       : destKind === 'optin'
         ? (optinFunnels.find((f) => f.id === optinFunnelId)?.slug ?? null)
         : null;
-  /** Settings checklist for the current pick ??? aspect + length fit. */
+  /** Settings checklist for the current pick — aspect + length fit. */
   const checks: ScheduleCheck[] =
     durationSec != null
       ? validateScheduleSettings({
@@ -2184,7 +2184,7 @@ function ScheduleSheet({
         })
       : [];
   const allOk = allChecksPass(checks);
-  /** Candidate thumbnail frames ??? 4 evenly spaced picks + the current one. */
+  /** Candidate thumbnail frames — 4 evenly spaced picks + the current one. */
   const thumbCandidates = useMemo(() => {
     if (!videoDurationSec || videoDurationSec <= 0) return [0.5];
     const dur = videoDurationSec;
@@ -2202,7 +2202,7 @@ function ScheduleSheet({
   async function submit() {
     setErr(null);
     try {
-      // 1 ??? the final MP4 (run the render when the reel isn't composed yet)
+      // 1 — the final MP4 (run the render when the reel isn't composed yet)
       let url = videoUrl;
       if (!url) {
         if (!onRender) throw new Error('No render path for this target.');
@@ -2211,7 +2211,7 @@ function ScheduleSheet({
       }
       if (!url) throw new Error('The render came back empty.');
 
-      // 2 ??? the planner card (format = the POST TYPE, not 'reel')
+      // 2 — the planner card (format = the POST TYPE, not 'reel')
       setPhase('scheduling');
       const pieceId = newManualPieceId();
       const plan = await fetch('/api/admin/mothermode-planner', {
@@ -2220,7 +2220,7 @@ function ScheduleSheet({
         body: JSON.stringify({
           action: 'upsertPlan',
           pieceId,
-          title: `${name} ??? ${platformTypeLabel(pickBrand, pickType)}`,
+          title: `${name} — ${platformTypeLabel(pickBrand, pickType)}`,
           platform: pickBrand,
           format: pickType,
           stage: 'Scheduled',
@@ -2232,7 +2232,7 @@ function ScheduleSheet({
         throw new Error(planJson.error || 'Planner save failed');
       }
 
-      // 3 ??? the tracked link (+ variant wiring), UTM derived from the picked platform
+      // 3 — the tracked link (+ variant wiring), UTM derived from the picked platform
       if (utm) {
         const utmParams = utmForReel({
           platform: pickBrand,
@@ -2246,7 +2246,7 @@ function ScheduleSheet({
           body: JSON.stringify({
             action: 'createLink',
             pieceId,
-            label: `${name} ??? ${platformTypeLabel(pickBrand, pickType)}`,
+            label: `${name} — ${platformTypeLabel(pickBrand, pickType)}`,
             funnelId: destKind === 'funnel' ? funnelId : '',
             optinFunnelId: destKind === 'optin' ? optinFunnelId : '',
             funnelPage: destKind === 'url' ? '' : funnelPage,
@@ -2291,20 +2291,20 @@ function ScheduleSheet({
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-bone">Schedule to the planner</h2>
             <span className="truncate text-[10px] text-bone/40">
-              {name} ?? {targetLabel}
+              {name} · {targetLabel}
             </span>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-bone/40 hover:bg-bone/10 hover:text-bone">
-            ???
+            —
           </button>
         </div>
         {phase === 'done' ? (
-          /* ??? done phase: the minted link with a copy button ??? */
+          /* — done phase: the minted link with a copy button — */
           <div className="mx-auto my-auto w-full max-w-sm space-y-2 p-5">
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] p-3 text-center">
-              <p className="text-[10px] font-semibold text-emerald-300/90">??? Scheduled</p>
+              <p className="text-[10px] font-semibold text-emerald-300/90">✓ Scheduled</p>
               <p className="mt-0.5 text-[10px] text-bone/60">
-                {platformTypeLabel(pickBrand, pickType)} ??? the card is on the planner board.
+                {platformTypeLabel(pickBrand, pickType)} — the card is on the planner board.
               </p>
               {mintedLink && (
                 <div className="mt-2 space-y-1.5">
@@ -2339,8 +2339,8 @@ function ScheduleSheet({
             </button>
           </div>
         ) : (
-          /* ??? the FULL two-column sheet: the Publish-view mock on the left,
-               the schedule form on the right ??? the mock updates LIVE as you edit ??? */
+          /* — the FULL two-column sheet: the Publish-view mock on the left,
+               the schedule form on the right — the mock updates LIVE as you edit — */
           <div className="grid min-h-0 flex-1 grid-cols-[1fr_300px]">
             {/* LEFT: the pixel-faithful platform mock (the SAME one as the Publish view) */}
             <div className="flex min-h-0 items-center justify-center overflow-y-auto bg-black/60 p-6">
@@ -2354,14 +2354,14 @@ function ScheduleSheet({
                 />
               ) : (
                 <div className="max-w-xs rounded-lg border border-dashed border-brass/30 bg-brass/[0.05] px-3 py-2.5 text-[10px] leading-relaxed text-brass/80">
-                  No composed MP4 yet ??? scheduling runs the <strong>render</strong> (ffmpeg
+                  No composed MP4 yet — scheduling runs the <strong>render</strong> (ffmpeg
                   compose) first, then schedules the finished video.
                 </div>
               )}
             </div>
             {/* RIGHT: the schedule form */}
             <div className="min-h-0 space-y-2 overflow-y-auto border-l border-bone/10 p-4">
-              {/* post assets ??? feed the mock LIVE */}
+              {/* post assets — feed the mock LIVE */}
               <div className="space-y-1.5 rounded-xl border border-bone/15 bg-bone/[0.02] p-2">
                 <p className="text-[9px] font-semibold uppercase tracking-wide text-bone/40">
                   Post assets
@@ -2394,7 +2394,7 @@ function ScheduleSheet({
                 />
               </div>
               <div className="space-y-2">
-          {/* Platform picker ??? ALL six platforms, not just similar ones */}
+          {/* Platform picker — ALL six platforms, not just similar ones */}
           <div className="rounded-xl border border-bone/15 bg-bone/[0.03] p-2">
             <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-bone/40">
               Post as
@@ -2441,7 +2441,7 @@ function ScheduleSheet({
               {platformTypeLabel(pickBrand, pickType)}
             </p>
           </div>
-          {/* Settings checklist ??? aspect + length fit for the chosen platform */}
+          {/* Settings checklist — aspect + length fit for the chosen platform */}
           {checks.length > 0 && (
             <div className="space-y-1 rounded-xl border border-bone/10 bg-bone/[0.02] p-2">
               {checks.map((c, i) => (
@@ -2453,7 +2453,7 @@ function ScheduleSheet({
                   )}
                 >
                   <span className="shrink-0">
-                    {c.ok ? '???' : '???'}
+                    {c.ok ? '✓' : '✕'}
                   </span>
                   <span className="min-w-0">
                     <span className="font-semibold">{c.label}:</span> {c.detail}
@@ -2462,12 +2462,12 @@ function ScheduleSheet({
               ))}
               {!allOk && (
                 <p className="pt-0.5 text-[9px] text-bone/40">
-                  The reel may be letterboxed/cropped ??? you can still schedule, but this is worth a check.
+                  The reel may be letterboxed/cropped — you can still schedule, but this is worth a check.
                 </p>
               )}
             </div>
           )}
-          {/* Thumbnail picker ??? YouTube and any video that needs one */}
+          {/* Thumbnail picker — YouTube and any video that needs one */}
           {videoUrl && videoDurationSec != null && videoDurationSec > 0 && (
             <div className="rounded-xl border border-bone/15 bg-bone/[0.03] p-2">
               <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-bone/40">
@@ -2510,7 +2510,7 @@ function ScheduleSheet({
             />
           </div>
           <label className="flex items-center justify-between rounded-lg border border-bone/15 px-2.5 py-2 text-[10px] font-semibold text-bone/60">
-            <span>Tracked link (UTM ??? clicks roll up automatically)</span>
+            <span>Tracked link (UTM — clicks roll up automatically)</span>
             <input
               type="checkbox"
               checked={utm}
@@ -2555,7 +2555,7 @@ function ScheduleSheet({
                     onChange={(e) => setFunnelId(e.target.value)}
                     className="w-full rounded-lg border border-bone/15 bg-ink px-2.5 py-1.5 text-[10px] text-bone/80"
                   >
-                    <option value="">??? pick a funnel ???</option>
+                    <option value="">— pick a funnel —</option>
                     {funnels.map((f) => (
                       <option key={f.id} value={f.id}>
                         {f.name}
@@ -2582,7 +2582,7 @@ function ScheduleSheet({
                     onChange={(e) => setOptinFunnelId(e.target.value)}
                     className="w-full rounded-lg border border-bone/15 bg-ink px-2.5 py-1.5 text-[10px] text-bone/80"
                   >
-                    <option value="">??? pick a lead magnet ???</option>
+                    <option value="">— pick a lead magnet —</option>
                     {optinFunnels.map((f) => (
                       <option key={f.id} value={f.id}>
                         {f.name}
@@ -2606,7 +2606,7 @@ function ScheduleSheet({
                 <input
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
-                  placeholder="https://??? custom destination (default: your site root)"
+                  placeholder="https://… custom destination (default: your site root)"
                   className="w-full rounded-lg border border-bone/15 bg-ink px-2.5 py-1.5 text-[10px] text-bone/80 outline-none placeholder:text-bone/25"
                 />
               )}
@@ -2626,9 +2626,9 @@ function ScheduleSheet({
             {phase === 'rendering' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {phase === 'scheduling' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {phase === 'rendering'
-              ? 'Rendering the MP4???'
+              ? 'Rendering the MP4…'
               : phase === 'scheduling'
-                ? 'Scheduling???'
+                ? 'Scheduling…'
                 : videoUrl
                   ? 'Schedule it'
                   : 'Render & schedule'}
@@ -2648,7 +2648,7 @@ function ScheduleSheet({
 
 type Tab = 'clips' | 'captions' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes';
 
-/** R6a Board shot: one line of the story ??? prompt + footage, in order. */
+/** R6a Board shot: one line of the story — prompt + footage, in order. */
 interface BoardShot {
   id: string;
   label: string;
@@ -2705,7 +2705,7 @@ export default function ReelStudioPage() {
   const [directorInput, setDirectorInput] = useState('');
   const [loopRows, setLoopRows] = useState<LoopRow[] | null>(null);
   const [loopWinner, setLoopWinner] = useState<LoopWinner | null>(null);
-  /** R14: variant schedule statuses for the Scoreboard chips ("Scheduled ?? platform"). */
+  /** R14: variant schedule statuses for the Scoreboard chips ("Scheduled · platform"). */
   const [loopStatuses, setLoopStatuses] = useState<
     Record<
       string,
@@ -2748,7 +2748,7 @@ export default function ReelStudioPage() {
   const [lensMode, setLensMode] = useState<'clean' | 'platform'>('clean');
   /** R10: the persistent variant gene strip beside the canvas (show/hide). */
   const [geneStrip, setGeneStrip] = useState(true);
-  /** R7 shared copy pool (title/caption/desc/tags/thumb) ??? canvas lens + Publish view share it. */
+  /** R7 shared copy pool (title/caption/desc/tags/thumb) — canvas lens + Publish view share it. */
   const [copyPool, setCopyPool] = useState<{
     title: string;
     caption: string;
@@ -2761,7 +2761,7 @@ export default function ReelStudioPage() {
   const [targetOverride, setTargetOverride] = useState<number | null>(null);
   const stripScrollRef = useRef<HTMLDivElement>(null);
 
-  /** R15: the stage is measured ??? the canvas is sized in pixels, never cut off. */
+  /** R15: the stage is measured — the canvas is sized in pixels, never cut off. */
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
@@ -2773,10 +2773,10 @@ export default function ReelStudioPage() {
     ro.observe(el);
     setStageSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
-    // re-arm when a project mounts ??? the stage doesn't exist on the empty state,
+    // re-arm when a project mounts — the stage doesn't exist on the empty state,
     // so the observer must attach AFTER project selection or the canvas never gets sized
   }, [project?.id]);
-  /** R28: the strip is measured too ??? the timeline ALWAYS fills the canvas width. */
+  /** R28: the strip is measured too — the timeline ALWAYS fills the canvas width. */
   const [stripWidth, setStripWidth] = useState(0);
   useEffect(() => {
     const el = stripScrollRef.current;
@@ -2796,7 +2796,7 @@ export default function ReelStudioPage() {
     return fitAspect(w, stageSize.h, aw, ah);
   }, [stageSize, aspect, geneStrip]);
 
-  /** R15 keyframe editing: patch one key, add at the playhead, remove ??? undo-safe. */
+  /** R15 keyframe editing: patch one key, add at the playhead, remove — undo-safe. */
   function setMotionKey(
     clip: ReelClip,
     idx: number,
@@ -2824,10 +2824,10 @@ export default function ReelStudioPage() {
   const [playheadSec, setPlayheadSec] = useState(0);
   const pendingSeekRef = useRef<number | null>(null);
   /**
-   * R25 THE PLAYBACK CLOCK ??? the single source of truth for time.
+   * R25 THE PLAYBACK CLOCK — the single source of truth for time.
    *
    * The old model let each clip's <video> free-run and tried to FENCE it at
-   * the trim ??? three patches later it still leaked (state/element races, NaN
+   * the trim — three patches later it still leaked (state/element races, NaN
    * ends, swap gaps). The clock inverts the relationship: a rAF loop owns the
    * timeline second, and the video element is a dumb frame server that gets
    * HARD-SYNCED to the clock every frame (drift > 0.12s = seek). Overrun is
@@ -2837,7 +2837,7 @@ export default function ReelStudioPage() {
   /**
    * R25b: LIVE mirror for the clock loop. The rAF chain re-schedules the SAME
    * closure every frame, so anything it reads from render scope (project,
-   * total) FROZE at play-press ??? trimming mid-play used to leave the clock
+   * total) FROZE at play-press — trimming mid-play used to leave the clock
    * running to the OLD total. The loop reads through this ref, never a closure.
    */
   const clockStateRef = useRef<{ project: ReelProject | null; total: number }>({
@@ -2856,7 +2856,7 @@ export default function ReelStudioPage() {
    * Automatic audio syncing (the easy-peasy-ease trick): the audio bed rides a
    * hidden <audio> that follows the preview. It starts when the playhead
    * crosses the bed's offset, pauses when the preview pauses, re-seeks when
-   * drift exceeds ~0.35s, and ??? the point of a bed ??? keeps rolling across
+   * drift exceeds ~0.35s, and — the point of a bed — keeps rolling across
    * scene boundaries while the preview auto-advances.
    */
   function syncAudioAt(tSec: number, play: boolean) {
@@ -2919,7 +2919,7 @@ export default function ReelStudioPage() {
   }, [load]);
 
   // Warm the filmstrip: prefetch every scene's sprite tile once per project so
-  // dragging/scrubbing never waits on the thumbnail network (R4: 4?? fewer calls).
+  // dragging/scrubbing never waits on the thumbnail network (R4: 4× fewer calls).
   useEffect(() => {
     if (!project) return;
     for (const c of project.clips) {
@@ -2948,12 +2948,12 @@ export default function ReelStudioPage() {
         if (json?.project) {
           setProject(json.project as ReelProject);
           setSelectedClip(clip.id);
-          setNote('Imported from the Content Hub ??? it is a scene on your timeline.');
+          setNote('Imported from the Content Hub — it is a scene on your timeline.');
           void load();
         }
       })();
     } catch {
-      /* malformed URL ??? ignore */
+      /* malformed URL — ignore */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects]);
@@ -3081,7 +3081,7 @@ export default function ReelStudioPage() {
     if (!/^https?:\/\//i.test(url) || !project) return;
     const dur = await probeDuration(url);
     if (!dur) {
-      setError('Could not read that video URL ??? it must be a direct, public MP4/WebM link.');
+      setError('Could not read that video URL — it must be a direct, public MP4/WebM link.');
       return;
     }
     const o: ReelOverlayClip = {
@@ -3094,7 +3094,7 @@ export default function ReelStudioPage() {
     };
     patch({ overlays: [...(project.overlays ?? []), o] });
     setOverlayUrl('');
-    setNote(`Overlay layer added at ${fmtSec(o.offsetSec)} ??? drag it on the violet lane.`);
+    setNote(`Overlay layer added at ${fmtSec(o.offsetSec)} — drag it on the violet lane.`);
   }
 
   async function save(): Promise<ReelProject | null> {
@@ -3126,7 +3126,7 @@ export default function ReelStudioPage() {
     if (!/^https?:\/\//i.test(url) || !project) return;
     const dur = await probeDuration(url);
     if (!dur) {
-      setError('Could not read that video URL ??? it must be a direct, public MP4/WebM link.');
+      setError('Could not read that video URL — it must be a direct, public MP4/WebM link.');
       return;
     }
     const name = url.split('/').pop()?.split('?')[0]?.slice(0, 60) || 'Clip';
@@ -3158,7 +3158,7 @@ export default function ReelStudioPage() {
       if (!put.ok) {
         const text = await put.text().catch(() => '');
         throw new Error(
-          `Upload rejected (${put.status})${text ? `: ${text.slice(0, 160)}` : ''} ??? if this mentions size, apply the bucket-limit migration.`,
+          `Upload rejected (${put.status})${text ? `: ${text.slice(0, 160)}` : ''} — if this mentions size, apply the bucket-limit migration.`,
         );
       }
       const url = String(mintJson.publicUrl || '');
@@ -3201,7 +3201,7 @@ export default function ReelStudioPage() {
 
   /**
    * R25: fal compose can't do in-points, so every clip with a `trimStartSec`
-   * gets materialized first ??? the ffmpeg worker re-cuts the head off for real
+   * gets materialized first — the ffmpeg worker re-cuts the head off for real
    * (the same path the silence chain uses), leaving a clean 0-start source.
    */
   async function materializeInPoints(): Promise<boolean> {
@@ -3209,7 +3209,7 @@ export default function ReelStudioPage() {
     for (const c of project.clips) {
       const ts = c.trimStartSec ?? 0;
       if (ts <= 0.05) continue;
-      setNote(`Materializing the in-point on "${c.name}" (ffmpeg head-cut)???`);
+      setNote(`Materializing the in-point on "${c.name}" (ffmpeg head-cut)…`);
       const saved = await save();
       if (!saved) return false;
       const json = await post({
@@ -3229,14 +3229,14 @@ export default function ReelStudioPage() {
   }
 
   async function compose() {
-    // THE SIMPLE RENDER ??? the local ffmpeg compose honors in-points natively,
+    // THE SIMPLE RENDER — the local ffmpeg compose honors in-points natively,
     // so there's NO in-point materialization pre-step anymore. Save and compose.
     const saved = await save();
     if (!saved) return;
     const json = await post({ action: 'compose', id: saved.id });
     if (json?.videoUrl) {
       setProject(json.project as ReelProject);
-      setNote(`Reel composed (${json.path === 'fal' ? 'fal' : 'local ffmpeg'}) ??? the final MP4 is ready below.`);
+      setNote(`Reel composed (${json.path === 'fal' ? 'fal' : 'local ffmpeg'}) — the final MP4 is ready below.`);
       void load();
     }
   }
@@ -3246,7 +3246,7 @@ export default function ReelStudioPage() {
     const saved = await save();
     if (!saved) return;
     setBusy(true);
-    setNote('Burning captions into the MP4 (word-accurate)???');
+    setNote('Burning captions into the MP4 (word-accurate)…');
     try {
       const res = await fetch(API, {
         method: 'POST',
@@ -3255,7 +3255,7 @@ export default function ReelStudioPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Burn-in failed');
-      setNote(`Captioned MP4 ready ??? ${json.words} words burned in.`);
+      setNote(`Captioned MP4 ready — ${json.words} words burned in.`);
       void navigator.clipboard?.writeText(String(json.url));
       window.open(String(json.url), '_blank');
     } catch (err) {
@@ -3345,7 +3345,7 @@ export default function ReelStudioPage() {
       return;
     }
     patch({ clips: [...project.clips, ...clips] });
-    setNote(`Board assembled ??? ${clips.length} scene(s) added to the timeline.`);
+    setNote(`Board assembled — ${clips.length} scene(s) added to the timeline.`);
     setTab('clips');
   }
 
@@ -3368,11 +3368,11 @@ export default function ReelStudioPage() {
     }
   }, [boardShots, project?.id]);
 
-  /** R6b Variant Lab: spin vault hook ?? body shape ?? vault outro into descendants. */
+  /** R6b Variant Lab: spin vault hook × body shape × vault outro into descendants. */
   async function spinVariantsLab() {
     if (!project) return;
     setError(null);
-    setNote('Spinning gene variants???');
+    setNote('Spinning gene variants…');
     try {
       const res = await fetch('/api/admin/reel-loop', {
         method: 'POST',
@@ -3383,8 +3383,8 @@ export default function ReelStudioPage() {
       if (json.success) {
         setNote(
           json.created.length > 0
-            ? `Variant Lab spun ${json.created.length} descendant(s) with vault genes ??? compose them with the queue.`
-            : 'Nothing new to spin ??? the Vault is empty (upload a hook/outro clip there first).',
+            ? `Variant Lab spun ${json.created.length} descendant(s) with vault genes — compose them with the queue.`
+            : 'Nothing new to spin — the Vault is empty (upload a hook/outro clip there first).',
         );
         void load();
       } else {
@@ -3436,7 +3436,7 @@ export default function ReelStudioPage() {
     if (!project || !currentClip) return;
     setBusy(true);
     setError(null);
-    setNote(`Split-screen rendering ??? ${currentClip.name} over ${a.name}???`);
+    setNote(`Split-screen rendering — ${currentClip.name} over ${a.name}…`);
     try {
       const res = await fetch('/api/admin/reel-splitscreen', {
         method: 'POST',
@@ -3470,7 +3470,7 @@ export default function ReelStudioPage() {
   }
 
 
-  /** Upload a reaction/intro/outro clip into the Vault (signed URL ??? probe ??? save). */
+  /** Upload a reaction/intro/outro clip into the Vault (signed URL — probe — save). */
   async function uploadToVault(file: File) {
     setBusy(true);
     setError(null);
@@ -3525,7 +3525,7 @@ export default function ReelStudioPage() {
   clockStateRef.current = { project, total };
   /**
    * R28 px/sec: never below the fit-to-width zoom. A 27s reel and a 3min reel
-   * both fill the exact same strip width ??? the ZOOM absorbs the length
+   * both fill the exact same strip width — the ZOOM absorbs the length
    * difference, not the layout. The zoom slider only zooms IN from fit
    * (past fit the track overflows and scrolls, as before).
    */
@@ -3558,7 +3558,7 @@ export default function ReelStudioPage() {
   const targetLen = targetLengthFor(postTarget);
   const targetSec = targetOverride ?? targetLen.target;
 
-  /** R3 Hook Score: recomputed on any timeline/caption/vault change ??? the Compose badge. */
+  /** R3 Hook Score: recomputed on any timeline/caption/vault change — the Compose badge. */
   const hook = useMemo(
     () =>
       project && project.clips.length
@@ -3571,7 +3571,7 @@ export default function ReelStudioPage() {
     [project, vaultAssets],
   );
 
-  // The badge and the Vault tab share the asset list ??? warm it once a reel is open.
+  // The badge and the Vault tab share the asset list — warm it once a reel is open.
   useEffect(() => {
     if (project && vaultAssets === null) void loadVault();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3705,7 +3705,7 @@ export default function ReelStudioPage() {
   }
 
   // The stage follows the clock: any clip-list change (add/trim/reorder/split)
-  // re-syncs the element to the clock position ??? the two can never drift apart.
+  // re-syncs the element to the clock position — the two can never drift apart.
   useEffect(() => {
     if (!project) return;
     if (clockRef.current.t > total) clockRef.current.t = total;
@@ -3715,7 +3715,7 @@ export default function ReelStudioPage() {
 
   /**
    * CUT TAIL (non-destructive): the scene now ENDS at the playhead. This is the
-   * fast "cut" ??? no server round-trip, instant on the strip, Ctrl+Z undoes it.
+   * fast "cut" — no server round-trip, instant on the strip, Ctrl+Z undoes it.
    */
   function cutTailAtPlayhead() {
     if (!project) return;
@@ -3730,7 +3730,7 @@ export default function ReelStudioPage() {
     patchClip(hit.clip.id, {
       trimEndSec: Math.round((hit.clip.durationSec - cutAt) * 10) / 10,
     });
-    setNote(`Tail cut ??? the scene now ends at ${fmtCs(local)}.`);
+    setNote(`Tail cut — the scene now ends at ${fmtCs(local)}.`);
   }
 
   /** Seek the whole timeline to a timeline-second (the CLOCK jumps + re-syncs). */
@@ -3756,7 +3756,7 @@ export default function ReelStudioPage() {
    */
   const [previewMode, setPreviewMode] = useState<'remotion' | 'edit'>('remotion');
 
-  /** R27 fancy subtitles (veed) ??? the settings the burn runs with. */
+  /** R27 fancy subtitles (veed) — the settings the burn runs with. */
   const [fancy, setFancy] = useState<{
     subtitleType: 'word' | 'line';
     position: 'top' | 'center' | 'bottom';
@@ -3794,12 +3794,12 @@ export default function ReelStudioPage() {
   async function renderFancyCaptions() {
     if (!project) return;
     if (!project.composedUrl) {
-      setError('Compose first ??? fancy subtitles burn into the composed MP4 (one flat video).');
+      setError('Compose first — fancy subtitles burn into the composed MP4 (one flat video).');
       return;
     }
     setFancyBusy(true);
     setError(null);
-    setNote('Fancy subtitles rendering via veed (word-timed ??? can take a minute)???');
+    setNote('Fancy subtitles rendering via veed (word-timed — can take a minute)…');
     try {
       const res = await fetch('/api/admin/reel-fancy-captions', {
         method: 'POST',
@@ -3808,7 +3808,7 @@ export default function ReelStudioPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Render failed');
-      setNote('Fancy subtitles ready ??? link copied.');
+      setNote('Fancy subtitles ready — link copied.');
       void navigator.clipboard?.writeText(String(json.url));
       window.open(String(json.url), '_blank');
     } catch (err) {
@@ -3819,7 +3819,7 @@ export default function ReelStudioPage() {
   }
 
   /**
-   * R25 INSTANT split at the playhead (S key) ??? NO server round-trip. Part A
+   * R25 INSTANT split at the playhead (S key) — NO server round-trip. Part A
    * keeps the id with the tail cut; part B rides the SAME source with an
    * in-point (`trimStartSec`). Undo-safe, works with the worker down. Compose
    * materializes the in-point via the worker at render time.
@@ -3838,7 +3838,7 @@ export default function ReelStudioPage() {
     clips.splice(hit.index, 1, a, b);
     patch({ clips });
     setSelectedClip(b.id);
-    setNote(`Split at ${fmtCs(hit.local)} ??? one scene became two (instant, Ctrl+Z undoes it).`);
+    setNote(`Split at ${fmtCs(hit.local)} — one scene became two (instant, Ctrl+Z undoes it).`);
   }
 
   /** R25 left-edge in-point trim: INSTANT (rides trimStartSec, no server). */
@@ -3869,7 +3869,7 @@ export default function ReelStudioPage() {
       };
       setProject(updated);
       setCcOn(true);
-      setNote(`Transcribed ${json.words.length} words ??? karaoke captions on.`);
+      setNote(`Transcribed ${json.words.length} words — karaoke captions on.`);
       await post({ action: 'save', project: updated });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Transcription failed');
@@ -3878,7 +3878,7 @@ export default function ReelStudioPage() {
     }
   }
 
-  /** R3: caption preset ??? a view setting, not an edit (no undo entry, saved straight through). */
+  /** R3: caption preset — a view setting, not an edit (no undo entry, saved straight through). */
   async function setCaptionStyle(preset: CaptionPreset) {
     if (!project || project.captionStyle === preset) return;
     const updated: ReelProject = { ...project, captionStyle: preset };
@@ -3903,16 +3903,16 @@ export default function ReelStudioPage() {
   }
 
   /**
-   * R20 drag-to-move: LOCAL-ONLY during the drag (no network ??? buttery smooth),
+   * R20 drag-to-move: LOCAL-ONLY during the drag (no network — buttery smooth),
    * then ONE save on pointer-up. Previously every pointermove POSTed the whole
-   * reel ??? the page flashed + felt clunky mid-drag.
+   * reel — the page flashed + felt clunky mid-drag.
    */
   function setCaptionOverridesLocal(patchOv: Partial<CaptionOverrides>) {
     if (!project) return;
     setProject({ ...project, captionOverrides: mergeCaptionOv(patchOv) });
   }
 
-  /** Raw split call for the silence chain ??? owns no busy state (the chain does). */
+  /** Raw split call for the silence chain — owns no busy state (the chain does). */
   async function splitCall(projectId: string, clipId: string, atSec: number) {
     const res = await fetch(API, {
       method: 'POST',
@@ -3930,7 +3930,7 @@ export default function ReelStudioPage() {
   }
 
   /**
-   * R3 auto-cut-silence: Whisper words ??? gap plan ??? the existing split worker
+   * R3 auto-cut-silence: Whisper words — gap plan — the existing split worker
    * does the cuts (first-to-last, each split in the current tail's local
    * seconds). Leading air = one split + drop the silent head; mid gaps =
    * split, split, drop the middle; trailing air = a plain tail trim (no
@@ -3942,10 +3942,10 @@ export default function ReelStudioPage() {
     setBusy(true);
     setError(null);
     try {
-      // 1 ??? words (transcribe on demand; silence detection rides them)
+      // 1 — words (transcribe on demand; silence detection rides them)
       let words = project.captions[clip.id] ?? [];
       if (!words.length) {
-        setNote('Transcribing the scene first ??? silence detection rides the Whisper words???');
+        setNote('Transcribing the scene first — silence detection rides the Whisper words…');
         const res = await fetch('/api/admin/reel-captions', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -3956,11 +3956,11 @@ export default function ReelStudioPage() {
         words = json.words as ReelWord[];
       }
 
-      // 2 ??? the plan (against the EFFECTIVE end, so an existing tail trim is honored)
+      // 2 — the plan (against the EFFECTIVE end, so an existing tail trim is honored)
       const effDur = effectiveClipDuration(clip);
       const gaps = findSilenceGaps(words, effDur);
       if (!gaps.length) {
-        setNote('No silent gaps ??? 0.6s in this scene ??? already tight.');
+        setNote('No silent gaps — 0.6s in this scene — already tight.');
         return;
       }
       const removed = gapTotalSec(gaps);
@@ -3970,11 +3970,11 @@ export default function ReelStudioPage() {
       );
       if (!ok) return;
 
-      // 3 ??? undo checkpoint, then save so the server's timeline matches ours
+      // 3 — undo checkpoint, then save so the server's timeline matches ours
       recordHistory();
       const saved = await save();
       if (!saved) return;
-      setBusy(true); // save() clears busy in its finally ??? the chain still runs
+      setBusy(true); // save() clears busy in its finally — the chain still runs
 
       let proj: ReelProject = { ...saved, captions: { ...saved.captions, [clip.id]: words } };
       const keptSegs = keptSegments(gaps, effDur);
@@ -3993,7 +3993,7 @@ export default function ReelStudioPage() {
           offset = gap.end;
           keptIds.push(tailId);
         } else if (gap.end >= effDur - 0.05) {
-          // trailing air: pure tail trim ??? no worker call
+          // trailing air: pure tail trim — no worker call
           const localStart = gap.start - offset;
           proj = {
             ...proj,
@@ -4020,10 +4020,10 @@ export default function ReelStudioPage() {
           keptIds.push(tailId);
         }
         cutCount += 1;
-        setNote(`Cutting silence??? ${cutCount}/${gaps.length}`);
+        setNote(`Cutting silence… ${cutCount}/${gaps.length}`);
       }
 
-      // 4 ??? karaoke re-timed onto the kept segments, then one final save
+      // 4 — karaoke re-timed onto the kept segments, then one final save
       const nextCaptions = { ...proj.captions };
       delete nextCaptions[clip.id];
       keptSegs.forEach((seg, i) => {
@@ -4036,7 +4036,7 @@ export default function ReelStudioPage() {
       setProject(proj);
       setSelectedClip(keptIds[0] ?? null);
       setNote(
-        `Silence cut ??? ${cutCount} gap${cutCount > 1 ? 's' : ''}, ${removed.toFixed(1)}s saved. Karaoke re-timed.`,
+        `Silence cut — ${cutCount} gap${cutCount > 1 ? 's' : ''}, ${removed.toFixed(1)}s saved. Karaoke re-timed.`,
       );
       await post({ action: 'save', project: proj });
       void load();
@@ -4050,7 +4050,7 @@ export default function ReelStudioPage() {
 
   /**
    * Execute the Director's action list against the live timeline. Every action
-   * is validated and clamped here ??? the Director can only trim/remove/move,
+   * is validated and clamped here — the Director can only trim/remove/move,
    * and never below 0.5s of a scene remaining. Returns human-readable
    * summaries of what actually happened.
    */
@@ -4129,15 +4129,15 @@ export default function ReelStudioPage() {
     }
   }
 
-  /** Cutdown Agent: one long video URL in ??? self-contained reels out, in the list. */
+  /** Cutdown Agent: one long video URL in — self-contained reels out, in the list. */
   async function runCutdown() {
     const url = window.prompt(
-      'Paste a public URL of a LONG video (???25MB) ??? the Cutdown Agent finds the reels inside it:',
+      'Paste a public URL of a LONG video (≤25MB) — the Cutdown Agent finds the reels inside it:',
     );
     if (!url || !/^https?:\/\//i.test(url.trim())) return;
     setBusy(true);
     setError(null);
-    setNote('Cutdown running ??? transcribing, picking, and cutting segments (can take a minute)???');
+    setNote('Cutdown running — transcribing, picking, and cutting segments (can take a minute)…');
     try {
       const res = await fetch('/api/admin/reel-cutdown', {
         method: 'POST',
@@ -4147,9 +4147,9 @@ export default function ReelStudioPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Cutdown failed');
       const names = Array.isArray(json.segments)
-        ? json.segments.map((s: { title: string }) => `???${s.title}???`).join(', ')
+        ? json.segments.map((s: { title: string }) => `“${s.title}”`).join(', ')
         : '';
-      setNote(`Cutdown made ${json.projects.length} reel(s): ${names} ??? they're in the reel list.`);
+      setNote(`Cutdown made ${json.projects.length} reel(s): ${names} — they're in the reel list.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cutdown failed');
@@ -4171,7 +4171,7 @@ export default function ReelStudioPage() {
           | undefined;
         setGeneLeaderLine(
           leader
-            ? `??? hook gene: ${leader.gene} ??? ${(leader.avgCtr * 100).toFixed(1)}% avg CTR across ${leader.variants} variant(s)`
+            ? `★ hook gene: ${leader.gene} — ${(leader.avgCtr * 100).toFixed(1)}% avg CTR across ${leader.variants} variant(s)`
             : null,
         );
       }
@@ -4197,7 +4197,7 @@ export default function ReelStudioPage() {
   async function composeBatch() {
     setBusy(true);
     setError(null);
-    setNote('Batch composing every reel with scenes (unchanged timelines reuse the cache)???');
+    setNote('Batch composing every reel with scenes (unchanged timelines reuse the cache)…');
     try {
       const res = await fetch('/api/admin/reel-loop', {
         method: 'POST',
@@ -4208,7 +4208,7 @@ export default function ReelStudioPage() {
       if (!json.success) throw new Error(json.error || 'Batch failed');
       setBatchResults(json.results);
       setNote(
-        `Batch done ??? ${json.results.filter((r: { status: string }) => r.status === 'composed').length} composed, ` +
+        `Batch done — ${json.results.filter((r: { status: string }) => r.status === 'composed').length} composed, ` +
           `${json.results.filter((r: { status: string }) => r.status === 'cached').length} cached, ` +
           `${json.results.filter((r: { status: string }) => r.status === 'failed').length} failed.`,
       );
@@ -4220,9 +4220,9 @@ export default function ReelStudioPage() {
     }
   }
 
-  /** Queue the batch as a job and poll it ??? the page stays editable while it runs. */
+  /** Queue the batch as a job and poll it — the page stays editable while it runs. */
   async function queueBatch() {
-    setNote('Batch queued ??? it runs in the background; results land here when done.');
+    setNote('Batch queued — it runs in the background; results land here when done.');
     try {
       const res = await fetch('/api/admin/reel-loop', {
         method: 'POST',
@@ -4245,7 +4245,7 @@ export default function ReelStudioPage() {
           const results = (sj.progress?.results ?? []) as { name: string; status: string }[];
           setBatchResults(results);
           setNote(
-            `Queued batch done ??? ${results.filter((r) => r.status === 'composed').length} composed, ` +
+            `Queued batch done — ${results.filter((r) => r.status === 'composed').length} composed, ` +
               `${results.filter((r) => r.status === 'cached').length} cached, ` +
               `${results.filter((r) => r.status === 'failed').length} failed.`,
           );
@@ -4254,7 +4254,7 @@ export default function ReelStudioPage() {
         }
         if (sj.status === 'failed') throw new Error(sj.error || 'Batch failed');
       }
-      setNote('Batch is still running ??? check the board in a minute.');
+      setNote('Batch is still running — check the board in a minute.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Queue failed');
     }
@@ -4273,7 +4273,7 @@ export default function ReelStudioPage() {
         setNote(
           json.updated > 0
             ? `Rolled ${json.clicksTotal.toLocaleString()} clicks onto ${json.updated} variant(s) from their tracked links.`
-            : 'No variant links yet ??? attach one with the + link button on a variant row.',
+            : 'No variant links yet — attach one with the + link button on a variant row.',
         );
       }
       void loadLoop();
@@ -4295,22 +4295,22 @@ export default function ReelStudioPage() {
     });
     const json = await res.json();
     if (json.ok || json.success) {
-      setNote('Linked ??? clicks roll up nightly, or hit "rollup" now.');
+      setNote('Linked — clicks roll up nightly, or hit "rollup" now.');
       void rollupMetrics();
     } else {
       setError(json.error || 'Link failed');
     }
   }
 
-  /** R13: the ONE Schedule sheet ??? a Scoreboard row (variant) or the current reel. */
+  /** R13: the ONE Schedule sheet — a Scoreboard row (variant) or the current reel. */
   const [schedRow, setSchedRow] = useState<LoopRow | null>(null);
   const [schedOpen, setSchedOpen] = useState(false);
   /** Thumbnail Lab: which variant/reel is being thumbnailed (null = closed). */
   const [thumbLabRow, setThumbLabRow] = useState<LoopRow | null>(null);
   const [thumbLabReel, setThumbLabReel] = useState(false);
-  /** The exported thumbnail URL per variant id ??? shows on the Scoreboard row after export. */
+  /** The exported thumbnail URL per variant id — shows on the Scoreboard row after export. */
   const [thumbByVariant, setThumbByVariant] = useState<Record<string, string>>({});
-  /** R14: bulk mode on the Scoreboard ??? pick variants, batch-schedule with settings check. */
+  /** R14: bulk mode on the Scoreboard — pick variants, batch-schedule with settings check. */
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -4318,7 +4318,7 @@ export default function ReelStudioPage() {
   /** Render the current reel's final MP4 (the ffmpeg compose) and return its URL. */
   async function renderCurrent(): Promise<string> {
     const saved = await save();
-    if (!saved) throw new Error('Save failed ??? the timeline did not reach the server.');
+    if (!saved) throw new Error('Save failed — the timeline did not reach the server.');
     const json = await post({ action: 'compose', id: saved.id });
     const url = typeof json?.videoUrl === 'string' ? (json.videoUrl as string) : '';
     if (!url) throw new Error('Compose returned no video URL.');
@@ -4328,7 +4328,7 @@ export default function ReelStudioPage() {
   }
 
   async function recordMetric(variantId: string) {
-    const raw = window.prompt('Result for this variant ??? "impressions clicks" (e.g. 1200 87):');
+    const raw = window.prompt('Result for this variant — "impressions clicks" (e.g. 1200 87):');
     if (!raw) return;
     const [imps, clicks] = raw.trim().split(/\s+/).map(Number);
     if (!(imps > 0) || !(clicks >= 0)) return;
@@ -4357,7 +4357,7 @@ export default function ReelStudioPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Loop failed');
       setNote(
-        `The loop turned. Winner: ???${json.winner.name}??? (${(json.winner.ctr * 100).toFixed(1)}% CTR) ??? ` +
+        `The loop turned. Winner: “${json.winner.name}” (${(json.winner.ctr * 100).toFixed(1)}% CTR) — ` +
           `${json.created.length} descendant drafts in your reel list.`,
       );
       void load();
@@ -4368,7 +4368,7 @@ export default function ReelStudioPage() {
     }
   }
 
-  /** Duplicate this reel as an A/B variant ("??? (B)") in the project list. */
+  /** Duplicate this reel as an A/B variant ("… (B)") in the project list. */
   async function duplicateAsVariant() {
 
 
@@ -4382,7 +4382,7 @@ export default function ReelStudioPage() {
       },
     });
     if (json?.project) {
-      setNote(`Variant saved ??? "${(json.project as ReelProject).name}" is in the reel list.`);
+      setNote(`Variant saved — "${(json.project as ReelProject).name}" is in the reel list.`);
       void load();
     }
   }
@@ -4431,7 +4431,7 @@ export default function ReelStudioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postTarget]);
 
-  // The copy pool persists per reel ??? Publish view edits, the canvas lens reads.
+  // The copy pool persists per reel — Publish view edits, the canvas lens reads.
   useEffect(() => {
     try {
       const raw = project?.id ? localStorage.getItem(`reel-studio:copy:${project.id}`) : null;
@@ -4515,7 +4515,7 @@ export default function ReelStudioPage() {
         e.preventDefault();
         cutTailAtPlayhead();
       } else if (e.key === ',' || e.key === '.') {
-        // , / . = frame-step (1/30s) ??? the precision nudge before a cut
+        // , / . = frame-step (1/30s) — the precision nudge before a cut
         e.preventDefault();
         stopClock();
         seekTimeline(clockRef.current.t + (e.key === ',' ? -1 : 1) / 30);
@@ -4559,7 +4559,7 @@ export default function ReelStudioPage() {
           }}
           className="ml-3 rounded-lg border border-bone/15 bg-ink px-2 py-1.5 text-xs text-bone/80"
         >
-          <option value="">??? pick a reel ???</option>
+          <option value="">— pick a reel —</option>
           {(projects ?? []).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name || 'Untitled reel'} ({p.clips.length})
@@ -4576,7 +4576,7 @@ export default function ReelStudioPage() {
         <button
           onClick={() => void runCutdown()}
           disabled={busy}
-          title="Cutdown Agent ??? one long video in, self-contained reels out"
+          title="Cutdown Agent — one long video in, self-contained reels out"
           className="inline-flex items-center gap-1 rounded-lg border border-bone/15 px-2.5 py-1.5 text-xs font-medium text-bone/60 hover:bg-bone/10 disabled:opacity-50"
         >
           <Scissors className="h-3.5 w-3.5" /> Cutdown
@@ -4591,7 +4591,7 @@ export default function ReelStudioPage() {
               className="ml-2 min-w-0 flex-1 rounded-lg border border-bone/15 bg-ink px-2.5 py-1.5 text-sm text-bone/85 outline-none focus:border-brass/40"
             />
             <span className="shrink-0 text-xs text-bone/40">
-              {project.clips.length} clips ?? {fmtSec(total)}
+              {project.clips.length} clips · {fmtSec(total)}
             </span>
             <button
               onClick={() => void save()}
@@ -4611,7 +4611,7 @@ export default function ReelStudioPage() {
                       ? 'border-bone/20 text-bone/60'
                       : 'border-red-500/30 text-red-300/80',
                 )}
-                title={`Hook score ${hook.score}/100${hook.verified ? '' : ' (unverified ??? transcribe scene 1)'}\n${hook.reasons.join('\n')}`}
+                title={`Hook score ${hook.score}/100${hook.verified ? '' : ' (unverified — transcribe scene 1)'}\n${hook.reasons.join('\n')}`}
               >
                 <Zap className="h-3 w-3" /> {hook.score}
               </span>
@@ -4627,7 +4627,7 @@ export default function ReelStudioPage() {
             <button
               onClick={() => void burnCaptions()}
               disabled={busy || Object.keys(project.captions ?? {}).length === 0}
-              title="Burn the karaoke captions INTO the MP4 (word-accurate with the stage) ??? downloads the captioned video"
+              title="Burn the karaoke captions INTO the MP4 (word-accurate with the stage) — downloads the captioned video"
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brass/40 bg-brass/[0.07] px-3 py-1.5 text-xs font-semibold text-brass hover:bg-brass/15 disabled:opacity-40"
             >
               <Zap className="h-3.5 w-3.5" /> Caption MP4
@@ -4710,7 +4710,7 @@ export default function ReelStudioPage() {
               </div>
               {(projects ?? []).length > 0 && (
                 <p className="mt-4 text-[10px] text-bone/30">
-                  ???or pick one of your {projects.length} reel(s) from the dropdown above.
+                  …or pick one of your {projects.length} reel(s) from the dropdown above.
                 </p>
               )}
             </div>
@@ -4721,7 +4721,7 @@ export default function ReelStudioPage() {
         <div className="flex min-h-0 flex-1">
           {/* left tools */}
           <aside className="flex shrink-0 border-r border-bone/10">
-            {/* the tool rail ??? tools go down the side vertically, never cramped */}
+            {/* the tool rail — tools go down the side vertically, never cramped */}
             <nav className="flex w-16 shrink-0 flex-col gap-1 border-r border-bone/10 p-1.5">
               {(
                 [
@@ -4770,7 +4770,7 @@ export default function ReelStudioPage() {
                   {tab === 'vault' && 'The Vault'}
                 </span>
                 <span className="text-[10px] text-bone/30">
-                  {tab === 'clips' && `${project.clips.length} scenes ?? ${fmtSec(total)}`}
+                  {tab === 'clips' && `${project.clips.length} scenes · ${fmtSec(total)}`}
                   {tab === 'director' && 'cuts execute live'}
                 </span>
               </div>
@@ -4778,13 +4778,13 @@ export default function ReelStudioPage() {
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {tab === 'clips' && (
                 <div className="space-y-2">
-                  {/* add scene ??? new material enters at the TOP of the panel */}
+                  {/* add scene — new material enters at the TOP of the panel */}
                   <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
                     <div className="flex items-center gap-1.5">
                       <input
                         value={addUrl}
                         onChange={(e) => setAddUrl(e.target.value)}
-                        placeholder="https://??? direct MP4/WebM"
+                        placeholder="https://… direct MP4/WebM"
                         className="min-w-0 flex-1 rounded-lg border border-bone/15 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
                       />
                       <button
@@ -4828,11 +4828,11 @@ export default function ReelStudioPage() {
                       <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-bone/10 bg-ink/60 p-1.5">
                         {hubPieces === null ? (
                           <p className="flex items-center gap-1.5 px-2 py-2 text-[10px] text-bone/40">
-                            <Loader2 className="h-3 w-3 animate-spin" /> Loading Hub renders???
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading Hub renders…
                           </p>
                         ) : hubPieces.length === 0 ? (
                           <p className="px-2 py-2 text-[10px] text-bone/30">
-                            No video renders in the Content Hub yet ??? generate one there, it lands here.
+                            No video renders in the Content Hub yet — generate one there, it lands here.
                           </p>
                         ) : (
                           hubPieces.map((p) => (
@@ -4858,7 +4858,7 @@ export default function ReelStudioPage() {
                   </div>
                   {project.clips.length === 0 && (
                     <p className="rounded-lg border border-dashed border-bone/10 px-3 py-4 text-xs text-bone/35">
-                      No scenes yet ??? add one above, or cut down a long video from the top bar.
+                      No scenes yet — add one above, or cut down a long video from the top bar.
                     </p>
                   )}
                   {project.clips.map((clip, i) => (
@@ -4886,7 +4886,7 @@ export default function ReelStudioPage() {
                           <div className="text-[10px] text-bone/40">
                             {fmtSec(effectiveClipDuration(clip))}
                             {clip.trimEndSec > 0 && (
-                              <span className="text-brass/70"> (???{fmtSec(clip.trimEndSec)})</span>
+                              <span className="text-brass/70"> (−{fmtSec(clip.trimEndSec)})</span>
                             )}
                           </div>
                         </div>
@@ -4955,7 +4955,7 @@ export default function ReelStudioPage() {
                           className="w-14 rounded border border-bone/15 bg-ink px-1 py-0.5 text-[10px] text-bone/80"
                         />
                       </div>
-                      {/* R15 Motion Lab: preset chips on the SELECTED scene ??? live CSS preview */}
+                      {/* R15 Motion Lab: preset chips on the SELECTED scene — live CSS preview */}
                       {selectedClip === clip.id && (
                         <div
                           className="mt-2 flex flex-wrap items-center gap-1 border-t border-bone/10 pt-2"
@@ -4992,13 +4992,13 @@ export default function ReelStudioPage() {
                               {p.label}
                             </button>
                           ))}
-                          {/* per-key editor ??? SLIDERS, not number boxes: ??? time + a zoom slider per key */}
+                          {/* per-key editor — SLIDERS, not number boxes: — time + a zoom slider per key */}
                           {clip.motion && clip.motion.length >= 2 && (
                             <div className="mt-1.5 w-full space-y-1.5 rounded-lg border border-brass/25 bg-brass/[0.04] p-2">
                               {clip.motion.map((k, ki) => (
                                 <div key={ki}>
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-[9px] text-brass">???</span>
+                                    <span className="text-[9px] text-brass">★</span>
                                     <input
                                       type="number"
                                       step={0.05}
@@ -5006,7 +5006,7 @@ export default function ReelStudioPage() {
                                       max={effectiveClipDuration(clip)}
                                       value={k.t}
                                       onChange={(e) => setMotionKey(clip, ki, { t: Number(e.target.value) })}
-                                      title="key time (s) ??? or drag the ??? on the timeline"
+                                      title="key time (s) — or drag the — on the timeline"
                                       className="w-14 rounded border border-bone/15 bg-ink px-1.5 py-0.5 text-[10px] text-bone/80"
                                     />
                                     <input
@@ -5016,18 +5016,18 @@ export default function ReelStudioPage() {
                                       step={0.01}
                                       value={k.scale}
                                       onChange={(e) => setMotionKey(clip, ki, { scale: Number(e.target.value) })}
-                                      title={`zoom ${k.scale.toFixed(2)}??`}
+                                      title={`zoom ${k.scale.toFixed(2)}×`}
                                       className="min-w-0 flex-1 accent-brass"
                                     />
                                     <span className="w-10 text-right text-[9px] font-semibold text-brass/80">
-                                      {k.scale.toFixed(2)}??
+                                      {k.scale.toFixed(2)}×
                                     </span>
                                     <button
                                       onClick={() => removeMotionKey(clip, ki)}
                                       className="text-bone/30 hover:text-red-300"
                                       title="Delete this key"
                                     >
-                                      ???
+                                      —
                                     </button>
                                   </div>
                                   {/* fine controls only when the key actually pans/rolls */}
@@ -5073,7 +5073,7 @@ export default function ReelStudioPage() {
                     </div>
                   ))}
 
-                  {/* audio bed ??? folded into Scenes (the timeline re-times it by dragging) */}
+                  {/* audio bed — folded into Scenes (the timeline re-times it by dragging) */}
                   <div className="rounded-xl border border-bone/10 bg-bone/[0.04] p-2.5">
                     <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-bone/40">
                       <Music className="h-3 w-3" /> Audio bed
@@ -5103,7 +5103,7 @@ export default function ReelStudioPage() {
                           value={voText}
                           onChange={(e) => setVoText(e.target.value)}
                           rows={2}
-                          placeholder="Voiceover script ??? one or two sentences, spoken word"
+                          placeholder="Voiceover script — one or two sentences, spoken word"
                           className="w-full rounded-lg border border-bone/15 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
                         />
                         <div className="flex gap-1.5">
@@ -5136,7 +5136,7 @@ export default function ReelStudioPage() {
                     )}
                   </div>
 
-                  {/* R25 overlay (b-roll) layers ??? add a clip ON TOP at the playhead */}
+                  {/* R25 overlay (b-roll) layers — add a clip ON TOP at the playhead */}
                   <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.05] p-2.5">
                     <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
                       <Layers className="h-3 w-3" /> Overlay layers
@@ -5148,7 +5148,7 @@ export default function ReelStudioPage() {
                       <input
                         value={overlayUrl}
                         onChange={(e) => setOverlayUrl(e.target.value)}
-                        placeholder="https://??? b-roll MP4/WebM"
+                        placeholder="https://… b-roll MP4/WebM"
                         className="min-w-0 flex-1 rounded-lg border border-violet-500/25 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
                       />
                       <button
@@ -5218,7 +5218,7 @@ export default function ReelStudioPage() {
                       onCustomize={(patchOv) => void setCaptionOverrides(patchOv)}
                     />
                   </div>
-                  {/* R27 FANCY SUBTITLES (veed) ??? word-timed burn-in via fal */}
+                  {/* R27 FANCY SUBTITLES (veed) — word-timed burn-in via fal */}
                   <div className="shrink-0 space-y-2 rounded-xl border border-brass/25 bg-brass/[0.04] p-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-brass/80">
                       <Sparkles className="h-3 w-3" /> Fancy subtitles
@@ -5226,7 +5226,7 @@ export default function ReelStudioPage() {
                         veed burn-in
                       </span>
                     </div>
-                    {/* the VEED preset catalog ??? Basic (1??) and Dynamic (2??) tiers */}
+                    {/* the VEED preset catalog — Basic (1×) and Dynamic (2×) tiers */}
                     <div>
                       <div className="mb-1 flex items-center gap-1">
                         {(['basic', 'dynamic'] as const).map((t) => (
@@ -5238,15 +5238,15 @@ export default function ReelStudioPage() {
                               presetTier === t ? 'bg-brass text-ink' : 'text-bone/45 hover:bg-bone/10',
                             )}
                           >
-                            {t === 'basic' ? 'Basic ?? 1??' : 'Dynamic ?? 2??'}
+                            {t === 'basic' ? 'Basic · 1×' : 'Dynamic · 2×'}
                           </button>
                         ))}
                         <button
                           onClick={() => setExampleOpen((v) => !v)}
                           className="ml-auto text-[8px] font-semibold text-brass/70 hover:underline"
-                          title="Watch the official VEED preset compilation ??? what each style looks like"
+                          title="Watch the official VEED preset compilation — what each style looks like"
                         >
-                          {exampleOpen ? 'hide example ???' : 'see styles ???'}
+                          {exampleOpen ? 'hide example ↑' : 'see styles ↓'}
                         </button>
                       </div>
                       {exampleOpen && (
@@ -5274,13 +5274,13 @@ export default function ReelStudioPage() {
                           </button>
                         ))}
                       </div>
-                      {/* the cost readout ??? multiplier ?? base rate, never a surprise bill */}
+                      {/* the cost readout — multiplier × base rate, never a surprise bill */}
                       <p className="mt-1 flex items-center justify-between text-[8px] text-bone/35">
                         <span>
-                          {veedCostMultiplier(fancy.preset, fancy.resolution)}?? base rate
+                          {veedCostMultiplier(fancy.preset, fancy.resolution)}× base rate
                         </span>
                         <span>
-                          ??? ${veedCostEstimate({ presetId: fancy.preset, resolution: fancy.resolution, durationSec: total }).toFixed(2)} for this reel
+                          → ${veedCostEstimate({ presetId: fancy.preset, resolution: fancy.resolution, durationSec: total }).toFixed(2)} for this reel
                         </span>
                       </p>
                     </div>
@@ -5289,25 +5289,25 @@ export default function ReelStudioPage() {
                         value={fancy.resolution}
                         onChange={(e) => setFancy((f) => ({ ...f, resolution: e.target.value as '1080p' | '4k' }))}
                         className="rounded-lg border border-bone/15 bg-ink px-1.5 py-1 text-[9px] text-bone/80"
-                        title="Output resolution ??? 4K is 2?? the base rate"
+                        title="Output resolution — 4K is 2× the base rate"
                       >
-                        <option value="1080p">1080p ?? 1??</option>
-                        <option value="4k">4K ?? 2??</option>
+                        <option value="1080p">1080p · 1×</option>
+                        <option value="4k">4K · 2×</option>
                       </select>
                       <input
                         value={fancy.translationLanguage}
                         onChange={(e) => setFancy((f) => ({ ...f, translationLanguage: e.target.value }))}
                         placeholder="translate to (e.g. es)"
                         className="rounded-lg border border-bone/15 bg-ink px-1.5 py-1 text-[9px] text-bone/80 outline-none placeholder:text-bone/25"
-                        title="Translate the subtitles into a BCP-47 language (es, fr, pt, de???) ??? leave empty for the source language"
+                        title="Translate the subtitles into a BCP-47 language (es, fr, pt, de…) — leave empty for the source language"
                       />
                     </div>
                     <input
                       value={fancy.customVocabulary}
                       onChange={(e) => setFancy((f) => ({ ...f, customVocabulary: e.target.value }))}
-                      placeholder="custom vocabulary (brand names, jargon ??? comma separated)"
+                      placeholder="custom vocabulary (brand names, jargon — comma separated)"
                       className="w-full rounded-lg border border-bone/15 bg-ink px-1.5 py-1 text-[9px] text-bone/80 outline-none placeholder:text-bone/25"
-                      title="Words ASR should never mishear ??? your brand name, product names, jargon. Up to 100, whole-word case-insensitive."
+                      title="Words ASR should never mishear — your brand name, product names, jargon. Up to 100, whole-word case-insensitive."
                     />
                     <div className="grid grid-cols-2 gap-1.5">
                       <select
@@ -5400,7 +5400,7 @@ export default function ReelStudioPage() {
                         <Sparkles className="h-3.5 w-3.5" />
                       )}
                       {fancyBusy
-                        ? 'Rendering???'
+                        ? 'Rendering…'
                         : project.composedUrl
                           ? 'Burn fancy subtitles'
                           : 'Compose first to burn'}
@@ -5413,11 +5413,11 @@ export default function ReelStudioPage() {
                 <div className="flex h-full flex-col gap-2">
                   <div className="rounded-xl border border-brass/25 bg-brass/[0.06] px-2.5 py-2">
                     <p className="text-[10px] font-semibold text-brass/90">
-                      The Director sees your timeline ??? and its cuts EXECUTE on it.
+                      The Director sees your timeline — and its cuts EXECUTE on it.
                     </p>
                     <p className="mt-0.5 text-[10px] leading-relaxed text-bone/45">
-                      {project.clips.length} scenes ?? {fmtSec(total)} loaded. Ask it to tighten,
-                      reorder, or cut scenes ??? Ctrl+Z undoes anything it does.
+                      {project.clips.length} scenes · {fmtSec(total)} loaded. Ask it to tighten,
+                      reorder, or cut scenes — Ctrl+Z undoes anything it does.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -5476,7 +5476,7 @@ export default function ReelStudioPage() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') void sendDirector();
                       }}
-                      placeholder="Cut the slow parts???"
+                      placeholder="Cut the slow parts…"
                       className="min-w-0 flex-1 rounded-lg border border-bone/15 bg-ink px-2.5 py-2 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
                     />
                     <button
@@ -5497,12 +5497,12 @@ export default function ReelStudioPage() {
                     board ranks variants by CTR, crowns the winner, and spins descendant drafts
                     from it.
                     <span className="mt-1 block text-bone/35">
-                      spin = swap hook/body/outro genes from the Vault into new variants ?? queue =
-                      compose in the background ?? rollup = pull clicks from your tracked links ??
+                      spin = swap hook/body/outro genes from the Vault into new variants · queue =
+                      compose in the background · rollup = pull clicks from your tracked links ·
                       run the loop = crown a winner and spin descendants from it
                     </span>
                   </p>
-                  {/* action rows ??? row 1: the three mains; row 2: utilities */}
+                  {/* action rows — row 1: the three mains; row 2: utilities */}
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => void composeBatch()}
@@ -5514,7 +5514,7 @@ export default function ReelStudioPage() {
                     <button
                       onClick={() => void runWeeklyLoop()}
                       disabled={busy}
-                      title="Winner ??? three descendant drafts"
+                      title="Winner — three descendant drafts"
                       className="inline-flex items-center gap-1 rounded-lg border border-brass/40 px-2.5 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
                     >
                       <Sparkles className="h-3 w-3" /> Run the loop
@@ -5547,7 +5547,7 @@ export default function ReelStudioPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => void queueBatch()}
-                      title="Compose in the background (agent_jobs) ??? the page stays editable"
+                      title="Compose in the background (agent_jobs) — the page stays editable"
                       className="inline-flex items-center gap-1 rounded-lg border border-bone/15 px-2.5 py-1.5 text-[10px] font-semibold text-bone/60 hover:bg-bone/10"
                     >
                       queue batch
@@ -5575,7 +5575,7 @@ export default function ReelStudioPage() {
                     >
                       {bulkMode ? `bulk (${bulkSelected.size})` : 'bulk'}
                     </button>
-                    {/* Bulk schedule button ??? only when variants are picked in bulk mode */}
+                    {/* Bulk schedule button — only when variants are picked in bulk mode */}
                     {bulkMode && bulkSelected.size > 0 && (
                       <button
                         onClick={() => setBulkOpen(true)}
@@ -5609,7 +5609,7 @@ export default function ReelStudioPage() {
                   )}
                   {loopWinner && (
                     <p className="rounded-lg border border-brass/30 bg-brass/10 px-2.5 py-1.5 text-[10px] text-brass/90">
-                      Winner: <strong>{loopWinner.projectName}</strong> ???{' '}
+                      Winner: <strong>{loopWinner.projectName}</strong> —{' '}
                       {(loopWinner.ctr * 100).toFixed(1)}% CTR
                     </p>
                   )}
@@ -5624,11 +5624,11 @@ export default function ReelStudioPage() {
                         onClick={() => void loadLoop()}
                         className="text-[11px] text-bone/40 hover:underline"
                       >
-                        Load variants???
+                        Load variants…
                       </button>
                     ) : loopRows.length === 0 ? (
                       <p className="text-[11px] text-bone/30">
-                        No variants yet ??? compose a batch, post the MP4s, record the results here.
+                        No variants yet — compose a batch, post the MP4s, record the results here.
                       </p>
                     ) : (
                       loopRows.map((r) => {
@@ -5666,33 +5666,33 @@ export default function ReelStudioPage() {
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[11px] font-medium text-bone/85">
-                                {isWinner && <span className="mr-1 text-brass">???</span>}
+                                {isWinner && <span className="mr-1 text-brass">★</span>}
                                 {r.projectName}
                               </div>
                               <div className="text-[10px] text-bone/40">
-                                {r.impressions.toLocaleString()} imp ?? {r.clicks.toLocaleString()} clicks
-                                {r.impressions > 0 && ` ?? ${(ctr * 100).toFixed(1)}%`}
+                                {r.impressions.toLocaleString()} imp · {r.clicks.toLocaleString()} clicks
+                                {r.impressions > 0 && ` · ${(ctr * 100).toFixed(1)}%`}
                               </div>
-                              {/* R14 schedule chip: "Scheduled ?? YouTube Shorts" when the variant is on the planner */}
+                              {/* R14 schedule chip: "Scheduled · YouTube Shorts" when the variant is on the planner */}
                               {loopStatuses[r.variant.id]?.scheduled && (
                                 <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-emerald-300/80">
                                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                                   {loopStatuses[r.variant.id]?.publishState === 'published' ? 'Published' : 'Scheduled'}
                                   {loopStatuses[r.variant.id]?.platform
-                                    ? ` ?? ${platformFor(loopStatuses[r.variant.id]!.platform!)?.label ?? loopStatuses[r.variant.id]!.platform}`
+                                    ? ` · ${platformFor(loopStatuses[r.variant.id]!.platform!)?.label ?? loopStatuses[r.variant.id]!.platform}`
                                     : ''}
                                   {loopStatuses[r.variant.id]?.format
                                     ? ` ${postTypeLabel(loopStatuses[r.variant.id]!.format!)}`
                                     : ''}
                                 </p>
                               )}
-                              {/* R14 link chip: "linked ?? /go/abc ?? 42 clicks" when a tracked link is attached */}
+                              {/* R14 link chip: "linked · /go/abc · 42 clicks" when a tracked link is attached */}
                               {loopStatuses[r.variant.id]?.linkCode && (
                                 <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-sky-300/80">
                                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-400" />
-                                  linked ?? /go/{loopStatuses[r.variant.id]!.linkCode}
+                                  linked · /go/{loopStatuses[r.variant.id]!.linkCode}
                                   {(loopStatuses[r.variant.id]!.linkClicks ?? 0) > 0 &&
-                                    ` ?? ${loopStatuses[r.variant.id]!.linkClicks!.toLocaleString()} clicks`}
+                                    ` · ${loopStatuses[r.variant.id]!.linkClicks!.toLocaleString()} clicks`}
                                 </p>
                               )}
                             </div>
@@ -5722,8 +5722,8 @@ export default function ReelStudioPage() {
                               )}
                               title={
                                 loopStatuses[r.variant.id]?.linkCode
-                                  ? `Linked to /go/${loopStatuses[r.variant.id]!.linkCode} ??? click to update`
-                                  : 'Attach a tracked link ??? clicks roll up automatically'
+                                  ? `Linked to /go/${loopStatuses[r.variant.id]!.linkCode} — click to update`
+                                  : 'Attach a tracked link — clicks roll up automatically'
                               }
                             >
                               {loopStatuses[r.variant.id]?.linkCode ? 'update link' : '+ link'}
@@ -5731,7 +5731,7 @@ export default function ReelStudioPage() {
                             <button
                               onClick={() => void recordMetric(r.variant.id)}
                               className="shrink-0 rounded border border-bone/15 px-1.5 py-1 text-[9px] text-bone/50 hover:bg-bone/10"
-                              title={`Record impressions/clicks ??? current: ${r.impressions.toLocaleString()} imp, ${r.clicks.toLocaleString()} clicks`}
+                              title={`Record impressions/clicks — current: ${r.impressions.toLocaleString()} imp, ${r.clicks.toLocaleString()} clicks`}
                             >
                               + result
                             </button>
@@ -5758,7 +5758,7 @@ export default function ReelStudioPage() {
                         .filter((a) => a.kind === 'intro' || a.kind === 'reaction')
                         .map((a) => (
                           <option key={a.id} value={a.id}>
-                            ??? {a.name}
+                            → {a.name}
                           </option>
                         ))}
                     </select>
@@ -5773,7 +5773,7 @@ export default function ReelStudioPage() {
                         .filter((a) => a.kind === 'outro' || a.kind === 'reaction')
                         .map((a) => (
                           <option key={a.id} value={a.id}>
-                            ??? {a.name}
+                            → {a.name}
                           </option>
                         ))}
                     </select>
@@ -5806,9 +5806,9 @@ export default function ReelStudioPage() {
                         void loadVault();
                       }}
                       className="ml-auto text-[9px] font-semibold text-brass/70 hover:underline"
-                      title="Recompute ??? win rates from the loop's recorded metrics"
+                      title="Recompute — win rates from the loop's recorded metrics"
                     >
-                      sync ???
+                      sync …
                     </button>
                     <button
                       onClick={() => void loadVault()}
@@ -5858,14 +5858,14 @@ export default function ReelStudioPage() {
                   <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
                     {vaultAssets === null ? (
                       <p className="flex items-center gap-1.5 px-1 py-2 text-[10px] text-bone/40">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Opening the Vault???
+                        <Loader2 className="h-3 w-3 animate-spin" /> Opening the Vault…
                       </p>
                     ) : vaultAssets.filter((a) => vaultKindFilter === 'all' || a.kind === vaultKindFilter)
                         .length === 0 ? (
                       <p className="rounded-lg border border-dashed border-bone/10 px-3 py-4 text-[10px] leading-relaxed text-bone/35">
-                        The Vault is empty ??? upload your first reaction clip above. Intros pin to
+                        The Vault is empty — upload your first reaction clip above. Intros pin to
                         scene 0, outros pin to the end, reactions drop in anywhere as pattern
-                        interrupts. Every clip earns a ??? win rate as the loop records results.
+                        interrupts. Every clip earns a — win rate as the loop records results.
                       </p>
                     ) : (
                       vaultAssets
@@ -5885,14 +5885,14 @@ export default function ReelStudioPage() {
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-[11px] font-medium text-bone/85">
                                   {stars > 0 && (
-                                    <span className="mr-1 text-brass">{'???'.repeat(stars)}</span>
+                                    <span className="mr-1 text-brass">{'★'.repeat(stars)}</span>
                                   )}
                                   {a.name}
                                 </div>
                                 <div className="text-[9px] text-bone/40">
-                                  {a.kind} ?? {fmtSec(a.durationSec)}
-                                  {a.tags.length > 0 && ` ?? ${a.tags.slice(0, 3).join(', ')}`}
-                                  {a.winRate != null && ` ?? ${(a.winRate * 100).toFixed(1)}%`}
+                                  {a.kind} · {fmtSec(a.durationSec)}
+                                  {a.tags.length > 0 && ` · ${a.tags.slice(0, 3).join(', ')}`}
+                                  {a.winRate != null && ` · ${(a.winRate * 100).toFixed(1)}%`}
                                 </div>
                               </div>
                               {a.kind === 'reaction' && (
@@ -5902,7 +5902,7 @@ export default function ReelStudioPage() {
                                   className="shrink-0 rounded border border-bone/20 px-1.5 py-1 text-[9px] font-semibold text-bone/60 hover:bg-bone/10 disabled:opacity-40"
                                   title="Split-screen: current scene on top, this reaction on the bottom third"
                                 >
-                                  ??? react
+                                  → react
                                 </button>
                               )}
                               <button
@@ -5936,7 +5936,7 @@ export default function ReelStudioPage() {
               {tab === 'post' && (
                 <div className="space-y-2">
                   <p className="rounded-xl border border-bone/10 bg-bone/[0.03] px-2.5 py-2 text-[10px] leading-relaxed text-bone/45">
-                    The post's assets for the current target ??? thumbnail, title, caption. These
+                    The post's assets for the current target — thumbnail, title, caption. These
                     feed the canvas lens and Publish view (one shared copy pool).
                   </p>
                   {currentClip && (
@@ -6015,18 +6015,18 @@ export default function ReelStudioPage() {
                         }))
                       }
                       rows={3}
-                      placeholder="The caption ??? hook lives on line one"
+                      placeholder="The caption — hook lives on line one"
                       className="w-full rounded-lg border border-bone/15 bg-ink px-2.5 py-2 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
                     />
                   </div>
                   {/* THE render: Remotion renders the real React/CSS caption
                       components frame by frame, so the MP4 matches the stage.
-                      It starts a Lambda render and polls ??? never blocks. */}
+                      It starts a Lambda render and polls — never blocks. */}
                   <RenderPanel
                     reelId={project.id}
                     onRendered={(url) => {
                       patch({ composedUrl: url });
-                      setNote('Render done ??? captions and animations are burned in. Save to keep the link.');
+                      setNote('Render done — captions and animations are burned in. Save to keep the link.');
                     }}
                   />
                   <div className="flex gap-1.5">
@@ -6043,7 +6043,7 @@ export default function ReelStudioPage() {
                       className="flex-1 rounded-lg bg-brass px-2.5 py-2 text-[10px] font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
                       title="Render the final MP4 and schedule it to the planner"
                     >
-                      Schedule???
+                      Schedule…
                     </button>
                   </div>
                 </div>
@@ -6051,7 +6051,7 @@ export default function ReelStudioPage() {
 
               {tab === 'genes' && (
                 <div className="space-y-2">
-                  {/* R11 Spin Lab ??? the mechanic, visible: HOOK ?? BODY ?? OUTRO recombine */}
+                  {/* R11 Spin Lab — the mechanic, visible: HOOK × BODY × OUTRO recombine */}
                   <div className="rounded-xl border border-brass/25 bg-brass/[0.04] p-2.5">
                     <p className="mb-2 text-[10px] leading-relaxed text-bone/50">
                       <strong className="text-brass/90">Spin = stitch a new variant.</strong> A hook
@@ -6120,7 +6120,7 @@ export default function ReelStudioPage() {
                             ))}
                           {(vaultAssets ?? []).filter((a) => a.kind === 'outro').length === 0 && (
                             <p className="rounded-lg border border-dashed border-bone/15 p-2 text-center text-[8px] leading-3 text-bone/30">
-                              optional ??? upload a CTA outro
+                              optional — upload a CTA outro
                             </p>
                           )}
                         </div>
@@ -6130,7 +6130,7 @@ export default function ReelStudioPage() {
                       onClick={() => void spinVariantsLab()}
                       disabled={busy || project.clips.length === 0}
                       className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[11px] font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
-                      title="Stitch every hook ?? body ?? outro into new descendant reels"
+                      title="Stitch every hook × body × outro into new descendant reels"
                     >
                       <Sparkles className="h-3.5 w-3.5" /> Spin variants
                     </button>
@@ -6152,7 +6152,7 @@ export default function ReelStudioPage() {
                       onClick={() => void loadLoop()}
                       className="text-[11px] text-bone/40 hover:underline"
                     >
-                      Load variants???
+                      Load variants…
                     </button>
                   ) : (
                     (() => {
@@ -6166,7 +6166,7 @@ export default function ReelStudioPage() {
                       if (rows.length === 0) {
                         return (
                           <p className="rounded-lg border border-dashed border-bone/10 px-3 py-4 text-[10px] leading-relaxed text-bone/30">
-                            No descendants yet ??? hit <strong className="text-brass/80">spin</strong>{' '}
+                            No descendants yet — hit <strong className="text-brass/80">spin</strong>{' '}
                             on the Scoreboard to recombine this reel with Vault genes.
                           </p>
                         );
@@ -6205,13 +6205,13 @@ export default function ReelStudioPage() {
                               />
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-[11px] font-semibold text-bone/85">
-                                  {isWinner && <span className="mr-1 text-brass">???</span>}
+                                  {isWinner && <span className="mr-1 text-brass">★</span>}
                                   {r.projectName}
                                 </p>
                                 <p className="text-[9px] text-bone/40">
                                   {ctr != null
-                                    ? `${(ctr * 100).toFixed(1)}% CTR ?? ${r.impressions.toLocaleString()} imp`
-                                    : 'not posted yet ??? click to edit it'}
+                                    ? `${(ctr * 100).toFixed(1)}% CTR · ${r.impressions.toLocaleString()} imp`
+                                    : 'not posted yet — click to edit it'}
                                 </p>
                               </div>
                             </div>
@@ -6247,7 +6247,7 @@ export default function ReelStudioPage() {
                 <div className="space-y-2">
                   <p className="rounded-xl border border-bone/10 bg-bone/[0.03] px-2.5 py-2 text-[10px] leading-relaxed text-bone/45">
                     The Board: story first. Shots in order, each with its Seedance prompt and its
-                    footage ??? Assemble lays them on the timeline as scenes.
+                    footage — Assemble lays them on the timeline as scenes.
                   </p>
                   <div className="flex items-center gap-1.5">
                     <input
@@ -6264,7 +6264,7 @@ export default function ReelStudioPage() {
                       <Sparkles className="h-3 w-3" /> Suggest
                     </button>
                   </div>
-                  {storyLine && <p className="text-[10px] italic text-bone/45">???{storyLine}???</p>}
+                  {storyLine && <p className="text-[10px] italic text-bone/45">“{storyLine}”</p>}
                   {boardShots.map((s, i) => (
                     <div key={s.id} className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.03] p-2">
                       <div className="flex items-center gap-1.5">
@@ -6288,14 +6288,14 @@ export default function ReelStudioPage() {
                           disabled={i === 0}
                           className="text-bone/40 hover:text-bone disabled:opacity-20"
                         >
-                          ???
+                          —
                         </button>
                         <button
                           onClick={() => moveBoardShot(s.id, 1)}
                           disabled={i === boardShots.length - 1}
                           className="text-bone/40 hover:text-bone disabled:opacity-20"
                         >
-                          ???
+                          —
                         </button>
                         <button
                           onClick={() => removeBoardShot(s.id)}
@@ -6315,7 +6315,7 @@ export default function ReelStudioPage() {
                         <input
                           value={s.url}
                           onChange={(e) => patchShot(s.id, { url: e.target.value })}
-                          placeholder="https://??? footage for this shot"
+                          placeholder="https://… footage for this shot"
                           className="min-w-0 flex-1 rounded border border-bone/15 bg-ink px-1.5 py-1 text-[10px] text-bone/80 outline-none placeholder:text-bone/25"
                         />
                         <button
@@ -6343,14 +6343,14 @@ export default function ReelStudioPage() {
                       disabled={busy || !boardShots.some((s) => s.url.trim())}
                       className="flex-1 rounded-lg bg-brass px-2 py-1.5 text-[10px] font-semibold text-ink disabled:opacity-40"
                     >
-                      Assemble ???
+                      Assemble →
                     </button>
                   </div>
                   {hubOpen && hubShotId && (
                     <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-bone/10 bg-ink/60 p-1.5">
                       {hubPieces === null ? (
                         <p className="flex items-center gap-1.5 px-2 py-2 text-[10px] text-bone/40">
-                          <Loader2 className="h-3 w-3 animate-spin" /> Loading Hub renders???
+                          <Loader2 className="h-3 w-3 animate-spin" /> Loading Hub renders…
                         </p>
                       ) : hubPieces.length === 0 ? (
                         <p className="px-2 py-2 text-[10px] text-bone/30">
@@ -6403,7 +6403,7 @@ export default function ReelStudioPage() {
                   )}
                   title={geneStrip ? 'Hide the variant gene strip' : 'Show the variant gene strip'}
                 >
-                  {geneStrip ? '??? genes' : 'genes ???'}
+                  {geneStrip ? '↑ genes' : 'genes ↓'}
                 </button>
                 <button
                   onClick={() => setPreviewMode((m) => (m === 'remotion' ? 'edit' : 'remotion'))}
@@ -6423,9 +6423,9 @@ export default function ReelStudioPage() {
                   <button
                     onClick={() => setTargetOpen((v) => !v)}
                     className="flex items-center gap-1.5 rounded-md border border-brass/40 px-2.5 py-1 text-[10px] font-semibold text-brass"
-                    title="Change the post target ??? the whole studio follows"
+                    title="Change the post target — the whole studio follows"
                   >
-                    <BrandLogo id={postTarget.brand} active /> {targetTypeLabel(postTarget)} ???
+                    <BrandLogo id={postTarget.brand} active /> {targetTypeLabel(postTarget)} ▾
                   </button>
                   {targetOpen && (
                     <div className="absolute left-1/2 top-8 z-40 max-h-72 w-52 -translate-x-1/2 overflow-y-auto rounded-xl border border-bone/15 bg-ink p-1.5 shadow-2xl">
@@ -6459,22 +6459,22 @@ export default function ReelStudioPage() {
               </div>
               <div ref={stageRef} className="flex min-h-0 items-center justify-center overflow-hidden">
 
-                {/* R10 variant gene strip ??? the gene flow, always beside the canvas (hideable) */}
+                {/* R10 variant gene strip — the gene flow, always beside the canvas (hideable) */}
                 {geneStrip && (
                   <div className="mr-3 flex w-40 shrink-0 flex-col gap-2 self-stretch overflow-y-auto border-r border-bone/10 pr-3">
                     <p className="text-[9px] font-semibold uppercase tracking-wide text-bone/30">
                       variants
                     </p>
-                    {/* the BASE card ??? one click back to the reel you're cutting */}
+                    {/* the BASE card — one click back to the reel you're cutting */}
                     <button
                       onClick={() => setSelectedClip(null)}
                       className="rounded-xl border border-brass/40 bg-brass/[0.06] p-1.5 text-left"
                       title={project.name}
                     >
                       <p className="truncate text-[10px] font-bold leading-4 text-brass">
-                        ??? {project.name.split(' (')[0]}
+                        → {project.name.split(' (')[0]}
                       </p>
-                      <p className="mt-0.5 text-[8px] leading-3 text-bone/40">base reel ??? now editing</p>
+                      <p className="mt-0.5 text-[8px] leading-3 text-bone/40">base reel — now editing</p>
                     </button>
                     {(() => {
                       const base = project.name.split(' (')[0];
@@ -6518,7 +6518,7 @@ export default function ReelStudioPage() {
                                 ? 'border-brass/60 bg-brass/[0.08] ring-1 ring-brass/30'
                                 : 'border-bone/10 bg-bone/[0.03] hover:border-brass/35',
                             )}
-                            title={`${r.projectName} ??? click to edit it`}
+                            title={`${r.projectName} — click to edit it`}
                           >
                             <Thumb
                               url={r.variant.composedUrl}
@@ -6526,7 +6526,7 @@ export default function ReelStudioPage() {
                               className="h-20 w-full rounded-lg object-cover"
                             />
                             <p className="mt-1.5 truncate text-[9px] font-semibold leading-4 text-bone/80">
-                              {isWinner && <span className="mr-1 text-brass">???</span>}
+                              {isWinner && <span className="mr-1 text-brass">★</span>}
                               {r.projectName.replace(`${base} `, '')}
                             </p>
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -6548,7 +6548,7 @@ export default function ReelStudioPage() {
                             </div>
                             <p className="mt-1 text-[8px] leading-3 text-bone/35">
                               {ctr != null
-                                ? `${(ctr * 100).toFixed(1)}% CTR ?? ${r.impressions.toLocaleString()} imp`
+                                ? `${(ctr * 100).toFixed(1)}% CTR · ${r.impressions.toLocaleString()} imp`
                                 : 'not posted yet'}
                             </p>
                           </button>
@@ -6575,7 +6575,7 @@ export default function ReelStudioPage() {
                   >
 
                     {/* R25: ONE element, driven 100% by the playback clock (no src prop,
-                        no fences ??? the clock swaps + seeks it; it never decides anything). */}
+                        no fences — the clock swaps + seeks it; it never decides anything). */}
                     <video
 
                       ref={previewRef}
@@ -6616,7 +6616,7 @@ export default function ReelStudioPage() {
                         }
                       }}
                     />
-                    {/* R25 overlay (b-roll) layer ??? picture-in-picture, clock-synced, muted. */}
+                    {/* R25 overlay (b-roll) layer — picture-in-picture, clock-synced, muted. */}
                     {overlayHit && (
                       <video
                         ref={overlayRef}
@@ -6642,7 +6642,7 @@ export default function ReelStudioPage() {
                       />
                     )}
                     {/* karaoke captions overlay (Whisper word timings, live on stage).
-                        R20: DRAGGABLE ??? grab it to move the captions anywhere on the frame. */}
+                        R20: DRAGGABLE — grab it to move the captions anywhere on the frame. */}
                     {ccOn &&
                       stageClip &&
                       (project.captions[stageClip.id]?.length ?? 0) > 0 &&
@@ -6677,7 +6677,7 @@ export default function ReelStudioPage() {
                                   Math.max(0, Math.min(92, 100 - ((ev.clientY - r.top) / r.height) * 100)),
                                 );
                                 last = { x: newX, y: newY };
-                                // LOCAL only mid-drag ??? buttery smooth, no network per frame.
+                                // LOCAL only mid-drag — buttery smooth, no network per frame.
                                 setCaptionOverridesLocal({ xPct: newX, positionPct: newY });
                               };
                               const up = () => {
@@ -6699,7 +6699,7 @@ export default function ReelStudioPage() {
                           </div>
                         );
                       })()}
-                    {/* R8 platform lens chrome (9:16 canvas only ??? vertical surfaces) */}
+                    {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
                     {lensMode === 'platform' && aspect === '9:16' && (
                       <PlatformLensOverlay
                         brand={postTarget.brand}
@@ -6722,7 +6722,7 @@ export default function ReelStudioPage() {
             )}
             <div className="shrink-0 px-4 pb-4">
 
-              {/* timeline toolbar ??? row 1: actions; row 2: hints + zoom */}
+              {/* timeline toolbar — row 1: actions; row 2: hints + zoom */}
               <div className="mb-1.5 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
@@ -6773,7 +6773,7 @@ export default function ReelStudioPage() {
                       onClick={cutTailAtPlayhead}
                       disabled={!currentClip}
                       className="inline-flex items-center gap-1 rounded border border-brass/40 px-2 py-0.5 text-[10px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
-                      title="Cut (C) ??? the scene ENDS at the playhead (instant, Ctrl+Z undoes it)"
+                      title="Cut (C) — the scene ENDS at the playhead (instant, Ctrl+Z undoes it)"
                     >
                       <Scissors className="h-3 w-3" /> Cut
                     </button>
@@ -6781,7 +6781,7 @@ export default function ReelStudioPage() {
                       onClick={() => void splitAtPlayhead()}
                       disabled={!currentClip || busy}
                       className="inline-flex items-center gap-1 rounded border border-brass/40 px-2 py-0.5 text-[10px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
-                      title="TRUE split at the playhead (S) ??? one scene becomes two"
+                      title="TRUE split at the playhead (S) — one scene becomes two"
                     >
                       <Scissors className="h-3 w-3" /> Split
                     </button>
@@ -6806,14 +6806,14 @@ export default function ReelStudioPage() {
                     {selected && (
                       <span className="normal-case text-brass/60">
                         scene {project.clips.findIndex((c) => c.id === selected.id) + 1}/
-                        {project.clips.length} ?? cut frame{' '}
+                        {project.clips.length} · cut frame{' '}
                         {fmtSec(Math.max(0, selected.durationSec - selected.trimEndSec))}
                       </span>
                     )}
                     <span>
                       {fmtSec(Math.min(playheadSec, total))} / {fmtSec(total)}
                     </span>
-                    {/* R26: the platform length budget ??? adjustable per reel */}
+                    {/* R26: the platform length budget — adjustable per reel */}
                     <span
                       className={clsx(
                         'flex items-center gap-0.5 normal-case',
@@ -6823,15 +6823,15 @@ export default function ReelStudioPage() {
                             ? 'text-amber-300/90'
                             : 'text-bone/40',
                       )}
-                      title={`${targetTypeLabel(postTarget)} sweet spot: ${fmtSec(targetLen.target)}${targetLen.max ? ` ?? hard max ${fmtSec(targetLen.max)}` : ''} ??? adjust with ???/+`}
+                      title={`${targetTypeLabel(postTarget)} sweet spot: ${fmtSec(targetLen.target)}${targetLen.max ? ` · hard max ${fmtSec(targetLen.max)}` : ''} — adjust with −/+`}
                     >
-                      ???
+                      −
                       <button
                         onClick={() => setTargetOverride(Math.max(15, targetSec - 15))}
                         className="rounded px-0.5 hover:bg-bone/10"
                         title="Shorter target"
                       >
-                        ???
+                        +
                       </button>
                       {fmtSec(targetSec)}
                       <button
@@ -6847,7 +6847,7 @@ export default function ReelStudioPage() {
                           className="text-brass hover:underline"
                           title="Reset to the platform default"
                         >
-                          ???
+                          ▾
                         </button>
                       )}
                       {targetLen.max > 0 && total > targetLen.max && (
@@ -6858,8 +6858,8 @@ export default function ReelStudioPage() {
                 </div>
                 <div className="flex items-center justify-between text-[9px] text-bone/30">
                   <span>
-                    drag scenes to reorder ?? drag an edge to trim ?? C cuts the tail at the playhead ??
-                    S splits into two ?? Space plays ?? , / . step a frame ?? Ctrl+Z undoes
+                    drag scenes to reorder · drag an edge to trim · C cuts the tail at the playhead ·
+                    S splits into two · Space plays · , / . step a frame · Ctrl+Z undoes
                   </span>
                   <label className="flex items-center gap-1.5 normal-case text-bone/40">
                     zoom
@@ -6882,7 +6882,7 @@ export default function ReelStudioPage() {
               </div>
               {project.clips.length > 0 ? (
                 <div ref={stripScrollRef} className="w-full min-w-0 max-w-full overflow-x-auto pb-1">
-                  {/* R25b: EXACT px width ??? NO min-w-full. When the container is
+                  {/* R25b: EXACT px width — NO min-w-full. When the container is
                       wider than the track, %-positioned things (playhead, ruler)
                       used to stretch to the full container while px-sized blocks
                       stayed at scale: the playhead sat PAST the trimmed block.
@@ -6892,7 +6892,7 @@ export default function ReelStudioPage() {
                     style={{ width: Math.max(total * pxPerSec, 1) }}
                   >
                     <TimeRuler totalSec={total} clips={project.clips} zoom={pxPerSec / 36} onScrub={seekTimeline} />
-                    {/* R8 story card guides: FB/IG stories split at 15s ??? land cuts on a card edge */}
+                    {/* R8 story card guides: FB/IG stories split at 15s — land cuts on a card edge */}
                     {isStoryTarget(postTarget) &&
                       total > 15 &&
                       Array.from({ length: Math.floor(total / 15) }, (_, k) => (k + 1) * 15)
@@ -6904,18 +6904,18 @@ export default function ReelStudioPage() {
                             style={{ left: `${(t / total) * 100}%` }}
                             title={`Story card ${k + 2} starts here (15s cards)`}
                           >
-                            ???{k + 2}
+                            ×{k + 2}
                           </div>
                         ))}
 
-                  {/* R26: the target-length marker ??? where this platform wants the cut to land */}
+                  {/* R26: the target-length marker — where this platform wants the cut to land */}
                   {targetSec < total && (
                     <div
                       className="pointer-events-none absolute bottom-0 top-6 z-20 border-l-2 border-dashed border-amber-400/70 pl-1 text-[8px] font-bold leading-3 text-amber-300/90"
                       style={{ left: `${(targetSec / total) * 100}%` }}
-                      title={`${targetTypeLabel(postTarget)} target: ${fmtSec(targetSec)} ??? you're ${fmtSec(total - targetSec)} over`}
+                      title={`${targetTypeLabel(postTarget)} target: ${fmtSec(targetSec)} — you're ${fmtSec(total - targetSec)} over`}
                     >
-                      ???{fmtSec(targetSec)}
+                      ≈{fmtSec(targetSec)}
                     </div>
                   )}
 
@@ -6939,7 +6939,7 @@ export default function ReelStudioPage() {
                     onKeyMove={(c, ki, t) => setMotionKey(c, ki, { t })}
                   />
 
-                  {/* R25 OVERLAY (b-roll) LAYERS lane ??? drag a block to re-time it */}
+                  {/* R25 OVERLAY (b-roll) LAYERS lane — drag a block to re-time it */}
                   {(project.overlays ?? []).length > 0 && (
                     <div className="relative mt-1.5 h-9 overflow-hidden rounded-lg border border-violet-500/25 bg-violet-500/[0.06]">
                       {(project.overlays ?? []).map((o) => {
@@ -6975,7 +6975,7 @@ export default function ReelStudioPage() {
                               el.addEventListener('pointermove', move);
                               el.addEventListener('pointerup', up);
                             }}
-                            title={`${o.name} ??? overlay @ ${fmtSec(o.offsetSec)} (drag to move)`}
+                            title={`${o.name} — overlay @ ${fmtSec(o.offsetSec)} (drag to move)`}
                           >
                             <Layers className="h-3 w-3 shrink-0 text-violet-200" />
                             <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-violet-100">
@@ -6997,7 +6997,7 @@ export default function ReelStudioPage() {
                       })}
                     </div>
                   )}
-                  {/* audio bed track ??? drag the block to re-time it against the cut */}
+                  {/* audio bed track — drag the block to re-time it against the cut */}
                   {project.audio && (
                     <div className="relative mt-1.5 h-10 overflow-hidden rounded-lg border border-bone/15 bg-ink/70">
                       <WaveformLane url={project.audio.url} />
@@ -7065,7 +7065,7 @@ export default function ReelStudioPage() {
                       </div>
                     </div>
                   )}
-                  {/* the playhead ??? grab the line itself to scrub */}
+                  {/* the playhead — grab the line itself to scrub */}
                   <div
                     className="absolute bottom-0 top-6 z-30 w-px cursor-ew-resize bg-brass shadow-[0_0_6px_rgba(168,139,92,0.8)]"
                     style={{ left: `${Math.min(100, (playheadSec / Math.max(total, 0.001)) * 100)}%` }}
@@ -7119,7 +7119,7 @@ export default function ReelStudioPage() {
                   <Check className="h-3.5 w-3.5 shrink-0 text-brass" />
                   <span className="min-w-0 flex-1">
                     <span className="font-semibold text-bone/85">Composed MP4 ready</span>
-                    {project.composedAt ? ` ?? ${new Date(project.composedAt).toLocaleString()}` : ''}
+                    {project.composedAt ? ` · ${new Date(project.composedAt).toLocaleString()}` : ''}
                   </span>
                   <button
                     onClick={() => {
@@ -7139,14 +7139,14 @@ export default function ReelStudioPage() {
                     className="inline-flex shrink-0 items-center gap-1 rounded bg-brass px-2 py-1 text-[10px] font-bold text-ink hover:bg-brass/90"
                     title="Download the composed MP4"
                   >
-                    ??? download
+                    → download
                   </a>
                 </div>
               )}
             </div>
             </div>
 
-            {/* R9 right setup rail ??? aspect, fit, target, lens, captions */}
+            {/* R9 right setup rail — aspect, fit, target, lens, captions */}
             <nav className="flex w-14 shrink-0 flex-col gap-1 border-l border-bone/10 p-1.5">
               <p className="mb-0.5 text-center text-[8px] font-semibold uppercase tracking-wide text-bone/30">
                 setup
@@ -7247,7 +7247,7 @@ export default function ReelStudioPage() {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-bone">Keyboard shortcuts</h2>
               <button onClick={() => setHelpOpen(false)} className="text-bone/40 hover:text-bone">
-                ???
+                ⋯
               </button>
             </div>
             <dl className="space-y-1.5 text-[11px]">
@@ -7257,7 +7257,7 @@ export default function ReelStudioPage() {
                   ['C', 'cut the tail at the playhead'],
                   ['S', 'TRUE split at the playhead'],
                   [', .', 'step one frame (1/30s)'],
-                  ['??? ???', 'nudge 1s (Shift: 5s)'],
+                  ['← →', 'nudge 1s (Shift: 5s)'],
                   ['Delete', 'remove the selected scene'],
                   ['Ctrl/Cmd+Z', 'undo'],
                   ['Ctrl/Cmd+Shift+Z', 'redo'],
@@ -7273,7 +7273,7 @@ export default function ReelStudioPage() {
               ))}
             </dl>
             <p className="mt-3 border-t border-bone/10 pt-2 text-[9px] text-bone/30">
-              drag scenes to reorder ?? drag edges to trim ?? drag the ruler or playhead to scrub
+              drag scenes to reorder · drag edges to trim · drag the ruler or playhead to scrub
             </p>
           </div>
         </div>
@@ -7306,7 +7306,7 @@ export default function ReelStudioPage() {
           captionOverrides={project.captionOverrides}
         />
       )}
-      {/* R13: the ONE Schedule sheet ??? current reel (renders first) or a Scoreboard variant */}
+      {/* R13: the ONE Schedule sheet — current reel (renders first) or a Scoreboard variant */}
       {schedOpen && project && (
         <ScheduleSheet
           name={project.name}
@@ -7341,7 +7341,7 @@ export default function ReelStudioPage() {
           onClose={() => setSchedRow(null)}
         />
       )}
-      {/* Thumbnail Lab ??? a Scoreboard variant or the current reel */}
+      {/* Thumbnail Lab — a Scoreboard variant or the current reel */}
       {thumbLabRow && (
         <ThumbnailLabSheet
           hook={thumbLabRow.projectName}
@@ -7365,7 +7365,7 @@ export default function ReelStudioPage() {
           onClose={() => setThumbLabReel(false)}
         />
       )}
-      {/* R14 bulk schedule sheet ??? opens when the user hits "bulk schedule" */}
+      {/* R14 bulk schedule sheet — opens when the user hits "bulk schedule" */}
       {bulkOpen && bulkSelected.size > 0 && loopRows && (
         <BulkScheduleSheet
           rows={loopRows.filter((r) => bulkSelected.has(r.variant.id))}

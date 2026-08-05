@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * Render panel ??? the only UI that produces a final MP4.
+ * Render panel — the only UI that produces a final MP4.
  *
  * Contract with the server (see src/app/api/admin/reel-render/route.ts):
- *   1. POST { id, aspect }            ??? { renderId, bucketName }
- *   2. POST { renderId, bucketName }  ??? { done, progress, videoUrl, errorMessage }
+ *   1. POST { id, aspect }            → { renderId, bucketName }
+ *   2. POST { renderId, bucketName }  → { done, progress, videoUrl, errorMessage }
  *
  * Two rules this component exists to enforce:
  *  - The browser NEVER waits on an open request for a render. We start, then
@@ -18,7 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 type Aspect = 'vertical' | 'square' | 'landscape';
 
 const ASPECTS: { value: Aspect; label: string; hint: string }[] = [
-  { value: 'vertical', label: '9:16', hint: 'Reels ?? TikTok ?? Shorts' },
+  { value: 'vertical', label: '9:16', hint: 'Reels · TikTok · Shorts' },
   { value: 'square', label: '1:1', hint: 'Feed' },
   { value: 'landscape', label: '16:9', hint: 'YouTube' },
 ];
@@ -100,7 +100,7 @@ export default function RenderPanel({
 
         const pct = Math.round(Number(json.progress ?? 0) * 100);
         setProgress(pct);
-        setStatus(`Rendering??? ${pct}%`);
+        setStatus(`Rendering… ${pct}%`);
 
         if (json.done && json.videoUrl) {
           setVideoUrl(json.videoUrl);
@@ -110,7 +110,7 @@ export default function RenderPanel({
           onRendered?.(json.videoUrl);
           return;
         }
-        // Not finished ??? check again shortly.
+        // Not finished — check again shortly.
         timer.current = setTimeout(() => void poll(renderId, bucketName), POLL_MS);
       } catch {
         // A dropped poll is not a failed render; keep watching.
@@ -125,7 +125,7 @@ export default function RenderPanel({
     setError('');
     setVideoUrl('');
     setProgress(0);
-    setStatus('Building the render plan???');
+    setStatus('Building the render plan…');
     try {
       const res = await fetch('/api/admin/reel-render', {
         method: 'POST',
@@ -139,7 +139,7 @@ export default function RenderPanel({
         setBusy(false);
         return;
       }
-      setStatus(`Queued ?? ${json.clips} clips ?? ${json.words} words ?? ~${json.durationSec}s`);
+      setStatus(`Queued · ${json.clips} clips · ${json.words} words · ~${json.durationSec}s`);
       timer.current = setTimeout(() => void poll(json.renderId, json.bucketName), POLL_MS);
     } catch {
       setError('Could not reach the render service.');
@@ -181,7 +181,7 @@ export default function RenderPanel({
         disabled={busy || available === false}
         className="w-full rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? status || 'Rendering???' : 'Render video'}
+        {busy ? status || 'Rendering…' : 'Render video'}
       </button>
 
       {busy ? (

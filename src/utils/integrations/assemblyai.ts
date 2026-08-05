@@ -6,20 +6,21 @@
  * URL directly — AssemblyAI fetches public URLs itself) → transcript → poll
  * until complete, then flatten `words[]` into our `ReelWord[]` (ms → seconds).
  *
- * Env: `ASSEMBLYAI_API_KEY`. Pure-mapped (no SDK) so it's unit-testable and
- * has zero new dependencies. `transcribeUrl` does the network dance;
- * `wordsFromTranscript` is the pure mapper the tests hit.
+ * Key: resolved via `getAssemblyAiKey()` — the `integrations` table first,
+ * `ASSEMBLYAI_API_KEY` second. Reading process.env directly here meant a key
+ * saved at /admin/integrations was invisible, so `isAssemblyAiConfigured()`
+ * said false and every transcription silently fell through to Whisper and its
+ * 25MB cap. Pure-mapped (no SDK) so it's unit-testable and has zero new
+ * dependencies. `transcribeUrl` does the network dance; `wordsFromTranscript`
+ * is the pure mapper the tests hit.
  */
 import type { ReelWord } from '@/lib/mothermode/reel/types';
+import { getAssemblyAiKey } from './runtime-config';
 
 const API = 'https://api.assemblyai.com/v2';
 
-export function isAssemblyAiConfigured(): boolean {
-  return !!(process.env.ASSEMBLYAI_API_KEY || '').trim();
-}
-
-function key(): string {
-  return (process.env.ASSEMBLYAI_API_KEY || '').trim();
+export async function isAssemblyAiConfigured(): Promise<boolean> {
+  return !!(await getAssemblyAiKey());
 }
 
 /** The raw word shape AssemblyAI returns (timings in MILLISECONDS). */
@@ -67,8 +68,12 @@ export async function transcribeUrl(
   url: string,
   opts?: { timeoutMs?: number; pollMs?: number },
 ): Promise<ReelWord[]> {
-  const apiKey = key();
-  if (!apiKey) throw new Error('ASSEMBLYAI_API_KEY is not configured.');
+  const apiKey = (await getAssemblyAiKey())?.trim();
+  if (!apiKey) {
+    throw new Error(
+      'No AssemblyAI key. Add one at /admin/integrations or set ASSEMBLYAI_API_KEY.',
+    );
+  }
   const timeoutMs = opts?.timeoutMs ?? 280_000;
   const pollMs = opts?.pollMs ?? 1500;
 

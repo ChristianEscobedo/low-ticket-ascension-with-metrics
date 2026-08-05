@@ -9,7 +9,7 @@
  */
 const express = require('express');
 const { bundle } = require('@remotion/bundler');
-const { renderMedia, selectComposition } = require('@remotion/renderer');
+const { renderMedia, selectComposition, getCompositions } = require('@remotion/renderer');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const fs = require('fs');
@@ -59,13 +59,35 @@ app.post('/render', async (req, res) => {
 
   try {
     const serveUrl = await getBundle();
-    // NOTE: this id must match the <Composition id="..."> in
-    // remotion-project/Root.tsx exactly. It is "Reel" (the component is named
-    // ReelComposition, which is what this used to ask for — and selectComposition
-    // throws on an unknown id, so every render failed before it began).
+    // This id must match the <Composition id="..."> in remotion-project/Root.tsx
+    // exactly. It is "Reel" — the COMPONENT is named ReelComposition, which is
+    // the name this used to ask for, and that mismatch failed every render.
+    //
+    // Resolve the composition defensively. `selectComposition` THROWS on an
+    // unknown id, which turns a one-word naming drift into a total render
+    // outage ("Could not find composition with ID X. Available: Reel"). If the
+    // expected id is missing we fall back to whatever the bundle actually
+    // registers, and log it loudly so the drift is visible instead of fatal.
+    let compositionId = 'Reel';
+    try {
+      const available = await getCompositions(serveUrl, { inputProps: { plan } });
+      const ids = available.map((c) => c.id);
+      if (!ids.includes(compositionId)) {
+        console.warn(
+          `[render] composition "${compositionId}" not in bundle; available: ${ids.join(', ') || '(none)'}`,
+        );
+        if (!ids.length) throw new Error('Remotion bundle registered no compositions');
+        compositionId = ids[0];
+        console.warn(`[render] falling back to composition "${compositionId}"`);
+      }
+    } catch (e) {
+      // Non-fatal: let selectComposition below produce the authoritative error.
+      console.warn(`[render] composition probe failed: ${e && e.message ? e.message : e}`);
+    }
+
     const composition = await selectComposition({
       serveUrl,
-      id: 'Reel',
+      id: compositionId,
       inputProps: { plan },
     });
 

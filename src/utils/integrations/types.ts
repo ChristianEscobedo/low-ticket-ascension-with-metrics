@@ -10,7 +10,8 @@ export type IntegrationProvider =
   | 'email'
   | 'monid'
   | 'rapidapi'
-  | 'apify';
+  | 'apify'
+  | 'assemblyai';
 
 export const PAGE_TYPES = ['fe', 'oto1', 'oto2', 'oto3', 'oto4'] as const;
 export type PageType = (typeof PAGE_TYPES)[number];
