@@ -59,9 +59,13 @@ app.post('/render', async (req, res) => {
 
   try {
     const serveUrl = await getBundle();
+    // NOTE: this id must match the <Composition id="..."> in
+    // remotion-project/Root.tsx exactly. It is "Reel" (the component is named
+    // ReelComposition, which is what this used to ask for — and selectComposition
+    // throws on an unknown id, so every render failed before it began).
     const composition = await selectComposition({
       serveUrl,
-      id: 'ReelComposition',
+      id: 'Reel',
       inputProps: { plan },
     });
 
