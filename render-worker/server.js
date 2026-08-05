@@ -73,7 +73,26 @@ async function getBundle() {
   return bundled;
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled }));
+/**
+ * Health + build provenance.
+ *
+ * `{ok, bundled}` alone cannot answer the only question that actually matters
+ * after a push: "is the code I just pushed the code that is running?" Three
+ * separate sessions burned time guessing at that, and one wrote a finding
+ * ("the worker returns an Express HTML 404, so the async API is not deployed")
+ * that was inferred from a 404 body rather than from a version, and was wrong.
+ *
+ * Railway injects RAILWAY_GIT_COMMIT_SHA at build time. Echoing it turns deploy
+ * freshness into a fact you can curl instead of a claim you have to trust.
+ */
+const BUILD = {
+  commit: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'unknown',
+  branch: process.env.RAILWAY_GIT_BRANCH || 'unknown',
+  deploymentId: process.env.RAILWAY_DEPLOYMENT_ID || 'unknown',
+  startedAt: new Date().toISOString(),
+};
+
+app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled, build: BUILD }));
 
 app.post('/render', (req, res) => {
   const { plan, reelId } = req.body || {};

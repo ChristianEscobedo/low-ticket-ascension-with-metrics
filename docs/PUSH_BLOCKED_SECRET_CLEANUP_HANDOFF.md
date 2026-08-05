@@ -1,7 +1,30 @@
 # Push blocked by committed secrets — cleanup handoff
 
-**Status:** push to `origin/main` is BLOCKED. 15 unpushed commits. Railway/Vercel therefore
-still run pre-fix code, so the caption MP4 parity fix is **not deployed and not verified**.
+> ## RESOLVED (session 4). This document is history; do not act on it.
+>
+> **The push is not blocked and has not been blocked for some time.** Measured, not assumed:
+>
+> ```
+> git fetch origin
+> git rev-list --count origin/main..HEAD   # => 2, not 15
+> git push origin main                     # => 0e3f46d..32a1208  main -> main
+> ```
+>
+> The push succeeded with no secret-scanning challenge at all. `origin/main` was already at
+> `0e3f46d` — the 14 commits this document describes as "stuck" had **already landed**; the
+> unblock link in the session-3 correction below was evidently used and the outcome never
+> written down. The only genuinely unpushed work was the last two commits.
+>
+> **The lesson is the same one this file keeps re-learning.** Session 2 asserted a test result
+> without checking that any test ran. Session 3 asserted a secret shape without looking at the
+> value. Session 4 inherited "push is blocked, 15 commits" and it was stale by a whole session —
+> the blocker was never re-measured, only re-inherited. Each handoff carried the previous claim
+> forward as fact. **Re-measure inherited blockers before planning around them; a blocker in a
+> handoff doc is a claim with a timestamp, not a current state.**
+
+**Status (historical):** push to `origin/main` is BLOCKED. 15 unpushed commits. Railway/Vercel
+therefore still run pre-fix code, so the caption MP4 parity fix is **not deployed and not
+verified**.
 
 ---
 
