@@ -117,3 +117,78 @@ This is the highest-priority item in this document. It is not blocked by the pus
 - `tests/lib/caption-vendor-parity.test.ts` asserts both copies produce identical `captionCssFor`
   output, so this silent render-path-only drift can't recur unnoticed.
 - `tests/lib/caption-presets.test.ts` passes.
+
+
+---
+
+## CORRECTION (session 3): the scrub plan was wrong. Both remaining blocks are false positives.
+
+The previous plan — rewrite all 16 commits with `git filter-repo --replace-text` — should
+NOT be executed. Two independent reasons, both discovered by looking at the actual values
+instead of guessing at their shape.
+
+### 1. The naive literal extractor was dangerous
+
+Extracting "any token >= 20 chars" from the flagged lines produced 23 "secrets", including:
+
+| captured | what it actually is |
+|---|---|
+| `@/li...[len=43]`, `@/li...[len=40]` (6 total) | `@/lib/...` **import paths** |
+| `cons...[len=22]`, `depl...[len=20]`, `back...[len=23]` | ordinary English prose |
+
+A `--replace-text` pass over that list would have rewritten source import paths across
+all 16 commits, silently breaking the build in every one. The generated `replacements.txt`
+was deleted rather than run. **Never scrub on a shape you have not looked at.**
+
+### 2. The two flagged values are not credentials
+
+```
+docs/RENDER_WORKER_DEPLOY_BLOCKED_SECRETS.md:12
+tests/lib/research-recap.test.ts:48
+```
+
+Both are the same literal, masked as `sk_live_***p7dc [len=32]`. The body is
+`4eC39HqLyjWDarjtT1zdp7dc` — **Stripe's own published documentation example key** — with
+the `sk_live_` prefix swapped on to exercise the live-key branch of `redactSecrets`.
+`research-recap.test.ts` is the *test suite for the redactor*; the fixture is the point of
+the test. Scrubbing it would delete the test's reason to exist.
+
+Note this doc's own triage table (lines 11-13) already said "Fake." That was correct and was
+being ignored in favour of a mechanical scrub.
+
+### The real secret is already handled
+
+Line 11: the Anthropic key was **REAL**, but it lived in `.env.local.bak`, which is already
+purged from history. This doc names only the `sk-ant-api03-…` prefix, not a usable value.
+**It still must be rotated** — purging history does not un-leak a key that was pushed.
+
+### Correct remedy: allow the false positive
+
+Editing HEAD would not help; push protection scans every commit in the range, and the
+literal exists in older blobs. Use the bypass:
+
+https://github.com/ChristianEscobedo/low-ticket-ascension-with-metrics/security/secret-scanning/unblock-secret/3HTfupSaUG8XSPumkgenceRJ3KY
+
+Choose **"It's used in tests"**. Then `git push origin main` (16 commits). If a second
+detection appears for the other path, the push error prints its own unblock URL.
+
+## Railway / Vercel: two separate actions
+
+Code and credentials deploy through different channels — doing one without the other breaks
+the worker:
+
+1. **Code** — Railway auto-deploys on push to `main`. Once the push lands, the worker
+   rebuilds and picks up the vendored-captions fix. Nothing to click.
+2. **Credentials** — rotated keys live as **env vars in the Railway and Vercel dashboards**,
+   not in git. Rotating the Anthropic key without updating both dashboards means the next
+   deploy authenticates with a dead key.
+
+Order: rotate → update Railway env vars → update Vercel env vars → redeploy.
+
+## Still unverified
+
+- **MP4 caption parity.** Unchanged from session 2: no gap has been observed closing. The
+  vendored-copy fix and the parity guard are reasoned-about, not rendered. First render
+  after the Railway redeploy is the actual test — compare letter-spacing and word-spacing
+  against the preview.
+- **Item 2 (render button across three surfaces)** remains untouched, as intended.
