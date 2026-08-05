@@ -251,12 +251,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  /**
+   * Echo the caption style that was actually sent to the renderer.
+   *
+   * "the MP4's captions don't match the preview" survived four rounds of fixes
+   * (the shared layer, the vendored copy, the Edit-stage third implementation,
+   * a preset normalizer that rewrote 37 of 41 presets to karaoke) because
+   * nothing on either side ever reported WHICH STYLE THE PLAN CARRIED. Every
+   * diagnosis was therefore an inference from pixels.
+   *
+   * `captionStyleSent` is that missing fact, on the response the studio already
+   * reads. Paired with the worker's matching `[worker] caption plan:` log line,
+   * one render now localizes the bug: if these two agree with the preset you
+   * picked, the plan is correct and the remaining suspect is the render itself
+   * (layer, fonts, bundle). If they disagree, it is the app.
+   */
   return NextResponse.json({
     success: true,
     jobId: workerJson.jobId,
     durationSec: estimateRenderSeconds(plan),
     words: plan.words.length,
     clips: plan.clips.length,
+    captionStyleSent: {
+      id: plan.captionStyleId,
+      resolvedId: plan.captionStyle?.id ?? null,
+      font: plan.captionStyle?.font ?? null,
+      sizePx: plan.captionLayout?.sizePx ?? null,
+      xPct: plan.captionLayout?.xPct ?? null,
+      positionPct: plan.captionLayout?.positionPct ?? null,
+      fonts: plan.fonts ?? [],
+    },
   });
 
 }

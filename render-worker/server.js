@@ -148,6 +148,47 @@ app.post('/render', (req, res) => {
   // Answer in milliseconds. The render continues on the event loop after this.
   res.status(202).json({ success: true, jobId, status: 'rendering' });
 
+  /**
+   * Log the caption style THIS job was handed, before rendering a single frame.
+   *
+   * WHY THIS LOG EXISTS
+   * -------------------
+   * "the render's captions don't match the preview" was chased for four
+   * sessions across the caption layer, the vendored copy, the Edit-mode stage
+   * and a preset normalizer. Every one of those was a real bug, and after each
+   * fix the symptom looked identical, because nothing anywhere printed the one
+   * fact that decides the question: WHICH STYLE DID THE RENDERER ACTUALLY GET?
+   *
+   * If this line shows the preset you picked, the plan is fine and the bug is
+   * downstream (the layer, fonts, the bundle). If it shows something else —
+   * karaoke, or stale colors — the bug is upstream in the app and no amount of
+   * work in the layer can help. One render now answers that instead of a guess.
+   */
+  try {
+    const st = plan.captionStyle || {};
+    const ly = plan.captionLayout || {};
+    console.log(
+      '[worker] caption plan: id=' +
+        JSON.stringify(plan.captionStyleId) +
+        ' style.id=' + JSON.stringify(st.id) +
+        ' font=' + JSON.stringify(st.font) +
+        ' weight=' + JSON.stringify(st.weight) +
+        ' upper=' + JSON.stringify(st.upper) +
+        ' anim=' + JSON.stringify(st.anim) +
+        ' color=' + JSON.stringify(st.color) +
+        ' active=' + JSON.stringify(st.activeColor || st.active) +
+        ' | sizePx=' + JSON.stringify(ly.sizePx) +
+        ' rows=' + JSON.stringify(ly.rows) +
+        ' wordsPerRow=' + JSON.stringify(ly.wordsPerRow) +
+        ' xPct=' + JSON.stringify(ly.xPct) +
+        ' positionPct=' + JSON.stringify(ly.positionPct) +
+        ' | words=' + (Array.isArray(plan.words) ? plan.words.length : 0) +
+        ' fonts=' + JSON.stringify(plan.fonts || []),
+    );
+  } catch (e) {
+    console.warn('[worker] could not log caption plan: ' + (e && e.message ? e.message : e));
+  }
+
   runRender(jobId, plan, reelId).catch((err) => {
     const job = jobs.get(jobId);
     if (job) Object.assign(job, { status: 'failed', error: err.message, updatedAt: Date.now() });
