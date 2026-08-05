@@ -1,219 +1,47 @@
 'use client';
 
 /**
- * Render panel — the only UI that produces a final MP4.
+ * Render panel — the full-size render UI under the Post tab.
  *
- * Contract with the server (see src/app/api/admin/reel-render/route.ts):
- *   1. POST { id, aspect }  → { jobId }
- *   2. POST { jobId }       → { done, progress, stage, elapsedSec, videoUrl, errorMessage }
-
+ * It used to own the job: its own state, its own poll loop, its own availability
+ * probe. It doesn't any more. The job moved to `useRenderJob`, called ONCE by
+ * the page, because the same render is now startable from the header and the
+ * Publish view too — and three components each polling would mean three timers
+ * and three different answers to "is it done yet?".
  *
- * Two rules this component exists to enforce:
- *  - The browser NEVER waits on an open request for a render. We start, then
- *    poll every 3s. That's why long reels no longer die on a function timeout.
- *  - Availability is probed up front, so a missing env var shows as a plain
- *    sentence in the panel instead of a mystery failure at click time.
+ * So this is a pure view now: it reads `job` and calls `job.start()`. The
+ * behaviour it used to enforce still holds, it just lives in the hook:
+ *  - the browser NEVER waits on an open request; we start, then poll.
+ *  - availability is probed up front, so a missing env var reads as a plain
+ *    sentence instead of a mystery failure at click time.
+ *
+ * This panel keeps the two things the compact `RenderButton` has no room for:
+ * the aspect picker and the finished-video player.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ASPECTS, type RenderJob } from './useRenderJob';
 
-type Aspect = 'vertical' | 'square' | 'landscape';
-
-const ASPECTS: { value: Aspect; label: string; hint: string }[] = [
-  { value: 'vertical', label: '9:16', hint: 'Reels · TikTok · Shorts' },
-  { value: 'square', label: '1:1', hint: 'Feed' },
-  { value: 'landscape', label: '16:9', hint: 'YouTube' },
-];
-
-const POLL_MS = 3000;
-
-/**
- * Turn a worker stage into a sentence a human can act on.
- *
- * The percentage alone is misleading: it only moves during frame rendering.
- * Bundling happens before the first frame and uploading after the last, so a
- * bare "0%" or "100%" can sit still for a long time on a render that is
- * perfectly healthy. Say which phase we're in, and how long it's been.
- */
-function describeStage(stage: unknown, progress: unknown, elapsedSec: unknown): string {
-  const secs = typeof elapsedSec === 'number' && elapsedSec > 0 ? ` · ${formatElapsed(elapsedSec)}` : '';
-  const pct = typeof progress === 'number' ? Math.round(progress * 100) : 0;
-
-  switch (stage) {
-    case 'starting':
-    case 'bundling':
-      return `Preparing the composition…${secs}`;
-    case 'uploading':
-      return `Uploading the MP4…${secs}`;
-    case 'waiting':
-      return `Waiting on the render worker…${secs}`;
-    case 'rendering':
-      return `Rendering… ${pct}%${secs}`;
-    default:
-      return `Rendering… ${pct}%${secs}`;
-  }
-}
-
-function formatElapsed(sec: number): string {
-  if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${String(s).padStart(2, '0')}s`;
-}
-
-
-export default function RenderPanel({
-  reelId,
-  onRendered,
-}: {
-  reelId: string;
-  /** Called once with the finished URL so the parent can persist it. */
-  onRendered?: (videoUrl: string) => void;
-}) {
-  const [available, setAvailable] = useState<boolean | null>(null);
-  const [hint, setHint] = useState('');
-  const [aspect, setAspect] = useState<Aspect>('vertical');
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-
-  // Kept in a ref so the unmount cleanup can always cancel the live timer.
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelled = useRef(false);
-
-  useEffect(() => {
-    cancelled.current = false;
-    return () => {
-      cancelled.current = true;
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, []);
-
-  // Probe availability once so the button can explain itself before it's clicked.
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/admin/reel-render');
-        const json = await res.json();
-        if (!alive) return;
-        setAvailable(Boolean(json?.configured));
-        setHint(typeof json?.hint === 'string' ? json.hint : '');
-      } catch {
-        if (alive) {
-          setAvailable(false);
-          setHint('Could not reach the render service.');
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const poll = useCallback(
-    async (jobId: string) => {
-      if (cancelled.current) return;
-      try {
-        const res = await fetch('/api/admin/reel-render', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobId }),
-        });
-        const json = await res.json();
-
-        if (!json?.success) {
-          setError(json?.error || 'Render failed.');
-          setBusy(false);
-          return;
-        }
-        if (json.errorMessage) {
-          setError(json.errorMessage);
-          setBusy(false);
-          return;
-        }
-
-        if (json.done && json.videoUrl) {
-          setVideoUrl(json.videoUrl);
-          setProgress(100);
-          setStatus('Done');
-          setBusy(false);
-          onRendered?.(json.videoUrl);
-          return;
-        }
-
-        // Show what the worker is actually doing. A render spends real time
-        // in stages that report no frame progress — bundling before the first
-        // frame, uploading after the last — and a bar frozen at 0% or 100%
-        // during those looks broken. Naming the stage is the difference
-        // between "it's working" and "it's hung".
-        setStatus(describeStage(json.stage, json.progress, json.elapsedSec));
-        if (typeof json.progress === 'number') {
-          setProgress(Math.round(json.progress * 100));
-        }
-
-        // Not finished — check again shortly.
-        timer.current = setTimeout(() => void poll(jobId), POLL_MS);
-      } catch {
-        // A dropped poll is not a failed render; keep watching.
-        timer.current = setTimeout(() => void poll(jobId), POLL_MS);
-      }
-    },
-    [onRendered],
-  );
-
-
-  const start = useCallback(async () => {
-    setBusy(true);
-    setError('');
-    setVideoUrl('');
-    setProgress(0);
-    setStatus('Building the render plan…');
-    try {
-      const res = await fetch('/api/admin/reel-render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: reelId, aspect }),
-      });
-      const json = await res.json();
-      if (!json?.success) {
-        // Plan validation errors land here (empty timeline, blob: URLs, no env).
-        setError(json?.error || 'Could not start the render.');
-        setBusy(false);
-        return;
-      }
-      setStatus(`Queued · ${json.clips} clips · ${json.words} words · ~${json.durationSec}s`);
-      // Poll straight away rather than after a full interval — the first tick
-      // is what replaces "Queued" with a real stage, and 3s of nothing right
-      // after a click is exactly when this feels broken.
-      void poll(json.jobId);
-
-    } catch {
-      setError('Could not reach the render service.');
-      setBusy(false);
-    }
-  }, [aspect, poll, reelId]);
-
+export default function RenderPanel({ job }: { job: RenderJob }) {
   return (
     <div className="space-y-3 rounded-lg border border-white/10 bg-black/30 p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">Render &amp; burn captions</h3>
-        {available === false ? (
+        {job.available === false ? (
           <span className="text-[11px] text-amber-400">Not configured</span>
         ) : null}
       </div>
 
+      {/* The aspect lives on the shared job, so switching it here is what the
+          header button will render too. One dial, not three. */}
       <div className="flex gap-2">
         {ASPECTS.map((a) => (
           <button
             key={a.value}
             type="button"
-            onClick={() => setAspect(a.value)}
-            disabled={busy}
+            onClick={() => job.setAspect(a.value)}
+            disabled={job.busy}
             title={a.hint}
             className={`rounded-md px-3 py-1.5 text-xs transition ${
-              aspect === a.value
+              job.aspect === a.value
                 ? 'bg-white text-black'
                 : 'bg-white/10 text-white/70 hover:bg-white/20'
             } disabled:opacity-50`}
@@ -225,37 +53,38 @@ export default function RenderPanel({
 
       <button
         type="button"
-        onClick={() => void start()}
-        disabled={busy || available === false}
+        onClick={job.start}
+        disabled={!job.canStart}
         className="w-full rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? status || 'Rendering…' : 'Render video'}
+        {job.busy ? job.status || 'Rendering…' : 'Render video'}
       </button>
 
-      {busy ? (
+      {job.busy ? (
         <div className="space-y-1.5">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full bg-emerald-400 transition-all duration-500"
-              style={{ width: `${Math.max(3, progress)}%` }}
+              style={{ width: `${Math.max(3, job.progress)}%` }}
             />
           </div>
           {/* Repeat the status under the bar. The button label is truncated by
               its own width on narrow panels, and this is the line people watch. */}
-          <p className="text-[11px] tabular-nums text-white/60">{status || 'Starting…'}</p>
+          <p className="text-[11px] tabular-nums text-white/60">{job.status || 'Starting…'}</p>
         </div>
       ) : null}
 
-
       {/* The real reason it can't run, not a generic error. */}
-      {available === false && hint ? <p className="text-[11px] text-white/50">{hint}</p> : null}
-      {error ? <p className="text-xs text-red-400">{error}</p> : null}
+      {job.available === false && job.hint ? (
+        <p className="text-[11px] text-white/50">{job.hint}</p>
+      ) : null}
+      {job.error ? <p className="text-xs text-red-400">{job.error}</p> : null}
 
-      {videoUrl ? (
+      {job.videoUrl ? (
         <div className="space-y-2">
-          <video src={videoUrl} controls className="w-full rounded-md bg-black" />
+          <video src={job.videoUrl} controls className="w-full rounded-md bg-black" />
           <a
-            href={videoUrl}
+            href={job.videoUrl}
             target="_blank"
             rel="noreferrer"
             className="block text-xs text-emerald-400 underline"

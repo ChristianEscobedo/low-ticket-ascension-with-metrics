@@ -1,13 +1,24 @@
-# Preview sizing, subtitle controls, render button placement — TASK
+> **[SUPERSEDED 2026-08-05 — word spacing]** Section 3 of this file (word spacing) is WRONG in
+> two ways and must not be actioned. It says CaptionLayer.tsx ignores both spacing dials and
+> should have them added: it does not ignore them (it imports captionCssFor and spreads
+> css.line), and adding them there would duplicate the dials and CREATE the preview/MP4 drift.
+> It also proposes gap over wordSpacing on a flex-row premise that is not what the markup does.
+> Root cause, the real fix, and the retracted claims: **docs/WORD_SPACING_ROOT_CAUSE_FINDING.md**.
+> Items 1, 2, 4 and 5 in this file are unaffected and still current.
 
-Status: **item 1 changed (unverified), items 2–5 not started.** One edit landed;
-everything else below is findings only.
+# Preview sizing, subtitle controls, render button placement - TASK
 
-## 1. Platform previews aren't platform-sized (the screenshot item) — EDITED, NOT VERIFIED
+Status (2026-08-05, late): item 1 edited (unverified), **item 2 DONE and wired**,
+**item 3 DONE** (see the SUPERSEDED banner above), items 4/5 still open.
+Baseline note: the suite is 46 failing / 1464 passing at HEAD **before** any of this work —
+proven by a stashed comparison. Do not mistake that for a regression. See
+`docs/SESSION_HANDOFF_RENDER_BUTTON.md`.
 
+
+## 1. Platform previews aren't platform-sized - EDITED, NOT VERIFIED
 
 All vertical mocks in `src/app/(fullscreen)/admin/reel-studio/page.tsx` go through
-`VerticalFrame` (~line 1119), inside `PlatformMockView` (~line 1054):
+`VerticalFrame` (~line 1119), inside `PlatformMockView` (~line 1054). It was:
 
 ```tsx
 <div className="relative w-full max-w-[300px] ..." style={{ aspectRatio: '9/19' }}>
@@ -15,58 +26,167 @@ All vertical mocks in `src/app/(fullscreen)/admin/reel-studio/page.tsx` go throu
 ```
 
 `9/19` is a **phone-body** ratio, not a video ratio. Shorts / TikTok / IG Reels /
-FB Reels are all **9:16**. So the frame itself is taller than the format it claims
-to preview, and the reported "not full screen on Shorts" follows from that: the
-chrome (`Shorts` badge, action rail, caption block) is positioned in percentages
-against a 9:19 box, leaving dead black above and below the video band.
+FB Reels are all **9:16**. Changed to `9/16`; `pnpm exec tsc --noEmit` passes.
+**Still not seen in a browser.**
 
-Note the video is already `object-cover`, which *should* crop-fill even at 9/19 —
-so if it still letterboxes after the ratio is corrected, the cause is elsewhere
-and worth checking in the browser before more edits. Verify against a real reel;
-don't trust the mock alone.
+Caveat that still stands: the video is already `object-cover`, which *should*
+crop-fill even at 9/19 - so if it still letterboxes, the ratio was not the cause
+and the real culprit is elsewhere. Check that before stacking more edits.
 
-Consumers of `VerticalFrame`: `shorts` (~1143), `fbreels` (~1194), plus TikTok and
-IG. `ytfeed` (~1172) is correctly `16/9` and should stay.
+Consumers: `shorts` (~1143), `fbreels` (~1194), plus TikTok and IG. `ytfeed`
+(~1172) is correctly `16/9` and should stay.
 
 Suggested shape: drive the frame from the existing `targetAspect(t)` helper
 (~line 856, already returns `'9:16' | '16:9'`) instead of a hardcoded literal, so
-the preview and the render plan can't drift apart.
+preview and render plan can't drift apart.
 
-## 2. Render button next to Caption MP4
+## 2. Render button next to Caption MP4 - DONE AND WIRED (2026-08-05), unverified in browser
 
-`Caption MP4` button lives in `page.tsx` and calls `burnCaptions()`. `RenderPanel`
-is currently mounted much further down. Wanted:
-- render control **beside Caption MP4**, with its progress/stage feedback there;
-- **keep** the existing one under Post;
-- add it to the **publish previews** too.
 
-Three mount points sharing state — lift the render job state (jobId, stage,
-progress) into the page or a small context so all three read one source of truth.
-Do not duplicate the polling loop three times.
+Wanted: render control **beside Caption MP4** with its progress/stage feedback
+there; **keep** the one under Post; add it to the **publish previews** too.
+Three mount points, one source of truth, **one** polling loop.
 
-## 3. Word spacing does nothing (subtitles → Customize)
+### Done this session: `src/app/(fullscreen)/admin/reel-studio/useRenderJob.ts`
 
-Control exists but has no effect. Trace: `SubtitlePanel.tsx` (214 lines) writes
-`CaptionOverrides` → `KaraokeLine` (~line 713) consumes them → and the burn path
-in `render-worker/remotion-project/CaptionLayer.tsx` must apply the same value or
-preview and output diverge. Check all three; a control that only lands in preview
-is the more likely bug given the pattern of the other caption props.
+All the job state and the poll loop moved out of `RenderPanel` into a
+`useRenderJob({ reelId, onRendered })` hook returning a flat `RenderJob` view
+model (`available`, `hint`, `aspect`/`setAspect`, `busy`, `progress`, `status`,
+`error`, `videoUrl`, `canStart`, `start`). `describeStage`/`formatElapsed`/
+`ASPECTS` came along and are exported.
 
-## 4. Subtitle lines panel is smooshed
+Two decisions worth not re-litigating:
 
-Layout regression, still open. `SubtitlePanel.tsx`.
+- **Prop, not context.** Call the hook ONCE in `ReelStudioPage` and pass the
+  object down. One call = one timer; three components owning their own state
+  would mean three timers and three answers to "is it done yet?". A prop also
+  makes it visible at each mount site which job a button drives, which matters
+  in a 7k-line file.
+- **`onRendered` is held in a ref** inside the hook so `poll` has a stable
+  identity. The page passes an inline arrow, so without the ref `poll` would be
+  rebuilt on every unrelated keystroke in the studio.
 
-## 5. Related, still open from the prior handoff
+**Update: the hook is now imported and driving all three surfaces.** `tsc --noEmit` is clean
+and the caption/render suites are 31/31. One deviation from the plan below, and it matters:
+`getReelId` is passed as a **thunk**, not a value, because the hook call site sits above the
+reel-id binding in this 7,388-line file and passing the value directly is a TDZ crash at
+module init. Keep it lazy. Not yet confirmed in a browser — see the handoff doc.
+
+### The four edits below are DONE — kept as the record of what was changed
+
+
+1. **`RenderPanel.tsx`** — delete its `useState`/`useEffect`/`poll`/`start`
+   (lines 17-196) and its local `ASPECTS`/`describeStage`/`formatElapsed`, take
+   `job: RenderJob` as a prop, and read from it. The JSX stays as-is; only the
+   identifiers change (`busy` → `job.busy`, etc). Import `ASPECTS` from the hook.
+   Keep `reelId`/`onRendered` OUT of it — the page owns those now.
+2. **`page.tsx` ~2732**, next to `const [publishOpen, setPublishOpen] = useState(false);`
+   — add the single `const renderJob = useRenderJob({ reelId: project?.id ?? null, onRendered: ... })`.
+   Must sit with the other top-level hooks (unconditional). Move the
+   `patch({ composedUrl: url })` + `setNote(...)` currently inline at 6034-6037
+   into its `onRendered`.
+3. **`page.tsx` 6032** — `<RenderPanel reelId={project.id} onRendered={...} />`
+   becomes `<RenderPanel job={renderJob} />`.
+4. **New `RenderButton.tsx`** (compact: label + inline bar + stage line, reads
+   the same `job`) mounted twice — in the header right after the `Caption MP4`
+   button (ends line 4641) and in `PublishSheet`, under the mock in the left
+   column (after `</PlatformMockView>`, line 1701). `PublishSheet` needs a
+   `renderJob?: RenderJob` prop added to its signature (~1457-1477) and passed at
+   its mount site (~7289, next to `onClose={() => setPublishOpen(false)}`).
+
+Note `burnCaptions()` (3252) is a **different** path from the render worker and
+stays where it is; item 2 is about placing the *render* control beside it, not
+merging the two.
+
+## 3. Word spacing does nothing - DONE (2026-08-05). SECTION CONTENT IS WRONG — SEE BANNER.
+
+> Everything below this heading is the **superseded** analysis, kept only so the wrong turns
+> are not repeated. Claim (a) is false and its proposed fix would have caused drift. The real
+> root cause was inline-block whitespace trimming, not a flex row. Both fixes live in
+> `src/lib/mothermode/reel/captions.ts`. Read
+> `docs/WORD_SPACING_ROOT_CAUSE_FINDING.md` instead of the text below.
+
+Two distinct defects, both confirmed by grep this session.
+
+
+**(a) The burn path ignores both spacing dials.**
+`render-worker/remotion-project/CaptionLayer.tsx` contains **zero** occurrences of
+`wordSpacing` or `letterSpacing`. So even when preview is correct, the rendered
+MP4 cannot match. The earlier handoff listed this as a hypothesis; it is now a
+fact.
+
+**(b) `captionCssFor` guards `wordSpacing` on truthiness.**
+In `src/lib/mothermode/reel/captions.ts`:
+
+```js
+letterSpacing: `${def.letterSpacingEm ?? (def.upper ? 0.03 : 0.01)}em`,
+...(def.wordSpacingEm ? { wordSpacing: `${def.wordSpacingEm}em` } : {}),
+```
+
+`letterSpacing` is always emitted; `wordSpacing` is dropped whenever
+`wordSpacingEm` is `0` - so you cannot explicitly set zero to override a preset
+that ships a nonzero default (`Bold Pop` 0.12, `Soft Card` 0.08, `Type On` 0.1).
+Should be a `??`/`!= null` check to match `letterSpacing`.
+
+**Most likely why it looks totally dead in preview.** CSS `word-spacing` only
+applies to real whitespace text nodes. If `KaraokeLine` (~line 713 of `page.tsx`)
+renders each word as its own `<span>` in a flex row, there is no whitespace
+character between them and the property is silently inert. That would explain
+precisely why letter spacing works and word spacing does not.
+
+**Verify that first** - it decides the fix. If words are flex items, the fix is
+`gap: ${wordSpacingEm}em` on the row (and the equivalent in `CaptionLayer.tsx`),
+not `wordSpacing`. Do not "fix" (b) and assume it's done; (b) alone will not make
+the slider visibly work.
+
+Chain to keep in sync: `CaptionGallery.tsx` (slider, writes `wordSpacing`) ->
+`mergeCaptionOverrides` -> `captionCssFor` -> `KaraokeLine` (preview) **and**
+`CaptionLayer.tsx` (burn).
+
+## 4. Subtitle lines panel is smooshed - NOT STARTED (but scoped, 2026-08-05)
+
+Layout regression. `SubtitlePanel.tsx` (213 lines).
+
+**Read this before editing that file: its internal layout looks correct, so the bug is
+probably not in it.** The component is a well-formed scroll container —
+`flex min-h-0 flex-1 flex-col overflow-hidden` on the root (100), `shrink-0` on the header
+(102), clip name (120) and footer (208), and `min-h-0 flex-1 overflow-y-auto` on the rows
+(132). The rows themselves are generously padded (`px-2.5 py-2`, `gap-2.5`, `leading-5`).
+That is the standard correct recipe, not a smooshed one.
+
+Which points at the **parent**. A `flex-1 min-h-0` child only gets height if its ancestor is
+a flex column with a *definite* height. If the panel was moved into a container that is
+`h-auto`, or that lost `flex-col`/`min-h-0`, it collapses to roughly content height and every
+row crushes together — which matches "smooshed" exactly. So:
+
+1. Find the mount site of `<SubtitlePanel` in `page.tsx` and inspect the **ancestor chain**
+   for a missing `min-h-0`, a missing `flex-col`, or a height that became implicit.
+2. Only if that chain is sound should you touch `SubtitlePanel.tsx` itself.
+
+Do not start by re-padding rows. That would be treating a symptom, and it will fight whatever
+the real container fix turns out to be. A screenshot would settle direction in one look.
+
+
+## 5. Related, still open
 
 - light-theme / layout regression
-- captions not animating in the render (hypothesis: plan `words[]` empty —
-  verify in `src/lib/mothermode/reel/render/plan.ts` before touching
-  `CaptionLayer.tsx` / `ReelComposition.tsx`)
-- the async render worker changes are committed but **unverified at runtime**;
-  they need a Railway redeploy before any of this can be tested end to end.
+- captions not animating in the render (hypothesis: plan `words[]` empty - verify
+  `src/lib/mothermode/reel/render/plan.ts` before touching `CaptionLayer.tsx` /
+  `ReelComposition.tsx`). Note this is plausibly the *same* root cause family as
+  item 3a: the burn component is missing props the preview has.
 
-## Ground rules for the next session
+## Repo state as of this session
 
-`page.tsx` is 7,388 lines — read the region before editing it, and run
+- Secrets cleanup landed: `56ae41d` untracked `.env.local.bak` and gitignored env
+  backups. The three credentials should still be rotated if that hasn't happened.
+- **13 commits ahead of `origin/main`, unpushed.** "Merge to main" is NOT done.
+- `page.tsx` has one uncommitted change (the `9/16` edit above).
+- The async render worker is still **unverified at runtime**; Railway was
+  confirmed serving the old synchronous build (`GET /render/:jobId` 404s). Nothing
+  in the render flow can be tested end to end until it is redeployed.
+
+## Ground rules
+
+`page.tsx` is 7,388 lines - read the region before editing, and run
 `pnpm exec tsc --noEmit` after each change rather than batching. Safety net is
 `git reset --hard backup/pre-restore-main`.

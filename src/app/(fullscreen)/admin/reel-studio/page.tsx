@@ -86,6 +86,8 @@ import { CaptionGallery } from './CaptionGallery';
 import { SubtitlePanel } from './SubtitlePanel';
 import ThumbnailLabSheet from './ThumbnailLabSheet';
 import RenderPanel from './RenderPanel';
+import RenderButton from './RenderButton';
+import { useRenderJob, type RenderJob } from './useRenderJob';
 
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import { RichTextField } from '@/components/mothermode/content/RichTextField';
@@ -749,10 +751,19 @@ function KaraokeLine({
           each time it changes — so the highlight sweeps + animates like the subtitle panel. */}
       {keyframes ? <style>{keyframes}</style> : null}
       {rowSlices.map((slice, ri) => (
-        <p key={ri} style={style.line} className={ri > 0 ? 'opacity-70' : undefined}>
+        // Dim the rows that DON'T hold the spoken word. This used to be `ri > 0`,
+        // which was only correct while row 0 always contained the active word.
+        <p
+          key={ri}
+          style={style.line}
+          className={idx >= slice.from && idx < slice.to ? undefined : 'opacity-70'}
+        >
           {words.slice(slice.from, slice.to).map((w, k) => {
             const wi = slice.from + k;
-            const isActive = ri === 0 && wi === idx;
+            // No `ri === 0` gate: with page-based rows the active word can sit on
+            // any row, and that gate was what pinned the highlight to the top row.
+            const isActive = wi === idx;
+
             // POWER WORDS glow in the active style even when they're idle.
             const isPower = !isActive && isPowerWord(w.word, overrides?.powerWords);
             const text = style.upper ? w.word.toUpperCase() : w.word;
@@ -1115,16 +1126,23 @@ function PlatformMockView({
     );
   };
 
-  /** Phone-frame vertical mock (story/reel/short surfaces). */
+  /**
+   * Phone-frame vertical mock (story/reel/short surfaces).
+   *
+   * The frame is 9:16 — the ACTUAL delivery ratio for Shorts / TikTok / IG+FB
+   * Reels — not a taller phone-body ratio. A 9:19 frame letterboxes the video
+   * inside the mock, so the preview stops matching what the platform shows.
+   */
   const VerticalFrame = ({ children }: { children: React.ReactNode }) => (
     <div
       className="relative w-full max-w-[300px] overflow-hidden rounded-[1.6rem] bg-black shadow-2xl ring-1 ring-white/10"
-      style={{ aspectRatio: '9/19' }}
+      style={{ aspectRatio: '9/16' }}
     >
-      <MockVideo className="absolute inset-0 h-full w-full object-cover" />
+      <MockVideo className="absolute inset-0 block h-full w-full object-cover" />
       {children}
     </div>
   );
+
 
   /** Right-side action rail used by short-form surfaces. */
   const ActionRail = ({ items, className }: { items: [string, string][]; className?: string }) => (
@@ -1450,6 +1468,7 @@ function PublishSheet({
   captionWords = [],
   captionPreset = 'karaoke',
   captionOverrides,
+  renderJob,
 }: {
   name: string;
   videoUrl: string;
@@ -1468,6 +1487,8 @@ function PublishSheet({
   captionWords?: ReelWord[];
   captionPreset?: CaptionPreset;
   captionOverrides?: CaptionOverrides;
+  /** The page's ONE render job — the same one the header and Post panel drive. */
+  renderJob?: RenderJob;
 }) {
   const [brand, setBrand] = useState(initialBrand ?? 'youtube');
   const [platform, setPlatform] = useState(initialPlatform ?? 'shorts');
@@ -1681,7 +1702,7 @@ function PublishSheet({
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_320px]">
           {/* LEFT: the platform mock (the shared, pixel-faithful one) */}
-          <div className="flex min-h-0 items-center justify-center overflow-y-auto bg-black/60 p-6">
+          <div className="flex min-h-0 flex-col items-center justify-center gap-3 overflow-y-auto bg-black/60 p-6">
             <PlatformMockView
               platform={platform}
               videoUrl={videoUrl}
@@ -1692,6 +1713,10 @@ function PublishSheet({
               captionPreset={captionPreset}
               captionOverrides={captionOverrides}
             />
+            {/* Render from where you're judging the result. This is the same job
+                as the header's and the Post panel's — start it anywhere, watch
+                it anywhere. */}
+            {renderJob ? <RenderButton job={renderJob} label="Render this MP4" /> : null}
           </div>
 
           {/* RIGHT: copy rail — TipTap fields + AI wands, grounded in the transcript */}
@@ -2723,6 +2748,22 @@ export default function ReelStudioPage() {
   const [geneLeaderLine, setGeneLeaderLine] = useState<string | null>(null);
   const [batchResults, setBatchResults] = useState<{ name: string; status: string }[] | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+
+  /**
+   * ONE render job for all three surfaces: the header button, the Post panel,
+   * and the Publish view. Called exactly once, here, and passed down — see
+   * useRenderJob.ts for why that's a prop and not a context.
+   *
+   * `getReelId` is a thunk on purpose: it's read at click time, so it doesn't
+   * matter that `project` is declared further down this file.
+   */
+  const renderJob = useRenderJob({
+    getReelId: () => project?.id ?? null,
+    onRendered: (url) => {
+      patch({ composedUrl: url });
+      setNote('Render done — captions and animations are burned in. Save to keep the link.');
+    },
+  });
   /** The `?` keyboard-shortcut overlay. */
   const [helpOpen, setHelpOpen] = useState(false);
   /** Content Hub generated-video picker state (the bridge in). */
@@ -4632,6 +4673,11 @@ export default function ReelStudioPage() {
             >
               <Zap className="h-3.5 w-3.5" /> Caption MP4
             </button>
+            {/* The Remotion render, next to the ffmpeg burn it's often confused
+                with. Different paths: `Caption MP4` burns captions onto an
+                existing compose, this renders the whole composition frame by
+                frame so the MP4 matches the stage. */}
+            <RenderButton job={renderJob} />
             <button
               onClick={() => void duplicateAsVariant()}
               disabled={busy}
@@ -6022,13 +6068,7 @@ export default function ReelStudioPage() {
                   {/* THE render: Remotion renders the real React/CSS caption
                       components frame by frame, so the MP4 matches the stage.
                       It starts a Lambda render and polls — never blocks. */}
-                  <RenderPanel
-                    reelId={project.id}
-                    onRendered={(url) => {
-                      patch({ composedUrl: url });
-                      setNote('Render done — captions and animations are burned in. Save to keep the link.');
-                    }}
-                  />
+                  <RenderPanel job={renderJob} />
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => setPublishOpen(true)}
@@ -7287,6 +7327,7 @@ export default function ReelStudioPage() {
             .map((w) => w.word)
             .join(' ')}
           onClose={() => setPublishOpen(false)}
+          renderJob={renderJob}
           initialBrand={postTarget.brand}
           initialPlatform={postTarget.type}
           copy={copyPool ?? undefined}
