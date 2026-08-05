@@ -143,12 +143,69 @@ Chain to keep in sync: `CaptionGallery.tsx` (slider, writes `wordSpacing`) ->
 `mergeCaptionOverrides` -> `captionCssFor` -> `KaraokeLine` (preview) **and**
 `CaptionLayer.tsx` (burn).
 
-## 4. Subtitle lines panel is smooshed - NOT STARTED (but scoped, 2026-08-05)
+## 4. Subtitle lines panel is smooshed - ANCESTOR CHAIN MEASURED (2026-08-05 session 2)
 
 Layout regression. `SubtitlePanel.tsx` (213 lines).
 
+### Measured ancestor chain - the hypothesis below was WRONG
+
+Step 1 of the plan ("inspect the ancestor chain for a missing `min-h-0`, a missing
+`flex-col`, or a height that became implicit") has now been done. Mount site is
+`page.tsx:5220`. Walking up by indentation:
+
+| Line | Element |
+| --- | --- |
+| 4581 | `<div className="flex h-full flex-col">` |
+| 4583 | `<header className="flex h-14 shrink-0 ...">` |
+| 4767 | `<div className="flex min-h-0 flex-1">` |
+| 4769 | `<aside className="flex shrink-0 border-r border-bone/10">` |
+| 4806 | `<div className="flex w-[330px] shrink-0 flex-col">` |
+| 4824 | `<div className="min-h-0 flex-1 overflow-y-auto p-3">` |
+| 5218 | `<div className="flex h-full min-h-0 flex-col gap-2">` (inside `{tab === 'captions' && ...}`) |
+| 5220 | `<SubtitlePanel ... />` |
+
+**No link in that chain is missing `min-h-0`, missing `flex-col`, or lacking a definite
+height.** The chain is sound. So the predicted root cause is not present, and the fix the
+plan anticipated does not exist to be made.
+
+### What is actually anomalous
+
+One thing, at the 4824/5218 boundary: the sidebar body at 4824 is a **scroll container**
+(`overflow-y-auto`), and the captions tab wrapper at 5218 is **`h-full`**. Those two want
+opposite things from the same box:
+
+- Every other tab is plain content and needs the body to scroll - hence `overflow-y-auto`.
+- The captions tab is a fixed-height panel with its *own* internal scroller
+  (`SubtitlePanel` root is `flex min-h-0 flex-1 flex-col overflow-hidden`, rows at
+  `min-h-0 flex-1 overflow-y-auto`) and needs a definite height - hence `h-full`.
+
+`height: 100%` against a scrolling parent pins the panel to exactly the visible height and
+denies it the parent's scroll. That is a genuine nested-scroll conflict and it is exactly
+the sort of shared-container coupling that regresses when someone adjusts the body for a
+*different* tab. It is a plausible mechanism for the smoosh.
+
+**But it is a mechanism, not a confirmed cause.** It is not proven to produce the reported
+symptom, and the reasonable-looking fixes (flip 4824 to `overflow-hidden`, or give 5218 a
+`min-h-[...]`) either affect every other tab or require inventing a pixel number.
+
+### Do not blind-patch this
+
+The prior session's advice still holds and now has teeth: **a screenshot settles direction
+in one look.** Deliberately NOT changed this session, because the measured evidence
+eliminated the predicted cause without establishing a replacement, and editing shared
+container CSS in a 7,428-line file on a hunch is how the *next* regression gets written.
+Next actor: get the screenshot first.
+
+### Original scoping notes (kept for the record — step 1 is now DONE, see above)
+
+> The numbered plan at the end of this block has been executed: step 1 found the chain
+> SOUND, which retires the "missing `min-h-0` / missing `flex-col` / implicit height"
+> hypothesis. Do not re-run that search expecting to find something. The one correct and
+> still-live instruction here is the last line: **get a screenshot.**
+
 **Read this before editing that file: its internal layout looks correct, so the bug is
 probably not in it.** The component is a well-formed scroll container —
+
 `flex min-h-0 flex-1 flex-col overflow-hidden` on the root (100), `shrink-0` on the header
 (102), clip name (120) and footer (208), and `min-h-0 flex-1 overflow-y-auto` on the rows
 (132). The rows themselves are generously padded (`px-2.5 py-2`, `gap-2.5`, `leading-5`).
@@ -177,13 +234,23 @@ the real container fix turns out to be. A screenshot would settle direction in o
 
 ## Repo state as of this session
 
+> **Updated 2026-08-05 session 2.** The three bullets below about unpushed commits and an
+> uncommitted `page.tsx` are now WRONG — corrected inline. Verified with
+> `git rev-list --count origin/main..main`.
+
 - Secrets cleanup landed: `56ae41d` untracked `.env.local.bak` and gitignored env
   backups. The three credentials should still be rotated if that hasn't happened.
-- **13 commits ahead of `origin/main`, unpushed.** "Merge to main" is NOT done.
-- `page.tsx` has one uncommitted change (the `9/16` edit above).
-- The async render worker is still **unverified at runtime**; Railway was
-  confirmed serving the old synchronous build (`GET /render/:jobId` 404s). Nothing
-  in the render flow can be tested end to end until it is redeployed.
+- ~~13 commits ahead of `origin/main`, unpushed.~~ **PUSHED. `origin/main..main` is now 0.**
+  "Merge to main" IS done. The push block (secret scanning) is resolved — see
+  `docs/PUSH_BLOCKED_SECRET_CLEANUP_HANDOFF.md`.
+- ~~`page.tsx` has one uncommitted change (the `9/16` edit).~~ **Committed.** Working tree is
+  clean.
+- The async render worker is still **unverified at runtime**. Railway was confirmed serving
+  the old synchronous build (`GET /render/:jobId` 404s). **The push was the blocker for
+  redeploying, and it is now cleared** — so a Railway redeploy is finally possible and is the
+  gate on verifying both the render flow end to end and the caption word-spacing parity in
+  the MP4. Nothing in the render path has been observed working yet.
+
 
 ## Ground rules
 
