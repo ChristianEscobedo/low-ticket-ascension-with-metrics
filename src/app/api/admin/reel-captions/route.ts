@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import type { ReelWord } from '@/lib/mothermode/reel/types';
 import { isAssemblyAiConfigured, transcribeUrl } from '@/utils/integrations/assemblyai';
+import { getOpenAiKey } from '@/utils/integrations/runtime-config';
 
 export const maxDuration = 300;
 
@@ -45,10 +46,18 @@ export async function POST(request: NextRequest) {
   }
 
   // -- FALLBACK: OpenAI Whisper (25MB cap) --------------------------------------
-  const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+  // Resolve through runtime-config, NOT process.env directly: admins can save
+  // the OpenAI key at /admin/integrations and it lives in the `integrations`
+  // table, not the environment. Reading env here made a dashboard-configured
+  // key invisible and returned a bogus "no key" 503.
+  const apiKey = (await getOpenAiKey())?.trim();
   if (!apiKey) {
     return NextResponse.json(
-      { success: false, error: 'No transcription key — set ASSEMBLYAI_API_KEY (recommended) or OPENAI_API_KEY.' },
+      {
+        success: false,
+        error:
+          'No transcription key. Add an OpenAI key at /admin/integrations, or set ASSEMBLYAI_API_KEY (recommended — no 25MB cap) in your environment.',
+      },
       { status: 503 },
     );
   }
