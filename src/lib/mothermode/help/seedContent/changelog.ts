@@ -349,6 +349,44 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.0.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Caption transform box: drag to move, corners to resize',
+    body: cl([
+      '<p>Captions on the Reel Studio stage now have a real transform box. Drag anywhere inside it to move the captions (it travels with your pointer, snaps to centre and thirds, arrow keys nudge), and pull any of the four corner handles to grow or shrink the text. It works identically on the true Remotion preview and the Edit canvas, and it writes the same xPct / positionPct / sizePx the render plan reads — so what you drag IS what burns into the MP4.</p>',
+      '<p>The box also hugs the caption text at any size: it derives its width and height from the caption block itself (86% of the frame, one line per caption row, font scaled the same way the renderer scales it) instead of sitting at a fixed padding, and it saves once when you release — no network chatter mid-drag.</p>',
+      '<p>Also in this round: the Captions tab\'s subtitle word list keeps a comfortable minimum height and takes the largest share of the panel, so editing words no longer means scrolling a two-line sliver.</p>',
+      '<p><strong>Where to start:</strong> open a reel with captions in /admin/reel-studio and drag the dashed box on the stage. Full guide: Help Center / Reel Studio / Move and resize captions with the transform box.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.1.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Ghost fade, karaoke fill, per-word styling, and image fly-ins',
+    body: cl([
+      '<p>The caption engine grew up. Five new presets — Ghost (each page of captions dissolves in and out smoothly), Floater (the block bobs gently), Fill Sweep (the spoken word fills with color left to right, glued to the audio), Sign On (neon sign flicker), and Cascade (letters type in one at a time) — and every one of the 17 word animations now renders frame-exact in the MP4, not just in the preview.</p>',
+      '<p>Words can now be styled individually: mark any spoken word with its own animation, color, scale, or per-letter cascade — the rest of the line keeps the preset. And image fly-ins: cue an image from the Media Library to fly in the moment a specific word is said — click cue word, click the word, pick the image, or hit auto and let the strong words match your library.</p>',
+      '<p><strong>Where to start:</strong> Captions tab in /admin/reel-studio — pick Fill Sweep from the gallery, then cue word → click a word.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.2.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Fly-in images: upload or AI-generate, style and keyframe every cue, plus the Cue Autopilot play',
+    body: cl([
+      '<p>Image fly-ins grew their full toolchain. The cue picker now takes an upload straight from your machine or an AI prompt — either way the picture lands in the Media Library AND attaches to the word in one step, so it is reusable the next time a beat calls for it.</p>',
+      '<p>Every attached cue carries its own look and move: size, position, corner rounding, shadow, border — plus the same keyframed motion tracks scenes have (zoom, pan, rotate, sampled over the cue\'s own window). Leave everything unset and you get the house card: rise, scale, fade.</p>',
+      '<p>And the Cue Autopilot: one click packages the reel\'s transcript into the Reel Cue Autopilot play. The agent proposes cue beats (word + image prompt + style hint), you approve or edit the list at the gate, and only then does it attach — matching your Media Library first (free before paid) and generating just the missing images. The run shows in the Plays rail with full cost tracking, like every other play.</p>',
+      '<p><strong>Where to start:</strong> Captions tab in /admin/reel-studio — cue word → click a word → upload, type a prompt, or hit autopilot.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

@@ -84,6 +84,7 @@ import {
 } from '@/lib/mothermode/reel/silence';
 import {
   CAPTION_PRESETS,
+  CAPTION_SIZE_DEFAULT,
   CAPTION_STYLE_DEFS,
   captionAnimCss,
   captionAnimKeyframes,
@@ -107,7 +108,7 @@ import { useRenderJob, type RenderJob } from './useRenderJob';
 
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import { RichTextField } from '@/components/mothermode/content/RichTextField';
-import { aiRewriteText, aiAmplify } from '@/components/mothermode/content/aiClient';
+import { aiRewriteText, aiAmplify, aiGenerateImage } from '@/components/mothermode/content/aiClient';
 import { listGenerated } from '@/components/mothermode/content/generatedClient';
 import {
   applyBookends,
@@ -128,7 +129,8 @@ import {
   splitClipAt,
   timelineErrors,
 } from '@/lib/mothermode/reel/timeline';
-import { makeClipId, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
+import { makeClipId, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
+import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
   ALL_VEED_PRESETS,
@@ -2882,6 +2884,23 @@ export default function ReelStudioPage() {
   });
   /** The `?` keyboard-shortcut overlay. */
   const [helpOpen, setHelpOpen] = useState(false);
+  /**
+   * Media cues (word-triggered image fly-ins): cue mode turns subtitle word
+   * clicks into "attach an image here". The picker lists Media Library images.
+   */
+  const [cueMode, setCueMode] = useState(false);
+  const [cuePickerWord, setCuePickerWord] = useState<number | null>(null);
+  const [cueAssets, setCueAssets] = useState<{ url: string; name: string; tags: string[] }[] | null>(null);
+  /** Cue picker sources: upload rides the signed-URL flow, AI rides the content
+   *  image pipeline — both land in the Media Library AND attach in one step. */
+  const [cueUploadBusy, setCueUploadBusy] = useState(false);
+  const [cueAiPrompt, setCueAiPrompt] = useState('');
+  const [cueAiBusy, setCueAiBusy] = useState(false);
+  const cueImageInput = useRef<HTMLInputElement>(null);
+  /** Which attached cue's style editor is open (by cue id; null = closed). */
+  const [cueStyleEditId, setCueStyleEditId] = useState<string | null>(null);
+  /** The Reel Cue Autopilot run (the gated recipe) starting up. */
+  const [cueAutopilotBusy, setCueAutopilotBusy] = useState(false);
   /** Content Hub generated-video picker state (the bridge in). */
   const [hubOpen, setHubOpen] = useState(false);
   const [hubPieces, setHubPieces] = useState<ContentPiece[] | null>(null);
@@ -4003,6 +4022,230 @@ export default function ReelStudioPage() {
     if (!project || !(inSec > 0.05 && inSec < clip.durationSec - 0.5)) return;
     patchClip(clip.id, { trimStartSec: Math.round(inSec * 10) / 10 });
     setNote(`Cut ${fmtSec(inSec)} off the head of ${clip.name} (instant, Ctrl+Z undoes it).`);
+  }
+
+  /** Load Media Library images once (the cue picker + auto-proposal read them). */
+  async function loadCueAssets(): Promise<{ url: string; name: string; tags: string[] }[]> {
+    if (cueAssets) return cueAssets;
+    try {
+      const res = await fetch('/api/admin/media-library', { cache: 'no-store' });
+      const json = await res.json();
+      const assets = (json.assets ?? json.records ?? []) as {
+        url?: string; name?: string; kind?: string; tags?: string[];
+      }[];
+      const images = assets
+        .filter((a) => a.url && /^https?:\/\//i.test(a.url) && (a.kind === 'image' || !a.kind))
+        .map((a) => ({ url: a.url as string, name: a.name ?? '', tags: a.tags ?? [] }));
+      setCueAssets(images);
+      return images;
+    } catch {
+      setCueAssets([]);
+      return [];
+    }
+  }
+
+  /** Persist a mediaCues change (same save path as caption word edits). */
+  async function saveMediaCues(next: ReelMediaCue[]) {
+    if (!project) return;
+    const updated: ReelProject = { ...project, mediaCues: next.length ? next : undefined };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+  }
+
+  /** Cue mode word click: open the image picker for that word. */
+  function beginCueAttach(wordIndex: number) {
+    setCuePickerWord(wordIndex);
+    void loadCueAssets();
+  }
+
+  /** Picker pick: attach the image to the pending word. One cue per word (re-pick replaces). */
+  async function attachCue(url: string) {
+    if (!project || !currentClip || cuePickerWord == null) return;
+    const rest = (project.mediaCues ?? []).filter(
+      (c) => !(c.clipId === currentClip.id && c.wordIndex === cuePickerWord),
+    );
+    await saveMediaCues([
+      ...rest,
+      { id: makeClipId(), clipId: currentClip.id, wordIndex: cuePickerWord, url },
+    ]);
+    setCuePickerWord(null);
+    setNote('Image fly-in attached — it renders in the Remotion preview and the MP4.');
+  }
+
+  /** Auto-proposal: match strong transcript words to library images. */
+  async function autoCues() {
+    if (!project || !currentClip) return;
+    const words = project.captions[currentClip.id] ?? [];
+    if (!words.length) return;
+    const images = await loadCueAssets();
+    const proposals = suggestCuesForWords(words, images);
+    if (!proposals.length) {
+      setNote('No matches — name or tag library images after the words you say (e.g. "money", "rocket").');
+      return;
+    }
+    const keep = (project.mediaCues ?? []).filter((c) => c.clipId !== currentClip.id);
+    await saveMediaCues([
+      ...keep,
+      ...proposals.map((p) => ({
+        id: makeClipId(),
+        clipId: currentClip.id,
+        wordIndex: p.wordIndex,
+        url: p.url,
+      })),
+    ]);
+    setNote(`Auto-attached ${proposals.length} image fly-in(s) on "${currentClip.name}".`);
+  }
+
+  /**
+   * Ingest a fresh cue image into the Media Library AND the picker's list.
+   * The cue itself never changes shape ({clipId, wordIndex, url}) — WHERE the
+   * image came from is a picker concern, not a data-model concern.
+   */
+  async function ingestCueAsset(input: {
+    name: string;
+    url: string;
+    source: 'upload' | 'generated';
+    tags: string[];
+  }) {
+    try {
+      await fetch('/api/admin/media-library', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ingest',
+          name: input.name.slice(0, 150),
+          url: input.url,
+          kind: 'image',
+          source: input.source,
+          tags: input.tags,
+        }),
+      });
+    } catch {
+      /* the library entry is a convenience — the cue still attaches */
+    }
+    const entry = { url: input.url, name: input.name, tags: input.tags };
+    setCueAssets((prev) => (prev ? [entry, ...prev.filter((a) => a.url !== entry.url)] : prev));
+  }
+
+  /** Cue source: upload an image — signed-URL flow → the library → attach, one step. */
+  async function uploadCueImage(file: File) {
+    if (cuePickerWord == null) return;
+    setCueUploadBusy(true);
+    setError(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const mint = await fetch(UPLOAD_API, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ext, contentType: file.type || undefined, kind: 'image' }),
+      });
+      const mintJson = await mint.json();
+      if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const put = await fetch(mintJson.signedUrl, {
+        method: 'PUT',
+        headers: { 'content-type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
+      const url = String(mintJson.publicUrl || '');
+      if (!url) throw new Error('Upload returned no public URL');
+      await ingestCueAsset({
+        name: file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'Cue image',
+        url,
+        source: 'upload',
+        tags: ['cue'],
+      });
+      await attachCue(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setCueUploadBusy(false);
+    }
+  }
+
+  /** Cue source: AI-generate the image — the content image pipeline hosts it,
+   *  the library keeps it, and it attaches to the pending word in one step. */
+  async function generateCueImage() {
+    const prompt = cueAiPrompt.trim();
+    if (!prompt || cuePickerWord == null) return;
+    setCueAiBusy(true);
+    setError(null);
+    try {
+      const url = await aiGenerateImage(prompt, 'reel');
+      await ingestCueAsset({
+        name: `${prompt.slice(0, 60)} (AI cue)`,
+        url,
+        source: 'generated',
+        tags: ['ai-image', 'cue'],
+      });
+      setCueAiPrompt('');
+      await attachCue(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI image failed');
+    } finally {
+      setCueAiBusy(false);
+    }
+  }
+
+  /** The cue's render window in seconds: its word's span + the 1s hold (the
+   *  same math shiftMediaCues resolves it to). Motion presets expand over it. */
+  function cueWindowSec(cue: ReelMediaCue): number {
+    const w = project?.captions[cue.clipId]?.[cue.wordIndex];
+    return Math.max(0.5, (w ? w.end - w.start : 0.4) + 1.0);
+  }
+
+  /** Patch one cue's fields and persist (the same save path as attach). */
+  async function patchCue(id: string, partial: Partial<ReelMediaCue>) {
+    if (!project) return;
+    await saveMediaCues(
+      (project.mediaCues ?? []).map((c) => (c.id === id ? { ...c, ...partial } : c)),
+    );
+  }
+
+  /** Patch one cue's STYLE (merge). A border width of 0 drops the border keys. */
+  async function patchCueStyle(
+    id: string,
+    partial: Partial<NonNullable<ReelMediaCue['style']>>,
+  ) {
+    if (!project) return;
+    const cue = (project.mediaCues ?? []).find((c) => c.id === id);
+    if (!cue) return;
+    const style = { ...(cue.style ?? {}), ...partial };
+    if (style.borderPx === 0) {
+      delete style.borderPx;
+      delete style.borderColor;
+    }
+    await patchCue(id, { style });
+  }
+
+  /**
+   * The full-auto pipeline, as the GATED recipe (never a silent background
+   * act): package this reel's transcripts, start 'reel-cue-autopilot' on the
+   * background lane, and hand the owner the run page — the gate (approve/edit
+   * the beat list) is where the images get matched or generated and the cues
+   * attach. Cost tracking rides the run like every other play.
+   */
+  async function runCueAutopilot() {
+    if (!project) return;
+    setCueAutopilotBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/reel-cue-autopilot', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Autopilot failed to start');
+      setNote(
+        'Cue Autopilot is running — approve the beat list when it lands, and the cues attach themselves (library matches are free; only the rest generate).',
+      );
+      window.open(String(json.runUrl || `/admin/recipes/${json.runId}`), '_blank');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Autopilot failed');
+    } finally {
+      setCueAutopilotBusy(false);
+    }
   }
 
   /** Whisper the current clip and store word timings for the karaoke layer. */
@@ -5326,7 +5569,14 @@ export default function ReelStudioPage() {
 
               {tab === 'captions' && (
                 <div className="flex h-full min-h-0 flex-col gap-2">
-                  {/* R20: the subtitle word track as a FIRST-CLASS editor */}
+                  {/* R20: the subtitle word track as a FIRST-CLASS editor.
+                      The wrapper gives it a FLOOR. SubtitlePanel is already
+                      `flex-1`, but flex-1 only hands out what's LEFT OVER — and
+                      the gallery (46% cap) plus the tall fancy-subtitles block
+                      below claimed nearly all of it, so the word list collapsed
+                      to a couple of scrolling lines. A min-height means the
+                      thing you actually edit in can't be crowded out. */}
+                  <div className="flex min-h-[240px] flex-[2] flex-col overflow-hidden">
                   <SubtitlePanel
                     words={currentClip ? (project.captions[currentClip.id] ?? []) : []}
                     clipName={currentClip?.name ?? ''}
@@ -5364,9 +5614,320 @@ export default function ReelStudioPage() {
                       setProject(updated);
                       void post({ action: 'save', project: updated });
                     }}
+                    cueMode={cueMode}
+                    onCueWord={(i) => beginCueAttach(i)}
+                    cuedWordIndexes={
+                      new Set(
+                        (project.mediaCues ?? [])
+                          .filter((c) => c.clipId === currentClip?.id)
+                          .map((c) => c.wordIndex),
+                      )
+                    }
                   />
+                  </div>
+                  {/* MEDIA CUES — image fly-ins keyed to spoken words (the
+                      Submagic/Opus b-roll beat). Cue mode turns word clicks into
+                      attaches; auto matches strong words to library images. */}
+                  <div className="shrink-0 space-y-1.5 rounded-xl border border-violet-500/25 bg-violet-500/[0.05] p-2">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="h-3 w-3 text-violet-300/80" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
+                        Image fly-ins
+                      </span>
+                      <button
+                        onClick={() => {
+                          setCueMode((v) => !v);
+                          setCuePickerWord(null);
+                        }}
+                        disabled={!currentClip || !(project.captions[currentClip.id]?.length ?? 0)}
+                        className={clsx(
+                          'ml-auto rounded px-2 py-0.5 text-[9px] font-semibold disabled:opacity-40',
+                          cueMode ? 'bg-violet-500 text-white' : 'text-violet-300/80 hover:bg-violet-500/15',
+                        )}
+                        title="Cue mode: click a word in the subtitle list to attach an image fly-in"
+                      >
+                        {cueMode ? 'cue mode ON' : 'cue word'}
+                      </button>
+                      <button
+                        onClick={() => void autoCues()}
+                        disabled={!currentClip || !(project.captions[currentClip.id]?.length ?? 0)}
+                        className="rounded border border-violet-400/40 px-2 py-0.5 text-[9px] font-semibold text-violet-300/90 hover:bg-violet-500/15 disabled:opacity-40"
+                        title="Match strong words to Media Library images automatically"
+                      >
+                        auto
+                      </button>
+                      <button
+                        onClick={() => void runCueAutopilot()}
+                        disabled={
+                          cueAutopilotBusy ||
+                          !currentClip ||
+                          !(project.captions[currentClip.id]?.length ?? 0)
+                        }
+                        className="inline-flex items-center gap-1 rounded border border-violet-400/60 bg-violet-500/15 px-2 py-0.5 text-[9px] font-semibold text-violet-200 hover:bg-violet-500/25 disabled:opacity-40"
+                        title="The gated recipe: AI proposes fly-in beats from the transcript → you approve the list → images match (free) or generate → cues attach"
+                      >
+                        {cueAutopilotBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        autopilot
+                      </button>
+                    </div>
+                    {/* the picker: open while a word waits for its image */}
+                    {cuePickerWord != null && (
+                      <div className="rounded-lg border border-violet-400/30 bg-ink/60 p-1.5">
+                        <p className="mb-1 flex items-center justify-between text-[9px] text-violet-200/70">
+                          <span>
+                            pick an image for "{project.captions[currentClip?.id ?? '']?.[cuePickerWord]?.word}"
+                          </span>
+                          <button onClick={() => setCuePickerWord(null)} className="text-bone/40 hover:text-bone">
+                            ✕
+                          </button>
+                        </p>
+                        {/* the sources: upload or AI-generate — either lands in the
+                            Media Library AND attaches to this word in one step */}
+                        <div className="mb-1.5 flex items-center gap-1">
+                          <button
+                            onClick={() => cueImageInput.current?.click()}
+                            disabled={cueUploadBusy || cueAiBusy}
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-400/40 px-1.5 py-1 text-[9px] font-semibold text-violet-200/90 hover:bg-violet-500/15 disabled:opacity-40"
+                            title="Upload an image — saves to the Media Library and attaches to this word"
+                          >
+                            {cueUploadBusy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Upload className="h-3 w-3" />
+                            )}
+                            upload
+                          </button>
+                          <input
+                            ref={cueImageInput}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void uploadCueImage(f);
+                              e.target.value = '';
+                            }}
+                          />
+                          <input
+                            value={cueAiPrompt}
+                            onChange={(e) => setCueAiPrompt(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void generateCueImage();
+                            }}
+                            placeholder="or describe it — AI generates + attaches"
+                            className="min-w-0 flex-1 rounded border border-violet-400/25 bg-ink px-1.5 py-1 text-[9px] text-bone/80 outline-none placeholder:text-bone/25"
+                          />
+                          <button
+                            onClick={() => void generateCueImage()}
+                            disabled={cueAiBusy || cueUploadBusy || !cueAiPrompt.trim()}
+                            className="inline-flex shrink-0 items-center gap-1 rounded bg-violet-500 px-1.5 py-1 text-[9px] font-semibold text-white hover:bg-violet-500/90 disabled:opacity-40"
+                            title="Generate the image with AI — saves to the Media Library and attaches to this word"
+                          >
+                            {cueAiBusy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3 w-3" />
+                            )}
+                            generate
+                          </button>
+                        </div>
+                        {cueAssets === null ? (
+                          <p className="flex items-center gap-1.5 px-1 py-2 text-[10px] text-bone/40">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Loading library…
+                          </p>
+                        ) : cueAssets.length === 0 ? (
+                          <p className="px-1 py-2 text-[10px] text-bone/35">
+                            No images in the Media Library yet — upload one there first.
+                          </p>
+                        ) : (
+                          <div className="grid max-h-28 grid-cols-4 gap-1 overflow-y-auto">
+                            {cueAssets.slice(0, 24).map((a) => (
+                              <button
+                                key={a.url}
+                                onClick={() => void attachCue(a.url)}
+                                title={a.name || a.url}
+                                className="overflow-hidden rounded border border-violet-400/20 hover:border-violet-400"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={a.url} alt={a.name} className="h-12 w-full object-cover" loading="lazy" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* existing cues on this clip — each opens a style/motion editor */}
+                    {currentClip && (project.mediaCues ?? []).some((c) => c.clipId === currentClip.id) && (
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-1">
+                          {(project.mediaCues ?? [])
+                            .filter((c) => c.clipId === currentClip.id)
+                            .map((c) => (
+                              <span
+                                key={c.id}
+                                className="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] text-violet-200"
+                              >
+                                🖼 "{project.captions[c.clipId]?.[c.wordIndex]?.word ?? c.wordIndex}"
+                                <button
+                                  onClick={() =>
+                                    setCueStyleEditId((v) => (v === c.id ? null : c.id))
+                                  }
+                                  className={clsx(
+                                    'text-violet-300/60 hover:text-violet-100',
+                                    (c.style || c.motion) && 'text-violet-300',
+                                  )}
+                                  title="Style + motion for this fly-in"
+                                >
+                                  ⚙
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    void saveMediaCues((project.mediaCues ?? []).filter((x) => x.id !== c.id))
+                                  }
+                                  className="text-violet-300/60 hover:text-red-300"
+                                  title="Remove this fly-in"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                        </div>
+                        {/* the per-cue style + keyframed motion editor */}
+                        {(() => {
+                          const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
+                          if (!cue || cue.clipId !== currentClip.id) return null;
+                          const windowSec = cueWindowSec(cue);
+                          return (
+                            <div className="space-y-1 rounded-lg border border-violet-400/25 bg-ink/70 p-1.5">
+                              <p className="flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-violet-300/60">
+                                <span>
+                                  fly-in style — "{project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}"
+                                </span>
+                                <button
+                                  onClick={() => void patchCue(cue.id, { style: undefined, motion: undefined })}
+                                  className="normal-case text-bone/35 hover:text-bone"
+                                  title="Back to the default card (top-right, rise+scale entrance)"
+                                >
+                                  reset
+                                </button>
+                              </p>
+                              {(
+                                [
+                                  ['size', 'widthPct', 15, 80, 34],
+                                  ['x', 'xPct', 0, 90, 60],
+                                  ['y', 'yPct', 0, 90, 16],
+                                  ['corner', 'radiusPx', 0, 60, 16],
+                                ] as const
+                              ).map(([label, key, min, max, dflt]) => (
+                                <label
+                                  key={key}
+                                  className="flex items-center gap-1.5 text-[8px] text-violet-200/50"
+                                >
+                                  <span className="w-8 shrink-0">{label}</span>
+                                  <input
+                                    type="range"
+                                    min={min}
+                                    max={max}
+                                    step={1}
+                                    value={cue.style?.[key] ?? dflt}
+                                    onChange={(e) =>
+                                      void patchCueStyle(cue.id, {
+                                        [key]: Number(e.target.value),
+                                      } as Partial<NonNullable<ReelMediaCue['style']>>)
+                                    }
+                                    className="min-w-0 flex-1 accent-violet-400"
+                                  />
+                                  <span className="w-6 shrink-0 text-right text-violet-200/60">
+                                    {cue.style?.[key] ?? dflt}
+                                  </span>
+                                </label>
+                              ))}
+                              <div className="flex items-center gap-1.5 text-[8px] text-violet-200/50">
+                                <span className="w-8 shrink-0">border</span>
+                                <input
+                                  type="color"
+                                  value={cue.style?.borderColor ?? '#a78bfa'}
+                                  onChange={(e) =>
+                                    void patchCueStyle(cue.id, {
+                                      borderColor: e.target.value,
+                                      borderPx: cue.style?.borderPx ?? 2,
+                                    })
+                                  }
+                                  className="h-4 w-5 shrink-0 cursor-pointer rounded border border-violet-400/25 bg-transparent"
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={12}
+                                  step={1}
+                                  value={cue.style?.borderPx ?? 0}
+                                  onChange={(e) =>
+                                    void patchCueStyle(cue.id, {
+                                      borderPx: Number(e.target.value),
+                                      ...(Number(e.target.value) > 0
+                                        ? { borderColor: cue.style?.borderColor ?? '#a78bfa' }
+                                        : {}),
+                                    })
+                                  }
+                                  className="w-12 accent-violet-400"
+                                  title="Border width (0 = none)"
+                                />
+                                <label className="ml-auto flex items-center gap-1">
+                                  shadow
+                                  <input
+                                    type="checkbox"
+                                    checked={cue.style?.shadow !== false}
+                                    onChange={(e) =>
+                                      void patchCueStyle(cue.id, { shadow: e.target.checked })
+                                    }
+                                    className="accent-violet-400"
+                                  />
+                                </label>
+                              </div>
+                              {/* motion — the SAME preset chips scenes use, expanded
+                                  over the cue's window (word span + 1s hold) */}
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                <span className="text-[8px] font-bold uppercase tracking-wide text-violet-300/50">
+                                  motion
+                                </span>
+                                <button
+                                  onClick={() => void patchCue(cue.id, { motion: undefined })}
+                                  className={clsx(
+                                    'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                    !cue.motion
+                                      ? 'bg-violet-500 text-white'
+                                      : 'text-violet-200/60 hover:bg-violet-500/15',
+                                  )}
+                                  title="The default rise+scale entrance"
+                                >
+                                  default
+                                </button>
+                                {MOTION_PRESETS.map((p) => (
+                                  <button
+                                    key={p.id}
+                                    onClick={() =>
+                                      void patchCue(cue.id, { motion: presetKeys(p.id, windowSec) })
+                                    }
+                                    title={p.hint}
+                                    className={clsx(
+                                      'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                      detectPreset(cue.motion, windowSec) === p.id
+                                        ? 'bg-violet-500 text-white'
+                                        : 'text-violet-200/60 hover:bg-violet-500/15',
+                                    )}
+                                  >
+                                    {p.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
                   {/* the preset gallery + customizer */}
-                  <div className="max-h-[46%] shrink-0 overflow-y-auto rounded-xl border border-bone/10 bg-bone/[0.02] p-2">
+                  <div className="max-h-[32%] shrink-0 overflow-y-auto rounded-xl border border-bone/10 bg-bone/[0.02] p-2">
                     <CaptionGallery
                       currentPreset={project.captionStyle}
                       overrides={project.captionOverrides}
@@ -6729,9 +7290,20 @@ export default function ReelStudioPage() {
                         <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
+                          sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
+                          // The box is as tall as the rows the caption wraps to, so the
+                          // outline tracks the text instead of sitting at a fixed size.
+                          rows={project.captionOverrides?.rows ?? 1}
                           onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
                           onCommit={(x, y) => {
                             void setCaptionOverrides({ xPct: x, positionPct: y });
+                          }}
+                          // Same local/persist split as the move: live while dragging a
+                          // corner, one write on release. Per-frame writes here would
+                          // hammer the API for a single resize gesture.
+                          onResize={(sizePx) => setCaptionOverridesLocal({ sizePx })}
+                          onResizeCommit={(sizePx) => {
+                            void setCaptionOverrides({ sizePx });
                           }}
                         />
                       )}
@@ -6834,14 +7406,20 @@ export default function ReelStudioPage() {
                           </div>
                           {/* Placement uses the SAME puck as the Remotion branch, so
                               dragging behaves identically on both previews. */}
-                          <CaptionDragLayer
-                            xPct={project.captionOverrides?.xPct ?? 50}
-                            yPct={project.captionOverrides?.positionPct ?? 12}
-                            onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
-                            onCommit={(x, y) => {
-                              void setCaptionOverrides({ xPct: x, positionPct: y });
-                            }}
-                          />
+                        <CaptionDragLayer
+                          xPct={project.captionOverrides?.xPct ?? 50}
+                          yPct={project.captionOverrides?.positionPct ?? 12}
+                          sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
+                          rows={project.captionOverrides?.rows ?? 1}
+                          onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
+                          onCommit={(x, y) => {
+                            void setCaptionOverrides({ xPct: x, positionPct: y });
+                          }}
+                          onResize={(sizePx) => setCaptionOverridesLocal({ sizePx })}
+                          onResizeCommit={(sizePx) => {
+                            void setCaptionOverrides({ sizePx });
+                          }}
+                        />
                         </>
                       )}
 

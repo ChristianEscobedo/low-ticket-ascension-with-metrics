@@ -55,7 +55,13 @@ export interface RecipeDeps {
    *  Returns the handed_off_to label on success, throws on failure. */
   runHandoff: (input: {
     artifactId: string;
-    target: 'planner-cards' | 'leadgen-kit' | 'email-kit' | 'sales-funnel' | 'system';
+    target:
+      | 'planner-cards'
+      | 'leadgen-kit'
+      | 'email-kit'
+      | 'sales-funnel'
+      | 'system'
+      | 'reel-cues';
     session: ResearchSession;
     generate: boolean;
   }) => Promise<string | void>;

@@ -30,7 +30,7 @@ import {
 import { captionFontsFor, type CaptionFont } from '../captionFonts';
 import type { MotionKey } from '../motion';
 import { effectiveClipDuration, MIN_CLIP_SECONDS } from '../timeline';
-import type { ReelProject, ReelWord } from '../types';
+import type { ReelMediaCueStyle, ReelProject, ReelWord, ReelWordMark } from '../types';
 
 // ---------------------------------------------------------------------------
 // Plan shape (must stay JSON-serializable — it travels as Remotion inputProps)
@@ -67,7 +67,34 @@ export interface RenderWord {
   text: string;
   fromFrame: number;
   toFrame: number;
+  /** Per-word styling, copied verbatim from ReelWord.mark by shiftWords. */
+  mark?: ReelWordMark;
 }
+
+/**
+ * A word-triggered media cue, resolved to TIMELINE frames. The image flies in
+ * when its trigger word is spoken and holds for MEDIA_CUE_HOLD_SEC after the
+ * word ends (clamped to the clip's surviving window).
+ */
+export interface RenderMediaCue {
+  id: string;
+  src: string;
+  fromFrame: number;
+  durationInFrames: number;
+  /** The trigger word (for logs/debugging). */
+  wordText: string;
+  /** Per-cue look (size/position/frame), copied verbatim from the project. */
+  style?: ReelMediaCueStyle;
+  /**
+   * Keyframed motion, CUE-RELATIVE seconds (0 = the frame the cue appears).
+   * The cue layer samples it exactly like a clip's track; when it's absent
+   * the default rise+scale/fade entrance owns the transform.
+   */
+  motion?: MotionKey[];
+}
+
+/** How long a media cue holds after its trigger word ends. */
+export const MEDIA_CUE_HOLD_SEC = 1.0;
 
 export interface RenderPlan {
   fps: number;
@@ -87,6 +114,8 @@ export interface RenderPlan {
   captionLayout: CaptionLayout;
   /** Words that render in the active style even when idle. */
   powerWords: string[];
+  /** Word-triggered media cues (image fly-ins), frame-resolved. */
+  mediaCues: RenderMediaCue[];
   /**
    * Webfonts the renderer must fetch *before* drawing frame 0. The render
    * container ships only Noto, so without this the caption font silently
@@ -147,7 +176,59 @@ export function shiftWords(
     const to = clipStartFrame + toFrames(Math.min(effectiveSec, localEnd), fps);
     const text = w.word.trim();
     if (!text) continue;
-    out.push({ text, fromFrame: from, toFrame: Math.max(from + 1, to) });
+    out.push({
+      text,
+      fromFrame: from,
+      toFrame: Math.max(from + 1, to),
+      // The mark rides through verbatim — it was validated by normalizeReelWords.
+      ...(w.mark ? { mark: w.mark } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * Resolve word-triggered media cues to TIMELINE frames.
+ *
+ * The cue keys on (clipId, wordIndex) — the same transcript-derived address the
+ * subtitle editor shows — so it re-times itself off the word's own start/end.
+ * A cue whose word was trimmed away is dropped here (the word is genuinely
+ * gone), exactly like shiftWords drops trimmed words.
+ */
+export function shiftMediaCues(
+  project: Pick<ReelProject, 'clips' | 'captions' | 'mediaCues'>,
+  fps: number,
+): RenderMediaCue[] {
+  const out: RenderMediaCue[] = [];
+  let cursor = 0;
+  for (const clip of project.clips) {
+    const effSec = effectiveClipDuration(clip);
+    const frames = clipFrames(effSec, fps);
+    const trimStartSec = Math.max(0, clip.trimStartSec ?? 0);
+    const cues = (project.mediaCues ?? []).filter((c) => c.clipId === clip.id);
+    const words = project.captions?.[clip.id] ?? [];
+    for (const cue of cues) {
+      const w = words[cue.wordIndex];
+      if (!w) continue;
+      const localStart = w.start - trimStartSec;
+      const localEnd = w.end - trimStartSec;
+      if (localEnd <= 0 || localStart >= effSec) continue;
+      const from = cursor + toFrames(Math.max(0, localStart), fps);
+      const to = cursor + toFrames(Math.min(effSec, localEnd + MEDIA_CUE_HOLD_SEC), fps);
+      out.push({
+        id: cue.id,
+        src: cue.url,
+        fromFrame: from,
+        durationInFrames: Math.max(1, to - from),
+        wordText: w.word,
+        // Style + motion ride through verbatim — normalizeMediaCues validated
+        // them at load, so the plan stays the faithful pipe (like shiftWords'
+        // mark passthrough).
+        ...(cue.style ? { style: cue.style } : {}),
+        ...(cue.motion && cue.motion.length >= 2 ? { motion: cue.motion } : {}),
+      });
+    }
+    cursor += frames;
   }
   return out;
 }
@@ -159,7 +240,7 @@ export function shiftWords(
 export function buildRenderPlan(
   project: Pick<
     ReelProject,
-    'clips' | 'audio' | 'captions' | 'captionStyle' | 'captionOverrides' | 'overlays'
+    'clips' | 'audio' | 'captions' | 'captionStyle' | 'captionOverrides' | 'overlays' | 'mediaCues'
   >,
   options: RenderPlanOptions = {},
 ): RenderPlan {
@@ -244,6 +325,7 @@ export function buildRenderPlan(
     captionStyle,
     captionLayout,
     powerWords: project.captionOverrides?.powerWords ?? [],
+    mediaCues: shiftMediaCues(project, fps),
     fonts: captionFontsFor(captionStyle),
   };
 }

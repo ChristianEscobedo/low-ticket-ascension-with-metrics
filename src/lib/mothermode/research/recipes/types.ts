@@ -25,9 +25,17 @@ export type RecipeInputFrom =
  *  Full System fan-out (lead magnet + opt-in funnel + nurture kit + sales
  *  funnel draft + planner cards, manifest persisted); it always Builds. */
 export interface RecipeStepHandoff {
-  target: 'planner-cards' | 'leadgen-kit' | 'email-kit' | 'sales-funnel' | 'system';
+  target:
+    | 'planner-cards'
+    | 'leadgen-kit'
+    | 'email-kit'
+    | 'sales-funnel'
+    | 'system'
+    | 'reel-cues';
   /** Build (true) runs the target's own pipeline; Draft (false) pre-fills.
-   *  Ignored by 'system' — the fan-out always builds its buildable parts. */
+   *  Ignored by 'system' — the fan-out always builds its buildable parts.
+   *  For 'reel-cues': Build = match the library first, then generate what's
+   *  missing; Draft = library matches only, never a paid generation. */
   generate: boolean;
 }
 
@@ -155,7 +163,8 @@ export function normalizeRecipeSteps(value: unknown): RecipeStep[] {
         target === 'leadgen-kit' ||
         target === 'email-kit' ||
         target === 'sales-funnel' ||
-        target === 'system'
+        target === 'system' ||
+        target === 'reel-cues'
       ) {
         step.handoff = { target, generate: hr.generate === true };
       }
@@ -251,6 +260,7 @@ const HANDOFF_TARGETS: readonly string[] = [
   'email-kit',
   'sales-funnel',
   'system',
+  'reel-cues',
 ];
 
 /**

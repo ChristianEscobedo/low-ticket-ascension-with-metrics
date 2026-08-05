@@ -69,6 +69,9 @@ export function SubtitlePanel({
   onTranscribe,
   onSeek,
   onEdit,
+  cueMode = false,
+  onCueWord,
+  cuedWordIndexes,
 }: {
   words: ReelWord[];
   clipName: string;
@@ -77,6 +80,13 @@ export function SubtitlePanel({
   onTranscribe: () => void;
   onSeek: (clipSec: number) => void;
   onEdit: (words: ReelWord[]) => void;
+  /**
+   * Media-cue mode: clicking a word attaches an image fly-in to it instead of
+   * opening the inline editor. Cued words get a violet underline.
+   */
+  cueMode?: boolean;
+  onCueWord?: (wordIndex: number) => void;
+  cuedWordIndexes?: ReadonlySet<number>;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
@@ -180,10 +190,15 @@ export function SubtitlePanel({
                         </span>
                       );
                     }
+                    const cued = cuedWordIndexes?.has(i) ?? false;
                     return (
                       <button
                         key={i}
                         onClick={() => {
+                          if (cueMode) {
+                            onCueWord?.(i);
+                            return;
+                          }
                           setEditing(i);
                           setDraft(w.word);
                         }}
@@ -192,8 +207,14 @@ export function SubtitlePanel({
                           isActive
                             ? 'bg-brass/25 font-semibold text-brass'
                             : 'hover:bg-bone/10',
+                          cueMode && 'cursor-copy hover:bg-violet-500/25 hover:text-violet-200',
+                          cued && 'underline decoration-violet-400 decoration-2 underline-offset-4',
                         )}
-                        title={`Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`}
+                        title={
+                          cueMode
+                            ? `Attach an image fly-in to "${w.word}" (${tc(w.start)}–${tc(w.end)})`
+                            : `Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`
+                        }
                       >
                         {w.word}
                       </button>
@@ -206,7 +227,9 @@ export function SubtitlePanel({
         </div>
       )}
       <p className="shrink-0 border-t border-bone/[0.06] bg-bone/[0.02] px-3 py-1.5 text-[8px] text-bone/25">
-        click a timecode to seek · click a word to edit it
+        {cueMode
+          ? 'cue mode: click a word to attach an image fly-in · underlined words have one'
+          : 'click a timecode to seek · click a word to edit it'}
       </p>
     </div>
   );

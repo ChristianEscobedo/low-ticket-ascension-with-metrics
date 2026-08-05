@@ -32,7 +32,10 @@ export type HighlightMode =
  * flip = flip in on the X axis · spin = a subtle rotate-in · bounce = springy
  * overshoot · blurIn = the Opus-Clip blur resolve · riseUp = clean rise+fade ·
  * elastic = squash-and-stretch · glitch = 2-frame RGB split · typeOn = a
- * left-to-right wipe reveal · shake = a 3-cycle emphasis wobble. '' = none.
+ * left-to-right wipe reveal · shake = a 3-cycle emphasis wobble ·
+ * riseMask = rise out of a clip mask · springPop = big overshoot pop ·
+ * neonFlicker = sign-flicker on · glowPulse = bloom swell ·
+ * cascade = letters stagger in one at a time. '' = none.
  */
 export type CaptionAnim =
   | ''
@@ -47,7 +50,23 @@ export type CaptionAnim =
   | 'elastic'
   | 'glitch'
   | 'typeOn'
-  | 'shake';
+  | 'shake'
+  | 'riseMask'
+  | 'springPop'
+  | 'neonFlicker'
+  | 'glowPulse'
+  | 'cascade';
+
+/**
+ * BLOCK-level ambience — the whole caption block, not one word.
+ * ghostFade = each PAGE of rows fades in on arrival and out before the flip
+ * (the smooth "ghost" dissolve). float = the block bobs gently forever.
+ *
+ * These are FRAME-DERIVED in the layer (page turns are computed from the word
+ * window, the bob from the frame clock) — never stored state, so they can't
+ * drift from the words the way a keyframe on a row index would.
+ */
+export type CaptionBlockFx = 'ghostFade' | 'float';
 
 /** The CSS keyframe for a word-enter animation (injected once into the page). */
 export function captionAnimKeyframes(anim: CaptionAnim): string {
@@ -76,6 +95,18 @@ export function captionAnimKeyframes(anim: CaptionAnim): string {
       return `@keyframes cap-typeon{0%{clip-path:inset(0 100% 0 0);opacity:.4}100%{clip-path:inset(0 0 0 0);opacity:1}}`;
     case 'shake':
       return `@keyframes cap-shake{0%,100%{transform:translate(0,0) rotate(0)}20%{transform:translate(2px,-1px) rotate(2deg)}40%{transform:translate(-2px,1px) rotate(-2deg)}60%{transform:translate(1px,1px) rotate(1deg)}80%{transform:translate(-1px,-1px) rotate(-1deg)}}`;
+    case 'riseMask':
+      return `@keyframes cap-risemask{0%{transform:translateY(0.5em);clip-path:inset(0 0 100% 0)}100%{transform:translateY(0);clip-path:inset(0 0 0% 0)}}`;
+    case 'springPop':
+      return `@keyframes cap-springpop{0%{transform:scale(0.5);opacity:0}55%{transform:scale(1.32);opacity:1}80%{transform:scale(0.94)}100%{transform:scale(1);opacity:1}}`;
+    case 'neonFlicker':
+      return `@keyframes cap-neonflicker{0%,9%,11%,19%,21%,100%{opacity:1}10%,20%{opacity:0.25}}`;
+    case 'glowPulse':
+      return `@keyframes cap-glowpulse{0%{opacity:.55;transform:scale(0.94)}55%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}`;
+    case 'cascade':
+      // The true letter-stagger is computed per frame in the layer; the CSS
+      // swatch approximates it as a soft rise for the platform mocks.
+      return `@keyframes cap-cascade{0%{transform:translateY(0.3em);opacity:0;filter:blur(3px)}100%{transform:translateY(0);opacity:1;filter:blur(0)}}`;
     default:
       return '';
   }
@@ -108,6 +139,16 @@ export function captionAnimCss(anim: CaptionAnim): string {
       return 'cap-typeon 200ms cubic-bezier(0.3,0.7,0.4,1)';
     case 'shake':
       return 'cap-shake 220ms ease-in-out';
+    case 'riseMask':
+      return 'cap-risemask 220ms cubic-bezier(0.2,0.8,0.3,1)';
+    case 'springPop':
+      return 'cap-springpop 220ms cubic-bezier(0.34,1.56,0.64,1)';
+    case 'neonFlicker':
+      return 'cap-neonflicker 220ms linear';
+    case 'glowPulse':
+      return 'cap-glowpulse 220ms ease-out';
+    case 'cascade':
+      return 'cap-cascade 220ms ease-out';
     default:
       return '';
   }
@@ -127,6 +168,11 @@ export const CAPTION_ANIMS: CaptionAnim[] = [
   'glitch',
   'typeOn',
   'shake',
+  'riseMask',
+  'springPop',
+  'neonFlicker',
+  'glowPulse',
+  'cascade',
 ];
 
 export interface CaptionStyleDef {
@@ -170,6 +216,18 @@ export interface CaptionStyleDef {
   wordSpacingEm?: number;
   /** Rounded card behind the whole caption LINE (Soft Card look), as CSS color. */
   lineBg?: string;
+  /**
+   * Karaoke PROGRESS FILL — the active word fills with the active color
+   * left-to-right across its own timing (the Submagic/Hormozi sweep), then the
+   * fill jumps to the next word. Frame-derived in the layer; the word still
+   * pops when fill is on.
+   */
+  karaokeFill?: boolean;
+  /**
+   * Block-level ambience (ghost page fades, gentle float). Frame-derived in
+   * the layer from the word window — see CaptionBlockFx.
+   */
+  blockFx?: CaptionBlockFx[];
 }
 
 /**
@@ -489,6 +547,44 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     shadow: '0 1px 3px rgba(0,0,0,0.9)',
     wordsPerLine: 3, anim: 'typeOn', wordSpacingEm: 0.1,
   },
+  // --- MODERN batch 3 (ghost fade / float / karaoke fill / flicker / cascade) ---
+  {
+    id: 'ghost', label: 'Ghost', tags: ['new', 'premium'],
+    font: 'Inter', weight: 600, upper: false,
+    wordColor: 'rgba(255,255,255,0.9)', activeColor: '#FFFFFF', highlightMode: 'color',
+    shadow: '0 2px 10px rgba(0,0,0,0.85)',
+    wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'],
+  },
+  {
+    id: 'floater', label: 'Floater', tags: ['new'],
+    font: 'Poppins', weight: 700, upper: false,
+    wordColor: '#FFFFFF', activeColor: '#7DD3FC', highlightMode: 'scale',
+    shadow: '0 4px 14px rgba(0,0,0,0.9)',
+    wordsPerLine: 2, anim: 'pop', blockFx: ['float'],
+  },
+  {
+    id: 'fill-sweep', label: 'Fill Sweep', tags: ['new', 'trend'],
+    font: 'Archivo Black', weight: 900, upper: true,
+    wordColor: 'rgba(255,255,255,0.45)', activeColor: '#FFD400', highlightMode: 'color',
+    stroke: { color: '#000000', width: 2 },
+    shadow: '0 4px 10px rgba(0,0,0,0.9)',
+    wordsPerLine: 2, anim: 'pop', karaokeFill: true,
+  },
+  {
+    id: 'sign-on', label: 'Sign On', tags: ['new', 'premium'],
+    font: 'Anton', weight: 900, upper: true,
+    wordColor: 'rgba(255,255,255,0.6)', activeColor: '#22D3EE', highlightMode: 'glow',
+    stroke: { color: '#000000', width: 1.5 },
+    wordsPerLine: 2, anim: 'neonFlicker',
+  },
+  {
+    id: 'cascade', label: 'Cascade', tags: ['new', 'trend'],
+    font: 'Poppins', weight: 800, upper: true,
+    wordColor: 'rgba(255,255,255,0.5)', activeColor: '#F472B6', highlightMode: 'color',
+    stroke: { color: '#000000', width: 1.5 },
+    shadow: '0 3px 8px rgba(0,0,0,0.9)',
+    wordsPerLine: 1, anim: 'cascade',
+  },
 ];
 
 const DEF_BY_ID = new Map(CAPTION_STYLE_DEFS.map((d) => [d.id, d]));
@@ -695,6 +791,22 @@ export interface CaptionLayout {
   rows: number;
 }
 
+/**
+ * The authored range for `sizePx`, exported so every surface that lets a human
+ * change the caption size agrees on the limits.
+ *
+ * These numbers used to live only inside the clamp below, so the size slider and
+ * anything else that touched sizePx re-typed them from memory. That is precisely
+ * the shape of the bug that made the renderer ignore 37 of 41 caption presets: a
+ * second, hand-copied definition of what counts as valid. One export, no copies.
+ *
+ * The unit is px authored against the 360px editor stage (CAPTION_STAGE_W); the
+ * caption layer scales it to the real frame width.
+ */
+export const CAPTION_SIZE_MIN = 8;
+export const CAPTION_SIZE_MAX = 200;
+export const CAPTION_SIZE_DEFAULT = 18;
+
 /** Resolve the on-stage layout from overrides (canvas + burn-in share this). */
 export function captionLayoutFor(
   def: CaptionStyleDef,
@@ -704,7 +816,7 @@ export function captionLayoutFor(
   return {
     xPct: clampNum(o.xPct, 0, 100, 50),
     positionPct: clampNum(o.positionPct, 0, 100, 12),
-    sizePx: clampNum(o.sizePx, 8, 200, 18),
+    sizePx: clampNum(o.sizePx, CAPTION_SIZE_MIN, CAPTION_SIZE_MAX, CAPTION_SIZE_DEFAULT),
     wordsPerRow: Math.round(clampNum(o.wordsPerRow, 1, 6, def.wordsPerLine)),
     rows: Math.round(clampNum(o.rows, 1, 3, 1)),
   };

@@ -156,3 +156,9 @@ The ffmpeg path (`burnCaptionsRemote`, `burnAssCaptions`) is still used for the 
 - **Google Fonts** load from the network during render. For maximum stability, bundle the fonts as WOFF2 in the render-worker (`@remotion/fonts` with `staticFile`). The current implementation loads them from Google Fonts at render time, which works but adds a network dependency.
 - **Caption animations** are CSS `@keyframes` — they replay on every word change (the `key` prop re-fires the animation). This is intentional (the karaoke sweep effect).
 - **The ffmpeg caption burn** (`burnCaptionsRemote`, `burnAssCaptions`) is still available for simple captions but doesn't support the modern animations. Use the Remotion render for anything beyond basic text.
+
+---
+
+## Caption placement: the transform box (2026-08-05)
+
+Placement and size are edited with ONE overlay — `CaptionDragLayer.tsx` — mounted on BOTH preview branches (Remotion Player and the legacy Edit canvas). Drag moves (`xPct`, `positionPct`), corner handles resize (`sizePx`), arrow keys nudge. Live updates stay local; one save fires on release. The box itself is not decorative: it derives its size from the same geometry the caption layer uses — 86% frame width, line-height 1.15 × `rows`, font scaled by `sizePx / CAPTION_STAGE_W × frameWidth` (measured with a ResizeObserver) — so the outline hugs the caption text at any size instead of sitting at a fixed padding. It reads the same `captionOverrides` the render plan reads, so what you drag IS what renders.

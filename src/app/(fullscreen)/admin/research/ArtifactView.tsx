@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Boxes,
   History,
+  Clapperboard,
 } from 'lucide-react';
 import {
   ARTIFACT_TYPE_LABELS,
@@ -50,6 +51,7 @@ const TARGET_META: Record<
   'email-kit': { label: 'Draft Email Kit', buildLabel: 'Build Email Kit', sentLabel: 'Sent to Email Kit', busyLabel: 'Building the email kit', icon: Mail, href: '/admin/email-marketing' },
   'sales-funnel': { label: 'Create Funnel Draft', buildLabel: 'Build Funnel', sentLabel: 'Funnel Drafted', busyLabel: 'Building the funnel pages', icon: ShoppingBag, href: '/admin/sales-funnels' },
   system: { label: 'Build Full System', sentLabel: 'System Built', busyLabel: 'Building the full system (lead magnet, opt-in, nurture kit, funnel draft, planner cards)', icon: Boxes, href: '/admin' },
+  'reel-cues': { label: 'Attach Cues (library only)', buildLabel: 'Attach Cues (match + generate)', sentLabel: 'Cues Attached', busyLabel: 'Matching the library and generating the missing fly-ins', icon: Clapperboard, href: '/admin/reel-studio' },
 };
 
 /** Where the handed-off banner LINKS: the built thing when we know its id. */

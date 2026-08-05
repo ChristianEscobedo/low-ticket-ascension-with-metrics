@@ -11,6 +11,7 @@ export const ADMIN_HELP_LINKS: Record<string, string> = {
   '/admin/funnel-stats': 'lead-capture-and-funnel-stats',
   '/admin/brand-bible': 'brand-bible-and-assets',
   '/admin/content': 'content-hub-overview',
+  '/admin/reel-studio': 'reel-studio-caption-transform-box',
   '/admin/planner': 'planner-board',
   '/admin/community': 'community-kit',
   '/admin/high-ticket': 'high-ticket-kit',

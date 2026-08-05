@@ -8,13 +8,14 @@
  * output is frame-exact by construction — no drift between the clip cuts, the
  * music and the captions, which is the failure mode the ffmpeg concat/burn
  * chain kept producing.
+ *
+ * NOTE: this file exists twice (here and render-worker/remotion-project/), once
+ * per build context. Edit it in one place and copy it over — they must agree.
  */
 import React from 'react';
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
 import { CaptionLayer } from './CaptionLayer';
-import { FontLoader } from './FontLoader';
-import type { RenderClip, RenderPlan } from './constants';
-
+import type { RenderClip, RenderMediaCue, RenderPlan } from '../src/lib/mothermode/reel/render/plan';
 
 /** Tolerant read of a motion keyframe — field names differ by preset vintage. */
 type MotionLike = {
@@ -25,9 +26,19 @@ type MotionLike = {
   x?: number;
   y?: number;
   rotate?: number;
+  panX?: number;
+  panY?: number;
+  rotateDeg?: number;
 };
 
 const keyTime = (k: MotionLike): number => Number(k.atSec ?? k.t ?? k.timeSec ?? 0);
+/** The plan's MotionKey uses panX/panY/rotateDeg; older vintages used x/y/rotate. */
+const keyPanX = (k: MotionLike): number =>
+  Number(typeof k.panX === 'number' ? k.panX : typeof k.x === 'number' ? k.x : 0);
+const keyPanY = (k: MotionLike): number =>
+  Number(typeof k.panY === 'number' ? k.panY : typeof k.y === 'number' ? k.y : 0);
+const keyRotate = (k: MotionLike): number =>
+  Number(typeof k.rotateDeg === 'number' ? k.rotateDeg : typeof k.rotate === 'number' ? k.rotate : 0);
 
 /**
  * Ken-Burns / pan / zoom, interpolated per frame.
@@ -51,9 +62,9 @@ function useMotionTransform(clip: RenderClip, fps: number): string {
     });
 
   const scale = pick((k) => (typeof k.scale === 'number' ? k.scale : 1));
-  const x = pick((k) => (typeof k.x === 'number' ? k.x : 0));
-  const y = pick((k) => (typeof k.y === 'number' ? k.y : 0));
-  const rotate = pick((k) => (typeof k.rotate === 'number' ? k.rotate : 0));
+  const x = pick(keyPanX);
+  const y = pick(keyPanY);
+  const rotate = pick(keyRotate);
   return `translate(${x}%, ${y}%) scale(${scale}) rotate(${rotate}deg)`;
 }
 
@@ -78,17 +89,88 @@ const ClipLayer: React.FC<{ clip: RenderClip; fps: number; muted?: boolean }> = 
   );
 };
 
+/**
+ * A word-triggered media cue: the image flies in when its word is spoken.
+ *
+ * Frame math again, never a CSS clock. Two motion cases:
+ *   - NO keyframes (the default): the ease-out rise+scale entrance over
+ *     ~0.25s and a fade over the last ~0.2s of the cue's window.
+ *   - cue.motion set: the SAME MotionKey[] track clips use, sampled per frame
+ *     with the same interpolate() call as useMotionTransform. The track owns
+ *     translate/scale/rotate; only the exit fade still applies (so the cue
+ *     never hard-cuts). Key times are CUE-RELATIVE seconds, and the window
+ *     is word-derived — a trim that shortens it plays less of the track.
+ * The cue's timing comes from the plan, which resolved it from the word's own
+ * start/end — so the fly-in is glued to the audio, not to a guess.
+ */
+const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fps }) => {
+  const frame = useCurrentFrame(); // cue-local, inside its Sequence
+  const enterFrames = Math.max(2, Math.round(fps * 0.25));
+  const exitFrames = Math.max(2, Math.round(fps * 0.2));
+  const e = 1 - Math.pow(1 - Math.min(1, frame / enterFrames), 3);
+  const out = Math.min(1, Math.max(0, (cue.durationInFrames - frame) / exitFrames));
+
+  const style = cue.style ?? {};
+  const keys = ((cue.motion ?? []) as unknown as MotionLike[])
+    .slice()
+    .sort((a, b) => keyTime(a) - keyTime(b));
+  const hasMotion = keys.length >= 2;
+
+  let motionTransform = '';
+  if (hasMotion) {
+    const keyFrames = keys.map((k) => Math.max(0, Math.round(keyTime(k) * fps)));
+    const pick = (get: (k: MotionLike) => number) =>
+      interpolate(frame, keyFrames, keys.map(get), {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
+    const scale = pick((k) => (typeof k.scale === 'number' ? k.scale : 1));
+    const x = pick(keyPanX);
+    const y = pick(keyPanY);
+    const rotate = pick(keyRotate);
+    motionTransform = `translate(${x}%, ${y}%) scale(${scale}) rotate(${rotate}deg)`;
+  }
+
+  const borderPx = style.borderPx ?? 0;
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      <div
+        style={{
+          position: 'absolute',
+          // The house card is right:6%/top:16%/width:34% — as left/top that is
+          // x=60, y=16. A style override moves the SAME box.
+          left: `${style.xPct ?? 60}%`,
+          top: `${style.yPct ?? 16}%`,
+          width: `${style.widthPct ?? 34}%`,
+          opacity: hasMotion ? out : Math.min(e, out),
+          transform: hasMotion
+            ? motionTransform
+            : `translateY(${((1 - e) * 40).toFixed(1)}px) scale(${(0.82 + e * 0.18).toFixed(3)})`,
+        }}
+      >
+        <Img
+          src={cue.src}
+          style={{
+            width: '100%',
+            display: 'block',
+            borderRadius: style.radiusPx ?? 16,
+            boxShadow: style.shadow === false ? 'none' : '0 12px 40px rgba(0,0,0,0.55)',
+            ...(borderPx > 0 && style.borderColor
+              ? { border: `${borderPx}px solid ${style.borderColor}` }
+              : {}),
+          }}
+        />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
   const { fps } = plan;
   // A replacement music bed means the original clip audio must duck out.
   const muteClips = plan.audio !== null;
 
   return (
-    // FontLoader wraps everything and holds the render open (delayRender) until
-    // the caption webfonts are usable. Without it Chromium paints a fallback
-    // face into the first frames and burns it into the MP4 permanently — the
-    // fonts are not in the container image, they are fetched at render time.
-    <FontLoader plan={plan}>
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
       {plan.clips.map((clip) => (
         <Sequence
@@ -118,9 +200,20 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
         </Sequence>
       ) : null}
 
+      {/* Word-triggered media cues (image fly-ins), timed in absolute frames. */}
+      {(plan.mediaCues ?? []).map((cue) => (
+        <Sequence
+          key={cue.id}
+          from={cue.fromFrame}
+          durationInFrames={cue.durationInFrames}
+          layout="none"
+        >
+          <MediaCueLayer cue={cue} fps={fps} />
+        </Sequence>
+      ))}
+
       {/* Captions live at the top of the stack, timed in absolute frames. */}
       <CaptionLayer plan={plan} />
     </AbsoluteFill>
-    </FontLoader>
   );
 };

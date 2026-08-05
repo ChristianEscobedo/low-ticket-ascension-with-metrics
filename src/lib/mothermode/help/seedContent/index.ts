@@ -6,6 +6,7 @@ import { planner } from './planner';
 import { kits } from './kits';
 import { deliverablesBrand, adminSystem } from './system';
 import { researchLab } from './researchLab';
+import { reelStudio } from './reelStudio';
 import { buyerHelp } from './buyerHelp';
 
 export type { SeedArticle, SeedChangelog } from './helpers';
@@ -22,5 +23,6 @@ export const HELP_CENTER_SEED_ARTICLES: SeedArticle[] = [
   ...deliverablesBrand,
   ...adminSystem,
   ...researchLab,
+  ...reelStudio,
   ...buyerHelp,
 ];

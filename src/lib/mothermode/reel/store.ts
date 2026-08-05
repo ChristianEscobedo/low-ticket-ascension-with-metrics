@@ -70,6 +70,7 @@ export async function upsertReelProject(input: {
   captionStyle?: ReelProject['captionStyle'];
   captionOverrides?: ReelProject['captionOverrides'];
   overlays?: ReelProject['overlays'];
+  mediaCues?: ReelProject['mediaCues'];
   updatedBy?: string | null;
 }): Promise<ReelProject | null> {
   try {
@@ -83,6 +84,7 @@ export async function upsertReelProject(input: {
         captionStyle: input.captionStyle,
         captionOverrides: input.captionOverrides,
         overlays: input.overlays,
+        mediaCues: input.mediaCues,
       }),
     );
 

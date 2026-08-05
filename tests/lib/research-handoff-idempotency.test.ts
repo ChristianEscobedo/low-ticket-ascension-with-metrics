@@ -125,6 +125,23 @@ vi.mock('@/utils/integrations/openai-sales', () => ({
 vi.mock('@/lib/mothermode/context/resolve', () => ({
   resolveContextRefs: vi.fn(async () => []),
 }));
+/* The reel-cues handoff's dependencies — mocked so the module load never
+ * touches Supabase/OpenAI (these tests never exercise the reel-cues path). */
+vi.mock('@/lib/mothermode/reel/store', () => ({
+  getReelProject: vi.fn(async () => null),
+  upsertReelProject: vi.fn(async (input: unknown) => input),
+}));
+vi.mock('@/lib/mothermode/reel/mediaLibrary', () => ({
+  listMediaAssets: vi.fn(async () => []),
+  ingestMediaAsset: vi.fn(async () => null),
+}));
+vi.mock('@/utils/integrations/openai-content', () => ({
+  generateContentImage: vi.fn(async () => ({ ok: false, error: 'not exercised' })),
+  imageSizeForFormat: vi.fn(() => '1080x1920'),
+}));
+vi.mock('@/utils/mothermode/storage', () => ({
+  hostGeneratedImage: vi.fn(async () => ''),
+}));
 
 // Imported AFTER the mocks are declared (vi.mock hoists).
 import { runHandoff } from '@/lib/mothermode/research/handoff';

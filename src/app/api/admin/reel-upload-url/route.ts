@@ -27,13 +27,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const kind = body.kind === 'audio' ? 'audio' : 'video';
+  const kind =
+    body.kind === 'audio' ? 'audio' : body.kind === 'image' ? 'image' : 'video';
   const ext =
     typeof body.ext === 'string' && /^[a-z0-9]{2,5}$/i.test(body.ext)
       ? body.ext.toLowerCase()
       : kind === 'audio'
         ? 'mp3'
-        : 'mp4';
+        : kind === 'image'
+          ? 'png'
+          : 'mp4';
   const contentType =
     typeof body.contentType === 'string' && body.contentType.length < 100
       ? body.contentType

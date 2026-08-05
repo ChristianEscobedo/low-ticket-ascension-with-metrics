@@ -215,6 +215,7 @@ export const RESEARCH_ARTIFACT_TYPES = [
   'ad-angles',
   'email-outline',
   'notes',
+  'reel-cue-plan',
 ] as const;
 export type ResearchArtifactType = (typeof RESEARCH_ARTIFACT_TYPES)[number];
 
@@ -226,6 +227,7 @@ export const ARTIFACT_TYPE_LABELS: Record<ResearchArtifactType, string> = {
   'ad-angles': 'Ad angles',
   'email-outline': 'Email outline',
   notes: 'Notes',
+  'reel-cue-plan': 'Reel cue plan',
 };
 
 export const RESEARCH_ARTIFACT_STATUSES = ['draft', 'final', 'handed-off'] as const;
@@ -233,7 +235,13 @@ export type ResearchArtifactStatus = (typeof RESEARCH_ARTIFACT_STATUSES)[number]
 
 /** Where an artifact went when it was handed off for creation. */
 export interface HandedOffRef {
-  kind: 'planner-cards' | 'leadgen-kit' | 'email-kit' | 'sales-funnel' | 'system';
+  kind:
+    | 'planner-cards'
+    | 'leadgen-kit'
+    | 'email-kit'
+    | 'sales-funnel'
+    | 'system'
+    | 'reel-cues';
   /** Kit id / funnel id, or '' for a multi-row handoff (planner cards, system). */
   id: string;
   /** Human label: kit name, funnel name, or "12 planner cards". */
@@ -331,7 +339,8 @@ export function normalizeHandedOffTo(value: unknown): HandedOffRef | null {
     kind !== 'leadgen-kit' &&
     kind !== 'email-kit' &&
     kind !== 'sales-funnel' &&
-    kind !== 'system'
+    kind !== 'system' &&
+    kind !== 'reel-cues'
   ) {
     return null;
   }
@@ -557,6 +566,64 @@ export function normalizeOfferBrief(value: unknown): OfferBrief {
   };
 }
 
+/**
+ * Reel cue plan -> the Reel Cue Autopilot's handoff payload: the beats an
+ * approved fly-in list carries. The handoff matches each beat against the
+ * Media Library first (free), generates what's missing (paid, on approval),
+ * and attaches the cues to the reel.
+ */
+export interface ReelCuePlanBeat {
+  /** The clip id in the reel project whose transcript holds the trigger word. */
+  clipId: string;
+  /** Index into that clip's transcript words. */
+  wordIndex: number;
+  /** The trigger word (shown in the owner's review list). */
+  word: string;
+  /** What the fly-in image should show — the AI prompt AND the library match key. */
+  imagePrompt: string;
+  /** Optional style hint (widthPct/xPct/yPct/…), validated again at attach. */
+  style?: Record<string, unknown>;
+}
+
+export interface ReelCuePlan {
+  projectId: string;
+  beats: ReelCuePlanBeat[];
+}
+
+/** Defensive: malformed beats drop; the plan caps at 12 (the studio's cue cap is 60). */
+export function normalizeReelCuePlan(value: unknown): ReelCuePlan {
+  const rec = (value && typeof value === 'object' ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  const beats: ReelCuePlanBeat[] = [];
+  if (Array.isArray(rec.beats)) {
+    for (const raw of rec.beats) {
+      if (!raw || typeof raw !== 'object') continue;
+      const b = raw as Record<string, unknown>;
+      const clipId = str(b.clipId).trim();
+      const wordIndex =
+        typeof b.wordIndex === 'number' && Number.isFinite(b.wordIndex)
+          ? Math.round(b.wordIndex)
+          : -1;
+      const word = str(b.word).trim().slice(0, 60);
+      const imagePrompt = str(b.imagePrompt).trim().slice(0, 400);
+      if (!clipId || wordIndex < 0 || !imagePrompt) continue;
+      beats.push({
+        clipId,
+        wordIndex,
+        word: word || imagePrompt.split(/\s+/)[0] || 'cue',
+        imagePrompt,
+        ...(b.style && typeof b.style === 'object' && !Array.isArray(b.style)
+          ? { style: b.style as Record<string, unknown> }
+          : {}),
+      });
+      if (beats.length >= 12) break;
+    }
+  }
+  return { projectId: str(rec.projectId).trim(), beats };
+}
+
 /** Which handoff targets an artifact type supports, in button order. */
 export function handoffTargetsFor(
   type: ResearchArtifactType,
@@ -572,6 +639,8 @@ export function handoffTargetsFor(
       return ['email-kit'];
     case 'offer-brief':
       return ['sales-funnel', 'system'];
+    case 'reel-cue-plan':
+      return ['reel-cues'];
     default:
       return [];
   }

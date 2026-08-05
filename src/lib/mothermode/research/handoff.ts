@@ -27,6 +27,7 @@ import {
   normalizeLeadMagnetConcept,
   normalizeEmailOutline,
   normalizeOfferBrief,
+  normalizeReelCuePlan,
   type HandedOffRef,
   type ResearchArtifact,
   type ResearchSession,
@@ -89,6 +90,25 @@ import {
 } from '@/lib/mothermode/sales/aiIntake';
 import { aiGenerateSalesFunnel } from '@/utils/integrations/openai-sales';
 import type { OfferBrief } from './types';
+import {
+  getReelProject,
+  upsertReelProject,
+} from '@/lib/mothermode/reel/store';
+import {
+  makeClipId,
+  normalizeMediaCueStyle,
+  type ReelMediaCue,
+} from '@/lib/mothermode/reel/types';
+import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
+import {
+  ingestMediaAsset,
+  listMediaAssets,
+} from '@/lib/mothermode/reel/mediaLibrary';
+import {
+  generateContentImage,
+  imageSizeForFormat,
+} from '@/utils/integrations/openai-content';
+import { hostGeneratedImage } from '@/utils/mothermode/storage';
 
 export type HandoffTarget = HandedOffRef['kind'];
 
@@ -795,6 +815,157 @@ async function runSystemBuild(
 }
 
 // ---------------------------------------------------------------------------
+// Reel Cue Autopilot (media-cue handoff)
+// ---------------------------------------------------------------------------
+
+/**
+ * 'reel-cues': attach an approved reel-cue-plan's beats to the reel as media
+ * cues. FREE BEFORE PAID is the rule: each beat first tries the Media Library
+ * (the same deterministic matcher the studio's "auto" button runs), and only
+ * an unmatched beat spends an image generation — and only when the step was
+ * told to Build (generate: true). Generated images are hosted and ingested
+ * into the library, so the next run's beats match against them for free.
+ *
+ * One cue per (clip, word) — a re-run REPLACES the same address instead of
+ * doubling (the studio's attachCue semantics). Beats whose word fell out of
+ * the transcript (a re-transcribe between propose and approve) are skipped
+ * and named in the label, never silently attached to the wrong word.
+ */
+async function handoffToReelCues(
+  artifact: ResearchArtifact,
+  _session: ResearchSession,
+  updatedBy: string | null,
+  generate: boolean,
+): Promise<HandoffResult> {
+  const plan = normalizeReelCuePlan(artifact.structured);
+  if (!plan.projectId || plan.beats.length === 0) {
+    return {
+      ok: false,
+      error: 'The cue plan needs a reel project id and at least one beat.',
+      status: 400,
+    };
+  }
+  const project = await getReelProject(plan.projectId);
+  if (!project) {
+    return {
+      ok: false,
+      error: 'Reel project not found — the plan points at a reel that no longer exists.',
+      status: 404,
+    };
+  }
+
+  const library = await listMediaAssets({ kind: 'image' });
+  const usedUrls = new Set<string>();
+  const cues: ReelMediaCue[] = [];
+  const skipped: string[] = [];
+  let matched = 0;
+  let generated = 0;
+
+  for (const beat of plan.beats) {
+    const words = project.captions[beat.clipId] ?? [];
+    if (!words[beat.wordIndex]) {
+      skipped.push(beat.word || `${beat.clipId}#${beat.wordIndex}`);
+      continue;
+    }
+    // 1 — the library first (free). One beat, one image; a used image can't
+    // serve a second beat (the studio's one-cue-per-pair rule).
+    const proposal = suggestCuesForWords(
+      [{ word: beat.word, start: 0, end: 1 }],
+      library.filter((a) => !usedUrls.has(a.url)),
+      1,
+    )[0];
+    let url = proposal?.url ?? '';
+    if (url) {
+      matched += 1;
+      usedUrls.add(url);
+    } else if (generate) {
+      // 2 — generate (paid), host it, keep it in the library for next time.
+      try {
+        const result = await generateContentImage(
+          beat.imagePrompt,
+          imageSizeForFormat('reel'),
+        );
+        if (result.ok) {
+          const hosted = await hostGeneratedImage(result.data);
+          if (/^https?:\/\//i.test(hosted)) {
+            url = hosted;
+            generated += 1;
+            usedUrls.add(url);
+            await ingestMediaAsset({
+              name: `${beat.imagePrompt.slice(0, 60)} (cue autopilot)`,
+              url,
+              kind: 'image',
+              source: 'generated',
+              tags: ['ai-image', 'cue-autopilot'],
+              refId: artifact.id,
+              refKind: 'recipe-run',
+            });
+          }
+        }
+      } catch {
+        /* a failed generation skips the beat — it never blocks the rest */
+      }
+    }
+    if (!url) {
+      skipped.push(beat.word || beat.imagePrompt.slice(0, 30));
+      continue;
+    }
+    const style = beat.style ? normalizeMediaCueStyle(beat.style) : undefined;
+    cues.push({
+      id: makeClipId(),
+      clipId: beat.clipId,
+      wordIndex: beat.wordIndex,
+      url,
+      ...(style ? { style } : {}),
+    });
+  }
+
+  if (!cues.length) {
+    return {
+      ok: false,
+      error:
+        'No beats landed — every proposed cue either missed its word or found no image.',
+      status: 400,
+    };
+  }
+
+  const replaceKeys = new Set(cues.map((c) => `${c.clipId}:${c.wordIndex}`));
+  const mediaCues = [
+    ...(project.mediaCues ?? []).filter((c) => !replaceKeys.has(`${c.clipId}:${c.wordIndex}`)),
+    ...cues,
+  ];
+  const saved = await upsertReelProject({
+    id: project.id,
+    name: project.name,
+    clips: project.clips,
+    audio: project.audio,
+    composedUrl: project.composedUrl,
+    composedAt: project.composedAt,
+    captions: project.captions,
+    captionStyle: project.captionStyle,
+    captionOverrides: project.captionOverrides,
+    overlays: project.overlays,
+    mediaCues,
+    updatedBy,
+  });
+  if (!saved) {
+    return { ok: false, error: 'The reel save failed.', status: 500 };
+  }
+
+  const parts = [`${cues.length} cue(s)`];
+  if (matched) parts.push(`${matched} matched free`);
+  if (generated) parts.push(`${generated} generated`);
+  if (skipped.length) parts.push(`skipped: ${skipped.slice(0, 3).join(', ')}`);
+  return finish(artifact, {
+    kind: 'reel-cues',
+    id: project.id,
+    label: `${project.name || 'Reel'} — ${parts.join(' · ')}`,
+    count: cues.length,
+    at: new Date().toISOString(),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -839,6 +1010,8 @@ export async function runHandoff(opts: {
       return handoffToSalesFunnel(artifact, opts.session, updatedBy, generate);
     case 'system':
       return runSystemBuild(artifact, opts.session, updatedBy);
+    case 'reel-cues':
+      return handoffToReelCues(artifact, opts.session, updatedBy, generate);
     default:
       return { ok: false, error: 'unknown handoff target', status: 400 };
   }
