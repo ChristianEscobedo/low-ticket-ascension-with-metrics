@@ -58,3 +58,7 @@ scripts/db-audit-run.txt
 scripts/bundle-run.txt
 
 
+
+# local env backups - never commit
+.env.local.bak
+*.env.local.bak
