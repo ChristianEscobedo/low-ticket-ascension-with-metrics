@@ -49,6 +49,20 @@ function modelId(v: unknown): string | undefined {
 }
 
 /**
+ * A recipe-inputs map from a picker (keyed by field id), or undefined when
+ * nothing usable was filled. Blank values drop out here so the generators only
+ * ever see real material.
+ */
+function strMap(v: unknown): Record<string, string> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === 'string' && val.trim()) out[k] = val.trim();
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Content hub AI backend. Admin-only. The actions the sheet tabs call:
 
  *   action 'image'   -> generate a post visual with the GPT Image API, then host
@@ -310,7 +324,8 @@ export async function POST(request: NextRequest) {
           }
         : undefined,
       model: modelId(body.model),
-
+      imageFramework: str(body.imageFramework),
+      recipeInputs: strMap(body.recipeInputs),
     });
     if (!result.ok) {
       return NextResponse.json(
@@ -339,6 +354,8 @@ export async function POST(request: NextRequest) {
       text: typeof body.text === 'string' ? body.text : '',
       instructions: str(body.instructions),
       variant: body.variant === true,
+      framework: str(body.framework),
+      recipeInputs: strMap(body.recipeInputs),
       context: ctx
         ? {
             theme: str(ctx.theme),
@@ -442,6 +459,8 @@ export async function POST(request: NextRequest) {
         ? body.sophistication
         : undefined,
       guides: str(body.guides),
+      framework: str(body.framework),
+      recipeInputs: strMap(body.recipeInputs),
       context: ctx
         ? {
             theme: str(ctx.theme),
@@ -495,6 +514,8 @@ export async function POST(request: NextRequest) {
         ? body.sophistication
         : undefined,
       guides: str(body.guides),
+      framework: str(body.framework),
+      recipeInputs: strMap(body.recipeInputs),
       context: ctx
         ? {
             theme: str(ctx.theme),
@@ -754,6 +775,8 @@ export async function POST(request: NextRequest) {
       frameCount: Math.max(0, Math.min(10, Math.round(Number(body.frameCount) || 0))),
       guides: str(body.guides),
       model: modelId(body.model),
+      imageFramework: str(body.imageFramework),
+      recipeInputs: strMap(body.recipeInputs),
     });
     if (!result.ok) {
       return NextResponse.json(

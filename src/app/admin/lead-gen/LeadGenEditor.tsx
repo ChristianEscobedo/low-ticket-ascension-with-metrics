@@ -12,7 +12,7 @@
  * publishing via /api/admin/mothermode-leadgen. The doc is a plain LeadGenDoc,
  * so text export uses the shared docToText renderer.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   blankDoc,
   blankIntake,
@@ -114,6 +114,18 @@ export default function LeadGenEditor({ initialKits }: Props) {
     setError(null);
     setNotice(null);
   }
+
+  // Deep-link: /admin/lead-gen?kit=<id> opens that kit directly. The prompt
+  // bank Test lab "Lead magnet" action lands the admin here after seeding a
+  // kit from a tested post.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('kit');
+    if (!id) return;
+    const kit = initialKits.find((k) => k.id === id);
+    if (kit) loadKit(kit);
+    // Mount-only: initialKits is the server-rendered list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function postJson(url: string, body: unknown) {
     const res = await fetch(url, {
@@ -561,7 +573,7 @@ export default function LeadGenEditor({ initialKits }: Props) {
             {doc.sections.map((section, sIndex) => (
               <div
                 key={section.id}
-                className="rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3"
+                className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs uppercase tracking-wide text-bone/40">
@@ -625,7 +637,7 @@ export default function LeadGenEditor({ initialKits }: Props) {
           </div>
 
           {/* CTA */}
-          <div className="rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3">
+          <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3">
             <span className="text-xs uppercase tracking-wide text-bone/40">Call to action</span>
             <Field
               label="CTA title"
@@ -668,7 +680,7 @@ export default function LeadGenEditor({ initialKits }: Props) {
             )}
           </div>
 
-          <div className="rounded-xl border border-bone/15 bg-ink/30 p-4 space-y-3">
+          <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 space-y-3">
             <span className="text-xs uppercase tracking-wide text-bone/40">
               Publish to Deliverables
             </span>
@@ -699,7 +711,7 @@ export default function LeadGenEditor({ initialKits }: Props) {
                 Buyer-facing render · {doc.sections.length} section(s)
               </span>
             </div>
-            <div className="rounded-xl border border-bone/15 overflow-hidden">
+            <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden">
               <div
                 className="bg-white overflow-y-auto max-h-[70vh] py-8"
                 dangerouslySetInnerHTML={{ __html: previewHtml }}

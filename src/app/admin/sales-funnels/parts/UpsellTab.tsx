@@ -26,7 +26,7 @@ export default function UpsellTab({
   regenBusy?: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+    <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
       <div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">{label}</div>
       {onRegenerate && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brass/25 bg-brass/[0.05] px-3 py-2">

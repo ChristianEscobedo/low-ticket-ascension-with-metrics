@@ -32,7 +32,14 @@ are documented in full below.
 | 10 | **Story autoplay + preview surfaces** | `ContentSheet.tsx`, `previews/*` | §5 below |
 | 11 | **YouTube + LinkedIn surfaces + YouTube Studio kit** | `youtube.ts`, `linkedin.ts`, `YouTubeStudioPanel.tsx`, `openai-youtube.ts`, `previews/YouTubePreview.tsx`, `previews/LinkedInPreview.tsx` | `YOUTUBE_LINKEDIN_SYSTEM_PORT.md` + §4 below |
 | 12 | **Deliverables admin + buyer resource workspaces** | `src/lib/mothermode/deliverables/*`, `resourceEntries.ts`, workspace parts | `DELIVERABLES_RESOURCES_SYSTEM_PORT.md` + §7 below |
-| 13 | **Admin Knowledge Base / Help Docs / Changelog** | `src/lib/mothermode/help/*`, `/admin/help`, `/api/admin/mothermode-help` + `mothermode-changelog`, `/mothermode/help`, `/mothermode/changelog` | `HELP_CENTER_SYSTEM_PORT.md` (built; spec: `ADMIN_KNOWLEDGE_BASE_CHANGELOG_TASK.md`) |
+| 13 | **Admin Knowledge Base / Help Docs / Changelog** (BUILT, round 2: audience split + buyer docs + in-app help) | `src/lib/mothermode/help/*` (`help/seedContent/*`, `help/articleStyles.ts`), `/admin/help`, `/admin/help-docs`, `/api/admin/mothermode-help` + `mothermode-changelog`, `/mothermode/help`, `/mothermode/changelog`, migrations `20260710000000_mothermode_help_center.sql` + `20261027000000_kb_articles_audience.sql`, test `tests/lib/help-mappers.test.ts` | `HELP_CENTER_SYSTEM_PORT.md` (built; spec: `ADMIN_KNOWLEDGE_BASE_CHANGELOG_TASK.md`) |
+| `20261101000000`–`20261103000000` (3 files) | research lab core | Chat sessions/messages, session intake, agent call log (#37). See `RESEARCH_LAB_SYSTEM_PORT.md` |
+| `20261104000000`–`20261112000000` (9 files) | experts, lineage, evidence, recipes, jobs, watchlists, learnings, embeddings | The agentic arc: 8-expert crew, artifact envelopes, evidence base, declarative recipes, background job lane, weekly watches, cross-session learnings, semantic search (#37). See `AGENTIC_EXPERTS_RECIPES_ROADMAP_TASK.md` |
+| `20261113000000`–`20261115000000` (3 files) | message provenance, recipe run events, watchlist triggers | Live-follow runs in chat, the fleet event feed, cron-fired watches (#37, #39). See `RECIPES_VISIBILITY_UX_PORT.md` |
+| `20261116000000_research_skills.sql` | research skills | Declarative HTTP skill registry with host allowlist + secret scoping + breaker (#38). See `AGENT_SKILLS_SYSTEM_PORT.md` |
+| `20261117000000_recipe_run_shares.sql` | recipe run shares | Public read-only links for a recipe run (`/share/run/<token>`). See `RECIPES_VISIBILITY_UX_PORT.md` |
+| `20261118000000_phase4_cost_and_citations.sql` | cost telemetry + citations | Per-call cost rows and citation tracking for the agent fleet (#37, #39) |
+| `20261119000000_mothermode_personalization.sql` | personalization campaigns + lead personalizations | Per-funnel mode (off/overlay/gated) + cached per-lead AI copy payloads (#40). See `PERSONALIZATION_SYSTEM_PORT.md` |
 | 14 | **Community Kit** (name, description, paid/free qualifying questions, DM + sales-call scripts, ads content style, first pinned post) (BUILT) | `src/lib/mothermode/community/*` (types + store + `frameworks/*`), `utils/integrations/openai-community.ts`, `/admin/community` (page + `CommunityEditor`), `/api/mothermode/community-ai` (generate + regenerate) + `/api/admin/mothermode-community` (CRUD), migration `20260715000000_mothermode_community_kits.sql`, test `tests/lib/community-mappers.test.ts` | `COMMUNITY_KIT_SYSTEM_PORT.md` (built; spec: `COMMUNITY_KIT_TASK.md`) |
 | 15 | **High Ticket Kit** (offer/program name, full high-ticket offer stack, give-away value resource, 15-min triage script, sales-call script, optional ads angle) (PLANNED) | planned: `src/lib/mothermode/highticket/*` (types + store + export + `frameworks/*`), `utils/integrations/openai-highticket.ts`, `/admin/high-ticket` (page + `HighTicketEditor`), `/api/mothermode/high-ticket-ai` (generate + regenerate) + `/api/admin/mothermode-high-ticket` (CRUD), migration `mothermode_high_ticket_kits`, test `tests/lib/high-ticket-mappers.test.ts` | `HIGH_TICKET_KIT_TASK.md` (spec); `HIGH_TICKET_KIT_SYSTEM_PORT.md` to author once built |
 | 16 | **Lead Gen Kit** (AI lead-magnet builder: 10 formats, length-driven multi-pass long-form generation, per-section expand, typed content blocks, self-contained styled-HTML publish to Deliverables) (BUILT) | `src/lib/mothermode/leadgen/*` (types + store + export + `formats/*`), `utils/integrations/openai-leadgen.ts`, `/admin/lead-gen` (page + `LeadGenEditor`), `/api/mothermode/leadgen-ai` (fillIntake/outline/generate/expand) + `/api/admin/mothermode-leadgen` (CRUD + publish), migration `20260725000000_mothermode_lead_gen_kits.sql` | `LEAD_GEN_KIT_SYSTEM_PORT.md` (built; spec: `LEAD_GEN_KIT_TASK.md`) |
@@ -42,6 +49,24 @@ are documented in full below.
 | 20 | **Kit rich-text editing** (TipTap HTML kit fields; prompt + export sanitized via `htmlToPromptText`) (foundation BUILT; per-editor swaps ongoing) | `src/lib/mothermode/richtext.ts`, `context/prompt.ts` (`clampPack`), `KitRichTextField.tsx`, test `tests/lib/richtext.test.ts` | `KIT_RICH_TEXT_EDITING_PORT.md` |
 | 21 | **Email Kit advanced editor** (rich-text bodies, body format + length controls global/per-email, branching `branch`+`parentId`, sequence extension/deep-nurture `aiExtendSequence`, per-email Image Studio, P.S. selling frameworks) (BUILT) | `email/types.ts` (branch/parentId/psFramework/images), `openai-email.ts` (extend + P.S. + length), `email-ai/route.ts` (`extend`), `EmailImageStudio.tsx`, `EmailKitEditor.tsx` (no migration — rides `sequence` JSONB) | `EMAIL_KIT_ADVANCED_FEATURES_PORT.md` |
 | 22 | **Email image in-body + Studio round-trip + funnel asset library** (insert hosted image into body via Studio trigger/slash; re-open gallery image as seed for text/overlay/edit; polymorphic `funnel_assets` join to attach any kit to a funnel, resolved via Context Bridge) (sanitizer `<img>` handling BUILT; rest PLANNED) | `richtext.ts` (`<img>`→`[image]`), `KitRichTextField.tsx` (opt-in `@tiptap/extension-image`), `EmailImageStudio.tsx`, `email/export.ts` (HTML `<img>` width cap), new `funnel-assets/` + migration `20260805000000_mothermode_funnel_assets.sql` | `EMAIL_IMAGE_IN_BODY_AND_FUNNEL_ASSETS_PORT.md` |
+| 23 | **Planner** (the scheduling board: plan cards for pieces, lead cards for magnet pushes, schedule drafts, piece preview panel, per-card metrics) (BUILT) | `src/lib/mothermode/planner/*` (types, store, links, clickPeople, adMetrics, utm, publishState, platformGlyph), `/admin/planner` (page + `PlannerWorkspace`, `AddPlanCard`, `AddLeadCard`, `LinkTracking`), `/api/admin/mothermode-planner`, `/api/admin/mothermode-links`, migration `20261007000000_content_plan_publish_state.sql` | `PLANNER_SYSTEM_PORT.md`, `PLANNER_ADMIN_UI_PORT.md`, `PLANNER_ADMIN_API_PORT.md` |
+| 24 | **Tracked links + UTM** (every post link is a minted `/go/code` link with UTM params; clicks, leads, sales join back to the post) (BUILT) | `src/app/go/[code]/route.ts`, `src/lib/mothermode/planner/links.ts`, `src/lib/mothermode/leadUtmContent.ts`, `src/lib/mothermode/planner/utm.ts`, migrations `20261005000000_planner_funnel_links_and_utm.sql` + `20261006000000_utm_links_optin_destinations.sql` | `PLANNER_LINK_TRACKING_SYSTEM_PORT.md`, `PLANNER_FUNNEL_LINKS_UTM_HANDOFF.md`, `CONTENT_HUB_UTM_AND_PLANNER_CARDS_HANDOFF.md` |
+| 25 | **Publish state system** (per-card draft / scheduled / published with badges + board filters) (BUILT) | `src/lib/mothermode/planner/publishState.ts`, `src/components/mothermode/planner/PublishBadges.tsx`, migration `20261007000000_content_plan_publish_state.sql` | `PUBLISH_STATE_SYSTEM_PORT.md` |
+| 26 | **Ad metrics + click rollups** (per-card clicks/leads/sales rollups, click-people drill-down, paid block with spend + derived metrics) (BUILT) | `src/lib/mothermode/planner/adMetrics.ts`, `src/lib/mothermode/planner/clickPeople.ts`, `src/components/mothermode/content/PieceClickMetrics.tsx` | `AD_METRICS_PHASE1_HANDOFF.md`, `AD_METRICS_NEXT_TASKS.md`, `PLANNER_LINK_TRACKING_SYSTEM_PORT.md` |
+| 27 | **Sales Funnel builder + AI autofill** (opt-in handoff, VSL page, checkout, upsell chain; AI drafts every page from the offer; per-page regenerate + chrome/media) (BUILT) | `src/lib/mothermode/sales/*` (types, store), `src/components/mothermode/sales/SalesOptinPage.tsx`, `/admin/sales-funnels` (page + `SalesFunnelEditor`), `/api/funnel/capture` | `SALES_FUNNEL_SYSTEM_PORT.md`, `SALES_FUNNEL_AI_BUILDER_PORT.md`, `SALES_FUNNEL_EDITOR_REFACTOR_SYSTEM_PORT.md`, `SALES_FUNNEL_EMAIL_AUTOBUILD_SYSTEM_PORT.md` |
+| 28 | **Opt-in funnels** (standalone lead-capture flows with per-step URLs, post-capture destinations, UTM-preserving capture) (BUILT) | `src/lib/mothermode/optin/*` (types, store), `src/components/mothermode/optin/OptinPage.tsx`, `/admin/funnels` (page + `OptinFunnelEditor`), `/api/optin/capture` | `OPTIN_FUNNEL_SYSTEM_PORT.md` |
+| 29 | **Seedance video pipeline** (second-by-second scene scripts, per-beat storyboard approval, render with model selector + per-clip progress) (BUILT) | `src/components/mothermode/content/VideoScriptPanel.tsx`, `src/utils/integrations/fal-smart-resize.ts`, `/api/mothermode/content/video` | `SEEDANCE_VIDEO_PIPELINE_SYSTEM_PORT.md`, `SEEDANCE_MODEL_SELECTOR_PORT.md`, `SEEDANCE_RENDER_UX_PORT.md`, `VIDEO_SCRIPT_STORYBOARD_PORT.md` |
+| 30 | **Brand Bible + Asset Hub** (voice/palette/imagery rules every generator follows; media library + offer-systems completeness view) (BUILT) | `src/lib/mothermode/brandbible/*`, `/admin/brand-bible`, `/admin/assets`, `src/lib/mothermode/offerMedia.ts`, `src/lib/mothermode/offerMediaSlots.ts` | `BRAND_BIBLE_SYSTEM_PORT.md`, `ASSET_HUB_SYSTEM_PORT.md`, `ADMIN_COLOR_ALIGNMENT_AND_SYSTEMS_VIEW_PORT.md` |
+| 31 | **Content scheduling sheet + Export panel** (the Hub scheduling/export surface: per-target export, schedule export carrying Planner dates, piece link panel + click metrics) (BUILT) | `src/lib/mothermode/content/export/*` (schedule, index), `src/components/mothermode/content/ExportPanel.tsx`, `SchedulePanel.tsx`, `ContentSheet.tsx`, `pieceLinks.ts`, `PieceLinkPanel.tsx`, `PieceClickMetrics.tsx` | `CONTENT_EXPORT_SYSTEM.md`, `SCHEDULE_DRAFT_AND_PLANNER_DETAIL_HANDOFF.md`, `CONTENT_HUB_UTM_AND_PLANNER_CARDS_HANDOFF.md` |
+| 32 | **Transactional email flows + analytics** (token/image template editor, flow canvas, funnel event assignment, testing inbox preview, send/open/click dashboards) (BUILT) | `/admin/email-templates`, `/admin/cta-analytics`, email flow canvas + event assignment + testing preview | `EMAIL_ANALYTICS_SYSTEM_PORT.md`, `EMAIL_FLOW_CANVAS_UI_UX_SYSTEM_PORT.md`, `EMAIL_FLOW_ANALYTICS_DASHBOARD_SYSTEM_PORT.md`, `EMAIL_TESTING_INBOX_PREVIEW_SYSTEM_PORT.md`, `EMAIL_TRIGGER_FUNNEL_MAPPING_SYSTEM_PORT.md` |
+| 33 | **FB color-block posts + TikTok photo-mode slideshows** (native FB big-text-on-color posts with brand palette + composer; swipeable TikTok photo posts with per-slide editable text overlays + burn-to-slide) (BUILT) | `content/types.ts` + `colorBlock.ts` + `constants.ts` (COLOR_BLOCK_SWATCHES), `facebook.ts`/`tiktok.ts` (6 + 4 catalog pieces), `previews/FacebookPreview.tsx` (ColorBlock) + `previews/TikTokPreview.tsx` (PhotoMode), `ContentCard.tsx` `ColorBlockVisual` (library tile), `review.ts` `slideOverlays` + `withSlideOverlay`, `SlideTextPanel.tsx` + `ColorBlockPanel.tsx`, `openai-content.ts` format guides, `platformCompliance.ts` `formatIssues`, test `tests/lib/colorblock-slideshow.test.ts` | `COLORBLOCK_AND_SLIDESHOW_FORMATS_PORT.md` |
+| 34 | **Email kit round 6: HTML output guarantee + deep event nurtures + rendered formatting** (every generate/save path renders `bodyHtml`; event nurtures run 7-14 emails — event-nurture 12, webinar-event 10; `*bold*`/`[BUTTON:]`/`[IMAGE:]` authoring markers render to real formatting) (BUILT) | `email/export.ts` (marker + emphasis pipeline, `renderSequenceHtml`), `email/store.ts` (`upsertKit` renders on every write), `email/campaigns/index.ts` (deepened event arcs), `/api/mothermode/email-ai` (HTML in every response), `openai-email.ts` (one-idea-per-block contract), test `tests/lib/email-kit.test.ts` (27) | `EMAIL_MARKETING_KIT_SYSTEM_PORT.md` (§3, §6, §7) + `EMAIL_HTML_AND_DEEP_EVENT_NURTURES_TASK.md` |
+| 35 | **Text model catalog + Moonshot (Kimi) provider** (Claude Opus 5, Claude Fable 5, Kimi K3 added to every text-model selector; new `moonshot` provider plumbed through all 11 text generators with graceful Auto degradation) (BUILT) | `content/models.ts` (TEXT_MODELS + `TextProvider` union), `runtime-config.ts` (`getMoonshotKey`, env `MOONSHOT_API_KEY` / `KIMI_API_KEY`), all 11 `openai-*.ts` generators (moonshot branch + base-aware calls), `scripts/add-moonshot-text-provider.cjs`, test `tests/lib/text-models.test.ts` | `TEXT_MODEL_CATALOG_SYSTEM_PORT.md` + `TEXT_MODEL_CATALOG_ROUND_TASK.md` |
+| 36 | **Text overlay posts + Twitter screen-grab cards** (native viral big-text overlays for reels / TikTok slides / stories / feed squares; full tweet-chrome screen-grab cards for IG / FB / TikTok — both rendered natively, no image model) (BUILT) | `content/types.ts` + `textPost.ts` + `tweetCard.ts` + `constants.ts` (caps, tweet identity), `TextPostPanel.tsx` + `TweetPanel.tsx` (composers + render-to-gallery), `ContentCard.tsx` visuals, `previews/FacebookPreview.tsx` + `previews/TikTokPreview.tsx` surfaces, `openai-content.ts` format guides + validators, `platformCompliance.ts`, `facebook.ts`/`tiktok.ts` examples, test `tests/lib/textpost-tweet.test.ts` (15) | `TEXT_OVERLAY_AND_TWEET_FORMATS_PORT.md` + `TEXT_OVERLAY_AND_TWEET_FORMATS_TASK.md` |
+| 37 | **Research Lab** (the agentic planning suite: chat agent with reasoning trace, token streaming + parallel tool rounds; pulls Monid social, RapidAPI Amazon, model-native web search, and internal metrics; deep mode for ranked posts + comment mining; evidence base with pins, phrase bank, and semantic search; budgets + call telemetry; 8-expert crew + 16 declarative Agent Recipes (the launch/system originals, the builder fleet: bulk content, full funnel, paid launch, email sequences, repurpose, launch week, and the deep research fleet: multi-influencer dives, comment mining, cross-channel sweeps with cited LinkedIn/Facebook web passes, and the Audience Mosaic flagship) with background runs, approve gates, weekly watch digests, and the in-chat Plays rail; artifacts hand off to Planner / Lead Gen Kit / Email Kit / Sales Funnel + the Full System builder; re-verify diffs and outcome digests close the loop) (BUILT) | `src/lib/mothermode/research/**` (agent/*, experts/*, recipes/*, evidence/liveCards/phraseBank/budget/urlSafety/freshness/reverify/outcome/embeddings/learnings/distill/endpointStats/watchlists), `utils/integrations/research-agent.ts` + `monid.ts` + `amazon-rapidapi.ts`, `/admin/research` + `/admin/experts` + `/admin/recipes`, `/api/mothermode/research/chat` (SSE) + `/api/admin/mothermode-research` + `/mothermode-experts` + `/mothermode-recipes` + `/mothermode-jobs`, integrations `monid` + `rapidapi` rows, migrations `20261101000000`–`20261112000000` (12), tests `tests/lib/research-*.test.ts` (194) + `tests/evals/research-loop.eval.test.ts` (19), help seed `researchLab.ts` (research-lab + agent-recipes) | `RESEARCH_LAB_SYSTEM_PORT.md`, `AGENTIC_EXPERTS_RECIPES_ROADMAP_TASK.md` |
+| 38 | **Agent Skills** (declarative skill registry: a skill is a ROW — an allowlisted HTTP request template with `{{input.*}}` vars, header-scoped `{{secret:NAME}}` resolution, dotted-path extraction, $/day caps, and a 5-failure breaker; drafts save imperfect, activation requires zero validator issues, test bench runs once live; ACTIVE skills bridge into the agent loop as first-class tools) (BUILT) | `src/lib/mothermode/research/skills/*` (types, store, template, run), `agent/skillBridge.ts`, `agent/toolDefs.ts`, `/admin/skills`, `/api/admin/mothermode-skills`, migration `20261116000000_research_skills.sql`, tests `tests/lib/research-skills.test.ts` + `tests/lib/research-skill-bridge.test.ts` | `AGENT_SKILLS_SYSTEM_PORT.md` |
+| 39 | **Mission Control + Gates + Command Palette** (the loop as the home screen: /admin strip with gates badge + today's fleet spend + job lane + active watches, crew presence, live cross-run event feed with 2s active / 30s idle polling; the phone-first /admin/gates Approve-Cancel screen; keyboard Command Palette mounted admin-wide) (BUILT) | `src/app/admin/MissionControl.tsx`, `src/app/admin/gates/page.tsx`, `src/app/admin/CommandPalette.tsx`, `recipes/crew.ts` (`missionSummary`, `gatedRuns`, `runProgress`), `/api/admin/mothermode-recipes` (+ `?activity=1`) + `/api/admin/mothermode-jobs`, tests `tests/lib/research-mission-control.test.ts` + `tests/lib/research-palette.test.ts` | `MISSION_CONTROL_SYSTEM_PORT.md` |
+| 40 | **1:1 Personalization** (every lead gets their own page: signed `?pp=` HMAC token on the email CTA, cached per-lead AI copy payload merged server-side onto funnel JSONB blocks — copy-only whitelist, price/Stripe/hrefs untouchable; off/overlay/**gated** modes with a decoy page for keyless visitors; capture-time + click-backstop generation; Hyperise-style dynamic per-recipient email images via a signed next/og endpoint; ESP pattern `?pp={{contact.pp_token}}`) (BUILT) | `src/lib/mothermode/personalize/*` (types, token, merge, context, store, generate, resolve, emailImage), `utils/integrations/openai-personalize.ts`, all `/funnel/*` + `/optin/*` routes, `/api/personalize/email-image`, `/admin/personalization` + `/api/admin/mothermode-personalize`, migration `20261119000000_mothermode_personalization.sql`, tests `tests/lib/personalize-token.test.ts` + `tests/lib/personalize-merge.test.ts` (29) | `PERSONALIZATION_SYSTEM_PORT.md` |
 
 
 
@@ -115,6 +140,11 @@ is PLANNED with the High Ticket Kit). Run them in order.
 | `20260730000000_mothermode_email_kits.sql` | email kits | Admin-only AI email campaign kits (intake + context_refs + sequence as JSONB). See `EMAIL_MARKETING_KIT_SYSTEM_PORT.md` |
 | (none) | — | The **Context Bridge** (§8f) adds no table; it reads existing offer + kit tables. See `OFFER_KIT_CONTEXT_BRIDGE_SYSTEM_PORT.md` |
 | `20260731000000_mothermode_kit_context_refs.sql` | community + high-ticket + lead-gen kits | Adds `context_refs` JSONB to the three kits so each carries a context selector like the Email Kit (§8g). See `TWO_WAY_CONTEXT_SYSTEM_PORT.md` |
+| `20260805000000_mothermode_funnel_assets.sql` | funnel assets | Polymorphic join attaching any kit to a funnel (#22). See `EMAIL_IMAGE_IN_BODY_AND_FUNNEL_ASSETS_PORT.md` |
+| `20261005000000_planner_funnel_links_and_utm.sql` | utm links + click tracking | Tracked `/go/code` links with UTM params and click rows (#24). See `PLANNER_LINK_TRACKING_SYSTEM_PORT.md` |
+| `20261006000000_utm_links_optin_destinations.sql` | utm links opt-in destinations | Opt-in destinations for tracked links (#24, #28). See `OPTIN_FUNNEL_SYSTEM_PORT.md` |
+| `20261007000000_content_plan_publish_state.sql` | content plan publish state | Per-card draft/scheduled/published state (#25). See `PUBLISH_STATE_SYSTEM_PORT.md` |
+| `20261027000000_kb_articles_audience.sql` | kb articles audience | Adds `audience` (admin|buyer) + RLS split (#13 round 2). See `HELP_CENTER_SYSTEM_PORT.md` |
 
 
 Port notes:
@@ -140,6 +170,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 # Optional export/integration targets
 GOOGLE_SHEETS_*            # service-account creds for Sheets export
+PERSONALIZE_SECRET=        # optional HMAC for 1:1 personalization links/images (falls back to the service-role key)
+MONID_API_KEY=             # Research Lab social scraping (also settable in /admin/integrations)
+RAPIDAPI_KEY=              # Research Lab Amazon reviews (also settable in /admin/integrations)
 ```
 
 Provider/model overrides can also be set at runtime by an admin
@@ -418,6 +451,107 @@ Bridge that closes the loop so context flows in **both** directions.
 
 ---
 
+## 8h. Prompt Bank + Image Bank + Test Lab (NEW)
+
+Full deep dive: **`CONTENT_PROMPT_BANK_SYSTEM_PORT.md`**. Resume doc:
+**`PROMPT_BANK_ROUND3_HANDOFF_TASK.md`**. Roadmap:
+**`PROMPT_BANK_1000_AND_TEST_LAB_TASK.md`**. Test Lab output actions spec:
+**`PROMPT_BANK_TEST_ACTIONS_TASK.md`** (shipped). Generator-surface pickers
+spec: **`PROMPT_BANK_GENERATOR_PICKERS_TASK.md`** (shipped). Round-3 YouTube
+spec: **`PROMPT_BANK_YOUTUBE_ROUND_TASK.md`** (shipped). Round-3 TikTok
+spec: **`PROMPT_BANK_TIKTOK_ROUND_TASK.md`** (shipped). Round-5 email
+spec: **`PROMPT_BANK_EMAIL_ROUND_TASK.md`** (shipped).
+
+A programmable bank of **233 A-level prompts** (147 text frameworks + 72
+image creative recipes + 14 styles), seeded from code registries and
+overridable live from `/admin/prompt-bank` via the
+`mothermode_prompt_recipes` table (migrations `20261028000000`,
+`20261029000000`, `20261030000000`).
+
+- **Text bank:** `content/promptBank.ts` + `promptBankRound2.ts` +
+  `promptBankRound3.ts` + `promptBankRound4.ts` + `promptBankRound5.ts`.
+  Base viral frameworks, 27 channel-specific frameworks (X, FB organic, FB
+  ads, IG, TikTok, YT, LinkedIn, Pinterest, email, blog, AEO), round 2's 10
+  FB ad-copy + 8 LinkedIn organic + 8 ultra-long-form structures, round 3's
+  YouTube scripts (8 `ytshort-` Shorts + 8 `ytlong-` long-form + 6 `ytad-`
+  YouTube ads), the TikTok half (10 `ttshort-` scripts + 6 `ttad-`
+  Spark-style ads), and the email ascension round: 8 `email-` sophisticated
+  sends, 6 `emlf-` ultra-long-form essays, 8 `embuy-` purchase + OTO
+  nurture frameworks (next-offer nurture + deep nurture per purchase, OTO
+  welcome + ascension per upsell), and 4 `emgoal-` goal-driven frameworks
+  with the custom `offer` + `goal` input fields. Generators execute them
+  via `style` / Auto `FRAMEWORK ROTATION`; each piece is badged with
+  `ContentPiece.framework`. The Email Kit mirrors 6 ascension frameworks
+  (`email/frameworks/ascension.ts`) and wires any kit email to a bank
+  recipe via `frameworkRecipeId` (editor picker with trigger-matched
+  ordering, expand-pass craft-block injection with goal/offer filled from
+  the intake, canvas trigger hint chip; rides the sequence JSONB, no
+  migration).
+- **Image bank:** `content/imagePromptBank.ts` + `imagePromptBankRound2.ts` +
+  `imagePromptBankRound3.ts` + `imagePromptBankRound4.ts` +
+  `imagePromptBankRound5.ts`. Seven sub-banks: `fbad-` FB ad creatives
+  (17), `igorg-` IG organic (8), `ytthumb-` YT thumbnails (25 after round
+  3's 10 viral frameworks), `liimg-` LinkedIn images (4), `igcar-` IG
+  carousel slide roles (4), `ttimg-` TikTok covers (8, 9:16 with chrome
+  safe zones), `emimg-` email images (6, the `email-header` 1200x600
+  sub-bank). All carry a {Slot} scene skeleton, 2 filled example prompts,
+  art direction, size presets, and the no-baked-in-text brand lock.
+  Execute through `imageFramework` on batch generation, the Amplify image
+  stage, and the Variation Lab brief converter.
+- **Test Lab:** `/admin/prompt-bank` → Test lab runs any recipe through the
+  real generator (`POST /api/admin/mothermode-prompts/test`) and shows the
+  piece in the actual `PlatformPreview` chrome with its hook and image
+  prompt. Works for disabled recipes and unsaved DB edits. **Output actions
+  (shipped):** the test result is a workbench — composed hook-anchored image
+  prompt with Copy, Add-as-example (dedupe + 6-cap, bank learns from real
+  outputs), Save to the generated library (keeps `framework: recipeId`),
+  Changes field with per-field rewrites + a v1/v2/v3 revision stack and
+  restore, Lead magnet (seeds the Lead Gen Kit and deep-links to
+  `/admin/lead-gen?kit=<id>`), Create sequence (3-5 post content funnel via
+  the test route's `action: 'sequence'`, per-piece previews + save-all), and
+  Remix into prompt (drafts a new custom recipe from the output, lands
+  unsaved for human review). Pure helpers in
+  `content/promptBankActions.ts`, tests in
+  `tests/lib/prompt-bank-actions.test.ts`.
+- **Custom input fields (recipe.inputs, shipped):** extended input/output
+  context on 18 story/lesson/experience recipes (personal-story,
+  journey-flex, mistakes, harsh-truths, brag, letter-younger, analogy...).
+  Each field is `{ id, label, placeholder?, hint?, required? }` — the ask,
+  an example answer, and an output steer. The admin fills them in the Test
+  lab or the Generate drawer ("Your material" block on an explicit pick);
+  filled values compose via `recipeInputsBlock` into a user-supplied-material
+  block injected after the craft block, and blank fields fall back to the
+  offer facts so Auto rotation never breaks. The prompt-bank editor manages
+  the field defs. Migration `20261030000000_mothermode_prompt_recipes_inputs.sql`
+  adds the `inputs jsonb` column (manual-apply like the image-group one);
+  the seed script carries it. Tests: 8 cases in
+  `tests/lib/prompt-bank.test.ts`.
+- **Generator-surface pickers (shipped):** one shared
+  `usePromptBankRecipes()` hook (the live merged bank, fetched once per
+  session, code-registry fallback) plus a `<FrameworkPicker>` (the "Steer
+  with a bank framework" toggle + a fits-first selector grouped by recipe
+  group + the "Your material" fields when the pick declares inputs) on every
+  generation surface: the Generate drawer (code-registry chips retired for
+  live data; `fitsOnly` mode lists only the channel's recommended frameworks,
+  with stale picks dropping back to Auto on channel change), the rewrite
+  tabs, the Amplify/Refine command box (applies to every part), and both
+  image stages (version composer scenes + Variation Lab brief, image-group
+  only). Ordering is the pure `orderRecipesForPicker`
+  helper; `framework` / `recipeInputs` ride rewrite, amplifyParts, amplify,
+  imagePrompts, and variationBrief end to end (route `strMap` guard +
+  `recipeInputsBlock` after the craft block). The one-shot
+  `scripts/add-recipe-inputs.cjs` is deleted.
+- **Programmability:** `promptBankStore.ts` merges DB rows over seeds (edit,
+  toggle, custom, reset-to-default), `seed-prompt-bank.cjs` seeds all 233,
+  and the editor offers search/group filters, full-field editing, image kind
+  + size-preset fields, assembled-prompt preview, and Notion swipe-file
+  import. Editor and page match the dark admin theme.
+- **Note:** the 20261029000000 image-group migration (`recipe_group 'image'`
+  + `kind` + `size_presets`) must be applied before seeding; the seed script
+  prints the exact instruction when it is missing.
+
+---
+
 ## 9. Consolidated port runbook
 
 
@@ -489,6 +623,34 @@ Do this in order in the target codebase.
 - `EMAIL_KIT_ADVANCED_FEATURES_PORT.md` (new, this round; rich-text bodies, format/length controls, branching, sequence extension, per-email Image Studio, P.S. selling)
 - `EMAIL_IMAGE_IN_BODY_AND_FUNNEL_ASSETS_PORT.md` (new, this round; insert image into body via Studio trigger, round-trip gallery image for text/overlay, polymorphic funnel-asset library)
 - `YOUTUBE_LINKEDIN_CONTENT_ROUND_1.md` (the copy-authoring spec for the catalogs)
+
+### Newer wave (planner, funnels, video, brand, help round 2)
+- `PLANNER_SYSTEM_PORT.md` + `PLANNER_ADMIN_UI_PORT.md` + `PLANNER_ADMIN_API_PORT.md` (the Planner board)
+- `PLANNER_LINK_TRACKING_SYSTEM_PORT.md` (tracked links + UTM) and `PLANNER_FUNNEL_LINKS_UTM_HANDOFF.md`
+- `PUBLISH_STATE_SYSTEM_PORT.md` (per-card publish state)
+- `AD_METRICS_SYSTEM_PORT.md` (ad metrics + click rollups; consolidates `AD_METRICS_PHASE1_HANDOFF.md` + `AD_METRICS_NEXT_TASKS.md`)
+- `SALES_FUNNEL_SYSTEM_PORT.md` + `SALES_FUNNEL_AI_BUILDER_PORT.md` + `SALES_FUNNEL_EDITOR_REFACTOR_SYSTEM_PORT.md` + `SALES_FUNNEL_EMAIL_AUTOBUILD_SYSTEM_PORT.md` (Sales Funnels)
+- `OPTIN_FUNNEL_SYSTEM_PORT.md` (opt-in funnels)
+- `SEEDANCE_VIDEO_PIPELINE_SYSTEM_PORT.md` + `SEEDANCE_MODEL_SELECTOR_PORT.md` + `SEEDANCE_RENDER_UX_PORT.md` (Seedance video)
+- `BRAND_BIBLE_SYSTEM_PORT.md` + `ASSET_HUB_SYSTEM_PORT.md` + `ADMIN_COLOR_ALIGNMENT_AND_SYSTEMS_VIEW_PORT.md` (Brand Bible + Asset Hub)
+- `CONTENT_EXPORT_SYSTEM.md` + `SCHEDULE_DRAFT_AND_PLANNER_DETAIL_HANDOFF.md` + `CONTENT_HUB_UTM_AND_PLANNER_CARDS_HANDOFF.md` (scheduling sheet + export)
+- `EMAIL_ANALYTICS_SYSTEM_PORT.md`, `EMAIL_FLOW_CANVAS_UI_UX_SYSTEM_PORT.md`, `EMAIL_FLOW_ANALYTICS_DASHBOARD_SYSTEM_PORT.md`, `EMAIL_TESTING_INBOX_PREVIEW_SYSTEM_PORT.md`, `EMAIL_TRIGGER_FUNNEL_MAPPING_SYSTEM_PORT.md` (transactional email flows)
+- `HELP_CENTER_SYSTEM_PORT.md` (Help Center round 2: audience split, buyer docs, in-app help, expandable changelog)
+- `CONTENT_PROMPT_BANK_SYSTEM_PORT.md` (Prompt Bank: 233 text+image recipes, DB-programmable) + `PROMPT_BANK_1000_AND_TEST_LAB_TASK.md` (roadmap) + `PROMPT_BANK_ROUND3_HANDOFF_TASK.md` (resume doc) + `PROMPT_BANK_TEST_ACTIONS_TASK.md` (Test Lab output actions, SHIPPED) + `PROMPT_BANK_GENERATOR_PICKERS_TASK.md` (generator-surface pickers + debt cleanup, SHIPPED) + `PROMPT_BANK_YOUTUBE_ROUND_TASK.md` (round 3 YouTube half: thumbnails, Shorts + long-form scripts, YT ads, SHIPPED) + `PROMPT_BANK_TIKTOK_ROUND_TASK.md` (round 3 TikTok half: ttshort scripts, ttimg covers, ttad Spark-style ads, SHIPPED) + `PROMPT_BANK_EMAIL_ROUND_TASK.md` (round 5 email ascension: email-/emlf-/embuy-/emgoal- frameworks, emimg- images, kit frameworks + trigger wiring, SHIPPED)
+
+### Round-6 wave (email depth, models, native text formats)
+- `EMAIL_MARKETING_KIT_SYSTEM_PORT.md` (updated: round 6 — HTML output guarantee on every generate/save path, deep event nurtures 7-14 emails, rendered formatting pipeline) + `EMAIL_HTML_AND_DEEP_EVENT_NURTURES_TASK.md` (spec, SHIPPED)
+- `TEXT_MODEL_CATALOG_SYSTEM_PORT.md` (Claude Opus 5 / Fable 5 / Kimi K3 + Moonshot provider across all 11 text generators, SHIPPED) + `TEXT_MODEL_CATALOG_ROUND_TASK.md` (spec)
+- `TEXT_OVERLAY_AND_TWEET_FORMATS_PORT.md` (text overlay posts + Twitter screen-grab cards, native text-render formats, SHIPPED) + `TEXT_OVERLAY_AND_TWEET_FORMATS_TASK.md` (spec)
+
+### Research wave (the agentic planning suite)
+- `RESEARCH_LAB_SYSTEM_PORT.md` (Research Lab: chat agent with reasoning trace, token streaming + parallel tool rounds; Monid social scraping, RapidAPI Amazon reviews, model-native web search, internal metrics; deep mode; evidence base + phrase bank + semantic search; budgets; handoffs to Planner / Lead Gen Kit / Email Kit / Sales Funnel + Full System builder, SHIPPED)
+- `AGENTIC_EXPERTS_RECIPES_ROADMAP_TASK.md` (the agentic arc roadmap: expert runtime + 8-expert crew, Agent Recipes + mission UI + background jobs + watchlists, cross-session memory + re-verify diffs + outcome digests — 27/27 SHIPPED)
+- `RECIPES_VISIBILITY_UX_PORT.md` (message provenance, live-follow runs in chat, expert identity everywhere, public run share links — SHIPPED)
+- `AGENT_SKILLS_SYSTEM_PORT.md` (declarative skill registry + agent bridge, SHIPPED) + `MISSION_CONTROL_SYSTEM_PORT.md` (Mission Control home, /admin/gates, Command Palette, SHIPPED) + `AGENTIC_GO_TO_ROADMAP_TASK.md` (the go-to arc roadmap)
+
+### Personalization wave (1:1 pages + per-recipient images)
+- `PERSONALIZATION_SYSTEM_PORT.md` (signed `?pp=` links, server-side copy merge with the money invariant, off/overlay/gated modes, capture-time AI payloads, dynamic per-recipient email images, ESP wiring — SHIPPED)
 
 
 

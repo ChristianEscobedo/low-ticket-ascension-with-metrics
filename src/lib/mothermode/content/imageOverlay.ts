@@ -376,9 +376,12 @@ export function canvasSizeForFormat(format?: string): {
     case 'story':
     case 'reel':
     case 'video':
+    case 'slideshow':
     case 'idea':
     case 'short':
       return { width: 1080, height: 1920 };
+    case 'colorblock':
+      return { width: 1080, height: 1080 };
     case 'pin':
       return { width: 1000, height: 1500 };
     case 'blog':
@@ -432,7 +435,7 @@ export function suggestOverlayText(
     '';
 
   if (
-    ['story', 'carousel', 'idea'].includes(piece.format) &&
+    ['story', 'carousel', 'slideshow', 'idea'].includes(piece.format) &&
     (packFrame?.text?.trim() || slide?.text)
   ) {
     return {

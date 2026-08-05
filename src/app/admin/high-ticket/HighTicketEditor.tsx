@@ -40,7 +40,7 @@ import {
 const inputCls =
   'w-full rounded-lg bg-black/20 border border-bone/15 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/50';
 const labelCls = 'block text-xs uppercase tracking-wider text-bone/50 mb-1';
-const cardCls = 'rounded-xl border border-bone/10 bg-bone/[0.02] p-4';
+const cardCls = 'rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4';
 const btnCls =
   'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 const primaryBtn = `${btnCls} bg-brass/[0.15] text-brass border border-brass/30 hover:bg-brass/25`;

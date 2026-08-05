@@ -38,6 +38,7 @@ import {
   deleteVersion,
 } from './versionsClient';
 import { aiGenerateImage, aiImagePrompts } from './aiClient';
+import { FrameworkPicker } from './FrameworkPicker';
 import { getReview, setReviewImages, loadReviews } from './reviewClient';
 import { reviewImages } from '@/lib/mothermode/content/review';
 import { buildImagePrompt } from '@/lib/mothermode/content/constants';
@@ -251,6 +252,11 @@ export const AmplifyComposer: React.FC<{
   const [imgModel, setImgModel] = useState(AUTO_MODEL);
   const [imgBusy, setImgBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
+  /** Image-bank steering for the scene-prompt stage (image recipes only). */
+  const [imgFramework, setImgFramework] = useState('');
+  const [imgRecipeInputs, setImgRecipeInputs] = useState<
+    Record<string, string>
+  >({});
 
   // Seed the image pool from the piece's shared gallery (and its catalog still),
   // so visuals generated in the Image Studio are pickable here too.
@@ -407,6 +413,8 @@ export const AmplifyComposer: React.FC<{
         avoid: imagePool,
         context: imgContext,
         model: model || undefined,
+        imageFramework: imgFramework || undefined,
+        recipeInputs: imgFramework ? imgRecipeInputs : undefined,
       });
       const urls: string[] = [];
       for (const scene of scenes) {
@@ -756,6 +764,16 @@ export const AmplifyComposer: React.FC<{
             No images yet. Generate a few below, or add them in the Image Studio.
           </p>
         )}
+
+        <FrameworkPicker
+          groups={['image']}
+          platform={piece.platform}
+          format={piece.format}
+          value={imgFramework}
+          onChange={setImgFramework}
+          inputValues={imgRecipeInputs}
+          onInputValues={setImgRecipeInputs}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] text-ink/55">How many</span>

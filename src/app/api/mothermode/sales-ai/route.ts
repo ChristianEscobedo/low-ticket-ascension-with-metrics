@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const allowed: SalesAiPageKey[] = [
       'optin', 'sales', 'vsl', 'checkout',
       'upsell1', 'upsell2', 'upsell3', 'upsell4',
-      'success', 'access',
+      'success', 'access', 'footer',
     ];
     if (!allowed.includes(page)) {
       return NextResponse.json(
@@ -110,5 +110,6 @@ if (action !== 'generate') {
     upsell4: result.data.upsell4,
     successBlock: result.data.success,
     access: result.data.access,
+    footer: result.data.footer,
   });
 }

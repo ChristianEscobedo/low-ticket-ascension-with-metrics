@@ -1,13 +1,74 @@
 import Link from 'next/link';
 import { getOverviewStats } from '@/utils/supabase/admin';
+import MissionControl from './MissionControl';
+import {
+  getClickRollupsSafe,
+  getPieceAttributionSafe,
+  sumPieceAttribution
+} from '@/lib/mothermode/planner/links';
+import { peopleLabel, readPeople } from '@/lib/mothermode/planner/clickPeople';
+import {
+  ATTRIBUTED_REVENUE_FLOOR_NOTE,
+  ATTRIBUTED_REVENUE_FLOOR_SHORT,
+  bidCeilingSummary,
+  blendedRateCaveat,
+  formatCents,
+  formatCentsPrecise,
+  pieceEconomics
+} from '@/lib/mothermode/planner/adMetrics';
 
 export const dynamic = 'force-dynamic';
+
+
 
 const fmt = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export default async function AdminOverviewPage() {
-  const stats = await getOverviewStats();
+  const [stats, clicks, attribution] = await Promise.all([
+    getOverviewStats(),
+    getClickRollupsSafe(),
+    /*
+     * Third read, independently fallible. Attribution can fail while clicks
+     * succeed (different tables, different migrations), and this page's job is
+     * revenue — a lead-join failure must not blank the Stripe cards above.
+     */
+    getPieceAttributionSafe(),
+  ]);
+
+  /*
+   * Derived here rather than inside the JSX because the roll-up can be null —
+   * `getClickRollupsSafe` returns null when the planner migration isn't applied,
+   * and the whole card already renders `n/a` in that case. Reading people off a
+   * null would be the one place this dashboard could crash on a fresh database.
+   */
+  const peopleReading = clicks ? readPeople(clicks) : null;
+  const peopleSuffix =
+    peopleReading && peopleReading.people !== null && clicks?.recentClicks
+      ? peopleLabel(peopleReading)
+      : '';
+
+  /*
+   * Account-level economics.
+   *
+   * Both inputs are ALL-TIME on purpose: `totalClicks` is the counter, and
+   * attribution has no window at all. The 30-day `recentClicks` sitting two
+   * lines above is the tempting denominator and the wrong one — dividing
+   * all-time revenue by a month of clicks would inflate EPC by however long
+   * this account has been running, and the result looks entirely plausible.
+   */
+  const attributed = sumPieceAttribution(attribution);
+  const economics = pieceEconomics({
+    clicks: clicks ? clicks.totalClicks : null,
+    clicksByTrafficType: clicks ? clicks.clicksByTrafficType : null,
+    // null, not the zeroed total, when the read failed: `n/a` rather than $0.00.
+    slice: attribution ? attributed : null,
+    split: attribution ? attributed.byTrafficType : null,
+  });
+  const bidCeiling = bidCeilingSummary(economics);
+  const blendWarning = blendedRateCaveat(economics.mix);
+
+
 
   return (
     <div>
@@ -18,6 +79,10 @@ export default async function AdminOverviewPage() {
       <p className="mt-2 text-bone/60">
         High-level view of revenue, subscriptions, and recent activity.
       </p>
+
+      {/* the loop as the home screen: what the crew is doing right now,
+          what it spent today, and what's waiting on your yes */}
+      <MissionControl />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
         <StatCard
@@ -44,9 +109,69 @@ export default async function AdminOverviewPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <StatCard
+          label="Tracked link clicks"
+          value={clicks ? String(clicks.totalClicks) : 'n/a'}
+          sub={
+            clicks
+              ? `${clicks.recentClicks} in 30d` +
+                // People, not just hits. On the dashboard this is the difference
+                // between "the campaign is working" and "I have refreshed my own
+                // link forty times", and the totals alone cannot tell them apart.
+                (peopleSuffix ? ` from ${peopleSuffix}` : '') +
+                (clicks.botClicks ? ` · ${clicks.botClicks} bots excluded` : '') +
+
+              ` · ${clicks.linksWithClicks}/${clicks.linkCount} links used`
+              : 'planner link tracking unavailable'
+          }
+        />
+        {/*
+          Labelled "Attributed revenue", never "Revenue" — the two Revenue cards
+          one row up come from Stripe and are always the larger, more complete
+          number. This one answers a different question (which POST earned it)
+          and can only ever be a subset.
+        */}
+        <StatCard
+          label="Attributed revenue"
+          value={attribution ? formatCents(attributed.revenueCents) : 'n/a'}
+          sub={
+            attribution
+              ? `${attributed.optins} opt-ins · ${attributed.purchases} sales · ` +
+                ATTRIBUTED_REVENUE_FLOOR_SHORT
+              : 'lead attribution unavailable'
+          }
+        />
+        <StatCard
+          label="Earnings per click"
+          value={formatCentsPrecise(economics.blended.epcCents)}
+          sub={
+            economics.mix.label
+              ? `leads: ${economics.mix.label}`
+              : 'no attributed leads yet'
+          }
+        />
+      </div>
+      {(attribution || clicks) && (
+        <div className="mt-2 space-y-1 text-xs text-bone/40">
+          <p>{ATTRIBUTED_REVENUE_FLOOR_NOTE}</p>
+          {/*
+            Only rendered when paid AND organic both produced leads, which is the
+            only case where the EPC above is a budget-weighted average. The
+            paid-only ceiling is printed next to the warning rather than as its
+            own card: read apart from the caveat it is just another number, and
+            it is the one someone would actually bid.
+          */}
+          {blendWarning && <p className="text-brass/60">{blendWarning}</p>}
+          {bidCeiling && <p className="text-brass/60">{bidCeiling}</p>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+        <QuickLink href="/admin/planner" label="Content Planner" />
         <QuickLink href="/admin/funnel-stats" label="Funnel Stats" />
         <QuickLink href="/admin/purchases" label="All purchases" />
+
         <QuickLink href="/admin/subscriptions" label="Subscriptions" />
       </div>
 

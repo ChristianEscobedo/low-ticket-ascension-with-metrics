@@ -5,13 +5,17 @@ import {
   getPublishedFunnelBySlug,
 } from '@/lib/mothermode/optin/store';
 import OptinThankYouPage from '@/components/mothermode/optin/OptinThankYouPage';
+import GatedPage from '@/components/mothermode/personalize/GatedPage';
+import { resolveOptinPersonalization } from '@/lib/mothermode/personalize/resolve';
 import { isAdminEmail } from '@/utils/courses/access';
 import { createClient } from '@/utils/supabase/server';
 import { getUser } from '@/utils/supabase/queries';
 
 interface Props {
   params: { slug: string };
+  searchParams: { pp?: string };
 }
+
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +28,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function OptinThankYouRoute({ params }: Props) {
+export default async function OptinThankYouRoute({ params, searchParams }: Props) {
+
   let funnel = await getPublishedFunnelBySlug(params.slug);
   let isAdmin = false;
 
@@ -45,7 +50,19 @@ export default async function OptinThankYouRoute({ params }: Props) {
   }
 
   if (!funnel) notFound();
+
+  if (!isAdmin) {
+    try {
+      const resolved = await resolveOptinPersonalization(funnel, searchParams?.pp);
+      funnel = resolved.funnel;
+      if (resolved.gated) return <GatedPage />;
+    } catch (err) {
+      console.error('[optin/thank-you] personalization resolve failed:', err);
+    }
+  }
+
   return <OptinThankYouPage funnel={funnel} isAdmin={isAdmin} />;
 }
+
 
 

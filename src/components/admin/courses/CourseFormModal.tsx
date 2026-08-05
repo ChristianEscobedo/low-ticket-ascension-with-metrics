@@ -88,13 +88,13 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl my-8 rounded-2xl border border-amber-200/20 bg-gradient-to-br from-gray-950 to-black p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl my-8 rounded-2xl border border-brass/20 bg-gradient-to-br from-mode-deep to-ink p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">
+          <h3 className="text-lg font-semibold text-bone">
             {course ? 'Edit course' : 'New course'}
           </h3>
-          <button onClick={onClose} className="p-1 text-white/50 hover:text-white">
+          <button onClick={onClose} className="p-1 text-bone/50 hover:text-bone">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -148,7 +148,7 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
               <img
                 src={form.thumbnail_url}
                 alt=""
-                className="w-20 h-12 object-cover rounded border border-white/10"
+                className="w-20 h-12 object-cover rounded border border-bone/10"
               />
             )}
             <input
@@ -161,7 +161,7 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-bone/5 hover:bg-bone/10 text-bone border border-bone/10 disabled:opacity-40"
             >
               {uploading ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -173,7 +173,7 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
             {form.thumbnail_url && (
               <button
                 onClick={() => setForm((p) => ({ ...p, thumbnail_url: '' }))}
-                className="text-xs text-white/40 hover:text-white"
+                className="text-xs text-bone/40 hover:text-bone"
               >
                 Clear
               </button>
@@ -199,7 +199,7 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
               className={`${inputCls} disabled:opacity-40`}
             />
           </Field>
-          <div className="flex flex-col justify-end gap-2 text-sm text-white/70">
+          <div className="flex flex-col justify-end gap-2 text-sm text-bone/70">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -238,13 +238,13 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
         )}
 
         <div className="flex items-center justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-3 py-2 text-sm text-white/60 hover:text-white">
+          <button onClick={onClose} className="px-3 py-2 text-sm text-bone/60 hover:text-bone">
             Cancel
           </button>
           <button
             onClick={save}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-black disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-brass hover:bg-brass/90 text-ink disabled:opacity-40"
           >
             {saving && <Loader2 className="w-3 h-3 animate-spin" />}
             {saving ? 'Saving…' : course ? 'Save changes' : 'Create course'}
@@ -256,12 +256,12 @@ export default function CourseFormModal({ course, onClose, onSaved }: Props) {
 }
 
 const inputCls =
-  'w-full px-3 py-2 text-sm rounded-lg bg-black/40 border border-white/10 text-white placeholder-white/30 focus:border-amber-300/40 focus:outline-none';
+  'w-full px-3 py-2 text-sm rounded-lg bg-ink/60 border border-bone/10 text-bone placeholder-bone/30 focus:border-brass/40 focus:outline-none';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="block text-xs font-medium text-white/60">{label}</label>
+      <label className="block text-xs font-medium text-bone/60">{label}</label>
       {children}
     </div>
   );

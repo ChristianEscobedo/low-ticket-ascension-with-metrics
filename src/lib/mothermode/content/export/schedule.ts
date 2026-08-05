@@ -173,14 +173,49 @@ export interface BuildRowsInput {
   reviews?: Record<string, PieceReview>;
   /** Optional best scheduled version per piece id. */
   versionsByPiece?: Record<string, SavedVersion | undefined>;
+  /**
+   * Planner calendar dates (ISO) keyed by piece id, from
+   * `mothermode_content_plan.scheduled_at` via planner/store
+   * `getScheduleByPieceId`.
+   *
+   * This is the highest-priority source and it outranks
+   * `SavedVersion.scheduledFor` on purpose: the calendar is where a human
+   * dropped the card, while `scheduledFor` is a per-version hint that can be
+   * left behind by an older draft. Without this precedence the exporter would
+   * quietly ignore a date the user just dragged.
+   */
+  scheduleByPieceId?: Record<string, string>;
+  /**
+   * Tracked `/go/<code>` (or full UTM) URL per piece id, from the link registry.
+   *
+   * Overrides the CTA link when present. Same precedence idea as
+   * `scheduleByPieceId`: an explicit planner decision beats a derived default.
+   * Without this the export ships the bare offer URL and every click arrives
+   * unattributed — which quietly defeats the point of minting the link at all,
+   * since the CSV is how most posts actually get published.
+   */
+  linkByPieceId?: Record<string, string>;
 }
 
 /**
  * Build ordered ExportRows with resolved captions, media, and schedule times.
  * Sorted by scheduledAt ascending.
+ *
+ * Schedule precedence: planner calendar → scheduled version → computed
+ * campaignStart + week offset. The computed fallback still runs for every
+ * unplanned piece, so partially-planned libraries export in one pass.
  */
+
 export function buildExportRows(input: BuildRowsInput): ExportRow[] {
-  const { pieces, options, reviews = {}, versionsByPiece = {} } = input;
+  const {
+    pieces,
+    options,
+    reviews = {},
+    versionsByPiece = {},
+    scheduleByPieceId = {},
+    linkByPieceId = {},
+  } = input;
+
   const start = parseDateOnly(options.campaignStart);
   if (!start) {
     throw new Error('Invalid campaign start date (use YYYY-MM-DD)');
@@ -232,7 +267,13 @@ export function buildExportRows(input: BuildRowsInput): ExportRow[] {
     const fromVersion = useVersions
       ? parseScheduledFor(version?.scheduledFor)
       : null;
+    // `parseScheduledFor` is reused for the planner date because it already
+    // rejects invalid ISO by returning null — a corrupt scheduled_at therefore
+    // falls through to the version/computed date instead of producing an
+    // Invalid Date that would serialize as an empty CSV cell.
+    const fromPlanner = parseScheduledFor(scheduleByPieceId[piece.id]);
     const scheduledAt =
+      fromPlanner ??
       fromVersion ??
       assignScheduleDate(
         start,
@@ -240,6 +281,7 @@ export function buildExportRows(input: BuildRowsInput): ExportRow[] {
         weekIndex.get(piece.id) ?? 0,
         time,
       );
+
 
     if (options.scope === 'range') {
       if (rangeStart && scheduledAt < rangeStart) continue;
@@ -269,7 +311,7 @@ export function buildExportRows(input: BuildRowsInput): ExportRow[] {
       imageUrls,
       videoUrls: videos,
       thumbnailUrl: thumbnail,
-      link: resolveLink(piece, options.offerUrl),
+      link: linkByPieceId[piece.id] || resolveLink(piece, options.offerUrl),
       missingMedia,
     });
   }

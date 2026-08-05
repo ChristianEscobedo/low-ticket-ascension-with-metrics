@@ -51,7 +51,7 @@ export const PLATFORM_SIZE_PRESETS: PlatformSizePreset[] = [
     width: 1080,
     height: 1920,
     platforms: ['instagram', 'facebook', 'tiktok'],
-    formats: ['story', 'reel', 'video', 'idea'],
+    formats: ['story', 'reel', 'video', 'slideshow', 'idea'],
     aspect: '9:16',
     group: 'story',
   },
@@ -359,8 +359,15 @@ export function defaultPresetIdsForFormat(format?: string): string[] {
     case 'story':
     case 'reel':
     case 'video':
+    case 'slideshow':
     case 'idea':
       return ['ig-fb-story'];
+    case 'colorblock':
+      return ['ig-fb-feed-11'];
+    case 'textpost':
+      return ['ig-fb-story', 'ig-fb-feed-11'];
+    case 'tweet':
+      return ['ig-fb-feed-11'];
     case 'carousel':
       return ['ig-carousel-square', 'ig-carousel-45'];
     case 'pin':
@@ -381,7 +388,12 @@ export function defaultPresetIdsForFormat(format?: string): string[] {
   }
 }
 
-/** Whether a format is multi-frame (carousel / story / idea pin). */
+/** Whether a format is multi-frame (carousel / story / slideshow / idea pin). */
 export function isMultiFrameFormat(format?: string): boolean {
-  return format === 'carousel' || format === 'story' || format === 'idea';
+  return (
+    format === 'carousel' ||
+    format === 'story' ||
+    format === 'slideshow' ||
+    format === 'idea'
+  );
 }

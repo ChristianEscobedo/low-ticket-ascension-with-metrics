@@ -10,6 +10,8 @@ import {
   markLeadOto,
   recordOptinEvent,
 } from '@/lib/mothermode/optin/store';
+import { triggerAutoPersonalization } from '@/lib/mothermode/personalize/generate';
+
 
 
 /**
@@ -109,6 +111,9 @@ export async function POST(request: NextRequest) {
       utmSource: typeof body.utmSource === 'string' ? body.utmSource : null,
       utmMedium: typeof body.utmMedium === 'string' ? body.utmMedium : null,
       utmCampaign: typeof body.utmCampaign === 'string' ? body.utmCampaign : null,
+      // utm_content carries the planner piece id, so a lead can be traced back
+      // to the individual post rather than just the campaign.
+      utmContent: typeof body.utmContent === 'string' ? body.utmContent : null,
       referrer: typeof body.referrer === 'string' ? body.referrer : null,
       userAgent: ua || null,
       ipHash,
@@ -137,7 +142,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Kick 1:1 personalization for this lead (fire-and-forget; no-op unless
+    // the funnel has personalization enabled in admin).
+    triggerAutoPersonalization({
+      kind: 'optin',
+      funnelId: funnel.id,
+      email: lead.email,
+      firstName: lead.firstName,
+    });
+
     const redirectTo = funnel.oto.enabled ? 'oto' : 'thank-you';
+
 
     return NextResponse.json({
       success: true,

@@ -32,7 +32,7 @@ export default function LeadsTab({
 }) {
   const shown = selectedId ? leads.filter((l) => l.funnelId === selectedId) : leads;
   return (
-    <section className="rounded-xl border border-bone/10 bg-ink/30 overflow-hidden">
+    <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden">
       <div className="flex items-center justify-between border-b border-bone/10 px-3 py-2">
         <div className="text-xs text-bone/45">{selectedId ? shown.length + ' for this funnel' : leads.length + ' recent'}</div>
         <button type="button" onClick={onExportCsv} className={btnGhost}>Export CSV</button>

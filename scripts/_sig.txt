@@ -1,0 +1,116 @@
+=== src/lib/mothermode/sales/ascension.ts
+export type EscalationAxis = 'bigger' | 'faster' | 'stronger' | 'doneForYou';
+export const ESCALATION_AXES: readonly EscalationAxis[] = [
+export type AscensionStage = 'frontEnd' | 'oto1' | 'oto2' | 'oto3';
+export const ASCENSION_STAGES: readonly AscensionStage[] = [
+export type TimelineHorizon = 'today' | 'next90Days' | 'nextFiveYears' | 'leverage';
+export const STAGE_HORIZON: Record<AscensionStage, TimelineHorizon> = {
+export const HORIZON_LABEL: Record<TimelineHorizon, string> = {
+export type MarketArchetype =
+  | 'bizop'
+  | 'dating'
+  | 'weightLoss'
+  | 'finance'
+  | 'painRelief'
+  | 'parenting'
+  | 'mlm'
+  | 'gameDev'
+  | 'saas'
+  | 'dogTraining'
+  | 'faith'
+  | 'productivity'
+  | 'consulting'
+  | 'language'
+  | 'eldercare'
+  | 'survival'
+  | 'generic';
+export type ArchetypeLadder = {
+  archetype: MarketArchetype;
+export const ARCHETYPE_LADDERS: Record<MarketArchetype, ArchetypeLadder> = {
+export const FORMAT_PRICE_ANCHORS = [
+export const UPSELL_ELASTICITY_MULTIPLE = 100;
+export type DownsellPlacement = 'none' | 'inline' | 'after';
+export const DEFAULT_CONVERSION_RATES: Record<
+export type AscensionRung = {
+  stage: AscensionStage;
+export type AscensionIssueCode =
+  | 'price-not-ascending'
+  | 'no-escalation'
+  | 'duplicate-outcome'
+  | 'missing-outcome'
+  | 'exceeds-elasticity'
+  | 'downsell-not-cheaper'
+  | 'stage-out-of-order';
+export type AscensionIssue = {
+  code: AscensionIssueCode;
+export function validateAscension(rungs: AscensionRung[]): AscensionIssue[] {
+export type AovLine = {
+  stage: AscensionStage;
+export type AovProjection = {
+  placement: DownsellPlacement;
+export function projectAov(
+export function compareDownsellPlacements(
+export function suggestPriceLadder(frontEndPrice: number): Record<AscensionStage, number> {
+export function suggestAscension(
+=== src/lib/mothermode/sales/funnelMap.ts
+export type FunnelNodeKind =
+  | 'ad'
+  | 'advertorial'
+  | 'optin'
+  | 'vsl'
+  | 'sales'
+  | 'checkout'
+  | 'orderBump'
+  | 'upsell'
+  | 'downsell'
+  | 'success'
+  | 'access'
+  | 'email';
+export type FunnelNode = {
+  id: string;
+export type FunnelEdge = {
+  from: string;
+export type FunnelMap = {
+  nodes: FunnelNode[];
+export type FunnelMapInput = {
+  frontEndName: string;
+export const ATTENTION_DECAY: Record<string, number> = {
+export function buildFunnelMap(input: FunnelMapInput): FunnelMap {
+export function orphanedEmails(map: FunnelMap): FunnelNode[] {
+export function toMermaid(map: FunnelMap): string {
+export function toAsciiMap(map: FunnelMap): string {
+=== src/lib/mothermode/sales/intakeAscension.ts
+export const UPSELL_STAGES: readonly AscensionStage[] = ASCENSION_STAGES.filter(
+export function parseIntakePrice(label: string | undefined | null): number {
+export const ESCALATION_KEYWORDS: Record<EscalationAxis, readonly string[]> = {
+export function inferEscalationAxes(text: string | undefined): EscalationAxis[] {
+export type IntakeAscensionNoteCode =
+  /** The intake has no price for this rung, so it entered the ladder at 0. */
+  | 'price-missing'
+  /** No promise text, so the rung has no outcome to be compared on. */
+  | 'outcome-missing'
+  /** Axes were guessed from the promise wording, not stated by the operator. */
+  | 'escalation-inferred'
+  /** Nothing in the promise named an axis; left blank for the validator. */
+  | 'escalation-unstated'
+  /** A subscription price was read as its first payment. */
+  | 'recurring-price-as-first-payment'
+  /** Slot 4 exists in the intake but the ladder stops at OTO 3. */
+  | 'upsell-beyond-oto3'
+  /** The intake cannot express a downsell, so placement cannot be compared. */
+  | 'downsells-not-expressible'
+  /** More order bumps than the map draws. */
+  | 'extra-order-bumps';
+export type IntakeAscensionNote = {
+  code: IntakeAscensionNoteCode;
+export type IntakeAscension = {
+  rungs: AscensionRung[];
+export function intakeToAscension(intake: SalesAiIntake): IntakeAscension {
+export function intakeToAscensionRungs(intake: SalesAiIntake): AscensionRung[] {
+export type IntakeFunnelMapOptions = {
+  traffic?: FunnelMapInput['traffic'];
+export function funnelMapInputFromIntake(
+export function buildFunnelMapFromIntake(
+export type IntakeFunnelAudit = {
+  rungs: AscensionRung[];
+export function auditIntakeFunnel(

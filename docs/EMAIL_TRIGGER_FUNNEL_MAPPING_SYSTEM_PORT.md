@@ -272,3 +272,34 @@ npx vitest run tests/lib/email-flow.test.ts tests/lib/email-kit.test.ts \
   tests/lib/email-triggers.test.ts
 ```
 Expected: tsc 0 errors; 5 files / 65 tests passing.
+
+---
+
+## 9. Round 5 companion: prompt-bank recipe wiring (shipped)
+
+Spec: `PROMPT_BANK_EMAIL_ROUND_TASK.md`. The prompt bank's email ascension
+round lands 26 email recipes in the bank (`email-`, `emlf-`, `embuy-`,
+`emgoal-` families, spec'd against this trigger taxonomy: purchase →
+`embuy-` welcome / first-win / next-offer-seed / deep-nurture-arc /
+review-ask, upsell_purchase → `embuy-oto-welcome` / `embuy-oto-ascend`,
+refund → `embuy-refund-save`, booking → `emgoal-book-call`, abandon → the
+honest closes) and wires them onto kit emails:
+
+- Any `EmailMessage` can carry an optional `frameworkRecipeId` (sequence
+  JSONB, normalized present-only; no schema change, same discipline as
+  `triggerConfig`). The kit editor's **Bank framework** select orders the
+  email-fit recipes with the trigger-matched family first via the pure
+  `orderEmailRecipesForTrigger` helper, and `aiExpandEmail` injects the
+  recipe's craft block (+ intake-filled `goal` / `offer` inputs) at expand
+  time.
+- The flow canvas trigger node shows a read-only hint chip naming the
+  fitting recipe family (`triggerRecipeFamilyLabel`), next to the
+  location/binding lines from §5.
+- The Email Kit also ships 6 ascension frameworks
+  (`email/frameworks/ascension.ts`) and remaps `pre-post-purchase`
+  (welcome → buyer-welcome, bridge → ascension-bridge).
+
+Tests: `tests/lib/email-kit.test.ts` (+3 round-5 cases),
+`tests/lib/prompt-bank-actions.test.ts` (+3 trigger-wiring cases). The §7
+dispatch work remains the standing non-goal; this wiring is generation-side
+only.

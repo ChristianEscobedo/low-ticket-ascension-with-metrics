@@ -14,7 +14,10 @@ const VALID_PROVIDERS: IntegrationProvider[] = [
   'stripe',
   'openai',
   'anthropic',
-  'email'
+  'email',
+  'monid',
+  'rapidapi',
+  'apify'
 ];
 
 // Secret-bearing config keys are write-only: a blank submission preserves the
@@ -25,6 +28,7 @@ const SECRET_KEYS = new Set([
   'secret_key',
   'webhook_secret',
   'api_key',
+  'api_token',
   'resend_api_key',
   'postmark_api_token'
 ]);
@@ -78,7 +82,18 @@ const CONFIG_KEYS: Record<IntegrationProvider, readonly string[]> = {
     'reply_to',
     'subject_prefix',
     'bcc'
-  ]
+  ],
+  monid: [
+    'api_key',
+    'base_url',
+    'endpoint_x',
+    'endpoint_tiktok',
+    'endpoint_instagram',
+    'endpoint_reddit',
+    'endpoint_youtube'
+  ],
+  rapidapi: ['api_key', 'amazon_host', 'engine'],
+  apify: ['api_token', 'reviews_actor']
 };
 
 export async function saveIntegrationAction(formData: FormData) {

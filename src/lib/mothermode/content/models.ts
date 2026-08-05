@@ -6,7 +6,7 @@
  * preserving the original behavior.
  */
 
-export type TextProvider = 'openai' | 'anthropic';
+export type TextProvider = 'openai' | 'anthropic' | 'moonshot';
 
 /** The image API a generator is served by. */
 export type ImageProvider = 'openai' | 'google';
@@ -35,12 +35,30 @@ export interface ImageModelOption {
 /** Frontier copywriters offered for text generation and rewrites. */
 export const TEXT_MODELS: TextModelOption[] = [
   {
+    id: 'claude-opus-5',
+    label: 'Claude Opus 5',
+    provider: 'anthropic',
+    note: 'Anthropic',
+  },
+  {
+    id: 'claude-fable-5',
+    label: 'Claude Fable 5',
+    provider: 'anthropic',
+    note: 'Anthropic',
+  },
+  {
     id: 'claude-opus-4-8',
     label: 'Claude Opus 4.8',
     provider: 'anthropic',
     note: 'Anthropic',
   },
   { id: 'gpt-5.5', label: 'GPT-5.5', provider: 'openai', note: 'OpenAI' },
+  {
+    id: 'kimi-k3',
+    label: 'Kimi K3',
+    provider: 'moonshot',
+    note: 'Moonshot',
+  },
 ];
 
 /** Image models offered for post visuals. */

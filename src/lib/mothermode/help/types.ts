@@ -8,6 +8,11 @@
  * DeliverableDoc.html), never buyer input.
  */
 
+/** Who an article is written for. 'admin' docs are how to run the app (read
+ *  through the service role only). 'buyer' docs are customer-facing help shown
+ *  publicly at /mothermode/help. */
+export type KbAudience = 'admin' | 'buyer';
+
 /** One knowledge base / help article. Grouped by `category`, ordered within a
  *  category by `sortOrder`, addressed publicly by its stable `slug`. */
 export interface KbArticle {
@@ -19,6 +24,7 @@ export interface KbArticle {
   body: string;
   published: boolean;
   sortOrder: number;
+  audience: KbAudience;
   updatedAt?: string | null;
   updatedBy?: string | null;
 }
@@ -49,6 +55,7 @@ export interface KbArticleRow {
   body: string;
   published: boolean;
   sort_order: number;
+  audience: string | null;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -87,6 +94,7 @@ export function rowToArticle(row: KbArticleRow): KbArticle {
     body: row.body,
     published: row.published,
     sortOrder: row.sort_order,
+    audience: row.audience === 'buyer' ? 'buyer' : 'admin',
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
   };

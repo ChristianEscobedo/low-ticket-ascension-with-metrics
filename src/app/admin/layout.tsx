@@ -3,7 +3,10 @@ import { PropsWithChildren } from 'react';
 import { createClient } from '@/utils/supabase/server';
 import { getUser } from '@/utils/supabase/queries';
 import AdminSidebar from './AdminSidebar';
+import HelpIcon from './help-docs/HelpIcon';
+import CommandPalette from './CommandPalette';
 import Footer8 from '@/components/footer-8';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -43,10 +46,18 @@ export default async function AdminLayout({ children }: PropsWithChildren) {
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
           <AdminSidebar userEmail={user.email ?? ''} />
-          <div className="min-w-0">{children}</div>
+          <div className="min-w-0 relative">
+            <div className="absolute top-0 right-0 z-20">
+              <HelpIcon />
+            </div>
+            {children}
+          </div>
         </div>
       </div>
       <Footer8 />
+      <CommandPalette />
     </section>
   );
 }
+
+

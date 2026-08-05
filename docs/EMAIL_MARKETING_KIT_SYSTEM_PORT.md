@@ -1,6 +1,9 @@
 # Email Marketing Kit — System & Port Guide
 
-Spec: `EMAIL_MARKETING_KIT_TASK.md`. Status: **BUILT**.
+Spec: `EMAIL_MARKETING_KIT_TASK.md`. Status: **BUILT** (round 5: +6 ascension
+frameworks and the prompt-bank recipe wiring, spec
+`PROMPT_BANK_EMAIL_ROUND_TASK.md`; round 6: deep event nurtures + the HTML
+output guarantee, spec `EMAIL_HTML_AND_DEEP_EVENT_NURTURES_TASK.md`).
 
 The Email Marketing Kit is the campaign-producing sibling of the Lead Gen /
 High Ticket / Community kits. From a short intake plus one or more attached
@@ -32,6 +35,8 @@ src/lib/mothermode/email/
     index.ts               EMAIL_FRAMEWORK_SPECS registry + frameworkSpec()
     soap-opera.ts pas.ts value-longform.ts story-lesson.ts quick-win.ts
     founder-note.ts case-study.ts objection-crusher.ts listicle.ts
+    ascension.ts           Round 5: buyer-welcome, ascension-bridge, deep-nurture,
+                           oto-ascend, goal-driven, ps-close
   export.ts                Pure text / HTML / CSV renderers (no server imports)
   store.ts                 Service-role Supabase CRUD (server-only)
   index.ts                 Browser-safe barrel (types + campaigns + frameworks + export)
@@ -91,6 +96,17 @@ Eight campaigns ship: `leadmag-to-lowticket`, `nurture-to-offer`,
 `cart-abandonment`, `pre-post-purchase`, `webinar-event`,
 `community-onboarding`, `event-nurture`, `reengagement`.
 
+**Deep event nurtures (round 6).** Every event nurture blueprint runs **7–14
+emails** by design: `event-nurture` is a 12-email, four-week pre-event runway
+(`-25d` → `-1d`) that alternates nurture/teach/story/proof so no two
+consecutive emails do the same job, then closes bridge → invite → reminder;
+`webinar-event` is a 10-email arc (`-7d` → `+3d`) spanning the pre-event week
+(invite, teach, story, proof, reminders), live day (`+0h`), and a replay →
+proof → offer post-event tail. Transactional arcs (cart abandonment,
+pre/post-purchase, onboarding, re-engagement) stay short on purpose — depth is
+for events, not receipts. Every role used by an event arc carries a
+`frameworkByRole` default; the lengths and shape are pinned by tests.
+
 **Timing-style scaling.** `scaleOffset(offset, style)` scales a single token by a
 multiplier (`aggressive 0.5`, `standard 1`, `gentle 2`), preserving sign and unit,
 clamping to a floor of 1, and passing `+0h` and unparseable tokens through
@@ -101,12 +117,35 @@ intake `timingStyle` reshapes any blueprint.
 
 ## 4. Frameworks (`frameworks/*`)
 
-Nine per-email writing structures, each an `EmailFrameworkSpec`
+Fifteen per-email writing structures, each an `EmailFrameworkSpec`
 (`label`, `structure`, `lengthTarget`, `styleNote`): `soap-opera`, `pas`,
 `value-longform`, `story-lesson`, `quick-win`, `founder-note`, `case-study`,
-`objection-crusher`, `listicle`. `frameworkSpec()` resolves one with a safe
-`story-lesson` fallback. The generator injects the chosen framework's structure +
-length + style into the per-email expand prompt.
+`objection-crusher`, `listicle`, plus the round-5 ascension set in
+`ascension.ts`: `buyer-welcome` (purchase-triggered confirmation that
+activates), `ascension-bridge` (the nurture bridge to the next offer),
+`deep-nurture` (the long value essay that keeps buyers warm), `oto-ascend`
+(upsell buyer to the offer that completes the stack), `goal-driven` (book a
+call / attend event / reply / join asks), `ps-close` (soft body, the
+postscript sells). `frameworkSpec()` resolves one with a safe `story-lesson`
+fallback. The generator injects the chosen framework's structure +
+length + style into the per-email expand prompt. The `pre-post-purchase`
+campaign maps welcome → `buyer-welcome` and bridge → `ascension-bridge`.
+
+**Prompt-bank recipe wiring (round 5).** Any email can carry an optional
+`frameworkRecipeId` (an `EmailMessage` field riding the sequence JSONB,
+normalized present-only like `abTest`). The kit editor shows a **Bank
+framework** select per email (email-platform framework recipes from the
+live merged prompt bank, ordered by `orderEmailRecipesForTrigger` so the
+family matching the sequence's enrollment trigger sorts first: `embuy-` for
+purchase / upsell_purchase / refund, `emgoal-` for booking, the honest
+closes for abandon). When set, `aiExpandEmail` injects the recipe's craft
+block via `recipeCraftBlock(recipe, 'email')` plus a `recipeInputsBlock`
+whose `goal` / `offer` fields fill automatically from the kit intake, and
+the assignment survives per-email rewrites. The flow canvas trigger node
+shows a read-only hint chip (`triggerRecipeFamilyLabel`). Resolution goes
+through `resolveRecipeById` (enabled-only), so a disabled recipe degrades
+to framework-only generation. Tests: 3 cases in
+`tests/lib/email-kit.test.ts` + 3 in `tests/lib/prompt-bank-actions.test.ts`.
 
 ---
 
@@ -141,8 +180,17 @@ the client) via `resolveContextRefs` and injected with
 - `sequenceToText` / `emailToText` — copy-paste plain-text bundle.
 - `renderEmailHtml` / `sequenceToHtml` — inline-styled, escaped HTML for pasting
   into an ESP (blank lines → `<p>`, `- ` runs → `<ul>`, CTA → styled `<a>`).
-- `renderSequenceHtml` — repopulates every `bodyHtml` from its `bodyText`; the CRUD
-  route calls this on **every save** so stored HTML never drifts.
+  The generator's authoring contract is fully honored here (round 6):
+  `*bold*` → `<strong>`, `[BUTTON: label -> URL]` → a real brand button (or a
+  button-styled link in rich-HTML bodies), `[IMAGE: description]` → the next
+  attached image from `email.images` or dropped quietly — marker syntax never
+  leaks into the rendered email.
+- `renderSequenceHtml` — repopulates every `bodyHtml` from its `bodyText`. This
+  is the **HTML output guarantee** (round 6): `upsertKit` in `store.ts` calls it
+  on **every write** (editor save, sales-funnel autobuild, any future caller),
+  and the AI route renders it into every `outline` / `generate` response (plus
+  per-email `renderEmailHtml` on `expand` / `extend`), so generated and stored
+  sequences always carry usable HTML — never only after a manual re-save.
 - `sequenceToRows` — one flat row per email for a scheduler/ESP CSV import.
 - `campaignArcSummary` — human one-liner of a campaign's arc for editor headers.
 
@@ -155,7 +203,9 @@ body is neutralized.
 
 **AI** — `POST /api/mothermode/email-ai` (admin-only): action switch over
 `fillIntake` → `{intake}`, `outline` → `{sequence}`, `expand` → `{email}`,
-`generate` → `{sequence}`. Resolves `contextRefs` to packs for the last three.
+`generate` → `{sequence}`, `extend` → `{emails}`. Resolves `contextRefs` to
+packs for the last four. Every sequence/email the route returns already
+carries `bodyHtml` rendered from `bodyText` (the HTML output guarantee).
 
 **CRUD** — `/api/admin/mothermode-email` (admin-only): `GET` lists all kits
 (`{success, admin, items}`), `POST` upserts (re-renders sequence HTML from text,
@@ -181,9 +231,11 @@ and Funnel Stats.
 
 ### Verification
 - `npx tsc --noEmit` exits 0.
-- `npx vitest run tests/lib/email-kit.test.ts` — 13 green (normalizers,
+- `npx vitest run tests/lib/email-kit.test.ts` — 27 green (normalizers,
   campaign/framework fallbacks, timing scaling, text/HTML/CSV renderers incl.
-  HTML escaping).
+  HTML escaping, the 7–14 deep-event-nurture shape pins, the HTML output
+  guarantee, the body-formatting cases — `*bold*`, spacing, `[BUTTON:]` /
+  `[IMAGE:]` conversion — and the round-5 ascension + recipe-wiring cases).
 - Generate produces on-voice sequences; save round-trips HTML from text; the
   plain-text and CSV exports open cleanly in the target ESP/scheduler.
 

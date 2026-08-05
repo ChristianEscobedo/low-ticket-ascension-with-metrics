@@ -120,8 +120,8 @@ export default function IntegrationCard({
             : String(initialConfig[f.key] ?? '');
           const secretHint = isSecret
             ? status?.configured
-              ? `Saved ••••${status.last4 ?? ''}. Leave blank to keep.`
-              : 'Not set'
+              ? { text: `Saved ••••${status.last4 ?? ''}. Leave blank to keep.`, ok: true }
+              : { text: 'Not set', ok: false }
             : null;
           return (
             <label key={f.key} className="block text-sm">
@@ -136,8 +136,12 @@ export default function IntegrationCard({
                 className="mt-1 w-full rounded-lg bg-bone/[0.03] border border-bone/10 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/60 focus:bg-bone/[0.05] transition-colors disabled:opacity-50"
               />
               {secretHint && (
-                <span className="text-xs text-bone/40 mt-1 block">
-                  {secretHint}
+                <span
+                  className={`text-xs mt-1 block ${
+                    secretHint.ok ? 'text-brass/80 font-medium' : 'text-bone/40'
+                  }`}
+                >
+                  {secretHint.text}
                 </span>
               )}
               {f.helper && (

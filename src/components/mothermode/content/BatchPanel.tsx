@@ -7,7 +7,7 @@
  * Review can one-click render each draft's media.prompt (or open Image Studio)
  * and those images ride along into the library on save.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X as XIcon,
   Sparkles,
@@ -34,6 +34,8 @@ import { PlatformPreview } from './previews/PlatformPreview';
 import { PlatformIcon, PLATFORM_BRAND } from './PlatformIcon';
 import { PlatformSelect } from './PlatformSelect';
 import { ImageStudioModal } from './ImageStudioModal';
+import { FrameworkPicker } from './FrameworkPicker';
+import { usePromptBankRecipes } from './usePromptBankRecipes';
 
 import { aiGenerateImage } from './aiClient';
 import { OFFERS } from '@/lib/mothermode/offers';
@@ -49,7 +51,10 @@ import {
   PROMPT_STYLES,
   AUTO_STYLE,
   stylesFor,
+  recipesFor,
+  imageRecipesFor,
   buildImagePrompt,
+
   type ContentFormat,
   type ContentKind,
   type ContentPiece,
@@ -124,6 +129,9 @@ export const BatchPanel: React.FC<{
   const [guides, setGuides] = useState('');
   const [model, setModel] = useState(AUTO_MODEL);
   const [style, setStyle] = useState(AUTO_STYLE);
+  const [imageFramework, setImageFramework] = useState('auto');
+  /** Filled values for the picked framework's custom input fields. */
+  const [recipeInputs, setRecipeInputs] = useState<Record<string, string>>({});
   const [sourceId, setSourceId] = useState('');
 
   // Review phase: drafts live here until the user saves selected ones.
@@ -155,6 +163,45 @@ export const BatchPanel: React.FC<{
     const rest = PROMPT_STYLES.filter((s) => !fitIds.has(s.id));
     return [...availableStyles, ...rest];
   }, [availableStyles]);
+
+  // The live merged prompt bank (DB customs, edits, and toggles included;
+  // degrades to the code registry). Every bank-driven control reads from it.
+  const { recipes: bankRecipes } = usePromptBankRecipes();
+
+  /** The hint line for a voice-style pick (bank picks hint inside the picker). */
+  const styleHint = PROMPT_STYLES.find((s) => s.id === style)?.hint;
+
+  /** The explicitly picked prompt-bank recipe, when it declares custom
+   *  input fields (story/lesson material the admin fills in before a run). */
+  const activeRecipe = bankRecipes.find((r) => r.id === style);
+  const activeInputs = activeRecipe?.inputs ?? [];
+  /** The framework label a draft executed, for review badges. */
+  const recipeLabel = (id?: string) =>
+    id ? bankRecipes.find((r) => r.id === id)?.label : undefined;
+
+  // Image-bank creative frameworks for this platform + placement kind (FB ad
+  // structures on facebook/ad, IG organic stills, YT thumbnails). Hydrated
+  // from the merged bank; empty on channels with no image recipes, which
+  // hides the picker.
+  const imageOptions = useMemo(
+    () =>
+      imageRecipesFor(
+        platform,
+        kind,
+        bankRecipes.filter((r) => r.group === 'image'),
+      ),
+    [platform, kind, bankRecipes],
+  );
+
+  // The drawer's bank selector only lists the channel's recommendations, so
+  // when the channel changes under a pick that no longer fits, drop the pick
+  // back to Auto rather than steer the run with a hidden selection.
+  useEffect(() => {
+    if (!activeRecipe) return;
+    const fits = recipesFor(platform, format, bankRecipes);
+    if (!fits.some((r) => r.id === activeRecipe.id)) setStyle(AUTO_STYLE);
+  }, [platform, format, activeRecipe, bankRecipes]);
+
 
   const changePlatform = (p: string) => {
     const next = p as ContentPlatform;
@@ -281,6 +328,7 @@ export const BatchPanel: React.FC<{
           : undefined;
       const created = await generateBatch({
         offerSlug,
+        recipeInputs: activeInputs.length ? recipeInputs : undefined,
         mode,
         count,
         platform,
@@ -291,6 +339,8 @@ export const BatchPanel: React.FC<{
         guides: guides.trim() || undefined,
         model: model || undefined,
         style: style || undefined,
+        imageFramework:
+          imageFramework === 'auto' ? undefined : imageFramework,
         source,
         persist: false,
       });
@@ -518,11 +568,46 @@ export const BatchPanel: React.FC<{
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[11px] text-ink/45">
-                  {PROMPT_STYLES.find((s) => s.id === style)?.hint ??
-                    'Best fit for this channel'}
-                </p>
+                {!activeRecipe && (
+                  <p className="mt-1.5 text-[11px] text-ink/45">
+                    {styleHint ??
+                      'Auto rotates a different proven framework per piece'}
+                  </p>
+                )}
+                <div className="mt-3 rounded-lg border border-ink/10 bg-white/40 p-2.5">
+                  <FrameworkPicker
+                    platform={platform}
+                    format={format}
+                    fitsOnly
+                    value={activeRecipe ? style : ''}
+                    onChange={(id) => setStyle(id || AUTO_STYLE)}
+                    inputValues={recipeInputs}
+                    onInputValues={setRecipeInputs}
+                  />
+                </div>
               </div>
+
+              {imageOptions.length > 0 && (
+                <div className="col-span-2">
+                  <Select
+                    label="Image creative (image bank)"
+                    value={imageFramework}
+                    onChange={setImageFramework}
+                  >
+                    <option value="auto">Auto (default scene brief)</option>
+                    {imageOptions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label} · {r.hint}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="mt-1.5 text-[11px] text-ink/45">
+                    Shapes every draft's image prompt. Edit the bank in
+                    the admin Prompt Bank, image tab.
+                  </p>
+                </div>
+              )}
+
 
               <div className="col-span-2">
                 <Select label="Writer model" value={model} onChange={setModel}>
@@ -663,7 +748,11 @@ export const BatchPanel: React.FC<{
                                 {d.script?.length
                                   ? ` · ${d.script.length} beats`
                                   : ''}
+                                {recipeLabel(d.framework)
+                                  ? ` · ${recipeLabel(d.framework)}`
+                                  : ''}
                               </p>
+
 
                             </button>
                           </div>

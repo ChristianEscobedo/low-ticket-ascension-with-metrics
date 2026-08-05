@@ -1,4 +1,21 @@
 import { getFunnelStats } from '@/utils/supabase/admin';
+import {
+  getClickRollupsSafe,
+  getPieceAttributionSafe,
+  sumPieceAttribution
+} from '@/lib/mothermode/planner/links';
+import { peopleLabel, readPeople } from '@/lib/mothermode/planner/clickPeople';
+import {
+  ATTRIBUTED_REVENUE_FLOOR_NOTE,
+  bidCeilingSummary,
+  blendedRateCaveat,
+  formatCents,
+  formatCentsPrecise,
+  formatRate,
+  pieceEconomics
+} from '@/lib/mothermode/planner/adMetrics';
+
+
 import DownloadCsvButton from './DownloadCsvButton';
 import FunnelVisualization from './FunnelVisualization';
 
@@ -8,7 +25,93 @@ const fmt = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export default async function FunnelStatsPage() {
-  const stats = await getFunnelStats(50);
+  const [stats, clicks, attribution] = await Promise.all([
+    getFunnelStats(50),
+    getClickRollupsSafe(),
+    getPieceAttributionSafe(),
+  ]);
+
+  /*
+   * Clicks sit at the TOP of this funnel, keyed by piece, not by funnel.
+   *
+   * This page's breakdowns are Stripe products and page types — there is no
+   * mothermode funnel id in scope to index `byFunnelId` with, so pretending to
+   * show "clicks per funnel" here would mean inventing a join that doesn't
+   * exist. What IS available and useful is which *posts* sent the traffic.
+
+   */
+  /*
+   * Rows are the UNION of pieces with clicks and pieces with leads, not just the
+   * click map.
+   *
+   * The two can diverge in both directions and each divergence is a finding: a
+   * piece with clicks and no opt-ins is a landing-page problem, and a piece with
+   * opt-ins but no clicks means its link was shared untracked (or the click read
+   * failed) — filtering to the click map would hide the second case entirely,
+   * along with whatever revenue it earned.
+   */
+  const pieceKeys = new Set<string>(Object.keys(clicks?.byPieceId || {}));
+  attribution?.forEach((_value, key) => pieceKeys.add(key));
+
+  const topPieces = Array.from(pieceKeys)
+    .map((piece) => {
+      const pieceClicks = clicks ? clicks.byPieceId[piece] ?? 0 : null;
+      const slice = attribution?.get(piece) ?? null;
+      return {
+        piece,
+        clicks: pieceClicks,
+        slice,
+        economics: pieceEconomics({
+          clicks: pieceClicks,
+          clicksByTrafficType: clicks?.mediumSplitByPieceId[piece] ?? null,
+          // A piece present in the click map but absent from attribution has
+          // genuinely earned nothing yet — a zeroed slice, not an unknown one.
+          slice: attribution ? slice ?? { optins: 0, purchases: 0, revenueCents: 0 } : null,
+          split: slice ? slice.byTrafficType : null,
+        }),
+      };
+    })
+    /*
+     * Sorted by attributed revenue first, clicks second.
+     *
+     * Clicks were the only available ranking before; now that money is on the
+     * row, ordering by clicks would put a viral post that sold nothing above the
+     * quiet one paying for the ads.
+     */
+    .sort(
+      (a, b) =>
+        (b.slice?.revenueCents ?? 0) - (a.slice?.revenueCents ?? 0) ||
+        (b.clicks ?? 0) - (a.clicks ?? 0)
+    )
+    .slice(0, 8);
+
+  // Account-wide, for the caveats under the table. Deliberately not rendered as
+  // a stat card next to Stripe's "Total revenue" — see the note below the table.
+  const attributed = sumPieceAttribution(attribution);
+  const accountEconomics = pieceEconomics({
+    clicks: clicks ? clicks.totalClicks : null,
+    clicksByTrafficType: clicks ? clicks.clicksByTrafficType : null,
+    slice: attribution ? attributed : null,
+    split: attribution ? attributed.byTrafficType : null,
+  });
+
+  /*
+   * "…from 3 people" under the 30d click count.
+   *
+   * Undefined (not an empty string) when there is nothing honest to say, so the
+   * card renders exactly as it did before rather than growing a blank sub-line.
+   * `readPeople` returns people: null when every click lacked an IP hash, which
+   * on a dev box is the normal case — printing "from 0 people" next to 40 clicks
+   * would be the most alarming and least true thing on the page.
+   */
+  const peopleReading = clicks ? readPeople(clicks) : null;
+  const peopleSub =
+    peopleReading && peopleReading.people !== null && clicks?.recentClicks
+      ? `from ${peopleLabel(peopleReading)}` +
+        (peopleReading.selfTrafficLikely ? ' — likely mostly you' : '')
+      : undefined;
+
+
 
   return (
     <div>
@@ -34,8 +137,120 @@ export default async function FunnelStatsPage() {
         />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+        <StatCard
+          label="Tracked clicks (all-time)"
+          value={clicks ? String(clicks.totalClicks) : 'n/a'}
+        />
+        {/*
+          The 30d card carries the people count as its own sub-line rather than a
+          fourth card. `Unique customers` is already on this page two rows up, and
+          two separately-defined "unique" numbers side by side invite the reader to
+          compare them — but one counts Stripe customers all-time and the other
+          counts distinct IPs over 30 days, so the comparison is meaningless.
+        */}
+        <StatCard
+          label="Tracked clicks (30d)"
+          value={clicks ? String(clicks.recentClicks) : 'n/a'}
+          sub={peopleSub}
+        />
+
+        <StatCard
+          label="Clicks per purchase"
+          value={
+            !clicks || stats.totalCount === 0
+              ? 'n/a'
+              : (clicks.totalClicks / stats.totalCount).toFixed(1)
+          }
+        />
+      </div>
+      <p className="mt-2 text-xs text-bone/40">
+        {clicks
+          ? 'Clicks come from tracked planner links; purchases come from Stripe. They are not a matched pair — a click can convert weeks later, and direct traffic buys without one.'
+          : 'Planner link tracking unavailable — these read n/a rather than 0 so an unapplied migration is not mistaken for no traffic.'}
+      </p>
+
       <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">Funnel conversion</h2>
       <FunnelVisualization byPageType={stats.byPageType} />
+
+      <h2 className="font-display text-2xl font-semibold mt-12 mb-4 tracking-tight">
+        Traffic by post
+      </h2>
+      <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
+            <tr>
+              <th className="text-left px-4 py-3 font-semibold">Piece (utm_content)</th>
+              <th className="text-right px-4 py-3 font-semibold">Clicks</th>
+              <th className="text-right px-4 py-3 font-semibold">Opt-ins</th>
+              <th className="text-right px-4 py-3 font-semibold">Opt-in rate</th>
+              {/* "Attributed", not "Revenue" — this column is a floor. */}
+              <th className="text-right px-4 py-3 font-semibold">Attributed rev.</th>
+              <th className="text-right px-4 py-3 font-semibold">Per click</th>
+            </tr>
+          </thead>
+          <tbody>
+            {topPieces.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-bone/40">
+                  {clicks
+                    ? 'No tracked link has been clicked yet. Mint a link on a planner card and share it.'
+                    : 'Planner link tracking unavailable.'}
+                </td>
+              </tr>
+            )}
+            {topPieces.map((row) => (
+              <tr
+                key={row.piece}
+                className="border-t border-bone/5 hover:bg-bone/[0.02] transition-colors"
+              >
+                <td className="px-4 py-2 font-mono text-xs">{row.piece}</td>
+                {/* n/a, not 0: this piece has leads, so its clicks are unknown
+                    rather than absent. */}
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {row.clicks === null ? 'n/a' : row.clicks}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {attribution ? row.slice?.optins ?? 0 : 'n/a'}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-bone/60">
+                  {formatRate(row.economics.blended.optinRate)}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {attribution ? formatCents(row.slice?.revenueCents ?? 0) : 'n/a'}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-bone/60">
+                  {formatCentsPrecise(row.economics.blended.epcCents)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 space-y-1 text-xs text-bone/40">
+        {/*
+          THE GAP THAT MUST NOT BE "FIXED".
+          Attributed revenue will always be below the Total revenue card at the
+          top of this page, and adding the two would double-count every tracked
+          sale. Stated on the same screen as both numbers, because this is the one
+          page where a reader can see them disagree.
+        */}
+        <p>{ATTRIBUTED_REVENUE_FLOOR_NOTE}</p>
+        <p>
+          Top 8 by attributed revenue, so this column does not sum to any total
+          above. Rates here are per piece and all-time — the same window as the
+          click counter, and not the 30-day numbers in the cards above.
+        </p>
+        {blendedRateCaveat(accountEconomics.mix) && (
+          <p className="text-brass/60">{blendedRateCaveat(accountEconomics.mix)}</p>
+        )}
+        {bidCeilingSummary(accountEconomics) && (
+          <p className="text-brass/60">
+            Account-wide: {bidCeilingSummary(accountEconomics)}
+          </p>
+        )}
+      </div>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
         <BreakdownTable
@@ -107,14 +322,25 @@ export default async function FunnelStatsPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  sub
+}: {
+  label: string;
+  value: string;
+  /** Optional qualifier. Omitted entirely when absent — never rendered empty. */
+  sub?: string;
+}) {
   return (
     <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 shadow-[0_0_30px_rgba(168,139,92,0.06)]">
       <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold">{label}</div>
       <div className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-bone/40 mt-1">{sub}</div>}
     </div>
   );
 }
+
 
 function BreakdownTable({
   title,

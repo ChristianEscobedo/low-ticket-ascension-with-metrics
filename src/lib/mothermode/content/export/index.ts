@@ -35,6 +35,13 @@ export interface RunExportInput {
   options: ExportOptions;
   reviews?: Record<string, PieceReview>;
   versionsByPiece?: Record<string, SavedVersion | undefined>;
+  /**
+   * Planner calendar dates (ISO) by piece id. Forwarded to `buildExportRows`,
+   * where it outranks `SavedVersion.scheduledFor`.
+   */
+  scheduleByPieceId?: Record<string, string>;
+  /** Tracked link URLs by piece id. Overrides the CTA link when present. */
+  linkByPieceId?: Record<string, string>;
 }
 
 /** Select, schedule, and serialize pieces for the chosen target. */
@@ -49,6 +56,8 @@ export function runExport(input: RunExportInput): ExportCsvResult {
     options: input.options,
     reviews: input.reviews,
     versionsByPiece: input.versionsByPiece,
+    scheduleByPieceId: input.scheduleByPieceId,
+    linkByPieceId: input.linkByPieceId,
   });
   const preview = previewRows(rows);
 
@@ -85,6 +94,8 @@ export function previewExport(input: RunExportInput): ExportPreview {
     options: input.options,
     reviews: input.reviews,
     versionsByPiece: input.versionsByPiece,
+    scheduleByPieceId: input.scheduleByPieceId,
+    linkByPieceId: input.linkByPieceId,
   });
   return previewRows(rows);
 }

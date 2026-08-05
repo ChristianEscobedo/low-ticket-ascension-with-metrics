@@ -26,6 +26,7 @@ import { PlatformSelect } from './PlatformSelect';
 import { AmplifyPools, partLabel } from './AmplifyPools';
 import { AmplifyComposer } from './AmplifyComposer';
 import { AmplifyIntro } from './AmplifyIntro';
+import { FrameworkPicker } from './FrameworkPicker';
 import {
   loadLastConfig,
   saveLastConfig,
@@ -113,6 +114,9 @@ export const AmplifyPanel: React.FC<{
   const [groundOffer, setGroundOffer] = useState(() => slugFromUrl(offerUrl));
   const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
   const [recipeId, setRecipeId] = useState('');
+  /** Bank steering for Refine runs: one framework applied to every part. */
+  const [framework, setFramework] = useState('');
+  const [recipeInputs, setRecipeInputs] = useState<Record<string, string>>({});
   const [pools, setPools] = useState<
     Partial<Record<AmplifyTextDimension, string[]>>
   >({});
@@ -220,6 +224,8 @@ export const AmplifyPanel: React.FC<{
         perspective: cfg.perspective,
         sophistication: cfg.sophistication,
         guides: cfg.guides.trim() || undefined,
+        framework: framework || undefined,
+        recipeInputs: framework ? recipeInputs : undefined,
         context,
         model: cfg.model || undefined,
       });
@@ -332,6 +338,15 @@ export const AmplifyPanel: React.FC<{
           Delete
         </button>
       </div>
+
+      <FrameworkPicker
+        platform={piece.platform}
+        format={piece.format}
+        value={framework}
+        onChange={setFramework}
+        inputValues={recipeInputs}
+        onInputValues={setRecipeInputs}
+      />
 
       <Segmented
         value={cfg.mode}

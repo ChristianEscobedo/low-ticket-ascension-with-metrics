@@ -29,8 +29,10 @@ const CHROMELESS_PREFIXES = [
   '/optin',
   '/funnel',
   '/signin',
-  '/admin'
+  '/admin',
+  '/share'
 ];
+
 
 
 const isChromelessRoute = (pathname: string) =>

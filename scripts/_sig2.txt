@@ -1,0 +1,155 @@
+export type IntakeAscensionNoteCode =
+  /** The intake has no price for this rung, so it entered the ladder at 0. */
+  | 'price-missing'
+  /** No promise text, so the rung has no outcome to be compared on. */
+  | 'outcome-missing'
+  /** Axes were guessed from the promise wording, not stated by the operator. */
+  | 'escalation-inferred'
+  /** Nothing in the promise named an axis; left blank for the validator. */
+  | 'escalation-unstated'
+  /** A subscription price was read as its first payment. */
+  | 'recurring-price-as-first-payment'
+  /** Slot 4 exists in the intake but the ladder stops at OTO 3. */
+  | 'upsell-beyond-oto3'
+  /** The intake cannot express a downsell, so placement cannot be compared. */
+  | 'downsells-not-expressible'
+  /** More order bumps than the map draws. */
+  | 'extra-order-bumps';
+
+export type IntakeAscensionNote = {
+  code: IntakeAscensionNoteCode;
+  stage?: AscensionStage;
+  detail: string;
+};
+
+export type IntakeAscensionNoteCode =
+  /** The intake has no price for this rung, so it entered the ladder at 0. */
+  | 'price-missing'
+  /** No promise text, so the rung has no outcome to be compared on. */
+  | 'outcome-missing'
+  /** Axes were guessed from the promise wording, not stated by the operator. */
+  | 'escalation-inferred'
+  /** Nothing in the promise named an axis; left blank for the validator. */
+  | 'escalation-unstated'
+  /** A subscription price was read as its first payment. */
+  | 'recurring-price-as-first-payment'
+  /** Slot 4 exists in the intake but the ladder stops at OTO 3. */
+  | 'upsell-beyond-oto3'
+  /** The intake cannot express a downsell, so placement cannot be compared. */
+  | 'downsells-not-expressible'
+  /** More order bumps than the map draws. */
+  | 'extra-order-bumps';
+
+export type IntakeAscensionNote = {
+  code: IntakeAscensionNoteCode;
+  stage?: AscensionStage;
+  detail: string;
+};
+
+export type IntakeFunnelAudit = {
+  rungs: AscensionRung[];
+  /** What the adapter had to assume or could not read. */
+  notes: IntakeAscensionNote[];
+  /** What is wrong with the ladder itself. */
+  issues: AscensionIssue[];
+  placements: Record<DownsellPlacement, AovProjection>;
+  /**
+   * Highest projected AOV. Ties go to the simplest structure, because equal
+   * money for fewer decisions is the better funnel.
+   */
+  bestPlacement: DownsellPlacement;
+  map: FunnelMap;
+};
+
+export type IntakeFunnelMapOptions = {
+  traffic?: FunnelMapInput['traffic'];
+  emails?: FunnelMapInput['emails'];
+  downsellPlacement?: DownsellPlacement;
+};
+
+export type AscensionRung = {
+  stage: AscensionStage;
+  name: string;
+  /** The outcome in buyer language. Not a feature, not a deliverable. */
+  outcome: string;
+  price: number;
+  /** Which axes this rung moves on relative to the rung before it. */
+  escalates: EscalationAxis[];
+  /** Optional recovery offer for buyers who decline this rung. */
+  downsell?: { name: string; price: number };
+};
+
+export type AscensionIssueCode =
+  | 'price-not-ascending'
+  | 'no-escalation'
+  | 'duplicate-outcome'
+  | 'missing-outcome'
+  | 'exceeds-elasticity'
+  | 'downsell-not-cheaper'
+  | 'stage-out-of-order';
+
+export type AscensionIssue = {
+  code: AscensionIssueCode;
+  stage: AscensionStage;
+  message: string;
+};
+
+export type AovProjection = {
+  placement: DownsellPlacement;
+  lines: AovLine[];
+  /** Number of yes/no decisions the buyer is asked to make after checkout. */
+  decisions: number;
+  total: number;
+};
+
+export type AovLine = {
+  stage: AscensionStage;
+  kind: 'upsell' | 'downsell';
+  name: string;
+  price: number;
+  conversionRate: number;
+  contribution: number;
+};
+
+export type FunnelMapInput = {
+  frontEndName: string;
+  frontEndPrice: number;
+  rungs: AscensionRung[];
+  downsellPlacement?: DownsellPlacement;
+  /** Traffic shape ahead of the offer. Omit any stage you do not run. */
+  traffic?: { ad?: boolean; advertorial?: boolean; optin?: boolean; vsl?: boolean };
+  orderBump?: { name: string; price: number };
+  /** Emails keyed to the event that fires them. */
+  emails?: { name: string; event: string; delayHours?: number }[];
+};
+
+export type FunnelMap = {
+  nodes: FunnelNode[];
+  edges: FunnelEdge[];
+};
+
+export type FunnelNodeKind =
+  | 'ad'
+  | 'advertorial'
+  | 'optin'
+  | 'vsl'
+  | 'sales'
+  | 'checkout'
+  | 'orderBump'
+  | 'upsell'
+  | 'downsell'
+  | 'success'
+  | 'access'
+  | 'email';
+
+export type FunnelNode = {
+  id: string;
+  kind: FunnelNodeKind;
+  label: string;
+  /** Price of the decision at this node, when it is a paid step. */
+  price?: number;
+  /** Projected share of visitors reaching this node, 0-1, when modelled. */
+  reach?: number;
+  /** Event name other systems (email triggers) can bind to. */
+  event?: string;
+};

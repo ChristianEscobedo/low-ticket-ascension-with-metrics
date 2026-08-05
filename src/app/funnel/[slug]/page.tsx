@@ -2,10 +2,13 @@ import type { Metadata } from 'next';
 import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import { loadSalesFunnelPage } from '@/lib/mothermode/sales/loadFunnelPage';
 import SalesOptinPage from '@/components/mothermode/sales/SalesOptinPage';
+import GatedPage from '@/components/mothermode/personalize/GatedPage';
 
 interface Props {
   params: { slug: string };
+  searchParams: { pp?: string };
 }
+
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -20,7 +23,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function FunnelOptinRoute({ params }: Props) {
-  const { funnel, isAdmin } = await loadSalesFunnelPage(params.slug, 'view');
+export default async function FunnelOptinRoute({ params, searchParams }: Props) {
+  const { funnel, isAdmin, gated } = await loadSalesFunnelPage(params.slug, 'view', {
+    pp: searchParams?.pp,
+  });
+  if (gated) return <GatedPage />;
   return <SalesOptinPage funnel={funnel} isAdmin={isAdmin} />;
 }
+
+

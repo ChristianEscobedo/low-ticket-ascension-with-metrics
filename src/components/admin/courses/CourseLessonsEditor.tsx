@@ -119,7 +119,7 @@ export default function CourseLessonsEditor({ course, onBack }: Props) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-sm text-white/60 hover:text-amber-200"
+          className="inline-flex items-center gap-1.5 text-sm text-bone/60 hover:text-brass"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to courses
@@ -129,7 +129,7 @@ export default function CourseLessonsEditor({ course, onBack }: Props) {
             setEditing(null);
             setShowForm(true);
           }}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-black"
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-brass hover:bg-brass/90 text-ink"
         >
           <Plus className="w-4 h-4" />
           Add lesson
@@ -137,31 +137,31 @@ export default function CourseLessonsEditor({ course, onBack }: Props) {
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold text-white">{course.title}</h2>
-        <p className="text-sm text-white/50">{lessons.length} lessons</p>
+        <h2 className="text-xl font-semibold text-bone">{course.title}</h2>
+        <p className="text-sm text-bone/50">{lessons.length} lessons</p>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-white/50 text-sm p-6">
+        <div className="flex items-center gap-2 text-bone/50 text-sm p-6">
           <Loader2 className="w-4 h-4 animate-spin" />
           Loading lessons…
         </div>
       ) : sorted.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-black/30 p-8 text-center text-white/50 text-sm">
-          No lessons yet. Click <span className="text-amber-200">Add lesson</span> to start.
+        <div className="rounded-xl border border-bone/10 bg-bone/[0.02] p-8 text-center text-bone/50 text-sm">
+          No lessons yet. Click <span className="text-brass">Add lesson</span> to start.
         </div>
       ) : (
         <ul className="space-y-2">
           {sorted.map((l, idx) => (
             <li
               key={l.id}
-              className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
+              className="flex items-center gap-3 rounded-xl border border-bone/10 bg-ink/40 px-3 py-2.5"
             >
               <div className="flex flex-col gap-0.5">
                 <button
                   onClick={() => move(l, -1)}
                   disabled={idx === 0}
-                  className="p-0.5 text-white/40 hover:text-amber-200 disabled:opacity-20"
+                  className="p-0.5 text-bone/40 hover:text-brass disabled:opacity-20"
                   aria-label="Move up"
                 >
                   <ChevronUp className="w-3.5 h-3.5" />
@@ -169,20 +169,20 @@ export default function CourseLessonsEditor({ course, onBack }: Props) {
                 <button
                   onClick={() => move(l, 1)}
                   disabled={idx === sorted.length - 1}
-                  className="p-0.5 text-white/40 hover:text-amber-200 disabled:opacity-20"
+                  className="p-0.5 text-bone/40 hover:text-brass disabled:opacity-20"
                   aria-label="Move down"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              <div className="text-xs text-white/40 w-12 text-center">
+              <div className="text-xs text-bone/40 w-12 text-center">
                 Ch {l.chapter_number} · {l.lesson_number}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-white truncate">{l.title}</div>
+                <div className="text-sm font-medium text-bone truncate">{l.title}</div>
                 {l.description && (
-                  <div className="text-xs text-white/40 truncate">{l.description}</div>
+                  <div className="text-xs text-bone/40 truncate">{l.description}</div>
                 )}
               </div>
               {l.is_preview && (
@@ -278,8 +278,8 @@ function IconButton({
       title={title}
       aria-label={title}
       disabled={busy}
-      className={`p-1.5 rounded hover:bg-white/5 disabled:opacity-40 ${
-        tone === 'danger' ? 'text-red-300 hover:text-red-200' : 'text-white/60 hover:text-amber-200'
+      className={`p-1.5 rounded hover:bg-bone/5 disabled:opacity-40 ${
+        tone === 'danger' ? 'text-red-300 hover:text-red-200' : 'text-bone/60 hover:text-brass'
       }`}
     >
       {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : children}

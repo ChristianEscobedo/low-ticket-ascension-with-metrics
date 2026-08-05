@@ -13,7 +13,7 @@ import {
   Table2,
   AlertCircle,
   CheckCircle2,
-  Loader2,
+  Loader2
 } from 'lucide-react';
 import {
   PLATFORM_LABEL,
@@ -26,7 +26,7 @@ import {
   type CampaignMonth,
   SOCIAL_EXPORT_PLATFORMS,
   defaultCampaignStart,
-  previewExport,
+  previewExport
 } from '@/lib/mothermode/content';
 import type { PieceReview } from '@/lib/mothermode/content/review';
 
@@ -34,8 +34,9 @@ import { getAllReviews } from './reviewClient';
 import {
   buildExportCsv,
   downloadExportCsv,
-  exportToGoogleSheets,
+  exportToGoogleSheets
 } from './exportClient';
+import { countTrackedPieces, usePieceLinks } from './pieceLinks';
 
 const labelCls = 'text-[11px] uppercase tracking-[0.16em] text-ink/45';
 const fieldCls =
@@ -45,18 +46,18 @@ const TARGETS: { id: ExportTarget; label: string; hint: string }[] = [
   {
     id: 'metricool',
     label: 'Metricool',
-    hint: 'Calendar import CSV',
+    hint: 'Calendar import CSV'
   },
   {
     id: 'ghl-advanced',
     label: 'GHL Advanced',
-    hint: 'Social Planner advanced',
+    hint: 'Social Planner advanced'
   },
   {
     id: 'ghl-basic',
     label: 'GHL Basic',
-    hint: 'Social Planner basic',
-  },
+    hint: 'Social Planner basic'
+  }
 ];
 
 const SCOPES: { id: ExportScope; label: string }[] = [
@@ -66,13 +67,13 @@ const SCOPES: { id: ExportScope; label: string }[] = [
   { id: 'months', label: 'By month' },
   { id: 'platforms', label: 'By platform' },
   { id: 'range', label: 'Date range + platform' },
-  { id: 'all', label: 'Export all' },
+  { id: 'all', label: 'Export all' }
 ];
 
 const MONTHS: { id: CampaignMonth; label: string }[] = [
   { id: 1, label: 'Month 1 (weeks 1–4)' },
   { id: 2, label: 'Month 2 (weeks 5–8)' },
-  { id: 3, label: 'Month 3 (weeks 9–12)' },
+  { id: 3, label: 'Month 3 (weeks 9–12)' }
 ];
 
 function toggleIn<T>(list: T[], value: T): T[] {
@@ -97,14 +98,14 @@ export const ExportPanel: React.FC<{
   offerSlug,
   offerUrl,
   onClose,
-  onRequestSelectMode,
+  onRequestSelectMode
 }) => {
   const [target, setTarget] = useState<ExportTarget>('metricool');
   const [scope, setScope] = useState<ExportScope>('current');
   const [weeks, setWeeks] = useState<number[]>([]);
   const [months, setMonths] = useState<CampaignMonth[]>([]);
   const [platforms, setPlatforms] = useState<ContentPlatform[]>([
-    ...SOCIAL_EXPORT_PLATFORMS,
+    ...SOCIAL_EXPORT_PLATFORMS
   ]);
   const [campaignStart, setCampaignStart] = useState(defaultCampaignStart());
   const [defaultTime, setDefaultTime] = useState('10:00:00');
@@ -145,7 +146,7 @@ export const ExportPanel: React.FC<{
         .filter(Boolean),
       offerUrl,
       brandName: 'MotherMode',
-      useScheduledVersions: true,
+      useScheduledVersions: true
     }),
     [
       target,
@@ -163,15 +164,37 @@ export const ExportPanel: React.FC<{
       asDraft,
       category,
       tags,
-      offerUrl,
-    ],
+      offerUrl
+    ]
   );
 
   const reviews: Record<string, PieceReview> = useMemo(
     () => getAllReviews(offerSlug),
     // Re-read when panel opens / scope changes; cache is sync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [offerSlug, scope, selectedIds, weeks, months, platforms],
+    [offerSlug, scope, selectedIds, weeks, months, platforms]
+  );
+
+  /*
+   * Tracked links + planner dates, keyed by piece id.
+   *
+   * These are fetched rather than derived because both live in Postgres
+   * (mothermode_utm_links / mothermode_content_plan) while this export runs
+   * entirely in the browser. `usePieceLinks` shares one request with any other
+   * surface that needs them and never throws — a failure yields empty maps and
+   * an `error` string, because an export that falls back to the plain offer URL
+   * is still a usable export, whereas one that refuses to run is not.
+   */
+  const pieceLinks = usePieceLinks(offerSlug);
+  const { linkByPieceId, scheduleByPieceId } = pieceLinks;
+
+  const trackedInLibrary = useMemo(
+    () =>
+      countTrackedPieces(
+        allPieces.map((p) => p.id),
+        linkByPieceId
+      ),
+    [allPieces, linkByPieceId]
   );
 
   const preview = useMemo(() => {
@@ -181,11 +204,23 @@ export const ExportPanel: React.FC<{
         currentPieces,
         options,
         reviews,
+        // Passed to the preview as well as the two builders below. If only the
+        // builders got them, the panel would report a row count and a schedule
+        // that the downloaded file then contradicts.
+        linkByPieceId,
+        scheduleByPieceId
       });
     } catch {
       return { count: 0, withImages: 0, missingMedia: 0, byPlatform: {} };
     }
-  }, [allPieces, currentPieces, options, reviews]);
+  }, [
+    allPieces,
+    currentPieces,
+    options,
+    reviews,
+    linkByPieceId,
+    scheduleByPieceId
+  ]);
 
   const runDownload = () => {
     setBusy(true);
@@ -196,15 +231,18 @@ export const ExportPanel: React.FC<{
         currentPieces,
         options,
         reviews,
+        linkByPieceId,
+        scheduleByPieceId
       });
+
       setResult({
         ok: true,
-        msg: `Downloaded ${out.filename} (${out.count} posts).`,
+        msg: `Downloaded ${out.filename} (${out.count} posts).`
       });
     } catch (err) {
       setResult({
         ok: false,
-        msg: err instanceof Error ? err.message : 'Export failed',
+        msg: err instanceof Error ? err.message : 'Export failed'
       });
     } finally {
       setBusy(false);
@@ -220,12 +258,15 @@ export const ExportPanel: React.FC<{
         currentPieces,
         options,
         reviews,
+        linkByPieceId,
+        scheduleByPieceId
       });
+
       const title = `MotherMode ${target} export ${campaignStart}`;
       const res = await exportToGoogleSheets({
         title,
         csv: built.csv,
-        target,
+        target
       });
       if (!res.ok) {
         setResult({ ok: false, msg: res.error });
@@ -233,14 +274,14 @@ export const ExportPanel: React.FC<{
         setResult({
           ok: true,
           msg: 'Opened in Google Sheets.',
-          url: res.url,
+          url: res.url
         });
         window.open(res.url, '_blank', 'noopener,noreferrer');
       }
     } catch (err) {
       setResult({
         ok: false,
-        msg: err instanceof Error ? err.message : 'Sheets export failed',
+        msg: err instanceof Error ? err.message : 'Sheets export failed'
       });
     } finally {
       setSheetsBusy(false);
@@ -249,20 +290,14 @@ export const ExportPanel: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/40 backdrop-blur-sm">
-      <div
-        className="absolute inset-0"
-        onClick={onClose}
-        aria-hidden
-      />
+      <div className="absolute inset-0" onClick={onClose} aria-hidden />
       <aside className="relative flex h-full w-full max-w-md flex-col border-l border-ink/10 bg-bone shadow-xl">
         <header className="flex items-start justify-between gap-3 border-b border-ink/10 px-5 py-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-brass">
               Export
             </p>
-            <h2 className="mt-1 font-display text-2xl text-ink">
-              Planner CSV
-            </h2>
+            <h2 className="mt-1 font-display text-2xl text-ink">Planner CSV</h2>
             <p className="mt-1 text-sm text-ink/55">
               Metricool or GoHighLevel Social Planner, from the hub library.
             </p>
@@ -322,8 +357,8 @@ export const ExportPanel: React.FC<{
             {scope === 'selected' && (
               <p className="mt-2 text-xs text-ink/50">
                 {selectedIds.length} piece
-                {selectedIds.length === 1 ? '' : 's'} selected on the hub.
-                Tick cards while this panel is open.
+                {selectedIds.length === 1 ? '' : 's'} selected on the hub. Tick
+                cards while this panel is open.
               </p>
             )}
           </section>
@@ -448,8 +483,8 @@ export const ExportPanel: React.FC<{
             </label>
           </section>
           <p className="text-xs text-ink/45">
-            Weeks 1–12 map from campaign start (week 1 = first 7 days). Posts
-            in the same week are staggered across the week.
+            Weeks 1–12 map from campaign start (week 1 = first 7 days). Posts in
+            the same week are staggered across the week.
           </p>
 
           <section className="space-y-2">
@@ -513,6 +548,25 @@ export const ExportPanel: React.FC<{
                 ? ` · ${preview.missingMedia} missing absolute media`
                 : ''}
             </p>
+            {/*
+              What the CSV will actually carry. Stated because the alternative is
+              an admin finding out in Metricool that 40 posts went out pointing at
+              the bare offer URL with nothing to attribute clicks to.
+
+              The counts are over the whole library, not the export scope: scope is
+              resolved inside the mapper, so a per-scope number here would be a
+              guess presented as a fact.
+            */}
+            <p
+              data-testid="export-link-summary"
+              className="mt-1 text-xs text-ink/50"
+            >
+              {pieceLinks.error
+                ? 'Tracked links unavailable — posts will use the plain offer URL.'
+                : `${trackedInLibrary} of ${allPieces.length} library posts have a tracked link · ${
+                    Object.keys(scheduleByPieceId).length
+                  } planner dates`}
+            </p>
           </section>
 
           {result && (
@@ -570,7 +624,6 @@ export const ExportPanel: React.FC<{
               <Table2 className="h-4 w-4" />
             )}
             Sheets
-
           </button>
         </footer>
       </aside>

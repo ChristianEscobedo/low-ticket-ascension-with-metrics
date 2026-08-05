@@ -35,6 +35,9 @@ export * from './constants';
 export * from './models';
 export * from './amplify';
 export * from './promptStyles';
+export * from './promptBank';
+export * from './imagePromptBank';
+
 export * from './compliance';
 export * from './compliancePass';
 export * from './platformCompliance';
@@ -46,6 +49,9 @@ export * from './platformSizes';
 export * from './variationLab';
 export * from './imageOverlay';
 export * from './framePack';
+export * from './colorBlock';
+export * from './textPost';
+export * from './tweetCard';
 
 
 
@@ -298,6 +304,26 @@ export function pieceToText(
     out.push(`HEADLINE: ${piece.ad.headline}`);
     if (piece.ad.description) out.push(`DESCRIPTION: ${piece.ad.description}`);
     out.push(`BUTTON: ${piece.ad.button}`);
+    out.push('');
+  } else if (piece.format === 'colorblock') {
+    const bg = piece.colorBlock?.bg ?? '#532B3C';
+    const grad = piece.colorBlock?.gradient?.length
+      ? ` (gradient: ${piece.colorBlock.gradient.join(' -> ')})`
+      : '';
+    out.push(`COLOR BLOCK${grad} bg ${bg}:`);
+    out.push(opener);
+    out.push('');
+  } else if (piece.format === 'textpost') {
+    const bg = piece.textPost?.bg ?? '#1C1917';
+    const aspect = piece.textPost?.aspect ?? '1:1';
+    out.push(`TEXT OVERLAY (${aspect}, bg ${bg}):`);
+    out.push(opener);
+    out.push('');
+  } else if (piece.format === 'tweet') {
+    const name = piece.tweetCard?.name ?? 'MotherMode';
+    const handle = piece.tweetCard?.handle ?? '@mothermode';
+    out.push(`TWEET SCREEN GRAB (${name} ${handle}):`);
+    out.push(opener);
     out.push('');
   } else {
     out.push(opener);

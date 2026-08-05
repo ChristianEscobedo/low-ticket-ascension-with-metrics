@@ -20,8 +20,26 @@ import { useState, type ReactNode } from 'react';
  * `min-w-0` here (and on the wrappers below) lets the columns actually shrink so
  * the declared gap survives. Do not drop it when editing these classes.
  */
+/**
+ * `box-border` is the fix for the 26px overflow, and it is NOT redundant.
+ *
+ * src/styles/main.css declares `*, *:before, *:after { box-sizing: inherit }`
+ * AFTER `@tailwind base`. Same specificity, later in the cascade, so it replaces
+ * preflight's `border-box` with an inheritance chain — and form controls, which
+ * carry their own UA box-sizing, resolve to `content-box`. With content-box,
+ * `w-full` (width:100%) is measured on the CONTENT box, so `px-3` (24px) and
+ * `border` (2px) get ADDED on top: every input, textarea and select rendered
+ * exactly 26px wider than its grid cell and punched through the panel border.
+ *
+ * Measured, not guessed: a DOM walk comparing each element's right edge to its
+ * parent's reported only leaf INPUT/TEXTAREA/SELECT at "26px over" — no container
+ * overflowed, which is what rules out the grid and points at the box model.
+ *
+ * This is also why `min-w-0` below never helped: min-width governs how far a grid
+ * item may SHRINK, and nothing here was being shrunk. Keep both.
+ */
 export const inputClass =
-  'w-full min-w-0 max-w-full rounded-lg bg-ink/40 border border-bone/15 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/40';
+  'box-border w-full min-w-0 max-w-full rounded-lg bg-ink/40 border border-bone/15 px-3 py-2 text-sm text-bone placeholder-bone/30 focus:outline-none focus:border-brass/40';
 /**
  * `selectClass`, not `inputClass`, for every <select>.
  *
@@ -36,7 +54,8 @@ export const inputClass =
  * `inputClass` for <textarea> and must stay free to grow (`min-h-[80px] resize-y`).
  * Adding a fixed height there would break the textareas instead.
  */
-export const selectClass = inputClass + ' cursor-pointer';
+export const selectClass = inputClass + ' h-[38px] cursor-pointer';
+
 export const labelClass = 'block text-xs uppercase tracking-wide text-bone/50 mb-1';
 
 export const btn = 'rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
@@ -44,7 +63,7 @@ export const btnPrimary = btn + ' bg-brass/[0.14] text-brass border border-brass
 export const btnGhost = btn + ' text-bone/60 border border-bone/15 hover:text-bone hover:bg-bone/[0.05]';
 export const btnDanger = btn + ' text-red-300/80 border border-red-400/20 hover:bg-red-500/10';
 
-export const panelClass = 'rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5';
+export const panelClass = 'rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5';
 
 export function linesToList(text: string): string[] {
   return text.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -142,7 +161,7 @@ export function Collapse({
     <details
       open={open}
       onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-      className="rounded-xl border border-bone/10 bg-ink/20"
+      className="rounded-xl border border-brass/10 bg-ink/40"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
         <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass/80">{title}</span>

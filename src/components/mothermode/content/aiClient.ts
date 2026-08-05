@@ -131,6 +131,10 @@ export async function aiImagePrompts(args: {
   context?: AiContext;
   /** Optional text model id. Omit/empty for Auto. */
   model?: string;
+  /** Optional image-bank recipe id: every scene executes that framework. */
+  imageFramework?: string;
+  /** Filled custom inputs for the picked image recipe, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }): Promise<string[]> {
   const json = await postAi({ action: 'imagePrompts', ...args });
   if (!Array.isArray(json.prompts)) throw new Error('No image prompts were returned');
@@ -146,6 +150,10 @@ export async function aiRewriteText(args: {
   context?: AiContext;
   /** Optional text model id. Omit/empty for Auto. */
   model?: string;
+  /** Optional prompt-bank framework id: restructure the text to execute it. */
+  framework?: string;
+  /** Filled custom inputs for the picked framework, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }): Promise<string> {
   const json = await postAi({ action: 'rewrite', ...args });
   if (typeof json.text !== 'string') throw new Error('No text was returned');
@@ -207,6 +215,10 @@ export async function aiAmplify(args: {
   context?: AiContext;
   /** Optional text model id. Omit/empty for Auto. */
   model?: string;
+  /** Optional prompt-bank framework id: shape every variant through it. */
+  framework?: string;
+  /** Filled custom inputs for the picked framework, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }): Promise<string[]> {
   const json = await postAi({ action: 'amplify', ...args });
   if (!Array.isArray(json.items)) throw new Error('No variants were returned');
@@ -227,6 +239,10 @@ export async function aiAmplifyParts(args: {
   context?: AiContext;
   /** Optional text model id. Omit/empty for Auto. */
   model?: string;
+  /** Optional prompt-bank framework id, applied to every part of the run. */
+  framework?: string;
+  /** Filled custom inputs for the picked framework, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }): Promise<Partial<Record<AmplifyTextDimension, string[]>>> {
   const json = await postAi({ action: 'amplifyParts', ...args });
   if (!json.parts || typeof json.parts !== 'object')
@@ -446,6 +462,10 @@ export async function aiVariationBrief(args: {
   frameCount?: number;
   guides?: string;
   model?: string;
+  /** Optional image-bank recipe id: master, alts, and frames execute it. */
+  imageFramework?: string;
+  /** Filled custom inputs for the picked image recipe, keyed by field id. */
+  recipeInputs?: Record<string, string>;
 }): Promise<{
   masterPrompt: string;
   altPrompts: string[];

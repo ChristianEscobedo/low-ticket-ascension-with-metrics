@@ -18,6 +18,7 @@ describe('help center row -> type mappers', () => {
       body: '<p>Hello.</p>',
       published: true,
       sort_order: 3,
+      audience: 'buyer',
       updated_at: '2026-01-01T00:00:00.000Z',
       updated_by: 'admin@example.com',
     };
@@ -30,6 +31,7 @@ describe('help center row -> type mappers', () => {
       body: '<p>Hello.</p>',
       published: true,
       sortOrder: 3,
+      audience: 'buyer',
       updatedAt: '2026-01-01T00:00:00.000Z',
       updatedBy: 'admin@example.com',
     });

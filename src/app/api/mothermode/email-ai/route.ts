@@ -17,6 +17,10 @@ import {
   toEmailFramework,
   type EmailMessage,
 } from '@/lib/mothermode/email/types';
+import {
+  renderEmailHtml,
+  renderSequenceHtml,
+} from '@/lib/mothermode/email/export';
 import { resolveContextRefs } from '@/lib/mothermode/context/resolve';
 
 /**
@@ -30,6 +34,12 @@ import { resolveContextRefs } from '@/lib/mothermode/context/resolve';
  *   POST { action: 'expand',     intake, campaignType, email, emails, contextRefs } -> { email }
  *   POST { action: 'generate',   intake, campaignType, framework, contextRefs } -> { sequence }
  *   POST { action: 'extend',     intake, campaignType, framework, emails, count, mode, contextRefs } -> { emails }
+ *
+ * HTML OUTPUT GUARANTEE: every sequence / email this endpoint returns already
+ * carries `bodyHtml` rendered from `bodyText` (the source of truth) via the
+ * shared brand renderer, so the editor has usable HTML the moment generation
+ * lands — not only after a save. The same invariant is enforced again on
+ * persist in email/store.ts, so no write path can store an HTML-less kit.
  */
 
 export async function POST(request: NextRequest) {
@@ -79,7 +89,10 @@ export async function POST(request: NextRequest) {
         { status: result.status },
       );
     }
-    return NextResponse.json({ success: true, sequence: result.data });
+    return NextResponse.json({
+      success: true,
+      sequence: renderSequenceHtml(result.data),
+    });
   }
 
   if (action === 'expand') {
@@ -94,7 +107,10 @@ export async function POST(request: NextRequest) {
         { status: result.status },
       );
     }
-    return NextResponse.json({ success: true, email: result.data });
+    return NextResponse.json({
+      success: true,
+      email: { ...result.data, bodyHtml: renderEmailHtml(result.data) },
+    });
   }
 
   if (action === 'generate') {
@@ -105,7 +121,10 @@ export async function POST(request: NextRequest) {
         { status: result.status },
       );
     }
-    return NextResponse.json({ success: true, sequence: result.data });
+    return NextResponse.json({
+      success: true,
+      sequence: renderSequenceHtml(result.data),
+    });
   }
 
   if (action === 'extend') {
@@ -132,7 +151,10 @@ export async function POST(request: NextRequest) {
         { status: result.status },
       );
     }
-    return NextResponse.json({ success: true, emails: result.data });
+    return NextResponse.json({
+      success: true,
+      emails: result.data.map((e) => ({ ...e, bodyHtml: renderEmailHtml(e) })),
+    });
   }
 
   return NextResponse.json(

@@ -273,7 +273,7 @@ export default function OptinFunnelEditor({
 
   function exportLeadsCsv() {
     const rows = selectedId ? leads.filter((l) => l.funnelId === selectedId) : leads;
-    const header = ['email', 'first_name', 'funnel', 'status', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'];
+    const header = ['email', 'first_name', 'funnel', 'status', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'created_at'];
     const lines = [header.join(',')];
     for (const l of rows) {
       const cells = [
@@ -284,6 +284,7 @@ export default function OptinFunnelEditor({
         l.utmSource || '',
         l.utmMedium || '',
         l.utmCampaign || '',
+        l.utmContent || '',
         l.createdAt,
       ].map((c) => `"${String(c).replace(/"/g, '""')}"`);
       lines.push(cells.join(','));
@@ -415,7 +416,7 @@ export default function OptinFunnelEditor({
         <button type="button" onClick={resetToNew} className={btnPrimary + ' w-full'}>
           + New funnel
         </button>
-        <div className="rounded-xl border border-bone/10 bg-ink/30 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto">
+        <div className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 divide-y divide-bone/10 max-h-[70vh] overflow-y-auto">
           {funnels.length === 0 && (
             <div className="p-4 text-sm text-bone/45">No funnels yet. Create one.</div>
           )}
@@ -453,7 +454,7 @@ export default function OptinFunnelEditor({
       {/* Editor */}
       <div className="space-y-5">
         {/* Identity */}
-        <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+        <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">
               {selectedId ? 'Edit funnel' : 'New funnel'}
@@ -629,7 +630,7 @@ export default function OptinFunnelEditor({
         </div>
 
         {tab === 'build' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <div>
               <div className="text-sm font-semibold text-bone">Self-building optin</div>
               <p className="mt-1 text-sm text-bone/55 max-w-2xl">
@@ -703,7 +704,7 @@ export default function OptinFunnelEditor({
         )}
 
         {tab === 'optin' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <Field label="Eyebrow" value={optin.eyebrow} onChange={(v) => setOptinField('eyebrow', v)} />
 
             <Field label="Badge" value={optin.badgeText} onChange={(v) => setOptinField('badgeText', v)} />
@@ -796,7 +797,7 @@ export default function OptinFunnelEditor({
         )}
 
         {tab === 'oto' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <label className="flex items-center gap-2 text-sm text-bone/70">
               <input
                 type="checkbox"
@@ -873,7 +874,7 @@ export default function OptinFunnelEditor({
         )}
 
         {tab === 'thankyou' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <Field
               label="Headline"
               value={thankyou.headline}
@@ -906,7 +907,7 @@ export default function OptinFunnelEditor({
         )}
 
         {tab === 'footer' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <label className="flex items-center gap-2 text-sm text-bone/70">
               <input
                 type="checkbox"
@@ -954,7 +955,7 @@ export default function OptinFunnelEditor({
 
         {tab === 'links' && (
 
-          <section className="rounded-xl border border-bone/10 bg-ink/30 p-4 sm:p-5 space-y-4">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
             <p className="text-sm text-bone/55">
               Optional hooks into the rest of MotherMode. Thank-you CTA falls back
               to offer slug, then deliverable, then /mothermode.
@@ -987,7 +988,7 @@ export default function OptinFunnelEditor({
         )}
 
         {tab === 'leads' && (
-          <section className="rounded-xl border border-bone/10 bg-ink/30 overflow-hidden">
+          <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 overflow-hidden">
             <div className="flex items-center justify-between border-b border-bone/10 px-3 py-2">
               <div className="text-xs text-bone/45">
                 {selectedId

@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     accountIds?: unknown;
     summary?: unknown;
     scheduleDate?: unknown;
+    status?: unknown;
     type?: unknown;
     mediaUrls?: unknown;
   };
@@ -54,6 +55,15 @@ export async function POST(request: NextRequest) {
   const mediaUrls = Array.isArray(body.mediaUrls)
     ? body.mediaUrls.map((v) => String(v))
     : undefined;
+  // Allow-listed rather than passed through: `status` decides whether GHL fires
+  // the post by itself, so an unrecognised value has to fall back to the old
+  // derive-from-date behaviour, not reach the API as-is.
+  const status =
+    body.status === 'draft' ||
+    body.status === 'scheduled' ||
+    body.status === 'published'
+      ? body.status
+      : undefined;
 
   if (accountIds.length === 0) {
     return NextResponse.json(
@@ -78,7 +88,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (when.getTime() <= Date.now()) {
+    // A *scheduled* post in the past can never fire, so it's a mistake worth
+    // blocking. A draft in the past is just a note about when this was meant to
+    // go out — nothing will act on it — so backdating a draft is allowed.
+    if (status !== 'draft' && when.getTime() <= Date.now()) {
       return NextResponse.json(
         { ok: false, error: 'schedule a time in the future' },
         { status: 400 }
@@ -93,6 +106,7 @@ export async function POST(request: NextRequest) {
     type,
     mediaUrls,
     scheduleDate,
+    status,
   });
   if (!result.ok) {
     return NextResponse.json(
@@ -104,5 +118,8 @@ export async function POST(request: NextRequest) {
     ok: true,
     id: result.data.id ?? null,
     scheduled: result.data.scheduled,
+    // Echoed back so the client can label its own confirmation without
+    // re-deriving the state it just asked for.
+    status: status ?? (scheduleDate ? 'scheduled' : 'published'),
   });
 }

@@ -14,6 +14,14 @@ import { founderNote } from './founder-note';
 import { caseStudy } from './case-study';
 import { objectionCrusher } from './objection-crusher';
 import { listicle } from './listicle';
+import {
+  buyerWelcome,
+  ascensionBridge,
+  deepNurture,
+  otoAscend,
+  goalDriven,
+  psClose,
+} from './ascension';
 
 export const EMAIL_FRAMEWORK_SPECS: Record<EmailFramework, EmailFrameworkSpec> = {
   'soap-opera': soapOpera,
@@ -25,6 +33,12 @@ export const EMAIL_FRAMEWORK_SPECS: Record<EmailFramework, EmailFrameworkSpec> =
   'case-study': caseStudy,
   'objection-crusher': objectionCrusher,
   listicle,
+  'buyer-welcome': buyerWelcome,
+  'ascension-bridge': ascensionBridge,
+  'deep-nurture': deepNurture,
+  'oto-ascend': otoAscend,
+  'goal-driven': goalDriven,
+  'ps-close': psClose,
 };
 
 /** Resolve one framework spec, defaulting to story-lesson if unknown. */

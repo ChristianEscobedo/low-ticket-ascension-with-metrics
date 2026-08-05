@@ -77,11 +77,35 @@ export function sequenceToText(
 // HTML
 // ---------------------------------------------------------------------------
 
+// The ampersand is built from its char code so the entity strings below can
+// never be flattened by intermediate tooling that decodes HTML entities.
+const AMP = String.fromCharCode(38);
+
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, `${AMP}amp;`)
+    .replace(/</g, `${AMP}lt;`)
+    .replace(/>/g, `${AMP}gt;`);
+}
+
+/**
+ * The generator's plain-text contract marks emphasis by wrapping key words in
+ * *asterisks* (see FORMATTING_RULES in openai-email.ts). Run AFTER escaping —
+ * `*` is untouched by escapeHtml — so the markers become real <strong> tags
+ * instead of leaking literal asterisks into the rendered email.
+ */
+function inlineEmphasis(escaped: string): string {
+  return escaped.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+}
+
+/** A `[BUTTON: label -> URL]` authoring marker on its own line. */
+const BUTTON_MARKER = /^\s*\[BUTTON:\s*(.+?)\s*->\s*(.+?)\s*\]\s*$/;
+/** An `[IMAGE: description]` authoring marker on its own line. */
+const IMAGE_MARKER = /^\s*\[IMAGE:\s*(.+?)\s*\]\s*$/;
+
+/** Email-safe inline image (same styling as the rich-HTML path). */
+function imageTag(src: string, alt: string): string {
+  return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" style="max-width:100%;height:auto;border-radius:8px;display:block;margin:4px 0"/>`;
 }
 
 /**
@@ -91,19 +115,66 @@ function escapeHtml(text: string): string {
  * Text is HTML-escaped here because {@link renderEmail} injects section content
  * verbatim. `{{token}}` markers survive escaping untouched, so they flow into
  * the output for the ESP to fill at send time.
+ *
+ * FORMATTING (round 6): the generator's authoring contract is fully honored —
+ * `*bold*` becomes <strong>, a `[BUTTON: label -> URL]` line becomes a real
+ * brand button section, and an `[IMAGE: description]` line renders the next
+ * attached image from `images` (in order) or is dropped quietly when no image
+ * is attached. Marker syntax never leaks into the rendered email.
  */
-function bodyTextToSections(bodyText: string): EmailSection[] {
+function bodyTextToSections(bodyText: string, images: string[] = []): EmailSection[] {
   const blocks = bodyText.trim().split(/\n{2,}/).filter((b) => b.trim());
-  return blocks.map((block) => {
+  const sections: EmailSection[] = [];
+  let imageIdx = 0;
+
+  for (const block of blocks) {
     const rows = block.split('\n');
     const isList = rows.length > 0 && rows.every((r) => /^\s*-\s+/.test(r));
     if (isList) {
-      return {
-        bullets: rows.map((r) => escapeHtml(r.replace(/^\s*-\s+/, ''))),
-      };
+      sections.push({
+        bullets: rows.map((r) => inlineEmphasis(escapeHtml(r.replace(/^\s*-\s+/, '')))),
+      });
+      continue;
     }
-    return { paragraphs: [escapeHtml(block).replace(/\n/g, '<br/>')] };
-  });
+
+    // Walk lines so BUTTON / IMAGE markers become real elements wherever the
+    // writer placed them; ordinary lines accumulate into paragraph runs.
+    let buffer: string[] = [];
+    const flush = () => {
+      if (!buffer.length) return;
+      sections.push({
+        paragraphs: [inlineEmphasis(escapeHtml(buffer.join('\n'))).replace(/\n/g, '<br/>')],
+      });
+      buffer = [];
+    };
+
+    for (const row of rows) {
+      const buttonMatch = BUTTON_MARKER.exec(row);
+      if (buttonMatch) {
+        flush();
+        sections.push({
+          button: { label: escapeHtml(buttonMatch[1]), url: escapeHtml(buttonMatch[2]) },
+        });
+        continue;
+      }
+      const imageMatch = IMAGE_MARKER.exec(row);
+      if (imageMatch) {
+        flush();
+        const src = images[imageIdx++];
+        if (src) sections.push({ paragraphs: [imageTag(src, imageMatch[1])] });
+        continue;
+      }
+      buffer.push(row);
+    }
+    flush();
+  }
+
+  return sections;
+}
+
+/** Brand-styled button link for converted [BUTTON:] markers (rich-HTML path). */
+function buttonLinkHtml(label: string, url: string): string {
+  return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:${C.mode};color:${C.bone};padding:13px 26px;border-radius:10px;font-weight:700;text-decoration:none;font-family:${BODY_FONT_SANS}">${label}</a>`;
 }
 
 /** Pull a text-align value out of a raw tag attribute string, if present. */
@@ -182,6 +253,23 @@ export function emailBodyHtml(input: string): string {
   });
   html = html.replace(/<\/mark>/gi, '</span>');
 
+  // Authoring markers from the generator contract (round 6): a
+  // [BUTTON: label -> URL] marker becomes a real brand button link (runs after
+  // the generic anchor pass so its styling wins); an [IMAGE: ...] slot drops
+  // out (real images are inline <img> tags in this path). Marker syntax never
+  // leaks into the rendered email. The arrow matches raw or entity-encoded.
+  html = html.replace(
+    /<p([^>]*)>\s*\[BUTTON:\s*([\s\S]+?)\s*-(?:>|&\w+;)\s*([\s\S]+?)\s*\]\s*<\/p>/gi,
+    (_m, attrs: string, label: string, url: string) =>
+      `<p${attrs}>${buttonLinkHtml(label.trim(), url.trim())}</p>`,
+  );
+  html = html.replace(
+    /\[BUTTON:\s*([^\]-]+?)\s*-(?:>|&\w+;)\s*([^\]\n<]+?)\s*\]/gi,
+    (_m, label: string, url: string) => buttonLinkHtml(label.trim(), url.trim()),
+  );
+  html = html.replace(/<p([^>]*)>\s*\[IMAGE:[\s\S]*?\]\s*<\/p>/gi, '');
+  html = html.replace(/\[IMAGE:[^\]\n]*\]/gi, '');
+
   // Drop anything outside the whitelist (keeps inner text of removed tags).
   html = html.replace(/<(\/?)([a-z0-9]+)\b[^>]*>/gi, (m, _slash: string, name: string) =>
     ALLOWED_BODY_TAGS.has(name.toLowerCase()) ? m : '',
@@ -205,7 +293,7 @@ export function emailToEmailDoc(email: EmailMessage): EmailDoc {
     title: escapeHtml(email.subject),
     ...(isHtml
       ? { bodyHtml: emailBodyHtml(email.bodyText) }
-      : { sections: bodyTextToSections(htmlToPromptText(email.bodyText)) }),
+      : { sections: bodyTextToSections(htmlToPromptText(email.bodyText), email.images) }),
     cta: email.cta.label
       ? { label: escapeHtml(email.cta.label), url: escapeHtml(email.cta.url || '#') }
       : undefined,

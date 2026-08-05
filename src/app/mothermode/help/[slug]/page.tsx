@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { getArticleBySlug } from '@/lib/mothermode/help/store';
+import { ARTICLE_BODY_STYLES } from '@/lib/mothermode/help/articleStyles';
 
 export const revalidate = 3600;
 
@@ -47,6 +48,7 @@ export default async function HelpArticlePage({ params }: PageProps) {
           <p className="mt-3 max-w-xl text-ink/60">{article.excerpt}</p>
         )}
 
+        <style dangerouslySetInnerHTML={{ __html: ARTICLE_BODY_STYLES }} />
         <article
           className="prose prose-neutral mt-8 max-w-none"
           // Body is trusted, hand-authored admin content, never buyer input.

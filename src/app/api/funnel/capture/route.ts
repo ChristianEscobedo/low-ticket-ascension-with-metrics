@@ -15,6 +15,8 @@ import {
   resolveEmailKitIdForEvent,
 } from '@/lib/mothermode/sales/store';
 import type { SalesEmailEvent } from '@/lib/mothermode/sales/types';
+import { triggerAutoPersonalization } from '@/lib/mothermode/personalize/generate';
+
 
 type UpsellKey = 'upsell1' | 'upsell2' | 'upsell3' | 'upsell4';
 
@@ -238,6 +240,9 @@ export async function POST(request: NextRequest) {
       utmSource: typeof body.utmSource === 'string' ? body.utmSource : null,
       utmMedium: typeof body.utmMedium === 'string' ? body.utmMedium : null,
       utmCampaign: typeof body.utmCampaign === 'string' ? body.utmCampaign : null,
+      // utm_content carries the planner piece id, so a lead can be traced back
+      // to the individual post rather than just the campaign.
+      utmContent: typeof body.utmContent === 'string' ? body.utmContent : null,
       referrer: typeof body.referrer === 'string' ? body.referrer : null,
       userAgent: ua || null,
       ipHash,
@@ -259,6 +264,16 @@ export async function POST(request: NextRequest) {
       await maybeEnroll(funnel, 'optin', lead);
     }
 
+    // Kick 1:1 personalization for this lead. Fire-and-forget and fully
+    // gated by the funnel's own settings — a no-op unless the admin turned
+    // personalization on for this funnel. Never blocks the revenue path.
+    triggerAutoPersonalization({
+      kind: 'sales',
+      funnelId: funnel.id,
+      email: lead.email,
+      firstName: lead.firstName,
+    });
+
     return NextResponse.json({
       success: true,
       redirectTo: 'sales',
@@ -266,6 +281,7 @@ export async function POST(request: NextRequest) {
       isNew,
       funnelSlug: funnel.slug,
     });
+
   } catch (err) {
     console.error('[funnel/capture] failed:', err);
     return NextResponse.json(

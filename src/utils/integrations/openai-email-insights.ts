@@ -16,6 +16,7 @@ import type { EnrollmentData } from '@/lib/mothermode/email/enrollment';
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
@@ -23,9 +24,11 @@ import { getTextModel, type TextProvider } from '@/lib/mothermode/content/models
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 const DEFAULT_ANTHROPIC_TEXT_MODEL = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT_TEXT_MODEL = 'kimi-k3';
 
 export type AiResult<T> =
   | { ok: true; data: T }
@@ -93,14 +96,20 @@ type TextConfig =
 async function resolveTextConfig(): Promise<TextConfig> {
   const openaiKey = await getOpenAiKey();
   const anthropicKey = await getAnthropicKey();
-  if (!openaiKey && !anthropicKey) {
+  const moonshotKey = await getMoonshotKey();
+  if (!openaiKey && !anthropicKey && !moonshotKey) {
     return { ok: false, error: 'No AI provider key configured.' };
   }
 
   const overrideModel = await getTextModelOverride();
   const overridePick = getTextModel(overrideModel);
   if (overridePick) {
-    const key = overridePick.provider === 'anthropic' ? anthropicKey : openaiKey;
+    const key =
+      overridePick.provider === 'anthropic'
+        ? anthropicKey
+        : overridePick.provider === 'moonshot'
+          ? moonshotKey
+          : openaiKey;
     if (key) return { ok: true, provider: overridePick.provider, model: overridePick.id, key };
   }
 
@@ -111,8 +120,14 @@ async function resolveTextConfig(): Promise<TextConfig> {
   if (pref === 'openai' && openaiKey) {
     return { ok: true, provider: 'openai', model: overrideModel || DEFAULT_OPENAI_TEXT_MODEL, key: openaiKey };
   }
+  if (pref === 'moonshot' && moonshotKey) {
+    return { ok: true, provider: 'moonshot', model: overrideModel || DEFAULT_MOONSHOT_TEXT_MODEL, key: moonshotKey };
+  }
   if (anthropicKey) {
     return { ok: true, provider: 'anthropic', model: DEFAULT_ANTHROPIC_TEXT_MODEL, key: anthropicKey };
+  }
+  if (moonshotKey) {
+    return { ok: true, provider: 'moonshot', model: DEFAULT_MOONSHOT_TEXT_MODEL, key: moonshotKey };
   }
   return { ok: true, provider: 'openai', model: DEFAULT_OPENAI_TEXT_MODEL, key: openaiKey! };
 }
@@ -167,7 +182,9 @@ async function callOpenAiJson<T>(system: string, user: string): Promise<AiResult
       const payload = (await res.json()) as { content?: Array<{ text?: string }> };
       raw = payload.content?.map((c) => c.text ?? '').join('') ?? '';
     } else {
-      const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      // Kimi (Moonshot) speaks the OpenAI-compatible chat API on its own base.
+      const base = cfg.provider === 'moonshot' ? MOONSHOT_BASE : OPENAI_BASE;
+      const res = await fetch(`${base}/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

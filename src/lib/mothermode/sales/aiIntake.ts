@@ -83,6 +83,22 @@ export interface SalesAiIntake {
   upsell4Name: string;
   upsell4Price: string;
   toneNotes: string;
+  /**
+   * Art direction. Six flat fields rather than a nested block so the existing
+   * setIntakeField / AI-fill allowlist / normalize plumbing carries them without
+   * special cases. They are the input side of `FunnelBrief.visual`: until they
+   * existed the brief could describe a visual world but nothing could state one,
+   * so every generated image fell back to the neutral look.
+   *
+   * List-ish fields (palette, style, avoid) are comma separated because they are
+   * typed into single-line inputs; `splitVisualList` is the one place that splits.
+   */
+  visualSubject: string;
+  visualPalette: string;
+  visualStyleKeywords: string;
+  visualLighting: string;
+  visualComposition: string;
+  visualAvoid: string;
   /** Structured money path. */
   offerStack: OfferStack;
 }
@@ -157,6 +173,12 @@ export function blankSalesAiIntake(): SalesAiIntake {
     upsell4Name: '',
     upsell4Price: '',
     toneNotes: '',
+    visualSubject: '',
+    visualPalette: '',
+    visualStyleKeywords: '',
+    visualLighting: '',
+    visualComposition: '',
+    visualAvoid: '',
     offerStack: blankOfferStack(),
   };
 }
@@ -302,9 +324,63 @@ export function normalizeSalesAiIntake(raw: unknown): SalesAiIntake {
     upsell4Name: as('upsell4Name'),
     upsell4Price: as('upsell4Price'),
     toneNotes: as('toneNotes'),
+    visualSubject: as('visualSubject'),
+    visualPalette: as('visualPalette'),
+    visualStyleKeywords: as('visualStyleKeywords'),
+    visualLighting: as('visualLighting'),
+    visualComposition: as('visualComposition'),
+    visualAvoid: as('visualAvoid'),
     offerStack: o.offerStack != null ? normalizeOfferStack(o.offerStack) : base.offerStack,
   };
   return syncIntakeStack(intake);
+}
+
+// ---------------------------------------------------------------------------
+// Visual direction
+// ---------------------------------------------------------------------------
+
+/**
+ * Split a comma/semicolon/newline separated field into the array shape
+ * `FunnelBriefVisual` wants. One implementation so the admin field, the brief
+ * and the image prompts cannot disagree about what a separator is.
+ */
+export function splitVisualList(v: string | undefined): string[] {
+  if (!v) return [];
+  return v
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * The `visual.*` paths that will be assumed if images are generated now, as
+ * dotted brief paths so the pre-flight warning in the editor and the post-run
+ * notice from `assumedVisualFields` name the same things.
+ *
+ * `visual.avoid` is absent on purpose: the prompt builder always has a base
+ * avoid list, so an empty avoid field is never an assumption.
+ */
+export function missingIntakeVisualFields(intake: SalesAiIntake): string[] {
+  const gaps: string[] = [];
+  if (!(intake.visualSubject || '').trim()) gaps.push('visual.subject');
+  if (!splitVisualList(intake.visualPalette).length) gaps.push('visual.palette');
+  if (!splitVisualList(intake.visualStyleKeywords).length) gaps.push('visual.styleKeywords');
+  if (!(intake.visualLighting || '').trim()) gaps.push('visual.lighting');
+  if (!(intake.visualComposition || '').trim()) gaps.push('visual.composition');
+  return gaps;
+}
+
+/** One-line art direction summary for AI user prompts. Empty when unstated. */
+export function formatIntakeVisualForPrompt(intake: SalesAiIntake): string {
+  const bits = [
+    intake.visualSubject && 'subject: ' + intake.visualSubject,
+    intake.visualPalette && 'palette: ' + intake.visualPalette,
+    intake.visualStyleKeywords && 'style: ' + intake.visualStyleKeywords,
+    intake.visualLighting && 'lighting: ' + intake.visualLighting,
+    intake.visualComposition && 'composition: ' + intake.visualComposition,
+    intake.visualAvoid && 'avoid: ' + intake.visualAvoid,
+  ].filter(Boolean);
+  return bits.join(' | ');
 }
 
 /** Human-readable stack summary for AI user prompts. */

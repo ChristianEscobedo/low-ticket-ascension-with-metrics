@@ -35,6 +35,11 @@ import {
 import { campaignSpec, scaleTiming } from '@/lib/mothermode/email/campaigns';
 import { frameworkSpec } from '@/lib/mothermode/email/frameworks';
 import {
+  recipeCraftBlock,
+  recipeInputsBlock,
+} from '@/lib/mothermode/content/promptBank';
+import { resolveRecipeById } from '@/lib/mothermode/content/promptBankStore';
+import {
   contextPacksToPromptBlock,
   type ContextPack,
 } from '@/lib/mothermode/context';
@@ -42,16 +47,19 @@ import { getTextModel, type TextProvider } from '@/lib/mothermode/content/models
 import {
   getOpenAiKey,
   getAnthropicKey,
+  getMoonshotKey,
   getTextModelOverride,
   getTextProviderOverride,
 } from './runtime-config';
 
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1';
+const MOONSHOT_BASE = 'https://api.moonshot.cn/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
 
 const DEFAULT_OPENAI_TEXT_MODEL = 'gpt-5.5';
 const DEFAULT_ANTHROPIC_TEXT_MODEL = 'claude-opus-4-8';
+const DEFAULT_MOONSHOT_TEXT_MODEL = 'kimi-k3';
 
 export type AiResult<T> =
   | { ok: true; data: T }
@@ -77,8 +85,9 @@ VOICE AND COMPLIANCE (always):
  */
 const FORMATTING_RULES = `
 FORMATTING AND READABILITY (always):
-- Super digestible. Keep every paragraph to 1-3 sentences MAX. Never write a
-  long block of text. Prefer short lines with white space between them.
+- Super digestible. Most paragraphs are ONE sentence; two is fine, three is
+  the hard max. Never write a wall of text. Separate every paragraph with a
+  blank line so the email breathes and a skimmer gets one idea per block.
 - Open with a strong HOOK in the first 1-2 lines: a pattern-interrupt, a
   question, or a bold claim that earns the next line. No slow warm-ups.
 - Use a short HEADLINE at the top and SUB-HEADLINES to break up sections so the
@@ -102,14 +111,20 @@ type TextConfig =
 async function resolveTextConfig(): Promise<TextConfig> {
   const openaiKey = await getOpenAiKey();
   const anthropicKey = await getAnthropicKey();
-  if (!openaiKey && !anthropicKey) {
+  const moonshotKey = await getMoonshotKey();
+  if (!openaiKey && !anthropicKey && !moonshotKey) {
     return { ok: false, error: 'No AI provider key configured.' };
   }
 
   const overrideModel = await getTextModelOverride();
   const overridePick = getTextModel(overrideModel);
   if (overridePick) {
-    const key = overridePick.provider === 'anthropic' ? anthropicKey : openaiKey;
+    const key =
+      overridePick.provider === 'anthropic'
+        ? anthropicKey
+        : overridePick.provider === 'moonshot'
+          ? moonshotKey
+          : openaiKey;
     if (key) return { ok: true, provider: overridePick.provider, model: overridePick.id, key };
   }
 
@@ -120,8 +135,14 @@ async function resolveTextConfig(): Promise<TextConfig> {
   if (pref === 'openai' && openaiKey) {
     return { ok: true, provider: 'openai', model: overrideModel || DEFAULT_OPENAI_TEXT_MODEL, key: openaiKey };
   }
+  if (pref === 'moonshot' && moonshotKey) {
+    return { ok: true, provider: 'moonshot', model: overrideModel || DEFAULT_MOONSHOT_TEXT_MODEL, key: moonshotKey };
+  }
   if (anthropicKey) {
     return { ok: true, provider: 'anthropic', model: DEFAULT_ANTHROPIC_TEXT_MODEL, key: anthropicKey };
+  }
+  if (moonshotKey) {
+    return { ok: true, provider: 'moonshot', model: DEFAULT_MOONSHOT_TEXT_MODEL, key: moonshotKey };
   }
   return { ok: true, provider: 'openai', model: DEFAULT_OPENAI_TEXT_MODEL, key: openaiKey! };
 }
@@ -177,7 +198,9 @@ async function callOpenAiJson<T>(system: string, user: string): Promise<AiResult
       const payload = (await res.json()) as { content?: Array<{ text?: string }> };
       raw = payload.content?.map((c) => c.text ?? '').join('') ?? '';
     } else {
-      const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+      // Kimi (Moonshot) speaks the OpenAI-compatible chat API on its own base.
+      const base = cfg.provider === 'moonshot' ? MOONSHOT_BASE : OPENAI_BASE;
+      const res = await fetch(`${base}/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -513,6 +536,24 @@ export async function aiExpandEmail(
     .map((e, i) => `${i + 1}. [${e.role}] ${e.subject || e.summary}`)
     .join('\n');
 
+  // Round 5: an optional prompt-bank recipe steers this email alongside the
+  // per-email framework. The recipe's custom input fields fill from the kit
+  // intake (goal -> 'goal', offerSlug -> 'offer') when the recipe declares
+  // those fields, so embuy-/emgoal- structures ground in the same context
+  // the rest of the sequence uses. Unknown or disabled ids degrade to
+  // framework-only generation, exactly as before.
+  let bankBlock = '';
+  if (email.frameworkRecipeId) {
+    const bankRecipe = await resolveRecipeById(email.frameworkRecipeId);
+    if (bankRecipe) {
+      const inputValues: Record<string, string> = {};
+      if (intake.goal?.trim()) inputValues.goal = intake.goal.trim();
+      if (intake.offerSlug?.trim()) inputValues.offer = intake.offerSlug.trim();
+      const material = recipeInputsBlock(bankRecipe, inputValues);
+      bankBlock = `\n\nBANK FRAMEWORK "${bankRecipe.label}" (strict: execute alongside the framework above; where they conflict, the bank framework wins):\n${recipeCraftBlock(bankRecipe, 'email')}${material ? `\n${material}` : ''}`;
+    }
+  }
+
   const user = `${intakeContext(intake, campaignType, packs)}
 
 FULL OUTLINE (for context, do not rewrite other emails):
@@ -526,6 +567,7 @@ WRITE THIS EMAIL ONLY:
 
 FRAMEWORK: ${spec.label}
 ${spec.structure}
+${bankBlock}
 
 ${bodyLengthRule(bodyLength, spec.lengthTarget)}
 STYLE: ${spec.styleNote}${psBlock(email.psFramework)}`;
@@ -554,6 +596,10 @@ STYLE: ${spec.styleNote}${psBlock(email.psFramework)}`;
     branch: email.branch,
     parentId: email.parentId,
     psFramework: email.psFramework,
+    // The bank recipe assignment survives rewrites (round 5).
+    ...(email.frameworkRecipeId
+      ? { frameworkRecipeId: email.frameworkRecipeId }
+      : {}),
   });
   return { ok: true, data: merged };
 

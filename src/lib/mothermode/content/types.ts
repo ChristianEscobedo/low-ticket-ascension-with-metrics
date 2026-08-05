@@ -26,7 +26,11 @@ export type ContentKind = 'organic' | 'ad';
 /** Every native format across the covered channels. */
 export type ContentFormat =
   | 'feed' // single feed post (FB, IG, X)
+  | 'colorblock' // FB native big-text-on-color post (no image)
+  | 'textpost' // native viral big-text-on-screen post (reel / TikTok slide / story / feed)
+  | 'tweet' // Twitter screen-grab card for IG / FB / TikTok
   | 'carousel' // multi-slide post (IG, FB)
+  | 'slideshow' // TikTok photo-mode swipe post (multi-image + per-slide text)
   | 'story' // vertical story frames (FB, IG)
   | 'reel' // short vertical video (FB, IG)
   | 'thread' // multi-post thread (X)
@@ -135,6 +139,59 @@ export interface AdFields {
   button: string;
 }
 
+/**
+ * Styling for a Facebook color-block post: the solid background the native
+ * surface paints behind the big text. Hex strings are #RRGGBB.
+ */
+export interface ColorBlockStyle {
+  /** Solid background hex, e.g. '#532B3C'. */
+  bg: string;
+  /** Optional gradient stops (2+) that win over `bg` when present. */
+  gradient?: string[];
+  /** Text size multiplier, 0.8-1.4. Native FB scales down as text lengthens. */
+  fontScale?: number;
+}
+
+/**
+ * Styling for a textpost: the native viral big-text-on-screen surface seen on
+ * reels, TikTok slides, stories, and feed posts. Renders natively (no image
+ * model), like the color-block surface but aspect-aware.
+ */
+export interface TextPostStyle {
+  /** Solid background hex, e.g. '#1C1917'. */
+  bg: string;
+  /** Optional gradient stops (2+) that win over `bg` when present. */
+  gradient?: string[];
+  /** Text size multiplier, 0.8-1.4. */
+  fontScale?: number;
+  /** The surface aspect: vertical 9:16 (reel / slide / story) or square 1:1 (feed). */
+  aspect?: '9:16' | '1:1';
+  /** Small @handle watermark, bottom-center. Defaults on. */
+  showHandle?: boolean;
+  /** Text alignment on the block. */
+  align?: 'center' | 'left';
+}
+
+/**
+ * Chrome + theme for a tweet screen-grab card: the screenshot-of-a-tweet unit
+ * posted to IG / FB / TikTok. Every field is editable per piece; the brand
+ * identity is the default.
+ */
+export interface TweetCardStyle {
+  /** Display name on the tweet, e.g. 'MotherMode'. */
+  name?: string;
+  /** @handle, e.g. '@mothermode'. */
+  handle?: string;
+  /** Show the verified badge. Defaults on. */
+  verified?: boolean;
+  /** Card theme: light (default) or dark. */
+  theme?: 'light' | 'dark';
+  /** Show the engagement row (replies / reposts / likes). Defaults on. */
+  showMetrics?: boolean;
+  /** Show the timestamp line. Defaults on. */
+  showTimestamp?: boolean;
+}
+
 /** One piece of content: an organic post or a paid ad for a single format. */
 export interface ContentPiece {
   /** Stable id, e.g. 'fb-feed-1'. */
@@ -168,6 +225,12 @@ export interface ContentPiece {
   tweets?: string[];
   /** Reel or video script beats. */
   script?: ScriptBeat[];
+  /** FB color-block styling, present when format is 'colorblock'. */
+  colorBlock?: ColorBlockStyle;
+  /** Textpost styling, present when format is 'textpost'. */
+  textPost?: TextPostStyle;
+  /** Tweet screen-grab chrome, present when format is 'tweet'. */
+  tweetCard?: TweetCardStyle;
   /** Post caption, for formats where the script is separate. */
   caption?: string;
   /** The line that turns value into the next step toward the offer. */
@@ -185,4 +248,9 @@ export interface ContentPiece {
   /** True for AI-batch-generated pieces stored in Supabase rather than the
    *  static catalog. Lets the hub badge and filter them. */
   generated?: boolean;
+  /** The prompt-bank framework id this piece executed, e.g. 'headline-list'.
+   *  Set by batch generation (explicit pick or Auto rotation) so review can
+   *  badge the structure and analytics can compare frameworks. */
+  framework?: string;
 }
+
