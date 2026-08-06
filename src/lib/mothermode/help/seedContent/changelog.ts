@@ -438,6 +438,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.7.0',
+    releasedOn: '2026-08-06',
+    entryType: 'fixed',
+    title: 'Over/under text layers, the always-visible drag box, and a real render fix',
+    body: cl([
+      '<p>Above/below is now a true LAYER, not a position: <strong>↑ over text</strong> paints the fly-in image ON TOP of the caption text, <strong>↓ under text</strong> paints it under (the house default) — frame-exact in the preview and the MP4. The chips still snap the box to the right spot as a convenience.</p>',
+      '<p>And the drag box on the preview canvas is always visible now, same rule as the style editor — grab it to place the fly-in, pull the right edge to scale, no ⚙ hunting.</p>',
+      '<p><strong>Also fixed:</strong> renders that reported "the render worker restarted and lost this job" on every single attempt. The worker never restarted — the job-poller endpoint was dropped by an earlier file repair, so every render ran fine and its progress poll 404\'d. The endpoint is restored (with a "do not remove" note in the code), verified live against the worker.</p>',
+      '<p><strong>Where to start:</strong> Captions tab — attach a fly-in and try ↑ over text / ↓ under text on a reel with captions on screen.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

@@ -271,3 +271,18 @@ from either side. (Also repaired server.js’s runRender head, lost in a crash.)
   chip picks WHICH cue the editor shows instead of toggling it. The "settings
   are gone" complaint was structural; this kills it.
 - Verify: tsc clean; marks 10/10; parity suites 32/32; vendored re-synced.
+
+### Round 3d — z-layer + always-visible drag box (2026-08-06)
+
+- **style.z**: 'below' (the house default) paints the cue UNDER the caption
+  layer (captions sit at zIndex 10 now, in captionLayer.tsx); 'above' sets
+  the cue card's zIndex to 20 in BOTH ReelComposition files, so it paints
+  OVER the text. Intermediates carry no z, so the comparison is global — a
+  layer, not a position; x/y still place the box. The ? over text / ? under
+  text chips write z + snap yPct as a convenience. normalizeMediaCueStyle
+  keeps/drops it like the rest.
+- **The cue drag box is always visible** (same rule as the style editor):
+  both preview branches fall back to the clip's first cue when no ? pick is
+  set, tracking `currentClip` — the editor and the box always edit the same
+  cue. Hiding it behind the ? toggle is what made it feel "gone".
+- Verify: tsc clean; cue/mark/parity suites 28/28; compositions identical.

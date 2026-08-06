@@ -92,3 +92,20 @@ Lambda renders the **deployed** bundle, not your working tree.
 2. Swap the editor stage to `@remotion/player` fed by the same `RenderPlan` â€”
    at that point preview and export are literally the same component tree.
 3. Delete the fal compose + ASS burn paths once the button ships.
+
+## Incident: the job poller went missing (2026-08-06)
+
+Every render reported "the render worker restarted and lost this job" — on
+the OLD worker after a deploy (true) AND on the new worker after it was
+healthy (false). Root cause: a crash-repair rewrite of render-worker/server.js
+had dropped `GET /render/:jobId` entirely. POST /render accepted the job and
+the background render ran fine, but the app's progress poll 404\'d — and the
+app honestly reads a 404 from an in-memory job registry as "restarted". No
+crash, no restart, no lost render; just nothing to poll.
+
+Restored the handler verbatim from git history with a "do not remove" note
+in the code, and verified live: a test job 404\'d on poll before the fix and
+the process never died (same startedAt across the render). Guard for next
+time: the worker has exactly three routes — /health, POST /render,
+GET /render/:jobId. If a fourth appears or a third disappears, that is the
+finding, not a restart.
