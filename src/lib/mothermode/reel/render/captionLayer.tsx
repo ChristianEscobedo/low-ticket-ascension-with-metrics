@@ -118,6 +118,10 @@ export interface CaptionWordMark {
   fxColor?: string;
   /** The fx intensity multiplier (0.2–3, default 1). */
   fxAmount?: number;
+  /** The fx density (0.2–3, default 1): glow layers, shine bands, frequencies. */
+  fxDensity?: number;
+  /** A second fx color: the gradient's end and the shine band's light. */
+  fxColor2?: string;
   /** A different font for THIS word (the plan ships it in plan.fonts). */
   font?: string;
   /** A one-shot sound at the word's first frame (the composition renders it). */
@@ -376,6 +380,7 @@ function applyWordMarkExtras(
   const tSec = frame / fps;
   const ease = clamp01((frame - fromFrame) / Math.max(1, Math.round(fps * 0.2)));
   const amount = Math.max(0.2, Math.min(3, mark.fxAmount ?? 1));
+  const density = Math.max(0.2, Math.min(3, mark.fxDensity ?? 1));
   // A per-word FONT — the family is in plan.fonts, so it is actually loaded.
   if (mark.font) {
     const serif = mark.font === 'Georgia' || mark.font === 'Playfair Display';
@@ -395,11 +400,18 @@ function applyWordMarkExtras(
   switch (mark.fx) {
     case 'glow': {
       const r = (7 + 9 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 2.4))) * amount;
-      style.textShadow = `0 0 ${r.toFixed(1)}px ${fxColor}, 0 0 2px ${fxColor}`;
+      // Density stacks halo layers (a single 2px rim at density 1).
+      const layers = Math.max(1, Math.round(density * 2));
+      const shadows = [`0 0 ${r.toFixed(1)}px ${fxColor}`];
+      for (let i = 1; i <= layers; i += 1) {
+        shadows.push(`0 0 ${(r * (1 + i * 0.8)).toFixed(1)}px ${fxColor}${i === layers ? '55' : '88'}`);
+      }
+      shadows.push(`0 0 2px ${fxColor}`);
+      style.textShadow = shadows.join(', ');
       break;
     }
     case 'gradient': {
-      style.backgroundImage = `linear-gradient(92deg, ${fxColor}, #ffffff 130%)`;
+      style.backgroundImage = `linear-gradient(92deg, ${fxColor}, ${mark.fxColor2 ?? '#ffffff'} 130%)`;
       style.backgroundClip = 'text';
       (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
       (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
@@ -409,16 +421,19 @@ function applyWordMarkExtras(
     case 'shine': {
       // A light band sweeping across the glyphs, over the word's own color.
       const baseC = (style.color as string) || '#ffffff';
-      const pos = ((tSec * 70) % 200) - 50;
+      // Density packs more sweeps into the same cycle (period shrinks).
+      const span = 200 / density;
+      const pos = ((tSec * 70) % span) - span / 4;
       const band = 14 * amount;
-      style.backgroundImage = `linear-gradient(105deg, ${baseC} ${pos.toFixed(1)}%, #ffffff ${(pos + band).toFixed(1)}%, ${baseC} ${(pos + band * 2).toFixed(1)}%)`;
+      const light = mark.fxColor2 ?? '#ffffff';
+      style.backgroundImage = `linear-gradient(105deg, ${baseC} ${pos.toFixed(1)}%, ${light} ${(pos + band).toFixed(1)}%, ${baseC} ${(pos + band * 2).toFixed(1)}%)`;
       style.backgroundClip = 'text';
       (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
       (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
       break;
     }
     case 'pulse': {
-      const s = 1 + 0.1 * amount * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3));
+      const s = 1 + 0.1 * amount * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3 * density));
       style.transform = `${(style.transform as string) ?? ''} scale(${s.toFixed(3)})`.trim();
       break;
     }
@@ -430,12 +445,12 @@ function applyWordMarkExtras(
       (style as Record<string, unknown>).paintOrder = 'stroke fill';
       break;
     case 'blink': {
-      style.opacity = (0.55 + 0.45 * Math.sin(tSec * Math.PI * 3)).toFixed(3);
+      style.opacity = (0.55 + 0.45 * Math.sin(tSec * Math.PI * 3 * density)).toFixed(3);
       break;
     }
     case 'jelly': {
-      const sx = 1 + 0.08 * amount * Math.sin(tSec * Math.PI * 2.6);
-      const sy = 1 - 0.08 * amount * Math.sin(tSec * Math.PI * 2.6);
+      const sx = 1 + 0.08 * amount * Math.sin(tSec * Math.PI * 2.6 * density);
+      const sy = 1 - 0.08 * amount * Math.sin(tSec * Math.PI * 2.6 * density);
       style.transform = `${(style.transform as string) ?? ''} scale(${sx.toFixed(3)},${sy.toFixed(3)})`.trim();
       break;
     }

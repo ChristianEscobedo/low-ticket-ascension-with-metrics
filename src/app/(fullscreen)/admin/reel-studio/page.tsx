@@ -2933,6 +2933,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
    *  bar applies the effect to every picked word (the cue flow's sibling). */
   const [fxMode, setFxMode] = useState(false);
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
+  /** Scope: 'global' = settings write to every picked word (a bulk
+   *  convenience); 'individual' = they write to ONE target word, seeded
+   *  from its current mark. Individual is the truth — global is bulk. */
+  const [fxScope, setFxScope] = useState<'global' | 'individual'>('global');
+  const [fxTarget, setFxTarget] = useState<number | null>(null);
   /** Media Library audio (kind 'audio') for cue + word SFX pickers. */
   const [sfxAssets, setSfxAssets] = useState<{ url: string; name: string }[] | null>(null);
   const cueSfxInput = useRef<HTMLInputElement>(null);
@@ -4257,8 +4262,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     await patchCue(id, { style });
   }
 
-  /** FX-mode word click: toggle the word in the picked set (never edits text). */
+  /** FX-mode word click: global toggles the pick set; individual selects the
+   *  ONE target word the settings edit (click again to deselect). */
   function toggleFxWord(i: number) {
+    if (fxScope === 'individual') {
+      setFxTarget((t) => (t === i ? null : i));
+      return;
+    }
     setFxWords((s) => {
       const next = new Set(s);
       if (next.has(i)) next.delete(i);
@@ -4267,9 +4277,31 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     });
   }
 
+  /** Individual scope: merge a mark patch onto ONE word and persist. */
+  async function applyWordMark(
+    index: number,
+    partial: Partial<import('@/lib/mothermode/reel/types').ReelWordMark>,
+  ) {
+    if (!project || !currentClip) return;
+    const words = (project.captions[currentClip.id] ?? []).map((w, i) =>
+      i === index ? { ...w, mark: { ...(w.mark ?? {}), ...partial } } : w,
+    );
+    const updated: ReelProject = {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: words },
+    };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+  }
+
   /** Merge a mark patch onto every picked word and persist (the subtitle
    *  panel's own save path — marks ride the words array). */
   async function applyWordMarks(partial: Partial<import('@/lib/mothermode/reel/types').ReelWordMark>) {
+    // Individual scope: the panel writes to the ONE target word instead.
+    if (fxScope === 'individual') {
+      if (fxTarget == null) return;
+      return applyWordMark(fxTarget, partial);
+    }
     if (!project || !currentClip || fxWords.size === 0) return;
     const words = (project.captions[currentClip.id] ?? []).map((w, i) =>
       fxWords.has(i) ? { ...w, mark: { ...(w.mark ?? {}), ...partial } } : w,
@@ -4285,12 +4317,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   /** Strip the fx/ambient/sfx keys off every picked word (empty marks drop). */
   async function clearWordFx() {
     if (!project || !currentClip) return;
+    const targets: ReadonlySet<number> =
+      fxScope === 'individual' ? new Set(fxTarget != null ? [fxTarget] : []) : fxWords;
     const words = (project.captions[currentClip.id] ?? []).map((w, i) => {
-      if (!fxWords.has(i) || !w.mark) return w;
+      if (!targets.has(i) || !w.mark) return w;
       const mark = { ...w.mark };
       delete mark.fx;
       delete mark.fxColor;
+      delete mark.fxColor2;
       delete mark.fxAmount;
+      delete mark.fxDensity;
       delete mark.font;
       delete mark.ambient;
       delete mark.sfx;
@@ -5780,7 +5816,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     }
                     fxMode={fxMode}
                     onFxWord={(i) => toggleFxWord(i)}
-                    fxWordIndexes={fxWords}
+                    fxWordIndexes={
+                      fxScope === 'individual'
+                        ? new Set(fxTarget != null ? [fxTarget] : [])
+                        : fxWords
+                    }
                   />
                   </div>
                   {/* MEDIA CUES — image fly-ins keyed to spoken words (the
@@ -5950,10 +5990,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               </span>
                             ))}
                         </div>
-                        {/* the per-cue style + keyframed motion editor */}
+                        {/* the per-cue style + keyframed motion editor — ALWAYS
+                            on screen when a cue exists (the ⚙ on a chip just
+                            picks WHICH cue it edits). Hiding it behind the
+                            toggle is what made the settings feel "gone". */}
                         {(() => {
-                          const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
-                          if (!cue || cue.clipId !== currentClip.id) return null;
+                          const clipCues = (project.mediaCues ?? []).filter(
+                            (x) => x.clipId === currentClip.id,
+                          );
+                          const cue =
+                            clipCues.find((x) => x.id === cueStyleEditId) ?? clipCues[0];
+                          if (!cue) return null;
                           const windowSec = cueWindowSec(cue);
                           const cueWord = project.captions[cue.clipId]?.[cue.wordIndex];
                           const wordSpanSec = cueWord ? cueWord.end - cueWord.start : 0;
@@ -6260,9 +6307,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         )}
                         title="FX mode: click words in the subtitle list to pick them, then apply an effect below"
                       >
-                        {fxMode ? `fx mode ON (${fxWords.size})` : 'fx word'}
+                        {fxMode
+                          ? `fx mode ON (${fxScope === 'individual' ? (fxTarget != null ? 1 : 0) : fxWords.size})`
+                          : 'fx word'}
                       </button>
-                      {fxMode && fxWords.size > 0 && (
+                      {fxMode && fxScope === 'global' && fxWords.size > 0 && (
                         <button
                           onClick={() => setFxWords(new Set())}
                           className="text-[8px] text-bone/35 hover:text-bone/70"
@@ -6300,9 +6349,53 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         </button>
                       ))}
                     </div>
-                    {/* the effects — apply to every picked word */}
-                    {fxMode && fxWords.size > 0 && (
-                      <>
+                    {/* the effects — global applies to every picked word;
+                        individual applies to the ONE target word, seeded from
+                        its current mark (hover a word to read its effects) */}
+                    {fxMode &&
+                      (fxScope === 'individual' ? fxTarget != null : fxWords.size > 0) &&
+                      (() => {
+                        const tm =
+                          fxScope === 'individual' && fxTarget != null
+                            ? ((project.captions[currentClip?.id ?? '']?.[fxTarget]?.mark ?? {}) as Record<
+                                string,
+                                unknown
+                              >)
+                            : {};
+                        return (
+                      <div
+                        key={`${fxScope}-${fxScope === 'individual' ? fxTarget : 'all'}`}
+                        className="space-y-1.5"
+                      >
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            scope
+                          </span>
+                          {(['global', 'individual'] as const).map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setFxScope(s)}
+                              className={clsx(
+                                'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                fxScope === s
+                                  ? 'bg-amber-400 text-ink'
+                                  : 'text-amber-200/60 hover:bg-amber-400/15',
+                              )}
+                              title={
+                                s === 'global'
+                                  ? 'Settings apply to every picked word (bulk)'
+                                  : 'Settings apply to ONE word, loaded from its current effects'
+                              }
+                            >
+                              {s === 'global' ? 'all picked' : 'one word'}
+                            </button>
+                          ))}
+                          {fxScope === 'individual' && fxTarget != null && (
+                            <span className="text-[8px] text-amber-200/60">
+                              → "{project.captions[currentClip?.id ?? '']?.[fxTarget]?.word}"
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
                             word feel
@@ -6350,10 +6443,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           ))}
                           <input
                             type="color"
-                            defaultValue="#ffd400"
+                            defaultValue={(tm.fxColor as string) ?? '#ffd400'}
                             onChange={(e) => void applyWordMarks({ fxColor: e.target.value })}
                             className="h-4 w-5 cursor-pointer rounded border border-amber-400/25 bg-transparent"
-                            title="The fx color (glow halo / underline / marker / gradient anchor) — click to apply to the picked words"
+                            title="The fx color (glow halo / underline / marker / gradient anchor) — click to apply"
+                          />
+                          <input
+                            type="color"
+                            defaultValue={(tm.fxColor2 as string) ?? '#ffffff'}
+                            onChange={(e) => void applyWordMarks({ fxColor2: e.target.value })}
+                            className="h-4 w-5 cursor-pointer rounded border border-amber-400/25 bg-transparent"
+                            title="The SECOND color — the gradient's end and the shine band's light — click to apply"
                           />
                         </div>
                         <div className="flex flex-wrap items-center gap-1">
@@ -6459,8 +6559,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             }}
                           />
                         </div>
-                      </>
-                    )}
+                      </div>
+                        );
+                      })()}
                     <p className="text-[7px] leading-3 text-amber-200/35">
                       {fxMode
                         ? 'click words in the subtitle list — amber-underlined ones are picked'

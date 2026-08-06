@@ -252,3 +252,22 @@ from either side. (Also repaired server.js’s runRender head, lost in a crash.)
   user asked; confirmed intact.
 - Verify: tsc clean; marks suite 10/10 (fxAmount keep/clamp, font keep/drop,
   plan.fonts inclusion); vendored re-synced byte-identical.
+
+### Round 3c — individual scope, hover readouts, density + second color, always-visible fly-in settings (2026-08-05)
+
+- **Scope toggle** in the Word FX panel: 'all picked' = the bulk editor;
+  'one word' = a single target word whose controls are SEEDED from its mark
+  (key-remount re-seeds on target change). applyWordMarks routes by scope;
+  applyWordMark is the single-word writer. Individual is the truth — global
+  is bulk, and marks were per-word all along.
+- **Hover readouts**: every word in the subtitle list gets a tooltip line
+  via `wordMarkSummary(mark)` in types.ts ("glow · fx #ffd400 ? #ff6b6b ·
+  ×2 · density 1.5 · Anton · float · sfx ?") — shared, pure, testable.
+- **fxDensity** (0.2–3): glow stacks halo layers, shine packs more sweeps
+  per cycle, pulse/blink/jelly frequencies scale. **fxColor2**: the
+  gradient's end and the shine band's light. Both normalized + mirrored +
+  clamped like the rest of the mark.
+- **Fly-in settings are always on screen** when a cue exists — the ? on a
+  chip picks WHICH cue the editor shows instead of toggling it. The "settings
+  are gone" complaint was structural; this kills it.
+- Verify: tsc clean; marks 10/10; parity suites 32/32; vendored re-synced.

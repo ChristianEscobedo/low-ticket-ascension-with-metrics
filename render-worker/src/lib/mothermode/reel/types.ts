@@ -124,6 +124,13 @@ export interface ReelWordMark {
    *  amplitude, marker opacity, underline/strike thickness, shine band,
    *  jelly squash. One honest dial instead of six knobs. */
   fxAmount?: number;
+  /** The fx DENSITY (0.2–3, default 1): extra glow layers, more shine bands,
+   *  faster pulse/blink/jelly frequencies. Amount owns SIZE, density owns
+   *  HOW MUCH of it happens. */
+  fxDensity?: number;
+  /** A second fx color: the gradient's end and the shine band's light.
+   *  Default white. */
+  fxColor2?: string;
   /** A different FONT for THIS word (one of WORD_FONTS). The render plan
    *  ships the family in plan.fonts so the worker loads it too. */
   font?: string;
@@ -426,6 +433,26 @@ function normalizeCueSfx(raw: unknown): { url: string; volume?: number } | undef
   };
 }
 
+/** A one-line readout of a word's mark for hover tooltips in the subtitle
+ *  list ("glow · fx #ffd400 → #ff6b6b · ×2 · density 1.5 · Anton · float ·
+ *  sfx"). Empty string when the word carries nothing — the tooltip omits. */
+export function wordMarkSummary(mark: ReelWordMark | undefined): string {
+  if (!mark) return '';
+  const parts: string[] = [];
+  if (mark.fx) parts.push(mark.fx);
+  if (mark.anim) parts.push(`anim ${mark.anim}`);
+  if (mark.color) parts.push(mark.color);
+  if (mark.fxColor) parts.push(`fx ${mark.fxColor}${mark.fxColor2 ? ` → ${mark.fxColor2}` : ''}`);
+  if (mark.fxAmount && mark.fxAmount !== 1) parts.push(`×${mark.fxAmount}`);
+  if (mark.fxDensity && mark.fxDensity !== 1) parts.push(`density ${mark.fxDensity}`);
+  if (mark.scale) parts.push(`scale ${mark.scale}`);
+  if (mark.font) parts.push(mark.font);
+  if (mark.ambient) parts.push(mark.ambient);
+  if (mark.stagger) parts.push(`cascade ${mark.stagger}s`);
+  if (mark.sfx) parts.push('sfx ✓');
+  return parts.join(' · ');
+}
+
 /** Validate one word mark. Unknown anims DROP the key (the word then inherits
  *  the preset) — never a silent substitution onto 'pop'. Same rule for fx. */
 function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
@@ -451,6 +478,12 @@ function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
   }
   if (typeof o.fxAmount === 'number' && Number.isFinite(o.fxAmount)) {
     out.fxAmount = Math.max(0.2, Math.min(3, o.fxAmount));
+  }
+  if (typeof o.fxDensity === 'number' && Number.isFinite(o.fxDensity)) {
+    out.fxDensity = Math.max(0.2, Math.min(3, o.fxDensity));
+  }
+  if (typeof o.fxColor2 === 'string' && o.fxColor2.trim()) {
+    out.fxColor2 = o.fxColor2.trim().slice(0, 40);
   }
   if (typeof o.font === 'string' && (WORD_FONTS as readonly string[]).includes(o.font)) {
     out.font = o.font;

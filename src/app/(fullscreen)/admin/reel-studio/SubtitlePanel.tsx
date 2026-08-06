@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { AlignLeft, Check, Loader2, Mic, X } from 'lucide-react';
-import type { ReelWord } from '@/lib/mothermode/reel/types';
+import { wordMarkSummary, type ReelWord } from '@/lib/mothermode/reel/types';
 
 function tc(s: number): string {
   const v = Math.max(0, s);
@@ -229,11 +229,14 @@ export function SubtitlePanel({
                           fxed && 'underline decoration-amber-400 decoration-2 underline-offset-4',
                         )}
                         title={
-                          fxMode
+                          (fxMode
                             ? `Pick "${w.word}" for a Word FX (${tc(w.start)}–${tc(w.end)})`
                             : cueMode
                               ? `Attach an image fly-in to "${w.word}" (${tc(w.start)}–${tc(w.end)})`
-                              : `Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`
+                              : `Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`) +
+                          // The per-word effects readout — hover any word and see
+                          // exactly what it carries ("glow · ×2 · Anton · sfx ✓").
+                          (wordMarkSummary(w.mark) ? `\n→ ${wordMarkSummary(w.mark)}` : '')
                         }
                       >
                         {w.word}

@@ -425,6 +425,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.6.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Word FX per word: individual scope, hover readouts, density and a second color — and fly-in settings that stay on screen',
+    body: cl([
+      '<p>The Word FX panel now has a <strong>scope</strong> toggle. <em>All picked</em> is the bulk editor you know: settings write to every word you picked. <em>One word</em> isolates a single word — the controls load THAT word\'s current effects and edit only it. And hovering any word in the subtitle list now reads out exactly what it carries ("glow · fx #ffd400 → #ff6b6b · ×2 · Anton · sfx ✓"), picked or not.</p>',
+      '<p>Two new settings dials, per the ask: <strong>density</strong> (0.2–3×) — extra glow halo layers, more shine sweeps, faster pulse/blink/jelly — and a <strong>second color</strong>: the gradient\'s end and the shine band\'s light. Amount owns SIZE, density owns HOW MUCH of it happens.</p>',
+      '<p>And the fly-in settings stopped hiding: the style editor is now always on screen when a cue exists — the ⚙ on a cue chip just picks WHICH cue it edits. Size, position, corner, border, shadow, on-screen time, feel, sfx, motion — permanently visible, no toggle to lose.</p>',
+      '<p><strong>Where to start:</strong> Captions tab — fx word → pick the scope, click a word, and its settings are already showing.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
