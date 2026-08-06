@@ -131,7 +131,7 @@ import {
   splitClipAt,
   timelineErrors,
 } from '@/lib/mothermode/reel/timeline';
-import { makeClipId, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
+import { makeClipId, WORD_FONTS, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -4290,6 +4290,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       const mark = { ...w.mark };
       delete mark.fx;
       delete mark.fxColor;
+      delete mark.fxAmount;
+      delete mark.font;
       delete mark.ambient;
       delete mark.sfx;
       return Object.keys(mark).length ? { ...w, mark } : { ...w, mark: undefined };
@@ -6353,6 +6355,65 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             className="h-4 w-5 cursor-pointer rounded border border-amber-400/25 bg-transparent"
                             title="The fx color (glow halo / underline / marker / gradient anchor) — click to apply to the picked words"
                           />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(
+                            [
+                              ['tilt', 'a static lean'],
+                              ['outline', 'a colored stroke around the glyphs'],
+                              ['strike', 'a line that wipes through the word'],
+                              ['blink', 'a steady flashing beat'],
+                              ['jelly', 'a continuous squash-and-stretch'],
+                            ] as const
+                          ).map(([fx, hint]) => (
+                            <button
+                              key={fx}
+                              onClick={() => void applyWordMarks({ fx })}
+                              className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-amber-200/70 hover:bg-amber-400/15"
+                              title={hint}
+                            >
+                              {fx}
+                            </button>
+                          ))}
+                        </div>
+                        {/* the settings — one intensity dial + the per-word font,
+                            applied to every picked word */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-10 shrink-0 text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            amount
+                          </span>
+                          <input
+                            type="range"
+                            min={0.2}
+                            max={3}
+                            step={0.1}
+                            defaultValue={1}
+                            onChange={(e) => void applyWordMarks({ fxAmount: Number(e.target.value) })}
+                            className="min-w-0 flex-1 accent-amber-400"
+                            title="Effect intensity (0.2–3×): glow radius, pulse amplitude, marker opacity, underline thickness, shine band, jelly squash"
+                          />
+                          <span className="w-6 shrink-0 text-right text-[8px] text-amber-200/60">×</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-10 shrink-0 text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            font
+                          </span>
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const f = e.target.value;
+                              void applyWordMarks(f ? { font: f } : { font: undefined as never });
+                            }}
+                            className="min-w-0 flex-1 rounded border border-amber-400/25 bg-ink px-1 py-0.5 text-[8px] text-bone/80"
+                            title="A different font for the picked words (loaded in preview AND the MP4)"
+                          >
+                            <option value="">— preset font —</option>
+                            {WORD_FONTS.map((f) => (
+                              <option key={f} value={f} style={{ fontFamily: f }}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="w-10 shrink-0 text-[8px] font-bold uppercase tracking-wide text-amber-300/50">

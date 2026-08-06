@@ -73,8 +73,35 @@ export interface ReelAudioTrack {
  * because the render worker doesn't vendor this file).
  */
 /** The persistent per-word effects (rendered frame-driven in the caption layer). */
-export const WORD_FX = ['glow', 'gradient', 'shine', 'pulse', 'underline', 'marker'] as const;
+export const WORD_FX = [
+  'glow',
+  'gradient',
+  'shine',
+  'pulse',
+  'underline',
+  'marker',
+  'tilt',
+  'outline',
+  'strike',
+  'blink',
+  'jelly',
+] as const;
 export type ReelWordFx = (typeof WORD_FX)[number];
+
+/** The font families a word can switch to — the catalog the presets draw from.
+ *  The render plan ships any marked family in plan.fonts so the worker loads
+ *  it too (a font nobody fetches renders as a fallback face in the MP4). */
+export const WORD_FONTS = [
+  'Anton',
+  'Archivo Black',
+  'Bebas Neue',
+  'Inter',
+  'Poppins',
+  'Georgia',
+  'Playfair Display',
+  'Courier Prime',
+  'Rubik Mono One',
+] as const;
 
 export interface ReelWordMark {
   /** Entrance anim for THIS word instead of the preset's. */
@@ -93,6 +120,13 @@ export interface ReelWordMark {
   /** The fx color (glow halo, underline, marker, gradient anchor). Default:
    *  the active caption color. */
   fxColor?: string;
+  /** The fx intensity multiplier (0.2–3, default 1): glow radius, pulse
+   *  amplitude, marker opacity, underline/strike thickness, shine band,
+   *  jelly squash. One honest dial instead of six knobs. */
+  fxAmount?: number;
+  /** A different FONT for THIS word (one of WORD_FONTS). The render plan
+   *  ships the family in plan.fonts so the worker loads it too. */
+  font?: string;
   /** A one-shot sound fired when the word starts — rendered as an <Audio> at
    *  the word's frame, so preview and MP4 agree by construction. */
   sfx?: { url: string; volume?: number };
@@ -414,6 +448,12 @@ function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
   }
   if (typeof o.fxColor === 'string' && o.fxColor.trim()) {
     out.fxColor = o.fxColor.trim().slice(0, 40);
+  }
+  if (typeof o.fxAmount === 'number' && Number.isFinite(o.fxAmount)) {
+    out.fxAmount = Math.max(0.2, Math.min(3, o.fxAmount));
+  }
+  if (typeof o.font === 'string' && (WORD_FONTS as readonly string[]).includes(o.font)) {
+    out.font = o.font;
   }
   const sfx = normalizeCueSfx(o.sfx);
   if (sfx) out.sfx = sfx;

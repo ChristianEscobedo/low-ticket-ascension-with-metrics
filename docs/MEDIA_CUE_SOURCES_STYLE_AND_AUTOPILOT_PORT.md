@@ -235,3 +235,20 @@ from either side. (Also repaired server.js’s runRender head, lost in a crash.)
 - Full suite: 46 failures in 8 files — ALL in unrelated subsystems (Stripe
   receipts/webhooks/create-payment-intent, research-fencing/recap,
   compliance-pass, review-logic) — pre-existing, zero overlap with this round.
+
+### Round 3b — FX settings + per-word font (2026-08-05)
+
+- `ReelWordMark` gains `fxAmount` (0.2–3, one intensity dial: glow radius /
+  pulse amplitude / marker opacity / underline+strike thickness / shine band /
+  jelly squash) and `font` (whitelisted against WORD_FONTS — the preset
+  catalog's families). Five effects join WORD_FX: tilt, outline, strike,
+  blink, jelly (all frame math; strike shares the underline's span pattern).
+- buildRenderPlan ships every marked family in plan.fonts (deduped with the
+  style's own) so the worker loads per-word fonts — a font nobody fetches
+  renders as a fallback face in the MP4.
+- Word FX panel: amount slider + font select + the five new chips, applied
+  to the picked words through the same mark slot; clear strips them too.
+- The image fly-in settings were never removed (the ? on a cue chip) — the
+  user asked; confirmed intact.
+- Verify: tsc clean; marks suite 10/10 (fxAmount keep/clamp, font keep/drop,
+  plan.fonts inclusion); vendored re-synced byte-identical.

@@ -330,7 +330,24 @@ export function buildRenderPlan(
     captionLayout,
     powerWords: project.captionOverrides?.powerWords ?? [],
     mediaCues: shiftMediaCues(project, fps),
-    fonts: captionFontsFor(captionStyle),
+    // The style's fonts PLUS any per-word font marks — a font the worker does
+    // not fetch renders as a fallback face in the MP4, so marked families
+    // ride the same plan.fonts list the preview and the worker both load.
+    fonts: (() => {
+      const base = captionFontsFor(captionStyle);
+      const seen = new Set(base.map((f) => f.family));
+      const out = base.slice();
+      for (const words of Object.values(project.captions ?? {})) {
+        for (const w of words) {
+          const fam = w.mark?.font;
+          if (fam && !seen.has(fam)) {
+            seen.add(fam);
+            out.push(...captionFontsFor({ font: fam } as Parameters<typeof captionFontsFor>[0]));
+          }
+        }
+      }
+      return out;
+    })(),
   };
 }
 

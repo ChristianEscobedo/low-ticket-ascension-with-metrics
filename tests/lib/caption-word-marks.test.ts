@@ -131,3 +131,42 @@ describe('entranceStyle: every CaptionAnim has a frame-driven case', () => {
     }
   });
 });
+
+describe('round 3b — fx settings + per-word font', () => {
+  it('keeps fxAmount + a known font; drops junk values', () => {
+    const json = normalizeProjectJson({
+      clips: [],
+      captions: {
+        a: [
+          { word: 'styled', start: 0, end: 0.4, mark: { font: 'Anton', fxAmount: 2.5 } },
+          { word: 'badfont', start: 0.5, end: 0.9, mark: { font: 'Comic Sans MS' } },
+          { word: 'badamt', start: 1.0, end: 1.4, mark: { fxAmount: 99 } },
+        ],
+      },
+    });
+    expect(json.captions.a[0].mark).toEqual({ font: 'Anton', fxAmount: 2.5 });
+    expect(json.captions.a[1].mark).toBeUndefined();
+    expect(json.captions.a[2].mark).toEqual({ fxAmount: 3 }); // clamped to the 0.2–3 dial
+  });
+
+  it('a marked word font ships in plan.fonts so the worker loads it', async () => {
+    const { buildRenderPlan } = await import('@/lib/mothermode/reel/render/plan');
+    const plan = buildRenderPlan(
+      {
+        clips: [
+          { id: 'c1', name: 'v', url: 'https://cdn.example.com/v.mp4', durationSec: 5, trimEndSec: 0 },
+        ],
+        audio: null,
+        captions: {
+          c1: [
+            { word: 'wow', start: 0, end: 0.5, mark: { font: 'Anton' } },
+            { word: 'plain', start: 0.6, end: 1.0 },
+          ],
+        },
+        captionStyle: 'karaoke',
+      },
+      { width: 1080, height: 1920 },
+    );
+    expect(plan.fonts.map((f) => f.family)).toContain('Anton');
+  });
+});

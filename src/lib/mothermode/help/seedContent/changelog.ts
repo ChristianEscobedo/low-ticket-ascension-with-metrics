@@ -412,6 +412,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.5.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Word FX settings: per-word fonts, an intensity dial, and five more effects',
+    body: cl([
+      '<p>The Word FX panel got its own settings, the same way the image fly-ins have theirs (the fly-in settings are still exactly where they were — the ⚙ on an attached cue\'s chip opens size, position, corner, border, shadow, on-screen time, feel, sfx, and motion). With words picked in fx mode, an <strong>amount</strong> slider (0.2–3×) tunes every effect at once: glow radius, pulse amplitude, marker opacity, underline and strike thickness, the shine band, the jelly squash.</p>',
+      '<p>And the headline: a <strong>font</strong> per word. Pick words, pick a family (Anton, Bebas, Poppins, Georgia, Courier Prime…) and those words render in it — in the preview AND the MP4, because the render plan now ships every marked family in its font list for the worker to load.</p>',
+      '<p>Five new effects join the six: tilt (a static lean), outline (a colored stroke), strike (a line that wipes through), blink (a steady flash), and jelly (a continuous squash-and-stretch). All frame math, so preview and export agree by construction.</p>',
+      '<p><strong>Where to start:</strong> Captions tab — fx word → click words → amount, font, or one of the eleven effects.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

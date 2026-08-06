@@ -101,10 +101,25 @@ export interface CaptionWordMark {
   stagger?: number;
   /** Ambient motion while the word shows: a gentle bob / a soft sway. */
   ambient?: 'float' | 'wiggle';
-  /** A persistent effect for THIS word. underline/marker render as spans. */
-  fx?: 'glow' | 'gradient' | 'shine' | 'pulse' | 'underline' | 'marker';
+  /** A persistent effect for THIS word. underline/marker/strike render as spans. */
+  fx?:
+    | 'glow'
+    | 'gradient'
+    | 'shine'
+    | 'pulse'
+    | 'underline'
+    | 'marker'
+    | 'tilt'
+    | 'outline'
+    | 'strike'
+    | 'blink'
+    | 'jelly';
   /** The fx color (halo / underline / marker / gradient anchor). */
   fxColor?: string;
+  /** The fx intensity multiplier (0.2–3, default 1). */
+  fxAmount?: number;
+  /** A different font for THIS word (the plan ships it in plan.fonts). */
+  font?: string;
   /** A one-shot sound at the word's first frame (the composition renders it). */
   sfx?: { url: string; volume?: number };
 }
@@ -360,6 +375,15 @@ function applyWordMarkExtras(
   if (!mark) return;
   const tSec = frame / fps;
   const ease = clamp01((frame - fromFrame) / Math.max(1, Math.round(fps * 0.2)));
+  const amount = Math.max(0.2, Math.min(3, mark.fxAmount ?? 1));
+  // A per-word FONT — the family is in plan.fonts, so it is actually loaded.
+  if (mark.font) {
+    const serif = mark.font === 'Georgia' || mark.font === 'Playfair Display';
+    const mono = mark.font === 'Courier Prime';
+    style.fontFamily = `"${mark.font}", ${
+      mono ? '"Courier New", monospace' : serif ? 'Georgia, serif' : 'Inter, system-ui, sans-serif'
+    }`;
+  }
   if (mark.ambient === 'float') {
     const bob = Math.sin(tSec * Math.PI * 1.2) * 0.1 * ease;
     style.transform = `${(style.transform as string) ?? ''} translateY(${bob.toFixed(3)}em)`.trim();
@@ -370,7 +394,7 @@ function applyWordMarkExtras(
   const fxColor = mark.fxColor ?? fallbackColor;
   switch (mark.fx) {
     case 'glow': {
-      const r = 7 + 9 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 2.4));
+      const r = (7 + 9 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 2.4))) * amount;
       style.textShadow = `0 0 ${r.toFixed(1)}px ${fxColor}, 0 0 2px ${fxColor}`;
       break;
     }
@@ -386,19 +410,37 @@ function applyWordMarkExtras(
       // A light band sweeping across the glyphs, over the word's own color.
       const baseC = (style.color as string) || '#ffffff';
       const pos = ((tSec * 70) % 200) - 50;
-      style.backgroundImage = `linear-gradient(105deg, ${baseC} ${pos.toFixed(1)}%, #ffffff ${(pos + 14).toFixed(1)}%, ${baseC} ${(pos + 28).toFixed(1)}%)`;
+      const band = 14 * amount;
+      style.backgroundImage = `linear-gradient(105deg, ${baseC} ${pos.toFixed(1)}%, #ffffff ${(pos + band).toFixed(1)}%, ${baseC} ${(pos + band * 2).toFixed(1)}%)`;
       style.backgroundClip = 'text';
       (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
       (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
       break;
     }
     case 'pulse': {
-      const s = 1 + 0.1 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3));
+      const s = 1 + 0.1 * amount * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3));
       style.transform = `${(style.transform as string) ?? ''} scale(${s.toFixed(3)})`.trim();
       break;
     }
+    case 'tilt':
+      style.transform = `${(style.transform as string) ?? ''} rotate(${(-8 * amount).toFixed(1)}deg)`.trim();
+      break;
+    case 'outline':
+      (style as Record<string, unknown>).WebkitTextStroke = `${Math.max(1, amount).toFixed(1)}px ${fxColor}`;
+      (style as Record<string, unknown>).paintOrder = 'stroke fill';
+      break;
+    case 'blink': {
+      style.opacity = (0.55 + 0.45 * Math.sin(tSec * Math.PI * 3)).toFixed(3);
+      break;
+    }
+    case 'jelly': {
+      const sx = 1 + 0.08 * amount * Math.sin(tSec * Math.PI * 2.6);
+      const sy = 1 - 0.08 * amount * Math.sin(tSec * Math.PI * 2.6);
+      style.transform = `${(style.transform as string) ?? ''} scale(${sx.toFixed(3)},${sy.toFixed(3)})`.trim();
+      break;
+    }
     default:
-      break; // underline/marker render as spans inside the word
+      break; // underline/marker/strike render as spans inside the word
   }
 }
 
@@ -589,7 +631,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                       position: 'absolute',
                       inset: '-0.04em -0.14em',
                       background: mark.fxColor ?? (css.active.color as string),
-                      opacity: 0.34,
+                      opacity: Math.min(0.85, 0.34 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))),
                       zIndex: -1,
                       borderRadius: '0.14em',
                       transformOrigin: 'left center',
@@ -606,10 +648,26 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                       left: '-0.04em',
                       right: '-0.04em',
                       bottom: '-0.10em',
-                      height: '0.09em',
+                      height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
                       borderRadius: '0.06em',
                       background: mark.fxColor ?? (css.active.color as string),
                       boxShadow: `0 0 0.12em ${mark.fxColor ?? (css.active.color as string)}`,
+                      transformOrigin: 'left center',
+                      transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                    }}
+                  />
+                ) : null}
+                {mark?.fx === 'strike' ? (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: '-0.04em',
+                      right: '-0.04em',
+                      top: '52%',
+                      height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
+                      borderRadius: '0.06em',
+                      background: mark.fxColor ?? (css.active.color as string),
                       transformOrigin: 'left center',
                       transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
                     }}
