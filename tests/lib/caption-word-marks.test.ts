@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeProjectJson } from '@/lib/mothermode/reel/types';
 import { shiftWords } from '@/lib/mothermode/reel/render/plan';
 import { entranceStyle } from '@/lib/mothermode/reel/render/captionLayer';
-import { CAPTION_ANIMS } from '@/lib/mothermode/reel/captions';
+import { CAPTION_ANIMS, captionDefFor, resolveCaptionStyle } from '@/lib/mothermode/reel/captions';
 
 describe('per-word marks: normalization', () => {
   it('keeps valid marks, drops unknown anims (never a silent substitution)', () => {
@@ -39,6 +39,69 @@ describe('per-word marks: normalization', () => {
       { clipStartFrame: 10, trimStartSec: 0, effectiveSec: 5, fps: 30 },
     );
     expect(out[0].mark).toEqual({ anim: 'cascade', color: '#FFD400' });
+  });
+
+  it('keeps ambient/fx/fxColor/sfx, drops unknown fx + junk sfx (same no-substitution rule)', () => {
+    const json = normalizeProjectJson({
+      clips: [],
+      captions: {
+        a: [
+          {
+            word: 'money',
+            start: 0,
+            end: 0.5,
+            mark: {
+              ambient: 'wiggle',
+              fx: 'glow',
+              fxColor: '#ffd400',
+              sfx: { url: 'https://cdn.example.com/cha-ching.mp3', volume: 2 },
+            },
+          },
+          { word: 'bad', start: 0.6, end: 1, mark: { ambient: 'wobble', fx: 'confetti' } },
+          { word: 'worse', start: 1.1, end: 1.4, mark: { sfx: { url: 'javascript:alert(1)' } } },
+        ],
+      },
+    });
+    const words = json.captions.a;
+    // The good mark survives whole (volume clamped 2 → 1).
+    expect(words[0].mark).toEqual({
+      ambient: 'wiggle',
+      fx: 'glow',
+      fxColor: '#ffd400',
+      sfx: { url: 'https://cdn.example.com/cha-ching.mp3', volume: 1 },
+    });
+    // Unknown ambient AND unknown fx → nothing usable left → the mark drops.
+    expect(words[1].mark).toBeUndefined();
+    // A non-http sfx URL is junk, and it was the only key → the mark drops.
+    expect(words[2].mark).toBeUndefined();
+  });
+});
+
+describe('caption block feel (blockMotion)', () => {
+  it('still strips float/wiggle but keeps page fx; float/wiggle own the motion slot', () => {
+    const ghost = captionDefFor('ghost'); // blockFx: ['ghostFade']
+    const still = resolveCaptionStyle(ghost, { blockMotion: 'still' });
+    expect(still.blockFx).toEqual(['ghostFade']);
+    const floater = captionDefFor('floater'); // blockFx: ['float']
+    const wiggled = resolveCaptionStyle(floater, { blockMotion: 'wiggle' });
+    expect(wiggled.blockFx).toEqual(['wiggle']);
+    const refloat = resolveCaptionStyle(ghost, { blockMotion: 'float' });
+    expect(refloat.blockFx).toEqual(['ghostFade', 'float']);
+    // Omit = the preset's own blockFx, untouched.
+    expect(resolveCaptionStyle(floater, {}).blockFx).toEqual(['float']);
+  });
+
+  it('a cue sfx survives normalization; junk URLs drop', () => {
+    const json = normalizeProjectJson({
+      clips: [{ id: 'c1', url: 'https://cdn.example.com/v.mp4', durationSec: 5 }],
+      captions: { c1: [{ word: 'look', start: 0, end: 0.4 }] },
+      mediaCues: [
+        { clipId: 'c1', wordIndex: 0, url: 'https://cdn.example.com/i.png', sfx: { url: 'https://cdn.example.com/whoosh.mp3', volume: 0.8 } },
+        { clipId: 'c1', wordIndex: 0, url: 'https://cdn.example.com/j.png', sfx: { url: 'ftp://nope.mp3' } },
+      ],
+    });
+    expect(json.mediaCues?.[0].sfx).toEqual({ url: 'https://cdn.example.com/whoosh.mp3', volume: 0.8 });
+    expect(json.mediaCues?.[1].sfx).toBeUndefined();
   });
 });
 

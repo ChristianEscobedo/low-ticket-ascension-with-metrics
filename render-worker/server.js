@@ -183,6 +183,8 @@ app.post('/render', (req, res) => {
         ' xPct=' + JSON.stringify(ly.xPct) +
         ' positionPct=' + JSON.stringify(ly.positionPct) +
         ' | words=' + (Array.isArray(plan.words) ? plan.words.length : 0) +
+        ' cues=' + (Array.isArray(plan.mediaCues) ? plan.mediaCues.length : 0) +
+        ' wordMarks=' + (Array.isArray(plan.words) ? plan.words.filter((w) => w && w.mark && (w.mark.fx || w.mark.ambient || (w.mark.sfx && w.mark.sfx.url))).length : 0) +
         ' fonts=' + JSON.stringify(plan.fonts || []),
     );
   } catch (e) {
@@ -195,29 +197,7 @@ app.post('/render', (req, res) => {
   });
 });
 
-/**
- * Poll a job. A 404 here is meaningful, not an error to paper over: it means
- * the worker restarted and the render died with it, so the caller should stop
- * polling and start again rather than wait forever.
- */
-app.get('/render/:jobId', (req, res) => {
-  const job = jobs.get(req.params.jobId);
-  if (!job) {
-    return res
-      .status(404)
-      .json({ success: false, error: 'Unknown job id — the render worker restarted. Start the render again.' });
-  }
-  res.json({
-    success: true,
-    status: job.status,
-    progress: job.progress,
-    stage: job.stage,
-    url: job.url,
-    error: job.error,
-    elapsedSec: Math.round((Date.now() - job.startedAt) / 1000),
-  });
-});
-
+/** The background render: bundle → probe → render → upload → job URL. */
 async function runRender(jobId, plan, reelId) {
   const job = jobs.get(jobId);
   const touch = (patch) => Object.assign(job, patch, { updatedAt: Date.now() });

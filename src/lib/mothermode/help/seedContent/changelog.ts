@@ -399,6 +399,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.4.0',
+    releasedOn: '2026-08-05',
+    entryType: 'added',
+    title: 'Word FX, caption feel, and sounds: glow, shine, underline, marker — and SFX on words and fly-ins',
+    body: cl([
+      '<p>Captions can now move as a block and shine by the word. <strong>Block feel</strong> (still / float / wiggle) sets the whole caption block\'s ambient motion. <strong>Word FX</strong> picks words in the subtitle list and applies an effect to every one of them: glow (a pulsing halo), gradient, shine (a light sweep), pulse (a breathing beat), underline (a rule that draws itself), or marker (a highlighter swipe) — each with its own color, plus a per-word bob or sway. Everything is frame math, so the preview and the MP4 agree.</p>',
+      '<p>And sound: attach a one-shot sound to a fly-in (a whoosh as it lands) or to any word (a hit as it is spoken). Pick from your Media Library\'s audio or upload one — it lands in the library tagged sfx, ready for the next beat. Sounds render as real audio at the exact frame, preview included.</p>',
+      '<p>The above/below snap chips also got honest math: they now seat the image\'s edge against the caption block\'s edge, computed from the block\'s real height (rows × size) and the image\'s real shape — no more landing on top of the text.</p>',
+      '<p><strong>Where to start:</strong> Captions tab in /admin/reel-studio — the Word FX panel under the fly-ins panel. fx word → click words → apply.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

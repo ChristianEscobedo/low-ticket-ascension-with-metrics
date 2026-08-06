@@ -86,6 +86,8 @@ export interface RenderMediaCue {
   wordText: string;
   /** Per-cue look (size/position/frame), copied verbatim from the project. */
   style?: ReelMediaCueStyle;
+  /** One-shot sound as the cue flies in, copied verbatim from the project. */
+  sfx?: { url: string; volume?: number };
   /**
    * Keyframed motion, CUE-RELATIVE seconds (0 = the frame the cue appears).
    * The cue layer samples it exactly like a clip's track; when it's absent
@@ -227,6 +229,7 @@ export function shiftMediaCues(
         // mark passthrough).
         ...(cue.style ? { style: cue.style } : {}),
         ...(cue.motion && cue.motion.length >= 2 ? { motion: cue.motion } : {}),
+        ...(cue.sfx ? { sfx: cue.sfx } : {}),
       });
     }
     cursor += frames;

@@ -72,6 +72,9 @@ export function SubtitlePanel({
   cueMode = false,
   onCueWord,
   cuedWordIndexes,
+  fxMode = false,
+  onFxWord,
+  fxWordIndexes,
 }: {
   words: ReelWord[];
   clipName: string;
@@ -87,6 +90,14 @@ export function SubtitlePanel({
   cueMode?: boolean;
   onCueWord?: (wordIndex: number) => void;
   cuedWordIndexes?: ReadonlySet<number>;
+  /**
+   * Word FX mode: clicking a word toggles it in the FX bar's picked set
+   * (amber underline) instead of opening the editor — the bar applies the
+   * effect to every picked word.
+   */
+  fxMode?: boolean;
+  onFxWord?: (wordIndex: number) => void;
+  fxWordIndexes?: ReadonlySet<number>;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
@@ -191,10 +202,15 @@ export function SubtitlePanel({
                       );
                     }
                     const cued = cuedWordIndexes?.has(i) ?? false;
+                    const fxed = fxWordIndexes?.has(i) ?? false;
                     return (
                       <button
                         key={i}
                         onClick={() => {
+                          if (fxMode) {
+                            onFxWord?.(i);
+                            return;
+                          }
                           if (cueMode) {
                             onCueWord?.(i);
                             return;
@@ -209,11 +225,15 @@ export function SubtitlePanel({
                             : 'hover:bg-bone/10',
                           cueMode && 'cursor-copy hover:bg-violet-500/25 hover:text-violet-200',
                           cued && 'underline decoration-violet-400 decoration-2 underline-offset-4',
+                          fxMode && 'cursor-crosshair hover:bg-amber-400/25 hover:text-amber-200',
+                          fxed && 'underline decoration-amber-400 decoration-2 underline-offset-4',
                         )}
                         title={
-                          cueMode
-                            ? `Attach an image fly-in to "${w.word}" (${tc(w.start)}–${tc(w.end)})`
-                            : `Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`
+                          fxMode
+                            ? `Pick "${w.word}" for a Word FX (${tc(w.start)}–${tc(w.end)})`
+                            : cueMode
+                              ? `Attach an image fly-in to "${w.word}" (${tc(w.start)}–${tc(w.end)})`
+                              : `Edit "${w.word}" (${tc(w.start)}–${tc(w.end)})`
                         }
                       >
                         {w.word}
@@ -227,9 +247,11 @@ export function SubtitlePanel({
         </div>
       )}
       <p className="shrink-0 border-t border-bone/[0.06] bg-bone/[0.02] px-3 py-1.5 text-[8px] text-bone/25">
-        {cueMode
-          ? 'cue mode: click a word to attach an image fly-in · underlined words have one'
-          : 'click a timecode to seek · click a word to edit it'}
+        {fxMode
+          ? 'fx mode: click words to pick them · amber-underlined words are picked'
+          : cueMode
+            ? 'cue mode: click a word to attach an image fly-in · underlined words have one'
+            : 'click a timecode to seek · click a word to edit it'}
       </p>
     </div>
   );

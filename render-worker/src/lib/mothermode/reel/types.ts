@@ -72,6 +72,10 @@ export interface ReelAudioTrack {
  * layer renders it (`CaptionWordMark` mirrors this shape there, structurally,
  * because the render worker doesn't vendor this file).
  */
+/** The persistent per-word effects (rendered frame-driven in the caption layer). */
+export const WORD_FX = ['glow', 'gradient', 'shine', 'pulse', 'underline', 'marker'] as const;
+export type ReelWordFx = (typeof WORD_FX)[number];
+
 export interface ReelWordMark {
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
@@ -81,6 +85,17 @@ export interface ReelWordMark {
   scale?: number;
   /** Per-letter cascade delay in seconds for THIS word. */
   stagger?: number;
+  /** Ambient motion while the word is on screen: a gentle bob / soft sway. */
+  ambient?: 'float' | 'wiggle';
+  /** A persistent effect for THIS word (glow / gradient fill / shine sweep /
+   *  pulse / underline draw-on / marker swipe). Omit = none. */
+  fx?: ReelWordFx;
+  /** The fx color (glow halo, underline, marker, gradient anchor). Default:
+   *  the active caption color. */
+  fxColor?: string;
+  /** A one-shot sound fired when the word starts — rendered as an <Audio> at
+   *  the word's frame, so preview and MP4 agree by construction. */
+  sfx?: { url: string; volume?: number };
 }
 
 /** One spoken word with its timing inside a clip (Whisper word granularity). */
@@ -144,6 +159,9 @@ export interface ReelMediaCue {
   url: string;
   /** Optional look (size/position/frame). Omit = the house card. */
   style?: ReelMediaCueStyle;
+  /** A one-shot sound fired as the cue flies in (a whoosh, a pop). Omit =
+   *  silent. Rendered as an <Audio> at the cue's first frame. */
+  sfx?: { url: string; volume?: number };
   /**
    * Keyframed motion — the SAME MotionKey[] shape clips use, sampled by the
    * same per-frame interpolation. Times are CUE-RELATIVE seconds, and the
@@ -361,8 +379,21 @@ export function normalizeReelAudio(raw: unknown): ReelAudioTrack | null {
   };
 }
 
+/** A one-shot sound: a real http(s) URL, volume clamped 0–1 (omit = full). */
+function normalizeCueSfx(raw: unknown): { url: string; volume?: number } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const url = asString(o.url).trim();
+  if (!isHttpUrl(url)) return undefined;
+  const volume = asNumber(o.volume, NaN);
+  return {
+    url,
+    ...(Number.isFinite(volume) ? { volume: Math.max(0, Math.min(1, volume)) } : {}),
+  };
+}
+
 /** Validate one word mark. Unknown anims DROP the key (the word then inherits
- *  the preset) — never a silent substitution onto 'pop'. */
+ *  the preset) — never a silent substitution onto 'pop'. Same rule for fx. */
 function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const o = raw as Record<string, unknown>;
@@ -377,6 +408,15 @@ function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
   if (typeof o.stagger === 'number' && Number.isFinite(o.stagger) && o.stagger > 0) {
     out.stagger = Math.max(0.005, Math.min(0.5, o.stagger));
   }
+  if (o.ambient === 'float' || o.ambient === 'wiggle') out.ambient = o.ambient;
+  if (typeof o.fx === 'string' && (WORD_FX as readonly string[]).includes(o.fx)) {
+    out.fx = o.fx as ReelWordFx;
+  }
+  if (typeof o.fxColor === 'string' && o.fxColor.trim()) {
+    out.fxColor = o.fxColor.trim().slice(0, 40);
+  }
+  const sfx = normalizeCueSfx(o.sfx);
+  if (sfx) out.sfx = sfx;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -411,6 +451,7 @@ function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>):
       const style = normalizeMediaCueStyle(o.style);
       const motion = normalizeMotionKeys(o.motion);
       const holdSec = asNumber(o.holdSec, NaN);
+      const sfx = normalizeCueSfx(o.sfx);
       return {
         id: asString(o.id) || makeClipId(),
         clipId,
@@ -419,6 +460,7 @@ function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>):
         ...(Number.isFinite(holdSec) ? { holdSec: Math.max(0.2, Math.min(8, holdSec)) } : {}),
         ...(style ? { style } : {}),
         ...(motion ? { motion } : {}),
+        ...(sfx ? { sfx } : {}),
       };
     })
     .filter((c): c is ReelMediaCue => !!c)

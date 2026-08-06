@@ -84,10 +84,11 @@ export const CASCADE_STAGGER_SEC = 0.035;
 /**
  * A per-word style mark (the "this word does its own thing" slot).
  *
- * Structural on purpose: it mirrors `ReelWord.mark` from the app's types.ts,
- * which this file must not import (the worker doesn't vendor types.ts). Keep
- * the two shapes in sync — `shiftWords` in plan.ts copies the mark across
- * verbatim, and `normalizeReelWords` in types.ts is what validates it.
+ * Structural on purpose: it mirrors `ReelWord.mark` from the app's types.ts.
+ * Keep the two shapes in sync — `shiftWords` in plan.ts copies the mark across
+ * verbatim, and `normalizeReelWords` in types.ts is what validates it. (The
+ * worker DOES vendor types.ts now — the sync guard keeps it byte-identical —
+ * but this mirror keeps the layer free of the import either way.)
  */
 export interface CaptionWordMark {
   /** Entrance anim for THIS word instead of the preset's. */
@@ -98,6 +99,14 @@ export interface CaptionWordMark {
   scale?: number;
   /** Per-letter cascade delay in seconds for THIS word. */
   stagger?: number;
+  /** Ambient motion while the word shows: a gentle bob / a soft sway. */
+  ambient?: 'float' | 'wiggle';
+  /** A persistent effect for THIS word. underline/marker render as spans. */
+  fx?: 'glow' | 'gradient' | 'shine' | 'pulse' | 'underline' | 'marker';
+  /** The fx color (halo / underline / marker / gradient anchor). */
+  fxColor?: string;
+  /** A one-shot sound at the word's first frame (the composition renders it). */
+  sfx?: { url: string; volume?: number };
 }
 
 /** One caption word, timed in TIMELINE frames. */
@@ -332,6 +341,73 @@ function CascadeWord({
 }
 
 /**
+ * A word mark's ambient + persistent fx, composed onto its style object.
+ *
+ * Same rule as everything in this file: frame math, never a CSS clock. The
+ * ambient eases in over the word's first ~0.2s so it never pops; underline and
+ * marker are NOT here — they render as real spans inside the word (a gradient
+ * needs the glyph clip, a marker needs a layer behind the text), see the main
+ * return below. The cascade branch owns its letters, so it skips these.
+ */
+function applyWordMarkExtras(
+  style: React.CSSProperties,
+  mark: CaptionWordMark | undefined,
+  frame: number,
+  fromFrame: number,
+  fps: number,
+  fallbackColor: string,
+): void {
+  if (!mark) return;
+  const tSec = frame / fps;
+  const ease = clamp01((frame - fromFrame) / Math.max(1, Math.round(fps * 0.2)));
+  if (mark.ambient === 'float') {
+    const bob = Math.sin(tSec * Math.PI * 1.2) * 0.1 * ease;
+    style.transform = `${(style.transform as string) ?? ''} translateY(${bob.toFixed(3)}em)`.trim();
+  } else if (mark.ambient === 'wiggle') {
+    const sway = Math.sin(tSec * Math.PI * 2.2) * 2.4 * ease;
+    style.transform = `${(style.transform as string) ?? ''} rotate(${sway.toFixed(2)}deg)`.trim();
+  }
+  const fxColor = mark.fxColor ?? fallbackColor;
+  switch (mark.fx) {
+    case 'glow': {
+      const r = 7 + 9 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 2.4));
+      style.textShadow = `0 0 ${r.toFixed(1)}px ${fxColor}, 0 0 2px ${fxColor}`;
+      break;
+    }
+    case 'gradient': {
+      style.backgroundImage = `linear-gradient(92deg, ${fxColor}, #ffffff 130%)`;
+      style.backgroundClip = 'text';
+      (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
+      (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
+      style.color = 'transparent';
+      break;
+    }
+    case 'shine': {
+      // A light band sweeping across the glyphs, over the word's own color.
+      const baseC = (style.color as string) || '#ffffff';
+      const pos = ((tSec * 70) % 200) - 50;
+      style.backgroundImage = `linear-gradient(105deg, ${baseC} ${pos.toFixed(1)}%, #ffffff ${(pos + 14).toFixed(1)}%, ${baseC} ${(pos + 28).toFixed(1)}%)`;
+      style.backgroundClip = 'text';
+      (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
+      (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
+      break;
+    }
+    case 'pulse': {
+      const s = 1 + 0.1 * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3));
+      style.transform = `${(style.transform as string) ?? ''} scale(${s.toFixed(3)})`.trim();
+      break;
+    }
+    default:
+      break; // underline/marker render as spans inside the word
+  }
+}
+
+/** The grow-in progress for a word's underline/marker span (0→1 over ~0.28s). */
+function wordSpanGrow(frame: number, fromFrame: number, fps: number): number {
+  return clamp01((frame - fromFrame) / Math.max(1, Math.round(fps * 0.28)));
+}
+
+/**
  * The caption block for one frame.
  *
  * Geometry lives here and ONLY here: the stage-width divisor, the 86% block
@@ -369,6 +445,14 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
     // the MP4. It composes with the centred anchor via transform chaining.
     const bob = Math.sin((frame / plan.fps) * ((2 * Math.PI) / FLOAT_PERIOD_SEC)) * 0.12;
     blockStyle.transform = `translateX(-50%) translateY(${bob.toFixed(3)}em)`;
+  }
+  if (blockFx.includes('wiggle')) {
+    // A soft rotational sway with a slight drift — same frame-clock rule. The
+    // feel override never carries float AND wiggle, so this composes cleanly.
+    const tSec = frame / plan.fps;
+    const sway = Math.sin(tSec * ((2 * Math.PI) / 0.9)) * 1.4; // deg
+    const drift = Math.sin(tSec * ((2 * Math.PI) / 1.8)) * 0.08; // em
+    blockStyle.transform = `translateX(-50%) rotate(${sway.toFixed(2)}deg) translateY(${drift.toFixed(3)}em)`;
   }
   if (blockFx.includes('ghostFade')) {
     // Each PAGE of rows fades in on arrival and out before the flip. The page
@@ -444,6 +528,8 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
             } else if (!isActive && mark?.scale) {
               style.transform = `${(style.transform as string) ?? ''} scale(${mark.scale})`.trim();
             }
+            // Ambient + persistent fx ride on top of the entrance, any state.
+            applyWordMarkExtras(style, mark, frame, w.fromFrame, plan.fps, css.active.color as string);
 
             const emoji =
               (isActive || power) && def.emoji && emojiFor(w.text)
@@ -476,6 +562,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
               const progress = clamp01(
                 (frame - w.fromFrame) / Math.max(1, w.toFrame - w.fromFrame),
               );
+              applyWordMarkExtras(base, mark, frame, w.fromFrame, plan.fps, css.active.color as string);
               return (
                 <span key={`${idx}-${w.text}`} style={base}>
                   <span style={{ color: css.word.color as string }}>{text}</span>
@@ -495,7 +582,39 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
 
             return (
               <span key={`${idx}-${w.text}`} style={style}>
+                {mark?.fx === 'marker' ? (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      inset: '-0.04em -0.14em',
+                      background: mark.fxColor ?? (css.active.color as string),
+                      opacity: 0.34,
+                      zIndex: -1,
+                      borderRadius: '0.14em',
+                      transformOrigin: 'left center',
+                      transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                    }}
+                  />
+                ) : null}
                 {text}
+                {mark?.fx === 'underline' ? (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: '-0.04em',
+                      right: '-0.04em',
+                      bottom: '-0.10em',
+                      height: '0.09em',
+                      borderRadius: '0.06em',
+                      background: mark.fxColor ?? (css.active.color as string),
+                      boxShadow: `0 0 0.12em ${mark.fxColor ?? (css.active.color as string)}`,
+                      transformOrigin: 'left center',
+                      transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                    }}
+                  />
+                ) : null}
                 {emoji}
                 {tail}
               </span>

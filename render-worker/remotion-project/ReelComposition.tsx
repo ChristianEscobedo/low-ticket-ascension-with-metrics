@@ -227,6 +227,35 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
         </Sequence>
       ))}
 
+      {/* One-shot SFX, frame-exact: a cue's whoosh at its first frame (its own
+          window bounds it), and a marked word's hit at the word's start. The
+          Player plays these in preview too, so what you hear IS what burns. */}
+      {(plan.mediaCues ?? [])
+        .filter((cue) => cue.sfx && cue.sfx.url)
+        .map((cue) => (
+          <Sequence
+            key={`sfx-${cue.id}`}
+            from={cue.fromFrame}
+            durationInFrames={cue.durationInFrames}
+            layout="none"
+          >
+            <Audio src={String(cue.sfx?.url)} volume={cue.sfx?.volume ?? 1} />
+          </Sequence>
+        ))}
+      {plan.words
+        .map((w, i) => ({ w, i }))
+        .filter(({ w }) => w.mark && w.mark.sfx && w.mark.sfx.url)
+        .map(({ w, i }) => (
+          <Sequence
+            key={`wsfx-${i}`}
+            from={w.fromFrame}
+            durationInFrames={Math.max(1, w.toFrame - w.fromFrame) + plan.fps}
+            layout="none"
+          >
+            <Audio src={String(w.mark?.sfx?.url)} volume={w.mark?.sfx?.volume ?? 1} />
+          </Sequence>
+        ))}
+
       {/* Captions live at the top of the stack, timed in absolute frames. */}
       <CaptionLayer plan={plan} />
     </AbsoluteFill>

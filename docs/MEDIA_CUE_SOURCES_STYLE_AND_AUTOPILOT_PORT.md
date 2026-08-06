@@ -180,3 +180,58 @@ live there.
 - Vendored copies byte-identical, types.ts now included
   (`scripts/sync-vendored-captions.cjs --check`); the two ReelComposition
   files identical (ambient math in both).
+
+---
+
+## Round 3 — caption feel, Word FX, and SFX (2026-08-05)
+
+**Caption feel (block motion).** `CaptionOverrides.blockMotion` (`still` /
+`float` / `wiggle`) in captions.ts owns the block’s ambient motion:
+`resolveCaptionStyle` strips float/wiggle from the preset’s blockFx and adds
+the chosen one (page-level fx like ghostFade survive; never both float AND
+wiggle). `CaptionBlockFx` gained `'wiggle'` — rendered in captionLayer.tsx as
+a frame-clock sway next to the float bob. The Word FX panel’s “block feel”
+chips write it through the same setCaptionOverrides path as every other dial.
+
+**Word FX (per-word effects).** `ReelWordMark` gained `ambient` (float/wiggle
+bob/sway while the word is on screen, eased in), `fx` (glow / gradient /
+shine / pulse / underline / marker, frame-derived), `fxColor`, and `sfx`
+({url, volume}). normalizeWordMark whitelists the fx names and drops junk
+(same no-substitution rule as anims). captionLayer’s `applyWordMarkExtras`
+composes ambient+glow/gradient/shine/pulse onto the word style; underline and
+marker render as real spans inside the word (a marker needs a layer behind
+the glyphs). The FX flow mirrors the cue flow: fx mode turns subtitle word
+clicks into picks (amber underline), and the Word FX panel applies the
+effect to every picked word via the mark slot (no new save path).
+
+**SFX (one-shot sounds).** `ReelMediaCue.sfx` + `ReelWordMark.sfx` —
+normalizeCueSfx keeps http(s) URLs, clamps volume 0–1. plan.ts passes the
+cue sfx through (RenderMediaCue.sfx); ReelComposition renders every sfx as
+an `<Audio>` in a Sequence at the cue/word’s first frame, so preview and
+MP4 agree by construction. Studio: a library-audio select + upload (lands in
+the Media Library kind=audio tagged sfx) in both the cue editor and the
+Word FX panel.
+
+**Above/below chip fix.** The snap chips now seat edges, not flat offsets:
+the caption block’s height from rows × sizePx (the layer’s own sizePx/360 ×
+frameW scale, 1.15em lines) and the cue’s height from widthPct × the
+image’s probed aspect (module-level `cueAspectCache` in page.tsx) — a
+portrait card is ~2× taller than a landscape one at the same widthPct, and
+the flat offsets were landing on the text.
+
+**Render diagnostics.** /api/admin/reel-render echoes `cues` + `wordMarks`
+counts next to captionStyleSent; the worker’s `[worker] caption plan:` log
+line prints them too — one render now answers “did the plan carry the cue/FX”
+from either side. (Also repaired server.js’s runRender head, lost in a crash.)
+
+### Verify (round 3)
+
+- `npx tsc --noEmit` clean.
+- caption-word-marks 8 (mark ambient/fx/fxColor/sfx keep+drop, blockMotion
+  strip/own/survive, cue sfx keep+drop), media-cues 14, render-vendor-parity
+  4, geometry-parity 4, stage-single-source 5, preset round-trip 186 — all
+  green; vendored copies re-synced byte-identical (4 files) + ReelComposition
+  copied.
+- Full suite: 46 failures in 8 files — ALL in unrelated subsystems (Stripe
+  receipts/webhooks/create-payment-intent, research-fencing/recap,
+  compliance-pass, review-logic) — pre-existing, zero overlap with this round.

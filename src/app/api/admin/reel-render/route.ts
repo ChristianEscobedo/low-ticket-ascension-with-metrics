@@ -270,8 +270,13 @@ export async function POST(request: NextRequest) {
     success: true,
     jobId: workerJson.jobId,
     durationSec: estimateRenderSeconds(plan),
-    words: plan.words.length,
-    clips: plan.clips.length,
+     words: plan.words.length,
+     clips: plan.clips.length,
+     // The cue + word-fx counts, so "the cue/FX didn't render" can be answered
+     // from the response: if the number is 0 here, the plan never got it (the
+     // bug is upstream); if it's > 0 and the MP4 lacks it, the bug is the layer.
+     cues: (plan.mediaCues ?? []).length,
+     wordMarks: plan.words.filter((w) => w.mark && (w.mark.fx || w.mark.ambient || w.mark.sfx)).length,
     captionStyleSent: {
       id: plan.captionStyleId,
       resolvedId: plan.captionStyle?.id ?? null,

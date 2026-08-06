@@ -266,6 +266,26 @@ function thumbUrl(url: string, t: number): string {
  * draws the frame to a canvas — data URL. One per (url, t) so it caches in a
  * module-level map and the strip never re-captures.
  */
+/** The cue image's real aspect (h/w), cached per URL — the above/below chips
+ *  seat the cue's EDGE against the caption block's edge, which needs the true
+ *  shape (a portrait card is ~2× taller than a landscape one at the same
+ *  widthPct, and flat offsets were landing on top of the text). 1 until the
+ *  probe lands; the chip reads the cache at click time, so no state churn. */
+const cueAspectCache = new Map<string, number>();
+function cueAspectFor(url: string): number {
+  const hit = cueAspectCache.get(url);
+  if (hit) return hit;
+  if (typeof Image !== 'undefined') {
+    cueAspectCache.set(url, 1); // guards duplicate probes while one is in flight
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth > 0) cueAspectCache.set(url, img.naturalHeight / img.naturalWidth);
+    };
+    img.src = url;
+  }
+  return cueAspectCache.get(url) ?? 1;
+}
+
 const clientThumbCache = new Map<string, Promise<string>>();
 function clientThumb(url: string, t: number): Promise<string> {
   const key = `${url}#${t.toFixed(1)}`;
@@ -2909,6 +2929,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   yPct: number;
   widthPct: number;
 } | null>(null);
+  /** Word FX mode: click words in the subtitle list to mark them, then the FX
+   *  bar applies the effect to every picked word (the cue flow's sibling). */
+  const [fxMode, setFxMode] = useState(false);
+  const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
+  /** Media Library audio (kind 'audio') for cue + word SFX pickers. */
+  const [sfxAssets, setSfxAssets] = useState<{ url: string; name: string }[] | null>(null);
+  const cueSfxInput = useRef<HTMLInputElement>(null);
+  const wordSfxInput = useRef<HTMLInputElement>(null);
   /** The Reel Cue Autopilot run (the gated recipe) starting up. */
   const [cueAutopilotBusy, setCueAutopilotBusy] = useState(false);
   /** Content Hub generated-video picker state (the bridge in). */
@@ -4227,6 +4255,120 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       delete style.borderColor;
     }
     await patchCue(id, { style });
+  }
+
+  /** FX-mode word click: toggle the word in the picked set (never edits text). */
+  function toggleFxWord(i: number) {
+    setFxWords((s) => {
+      const next = new Set(s);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  /** Merge a mark patch onto every picked word and persist (the subtitle
+   *  panel's own save path — marks ride the words array). */
+  async function applyWordMarks(partial: Partial<import('@/lib/mothermode/reel/types').ReelWordMark>) {
+    if (!project || !currentClip || fxWords.size === 0) return;
+    const words = (project.captions[currentClip.id] ?? []).map((w, i) =>
+      fxWords.has(i) ? { ...w, mark: { ...(w.mark ?? {}), ...partial } } : w,
+    );
+    const updated: ReelProject = {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: words },
+    };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+  }
+
+  /** Strip the fx/ambient/sfx keys off every picked word (empty marks drop). */
+  async function clearWordFx() {
+    if (!project || !currentClip) return;
+    const words = (project.captions[currentClip.id] ?? []).map((w, i) => {
+      if (!fxWords.has(i) || !w.mark) return w;
+      const mark = { ...w.mark };
+      delete mark.fx;
+      delete mark.fxColor;
+      delete mark.ambient;
+      delete mark.sfx;
+      return Object.keys(mark).length ? { ...w, mark } : { ...w, mark: undefined };
+    });
+    const updated: ReelProject = {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: words },
+    };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+  }
+
+  /** Media Library audio, once (the cue + word SFX pickers read it). */
+  async function loadSfxAssets(): Promise<{ url: string; name: string }[]> {
+    if (sfxAssets) return sfxAssets;
+    try {
+      const res = await fetch('/api/admin/media-library', { cache: 'no-store' });
+      const json = await res.json();
+      const rows = (json.assets ?? json.records ?? []) as {
+        url?: string;
+        name?: string;
+        kind?: string;
+      }[];
+      const audio = rows
+        .filter((a) => a.url && /^https?:\/\//i.test(a.url) && a.kind === 'audio')
+        .map((a) => ({ url: a.url as string, name: a.name ?? '' }));
+      setSfxAssets(audio);
+      return audio;
+    } catch {
+      setSfxAssets([]);
+      return [];
+    }
+  }
+
+  /** Upload a sound: signed-URL flow → the library (kind audio, tag sfx) → the
+   *  entry, so it attaches AND is reusable by the next beat. */
+  async function uploadSfx(file: File): Promise<{ url: string; name: string } | null> {
+    setError(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'mp3';
+      const mint = await fetch(UPLOAD_API, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ext, contentType: file.type || undefined, kind: 'audio' }),
+      });
+      const mintJson = await mint.json();
+      if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const put = await fetch(mintJson.signedUrl, {
+        method: 'PUT',
+        headers: { 'content-type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
+      const url = String(mintJson.publicUrl || '');
+      if (!url) throw new Error('Upload returned no public URL');
+      const name = file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'SFX';
+      try {
+        await fetch('/api/admin/media-library', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'ingest',
+            name,
+            url,
+            kind: 'audio',
+            source: 'upload',
+            tags: ['sfx'],
+          }),
+        });
+      } catch {
+        /* the library entry is a convenience — the attach still happens */
+      }
+      const entry = { url, name };
+      setSfxAssets((prev) => (prev ? [entry, ...prev.filter((a) => a.url !== url)] : [entry]));
+      return entry;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'SFX upload failed');
+      return null;
+    }
   }
 
   /**
@@ -5634,6 +5776,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           .map((c) => c.wordIndex),
                       )
                     }
+                    fxMode={fxMode}
+                    onFxWord={(i) => toggleFxWord(i)}
+                    fxWordIndexes={fxWords}
                   />
                   </div>
                   {/* MEDIA CUES — image fly-ins keyed to spoken words (the
@@ -5810,9 +5955,25 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           const windowSec = cueWindowSec(cue);
                           const cueWord = project.captions[cue.clipId]?.[cue.wordIndex];
                           const wordSpanSec = cueWord ? cueWord.end - cueWord.start : 0;
-                          // The caption block's bottom edge, top-anchored (positionPct
-                          // is bottom-anchored) — the above/below chips read it.
+                          // Edge math, not flat offsets: the caption block's height
+                          // from rows × sizePx (the layer's own scale: sizePx/360 ×
+                          // frameW, 1.15em lines) and the cue's height from its
+                          // widthPct × the image's REAL aspect — so "above" seats
+                          // the cue's BOTTOM edge over the block's TOP edge,
+                          // whatever the image's shape (flat offsets were landing
+                          // on top of the text).
                           const captionPct = project.captionOverrides?.positionPct ?? 12;
+                          const wh = aspect === '16:9' ? 16 / 9 : aspect === '1:1' ? 1 : 9 / 16;
+                          const capBlockPct =
+                            (project.captionOverrides?.rows ?? 1) *
+                            (project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT) *
+                            wh * 1.15 / 3.6;
+                          const capTopPct = 100 - captionPct - capBlockPct;
+                          const capBottomPct = 100 - captionPct;
+                          const cueHPct =
+                            (cue.style?.widthPct ?? 34) * cueAspectFor(cue.url) * wh;
+                          const aboveYPct = Math.max(2, Math.round(capTopPct - cueHPct - 3));
+                          const belowYPct = Math.min(90, Math.round(capBottomPct + 3));
                           return (
                             <div className="space-y-1 rounded-lg border border-violet-400/25 bg-ink/70 p-1.5">
                               <p className="flex items-center justify-between text-[8px] font-semibold uppercase tracking-wide text-violet-300/60">
@@ -5967,24 +6128,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                 ))}
                                 <span className="mx-0.5 h-3 w-px bg-violet-400/20" />
                                 <button
-                                  onClick={() =>
-                                    void patchCueStyle(cue.id, {
-                                      yPct: Math.max(2, Math.round(100 - captionPct - 36)),
-                                    })
-                                  }
+                                  onClick={() => void patchCueStyle(cue.id, { yPct: aboveYPct })}
                                   className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
-                                  title="Snap above the caption block"
+                                  title="Snap above the caption block (edge-to-edge, from the block's own rows × size)"
                                 >
                                   ↑ above text
                                 </button>
                                 <button
-                                  onClick={() =>
-                                    void patchCueStyle(cue.id, {
-                                      yPct: Math.min(90, Math.round(100 - captionPct + 6)),
-                                    })
-                                  }
+                                  onClick={() => void patchCueStyle(cue.id, { yPct: belowYPct })}
                                   className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
-                                  title="Snap below the caption block"
+                                  title="Snap below the caption block (edge-to-edge)"
                                 >
                                   ↓ below text
                                 </button>
@@ -5992,6 +6145,54 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                   tip: while this editor is open, the dashed box on the preview
                                   drags to move · its right edge scales
                                 </span>
+                              </div>
+                              {/* sfx — a one-shot whoosh as the image flies in.
+                                  Pick from library audio or upload one (it lands
+                                  in the library tagged sfx). Renders as an <Audio>
+                                  at the cue's first frame — preview and MP4 agree. */}
+                              <div className="flex items-center gap-1.5 pt-0.5 text-[8px] text-violet-200/50">
+                                <span className="w-8 shrink-0">sfx</span>
+                                <select
+                                  value={cue.sfx?.url ?? ''}
+                                  onFocus={() => void loadSfxAssets()}
+                                  onChange={(e) => {
+                                    const url = e.target.value;
+                                    void patchCue(cue.id, {
+                                      sfx: url ? { url, volume: cue.sfx?.volume ?? 0.9 } : undefined,
+                                    });
+                                  }}
+                                  className="min-w-0 flex-1 rounded border border-violet-400/25 bg-ink px-1 py-0.5 text-[8px] text-bone/80"
+                                  title="A sound as the fly-in lands (library audio)"
+                                >
+                                  <option value="">none</option>
+                                  {(sfxAssets ?? []).map((a) => (
+                                    <option key={a.url} value={a.url}>
+                                      {a.name || a.url.split('/').pop()}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => cueSfxInput.current?.click()}
+                                  className="shrink-0 rounded border border-violet-400/40 px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/80 hover:bg-violet-500/15"
+                                  title="Upload a sound — saves to the library and attaches"
+                                >
+                                  <Upload className="h-2.5 w-2.5" />
+                                </button>
+                                <input
+                                  ref={cueSfxInput}
+                                  type="file"
+                                  accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/m4a"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) {
+                                      void uploadSfx(f).then((entry) => {
+                                        if (entry) void patchCue(cue.id, { sfx: { url: entry.url, volume: 0.9 } });
+                                      });
+                                    }
+                                    e.target.value = '';
+                                  }}
+                                />
                               </div>
                               {/* motion — the SAME preset chips scenes use, expanded
                                   over the cue's window (word span + the hold) */}
@@ -6034,6 +6235,176 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         })()}
                       </div>
                     )}
+                  </div>
+                  {/* WORD FX — per-word effects, the cue flow's sibling: toggle
+                      fx mode, click words in the subtitle list, then an effect
+                      chip applies to every picked word. Marks ride the words
+                      array (the existing slot), so save/render/preview agree. */}
+                  <div className="shrink-0 space-y-1.5 rounded-xl border border-amber-400/25 bg-amber-400/[0.05] p-2">
+                    <div className="flex items-center gap-1.5">
+                      <Zap className="h-3 w-3 text-amber-300/80" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">
+                        Word FX
+                      </span>
+                      <button
+                        onClick={() => {
+                          setFxMode((v) => !v);
+                          setFxWords(new Set());
+                        }}
+                        disabled={!currentClip || !(project.captions[currentClip.id]?.length ?? 0)}
+                        className={clsx(
+                          'ml-auto rounded px-2 py-0.5 text-[9px] font-semibold disabled:opacity-40',
+                          fxMode ? 'bg-amber-400 text-ink' : 'text-amber-300/80 hover:bg-amber-400/15',
+                        )}
+                        title="FX mode: click words in the subtitle list to pick them, then apply an effect below"
+                      >
+                        {fxMode ? `fx mode ON (${fxWords.size})` : 'fx word'}
+                      </button>
+                      {fxMode && fxWords.size > 0 && (
+                        <button
+                          onClick={() => setFxWords(new Set())}
+                          className="text-[8px] text-bone/35 hover:text-bone/70"
+                          title="Unpick all words"
+                        >
+                          un-pick
+                        </button>
+                      )}
+                    </div>
+                    {/* block feel — the caption BLOCK's ambient motion (rides
+                        captionOverrides.blockMotion → resolveCaptionStyle) */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                        block feel
+                      </span>
+                      {(['still', 'float', 'wiggle'] as const).map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => void setCaptionOverrides({ blockMotion: m })}
+                          className={clsx(
+                            'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                            (project.captionOverrides?.blockMotion ?? 'still') === m
+                              ? 'bg-amber-400 text-ink'
+                              : 'text-amber-200/60 hover:bg-amber-400/15',
+                          )}
+                          title={
+                            m === 'still'
+                              ? 'No block motion'
+                              : m === 'float'
+                                ? 'The whole caption block bobs gently'
+                                : 'The whole caption block sways softly'
+                          }
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                    {/* the effects — apply to every picked word */}
+                    {fxMode && fxWords.size > 0 && (
+                      <>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            word feel
+                          </span>
+                          {(['float', 'wiggle'] as const).map((a) => (
+                            <button
+                              key={a}
+                              onClick={() => void applyWordMarks({ ambient: a })}
+                              className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-amber-200/70 hover:bg-amber-400/15"
+                              title={`${a} the picked words while they're on screen`}
+                            >
+                              {a}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => void clearWordFx()}
+                            className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-red-300/70 hover:bg-red-500/10"
+                            title="Strip effect + feel + sfx off the picked words"
+                          >
+                            clear
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            effect
+                          </span>
+                          {(
+                            [
+                              ['glow', 'a pulsing neon halo'],
+                              ['gradient', 'a color gradient through the glyphs'],
+                              ['shine', 'a light band sweeping the word'],
+                              ['pulse', 'a scale breathing beat'],
+                              ['underline', 'a rule that draws itself under the word'],
+                              ['marker', 'a highlighter swipe behind the word'],
+                            ] as const
+                          ).map(([fx, hint]) => (
+                            <button
+                              key={fx}
+                              onClick={() => void applyWordMarks({ fx })}
+                              className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-amber-200/70 hover:bg-amber-400/15"
+                              title={hint}
+                            >
+                              {fx}
+                            </button>
+                          ))}
+                          <input
+                            type="color"
+                            defaultValue="#ffd400"
+                            onChange={(e) => void applyWordMarks({ fxColor: e.target.value })}
+                            className="h-4 w-5 cursor-pointer rounded border border-amber-400/25 bg-transparent"
+                            title="The fx color (glow halo / underline / marker / gradient anchor) — click to apply to the picked words"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-10 shrink-0 text-[8px] font-bold uppercase tracking-wide text-amber-300/50">
+                            sfx
+                          </span>
+                          <select
+                            value=""
+                            onFocus={() => void loadSfxAssets()}
+                            onChange={(e) => {
+                              const url = e.target.value;
+                              if (url) void applyWordMarks({ sfx: { url, volume: 0.9 } });
+                            }}
+                            className="min-w-0 flex-1 rounded border border-amber-400/25 bg-ink px-1 py-0.5 text-[8px] text-bone/80"
+                            title="A one-shot sound when the picked words start (library audio)"
+                          >
+                            <option value="">— pick a sound —</option>
+                            {(sfxAssets ?? []).map((a) => (
+                              <option key={a.url} value={a.url}>
+                                {a.name || a.url.split('/').pop()}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => wordSfxInput.current?.click()}
+                            className="shrink-0 rounded border border-amber-400/40 px-1.5 py-0.5 text-[8px] font-semibold text-amber-200/80 hover:bg-amber-400/15"
+                            title="Upload a sound — saves to the library and applies to the picked words"
+                          >
+                            <Upload className="h-2.5 w-2.5" />
+                          </button>
+                          <input
+                            ref={wordSfxInput}
+                            type="file"
+                            accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/m4a"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                void uploadSfx(f).then((entry) => {
+                                  if (entry) void applyWordMarks({ sfx: { url: entry.url, volume: 0.9 } });
+                                });
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                    <p className="text-[7px] leading-3 text-amber-200/35">
+                      {fxMode
+                        ? 'click words in the subtitle list — amber-underlined ones are picked'
+                        : 'fx word = pick words, then apply glow / gradient / shine / pulse / underline / marker, a bob or sway, and a sound'}
+                    </p>
                   </div>
                   {/* the preset gallery + customizer */}
                   <div className="max-h-[32%] shrink-0 overflow-y-auto rounded-xl border border-bone/10 bg-bone/[0.02] p-2">

@@ -66,7 +66,7 @@ export type CaptionAnim =
  * window, the bob from the frame clock) — never stored state, so they can't
  * drift from the words the way a keyframe on a row index would.
  */
-export type CaptionBlockFx = 'ghostFade' | 'float';
+export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle';
 
 /** The CSS keyframe for a word-enter animation (injected once into the page). */
 export function captionAnimKeyframes(anim: CaptionAnim): string {
@@ -775,6 +775,12 @@ export interface CaptionOverrides {
   wordSpacing?: number;
   /** POWER WORDS: comma-separated — they render in the ACTIVE style even when idle. */
   powerWords?: string[];
+  /**
+   * The block's ambient motion: 'still' strips float/wiggle, 'float' is the
+   * gentle bob, 'wiggle' a soft rotational sway. Omit = the preset's own
+   * blockFx. Page-level effects (ghostFade) are a different axis and survive.
+   */
+  blockMotion?: 'still' | 'float' | 'wiggle';
 }
 
 /** Clamp a number into a range, with a fallback for junk. */
@@ -886,6 +892,11 @@ export function resolveCaptionStyle(
   }
   if (typeof overrides.wordSpacing === 'number' && Number.isFinite(overrides.wordSpacing)) {
     out.wordSpacingEm = Math.max(0, Math.min(0.6, overrides.wordSpacing));
+  }
+  // Block feel: the override owns float/wiggle (never both), page fx survive.
+  if (overrides.blockMotion === 'still' || overrides.blockMotion === 'float' || overrides.blockMotion === 'wiggle') {
+    const rest = (out.blockFx ?? []).filter((fx) => fx !== 'float' && fx !== 'wiggle');
+    out.blockFx = overrides.blockMotion === 'still' ? rest : [...rest, overrides.blockMotion];
   }
   return out;
 }
