@@ -168,6 +168,12 @@ export interface ReelMediaCueStyle {
   /** Drop shadow on/off (the house card has one). Default on. */
   shadow?: boolean;
   /**
+   * Z-order against the CAPTION layer: 'below' (the house default) paints the
+   * cue UNDER the caption text; 'above' paints it ON TOP of the captions.
+   * This is a layer, not a position — x/y still place the box.
+   */
+  z?: 'above' | 'below';
+  /**
    * Ambient motion while the cue is on screen (frame-driven, like the caption
    * `float` blockFx): 'float' = a gentle vertical bob, 'wiggle' = a soft
    * rotational sway. Omit = still. Composes ON TOP of the entrance and any
@@ -374,6 +380,7 @@ export function normalizeMediaCueStyle(raw: unknown): ReelMediaCueStyle | undefi
   }
   if (out.borderColor && out.borderPx === undefined) out.borderPx = 2;
   if (typeof o.shadow === 'boolean') out.shadow = o.shadow;
+  if (o.z === 'above' || o.z === 'below') out.z = o.z;
   if (o.ambient === 'float' || o.ambient === 'wiggle') out.ambient = o.ambient;
   return Object.keys(out).length ? out : undefined;
 }

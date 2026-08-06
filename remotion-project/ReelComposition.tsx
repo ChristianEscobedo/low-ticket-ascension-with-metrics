@@ -157,6 +157,10 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
           left: `${style.xPct ?? 60}%`,
           top: `${style.yPct ?? 16}%`,
           width: `${style.widthPct ?? 34}%`,
+          // Z-order against the caption layer (z 10): 'above' paints OVER the
+          // text, the house default (no z) stays UNDER it. Intermediates carry
+          // no z, so the comparison is global. A layer, not a position.
+          zIndex: style.z === 'above' ? 20 : undefined,
           opacity: hasMotion ? out : Math.min(e, out),
           transform: hasMotion
             ? motionTransform + ambientTf

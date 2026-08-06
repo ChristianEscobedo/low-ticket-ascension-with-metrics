@@ -197,6 +197,31 @@ app.post('/render', (req, res) => {
   });
 });
 
+/**
+ * The job poller. 404 when the id is unknown — an in-memory job dies with the
+ * container, so an unknown id honestly means "the worker restarted; start the
+ * render again". THIS HANDLER WENT MISSING once (a crash repair rewrote the
+ * file without it) and every render then reported exactly that — the job ran
+ * fine, the poller just had nothing to poll. Do not remove it.
+ */
+app.get('/render/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'Unknown job id — the render worker restarted. Start the render again.' });
+  }
+  res.json({
+    success: true,
+    status: job.status,
+    progress: job.progress,
+    stage: job.stage,
+    url: job.url,
+    error: job.error,
+    elapsedSec: Math.round((Date.now() - job.startedAt) / 1000),
+  });
+});
+
 /** The background render: bundle → probe → render → upload → job URL. */
 async function runRender(jobId, plan, reelId) {
   const job = jobs.get(jobId);

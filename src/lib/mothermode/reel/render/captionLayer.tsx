@@ -539,6 +539,10 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
         alignItems: 'center',
         gap: '0.15em',
         fontSize,
+        // Captions sit at z 10: a media cue with style.z 'above' (20) paints
+        // OVER the text, the house default (no z) stays UNDER it. A layer,
+        // not a position. Intermediates carry no z, so the comparison is global.
+        zIndex: 10,
         ...blockStyle,
       }}
     >

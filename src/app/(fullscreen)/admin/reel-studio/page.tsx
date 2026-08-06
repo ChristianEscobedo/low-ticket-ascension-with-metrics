@@ -6177,18 +6177,32 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                 ))}
                                 <span className="mx-0.5 h-3 w-px bg-violet-400/20" />
                                 <button
-                                  onClick={() => void patchCueStyle(cue.id, { yPct: aboveYPct })}
-                                  className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
-                                  title="Snap above the caption block (edge-to-edge, from the block's own rows × size)"
+                                  onClick={() =>
+                                    void patchCueStyle(cue.id, { z: 'above', yPct: aboveYPct })
+                                  }
+                                  className={clsx(
+                                    'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                    cue.style?.z === 'above'
+                                      ? 'bg-violet-500 text-white'
+                                      : 'text-violet-200/60 hover:bg-violet-500/15',
+                                  )}
+                                  title="LAYER: the image paints ON TOP of the caption text (and snaps over the block)"
                                 >
-                                  ↑ above text
+                                  ↑ over text
                                 </button>
                                 <button
-                                  onClick={() => void patchCueStyle(cue.id, { yPct: belowYPct })}
-                                  className="rounded px-1.5 py-0.5 text-[8px] font-semibold text-violet-200/60 hover:bg-violet-500/15"
-                                  title="Snap below the caption block (edge-to-edge)"
+                                  onClick={() =>
+                                    void patchCueStyle(cue.id, { z: 'below', yPct: belowYPct })
+                                  }
+                                  className={clsx(
+                                    'rounded px-1.5 py-0.5 text-[8px] font-semibold',
+                                    (cue.style?.z ?? 'below') === 'below'
+                                      ? 'bg-violet-500 text-white'
+                                      : 'text-violet-200/60 hover:bg-violet-500/15',
+                                  )}
+                                  title="LAYER: the image paints UNDER the caption text — the house default (and snaps under the block)"
                                 >
-                                  ↓ below text
+                                  ↓ under text
                                 </button>
                                 <span className="w-full text-[7px] leading-3 text-violet-200/35">
                                   tip: while this editor is open, the dashed box on the preview
@@ -7956,7 +7970,15 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         shows while a cue's style editor is open, even outside
                         the cue's window — it marks where the fly-in lands. */}
                     {(() => {
-                      const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
+                      // Same always-visible rule as the style editor: the drag
+                      // box shows for the cue the editor is editing — the ⚙
+                      // pick when set, else the clip's first cue. Hiding it
+                      // behind the ⚙ toggle is what made it "gone".
+                      const clipCues = (project.mediaCues ?? []).filter(
+                        (x) => x.clipId === currentClip?.id,
+                      );
+                      const cue =
+                        clipCues.find((x) => x.id === cueStyleEditId) ?? clipCues[0];
                       if (!cue) return null;
                       const sx = cue.style?.xPct ?? 60;
                       const sy = cue.style?.yPct ?? 16;
@@ -8112,7 +8134,15 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         overlay, same numbers, so placement agrees across both
                         previews by construction. */}
                     {(() => {
-                      const cue = (project.mediaCues ?? []).find((x) => x.id === cueStyleEditId);
+                      // Same always-visible rule as the style editor: the drag
+                      // box shows for the cue the editor is editing — the ⚙
+                      // pick when set, else the clip's first cue. Hiding it
+                      // behind the ⚙ toggle is what made it "gone".
+                      const clipCues = (project.mediaCues ?? []).filter(
+                        (x) => x.clipId === currentClip?.id,
+                      );
+                      const cue =
+                        clipCues.find((x) => x.id === cueStyleEditId) ?? clipCues[0];
                       if (!cue) return null;
                       const sx = cue.style?.xPct ?? 60;
                       const sy = cue.style?.yPct ?? 16;
