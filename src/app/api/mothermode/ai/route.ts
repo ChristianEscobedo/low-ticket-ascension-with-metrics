@@ -10,6 +10,7 @@ import {
   amplifyParts,
   amplifyImagePrompts,
   generateVideoScript,
+  generateCloneAutofill,
   generateCloneScript,
   generateStoryboardPlan,
   generateFramePackPlan,
@@ -591,6 +592,28 @@ export async function POST(request: NextRequest) {
       model: result.data.model,
       totalSeconds: durationSec,
     });
+  }
+
+  // -- cloneAutofill (AI Clone step 1: loose description -> the clone fields) --
+  if (action === 'cloneAutofill') {
+    const description = typeof body.description === 'string' ? body.description.trim() : '';
+    if (!description) {
+      return NextResponse.json(
+        { ok: false, error: 'Describe the person first' },
+        { status: 400 },
+      );
+    }
+    const result = await generateCloneAutofill({
+      description: description.slice(0, 400),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, autofill: result.data });
   }
 
   // -- cloneScript (AI Clone step 2: per-beat lines with voice programming) ----

@@ -122,7 +122,7 @@ import {
 
 import { PersonStanding, Wand2 } from 'lucide-react';
 import ClonePanel from './ClonePanel';
-import type { CloneBeat, ClonePlan } from '@/lib/mothermode/reel/clone';
+import { cloneLibraryEntries, type CloneBeat, type ClonePlan } from '@/lib/mothermode/reel/clone';
 import { cloneSceneName } from '@/lib/mothermode/reel/cloneGenerate';
 
 
@@ -5408,6 +5408,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   onSavePlan={saveClonePlan}
                   onAssemble={assembleCloneBeats}
                   onNote={setNote}
+                  library={cloneLibraryEntries(projects ?? [], project.id)}
                 />
               )}
               {tab === 'clips' && (

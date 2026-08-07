@@ -26,7 +26,7 @@ import {
   cloneShotFraming,
 } from '@/lib/mothermode/reel/cloneGenerate';
 import { characterSheetAssets } from '@/lib/mothermode/reel/mediaLibrary';
-import { normalizeClonePlan } from '@/lib/mothermode/reel/clone';
+import { cloneLibraryEntries, normalizeClonePlan } from '@/lib/mothermode/reel/clone';
 
 const CLONE: ReelClone = {
   id: 'clone-test01',
@@ -273,5 +273,28 @@ describe('the cast (Content Hub handoff)', () => {
     const cast = characterSheetAssets(assets);
     expect(cast).toHaveLength(1);
     expect(cast[0].url).toBe('https://cdn.example.com/sheet.png');
+  });
+});
+
+describe('the clone library', () => {
+  it('lists other reels’ clones, skips self + plan-less reels, flags readiness', () => {
+    const plan = blankClonePlan(CLONE);
+    const entries = cloneLibraryEntries(
+      [
+        { id: 'reel-self', name: 'This reel', clonePlan: plan },
+        { id: 'reel-a', name: 'Hook reel', clonePlan: plan },
+        { id: 'reel-b', name: 'Empty reel' },
+        {
+          id: 'reel-c',
+          name: 'Bare clone',
+          clonePlan: { clone: { name: 'Half-built', refPhotos: [], voice: {} } },
+        },
+      ],
+      'reel-self',
+    );
+    expect(entries.map((e) => e.reelId)).toEqual(['reel-a', 'reel-c']);
+    expect(entries[0].clone.name).toBe('The Founder');
+    expect(entries[0].ready).toBe(true); // sheet + voice id
+    expect(entries[1].ready).toBe(false); // no refs at all
   });
 });

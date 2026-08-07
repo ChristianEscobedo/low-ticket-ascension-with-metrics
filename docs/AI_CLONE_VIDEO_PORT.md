@@ -282,3 +282,21 @@ tests green (18 in clone-generate, 31 in clone, 5 in media-library).
 **That completes the wizard.** The task doc's open question remains the one
 to close at first live render: confirm `MUAPI_AVATAR_MODEL`'s slug + field
 names and refresh `CLONE_COSTS` from muapi's live pricing.
+
+## The step-1 helpers (shipped 2026-08-07, changelog 2.13.0)
+
+Post-launch UX round on step 1 (the clone card):
+
+- **The clone library** — `cloneLibraryEntries(projects, excludeReelId)` in
+  clone.ts derives every clone built on OTHER reels (copy semantics);
+  page.tsx passes it to the panel (`library` prop) and a dropdown at the
+  top of the clone card fills the whole form on pick — name, look bible,
+  voice, refs, sheet. Save casts an independent copy on this reel.
+- **AI fill** — `generateCloneAutofill` in openai-content.ts (the
+  `cloneAutofill` action on the AI route, `aiCloneAutofill` in aiClient):
+  one loose sentence → name + foundry-ready description + the four
+  look-bible fields. The ✨ button sits on the clone card header.
+- **The stepper shows the real stage** — `wizardStage` derives from the
+  manifest (no plan → 1; no beats → 2; unapproved → 4; generating → 5;
+  rendered → 6); finished stages check off, the current one glows.
+- Coverage: the library describe in tests/lib/clone-generate.test.ts.

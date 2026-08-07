@@ -763,6 +763,33 @@ export interface AiCloneScriptBeat {
  * honest 5/10/15s grid, each carrying its voice direction. Throws a readable
  * Error on failure so the panel can surface it inline.
  */
+/** AI Clone step 1 — the "AI fill": a loose sentence becomes the clone's fields. */
+export interface AiCloneAutofill {
+  name: string;
+  description: string;
+  wardrobe: string;
+  backdrop: string;
+  lighting: string;
+  lens: string;
+}
+
+export async function aiCloneAutofill(description: string): Promise<AiCloneAutofill> {
+  const json = await postAi({ action: 'cloneAutofill', description });
+  const a = json.autofill as Partial<AiCloneAutofill> | undefined;
+  if (!a || typeof a.description !== 'string' || !a.description.trim()) {
+    throw new Error('The autofill came back empty — try again');
+  }
+  const txt = (v: unknown) => (typeof v === 'string' ? v : '');
+  return {
+    name: txt(a.name),
+    description: a.description,
+    wardrobe: txt(a.wardrobe),
+    backdrop: txt(a.backdrop),
+    lighting: txt(a.lighting),
+    lens: txt(a.lens),
+  };
+}
+
 export async function aiGenerateCloneScript(args: {
   topic: string;
   typeLabel: string;

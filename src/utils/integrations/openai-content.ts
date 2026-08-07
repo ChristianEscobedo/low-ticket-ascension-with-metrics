@@ -2841,6 +2841,63 @@ function normalizeCloneScriptBeats(
 }
 
 /**
+ * The Clone tab's "AI fill" (step 1): one loose sentence about the person
+ * becomes the structured clone fields — a stage name, a foundry-ready
+ * description, and the look bible (wardrobe / backdrop / lighting / lens).
+ */
+export interface CloneAutofillResult {
+  name: string;
+  description: string;
+  wardrobe: string;
+  backdrop: string;
+  lighting: string;
+  lens: string;
+}
+
+export async function generateCloneAutofill(input: {
+  description: string;
+  model?: string;
+}): Promise<AiResult<CloneAutofillResult & { model: string }>> {
+  const description = (input.description ?? '').trim().slice(0, 400);
+  if (!description) return { ok: false, status: 400, error: 'Describe the person first' };
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You cast and style AI video avatars for short-form ads. Given a loose description of a person, you write the structured clone fields a video generation pipeline consumes.',
+    'Return ONLY a JSON object. No prose, no code fences.',
+  ].join(' ');
+  const user = [
+    `The person: ${description}.`,
+    'Return {"name","description","wardrobe","backdrop","lighting","lens"} where:',
+    '"name": a short stage name (2–4 words, e.g. "The Founder"),',
+    '"description": ONE vivid casting sentence (age, face, hair, build, vibe) an image model can render,',
+    '"wardrobe": the ONE outfit, specific and repeatable (e.g. "navy crewneck, no logos"),',
+    '"backdrop": the ONE setting (e.g. "warm gray studio wall"),',
+    '"lighting": the ONE lighting setup (e.g. "soft key from camera-left"),',
+    '"lens": the ONE lens look (e.g. "50mm, shallow depth of field").',
+  ].join('\n');
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model, provider);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const txt = (v: unknown, max: number) =>
+    typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '';
+  const out: CloneAutofillResult = {
+    name: txt(parsed?.name, 80),
+    description: txt(parsed?.description, 300),
+    wardrobe: txt(parsed?.wardrobe, 200),
+    backdrop: txt(parsed?.backdrop, 200),
+    lighting: txt(parsed?.lighting, 200),
+    lens: txt(parsed?.lens, 200),
+  };
+  if (!out.description) {
+    return { ok: false, status: 502, error: 'The autofill came back empty — try again' };
+  }
+  return { ok: true, data: { ...out, model } };
+}
+
+/**
  * Write the clone script: one line per beat (max ~25 words — the 5/10/15s
  * grid is honest), each line carrying its voice programming (pace, energy,
  * emphasis words, pause placement). B-roll beats carry a visual prompt that

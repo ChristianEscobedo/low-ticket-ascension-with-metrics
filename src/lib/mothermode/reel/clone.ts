@@ -696,3 +696,41 @@ export function blankClonePlan(clone: ReelClone): ClonePlan {
     updatedAt: now,
   };
 }
+
+// ---------------------------------------------------------------------------
+// The clone library (every clone you've built, pickable on any reel)
+// ---------------------------------------------------------------------------
+
+/** A clone built on another reel, offered in this reel's picker. */
+export interface CloneLibraryEntry {
+  reelId: string;
+  reelName: string;
+  clone: ReelClone;
+  /** Ready to cast: a sheet (or ref photo) + a voice id. */
+  ready: boolean;
+}
+
+/**
+ * The clone library: every OTHER reel's saved clonePlan, in list order.
+ * Copy semantics — picking one fills this reel's form, and saving writes an
+ * independent copy onto this reel's manifest (no shared mutable state). The
+ * current reel is excluded: its clone is already loaded.
+ */
+export function cloneLibraryEntries(
+  projects: { id: string; name: string; clonePlan?: unknown }[],
+  excludeReelId: string,
+): CloneLibraryEntry[] {
+  const out: CloneLibraryEntry[] = [];
+  for (const p of projects) {
+    if (p.id === excludeReelId) continue;
+    const plan = normalizeClonePlan(p.clonePlan ?? null);
+    if (!plan) continue;
+    out.push({
+      reelId: p.id,
+      reelName: p.name || 'Untitled reel',
+      clone: plan.clone,
+      ready: !!(plan.clone.sheetUrl ?? plan.clone.refPhotos[0]) && !!plan.clone.voice.voiceId,
+    });
+  }
+  return out;
+}

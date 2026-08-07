@@ -56,6 +56,7 @@ import {
   storyboardIssues,
   withBeatRefSlot,
   type CloneBeat,
+  type CloneLibraryEntry,
   type ClonePlan,
   type CloneShotAngle,
   type ReelClone,
@@ -69,6 +70,7 @@ import {
   cloneGenStep,
 } from '@/lib/mothermode/reel/cloneGenerate';
 import {
+  aiCloneAutofill,
   aiGenerateCloneScript,
   aiGenerateImage,
   aiListVoices,
@@ -113,12 +115,15 @@ export default function ClonePanel({
   onSavePlan,
   onAssemble,
   onNote,
+  library = [],
 }: {
   project: ReelProject;
   onSavePlan: (plan: ClonePlan) => Promise<void> | void;
   /** Generated beats land on the timeline as scenes (page.tsx owns clips). */
   onAssemble?: (beats: CloneBeat[]) => Promise<void> | void;
   onNote?: (msg: string) => void;
+  /** Clones built on other reels — the selectable library (copy semantics). */
+  library?: CloneLibraryEntry[];
 }) {
   // Local mirror of the saved manifest — a generation CHAIN (voice → video)
   // writes twice, and step 2 of the chain must read step 1's audioUrl, so
@@ -150,6 +155,8 @@ export default function ClonePanel({
   const [forgeBusy, setForgeBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The step-1 helpers: library pick + AI fill. */
+  const [autofillBusy, setAutofillBusy] = useState(false);
 
   // Step 2 — video type + framework + the script.
   const [topic, setTopic] = useState('');
@@ -201,6 +208,47 @@ export default function ClonePanel({
       setError(err instanceof Error ? err.message : 'Sheet generation failed');
     } finally {
       setForgeBusy(false);
+    }
+  }
+
+  /** The library: a clone built on another reel fills this reel's form. */
+  function pickFromLibrary(reelId: string) {
+    const entry = library.find((e) => e.reelId === reelId);
+    if (!entry) return;
+    const c = entry.clone;
+    setName(c.name);
+    setWardrobe(c.lookBible.wardrobe);
+    setBackdrop(c.lookBible.backdrop);
+    setLighting(c.lookBible.lighting);
+    setLens(c.lookBible.lens);
+    setVoiceId(c.voice.voiceId);
+    setVoiceName(c.voice.name);
+    setRefPhotos(c.refPhotos);
+    setSheetUrl(c.sheetUrl ?? '');
+    setDescription('');
+    onNote?.(
+      `"${c.name}" loaded from "${entry.reelName}" — hit save to cast them on this reel (an independent copy).`,
+    );
+  }
+
+  /** AI fill: the loose description becomes the structured clone fields. */
+  async function runAutofill() {
+    if (!description.trim() || autofillBusy) return;
+    setAutofillBusy(true);
+    setError(null);
+    try {
+      const a = await aiCloneAutofill(description.trim());
+      if (!name.trim() && a.name) setName(a.name);
+      setDescription(a.description); // the refined, foundry-ready sentence
+      if (a.wardrobe) setWardrobe(a.wardrobe);
+      if (a.backdrop) setBackdrop(a.backdrop);
+      if (a.lighting) setLighting(a.lighting);
+      if (a.lens) setLens(a.lens);
+      onNote?.('Fields filled — tweak anything, then forge the sheet.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI fill failed');
+    } finally {
+      setAutofillBusy(false);
     }
   }
 
@@ -486,23 +534,42 @@ export default function ClonePanel({
     }
   }
 
+  // Where the wizard actually stands — the stepper highlights THIS stage.
+  const wizardStage = !existing
+    ? 1
+    : existing.beats.length === 0
+      ? 2
+      : !approved
+        ? 4
+        : genProgress && genProgress.generated < genProgress.total
+          ? 5
+          : 6;
+
   return (
     <div className="space-y-3">
-      {/* the wizard stepper — step 1 is live, the rest light up as they ship */}
+      {/* the wizard stepper — the current stage lights up, done stages check */}
       <div className="grid grid-cols-6 gap-1">
         {WIZARD_STEPS.map((s) => (
           <div
             key={s.n}
             className={`rounded-lg border px-1 py-1.5 text-center ${
-              s.n === 1
-                ? 'border-brass/40 bg-brass/10 text-brass'
-                : s.live
-                  ? 'border-bone/15 text-bone/70'
-                  : 'border-bone/10 text-bone/25'
+              s.n === wizardStage
+                ? 'border-brass/60 bg-brass/15 text-brass ring-1 ring-brass/40'
+                : s.n < wizardStage
+                  ? 'border-emerald-400/25 text-emerald-300/70'
+                  : 'border-bone/10 text-bone/30'
             }`}
-            title={s.live ? s.label : `${s.label} — ships in a later step`}
+            title={
+              s.n === wizardStage
+                ? `You are here — ${s.label}`
+                : s.n < wizardStage
+                  ? `${s.label} — done`
+                  : s.label
+            }
           >
-            <div className="text-[8px] font-bold uppercase tracking-wider">step {s.n}</div>
+            <div className="text-[8px] font-bold uppercase tracking-wider">
+              {s.n < wizardStage ? '✓ done' : `step ${s.n}`}
+            </div>
             <div className="text-[9px] font-semibold leading-tight">{s.label}</div>
           </div>
         ))}
@@ -525,7 +592,40 @@ export default function ClonePanel({
 
       {/* the clone asset form */}
       <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
-        <span className={LABEL}>The clone</span>
+        <div className="flex items-center justify-between">
+          <span className={LABEL}>The clone</span>
+          <button
+            onClick={() => void runAutofill()}
+            disabled={!description.trim() || autofillBusy}
+            title="AI fill: the description becomes the name + look bible fields"
+            className="inline-flex items-center gap-1 rounded-md border border-brass/40 px-1.5 py-0.5 text-[9px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+          >
+            {autofillBusy ? (
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-2.5 w-2.5" />
+            )}
+            AI fill
+          </button>
+        </div>
+        {library.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) pickFromLibrary(e.target.value);
+            }}
+            className={INPUT}
+            title="Cast a clone you already built on another reel (an independent copy)"
+          >
+            <option value="">— from your clone library ({library.length} built) —</option>
+            {library.map((e) => (
+              <option key={e.reelId} value={e.reelId}>
+                {e.clone.name} · on {e.reelName}
+                {e.ready ? '' : ' (incomplete)'}
+              </option>
+            ))}
+          </select>
+        )}
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Clone name (e.g. The Founder)" className={INPUT} />
         <textarea
           value={description}

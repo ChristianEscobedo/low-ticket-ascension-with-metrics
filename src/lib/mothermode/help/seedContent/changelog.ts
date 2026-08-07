@@ -512,6 +512,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.13.0',
+    releasedOn: '2026-08-07',
+    entryType: 'improved',
+    title: 'AI Clone: the clone library + AI fill, and a stepper that knows where you are',
+    body: cl([
+      '<p>Step 1 of the Clone wizard got its helpers. <strong>The clone library</strong>: every clone you\'ve built — on any reel — is now pickable from a dropdown at the top of the clone card. Pick one and the whole form fills (name, look bible, voice, refs, sheet); save casts an independent copy on this reel. No more rebuilding the same character per reel.</p>',
+      '<p><strong>AI fill</strong>: type one loose sentence about the person ("woman in her 30s, athletic, confident, gym energy") and hit the ✨ button — the name, the foundry-ready description, and all four look-bible fields fill in, ready to tweak and forge. And the wizard stepper now shows the stage you\'re actually ON — finished stages check off, the current one glows — instead of sitting on step 1 forever.</p>',
+      '<p><strong>Where to start:</strong> Clipping Studio → Clone tab → the library dropdown and the ✨ AI fill button live at the top of the clone card.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
