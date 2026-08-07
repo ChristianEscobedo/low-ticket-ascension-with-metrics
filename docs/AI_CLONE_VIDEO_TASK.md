@@ -1,6 +1,11 @@
 # AI Clone Video — TASK (handoff)
 
-**Status: planned, not started. This doc is the whole plan — pick it up cold.**
+**Status: IN PROGRESS. Step 1 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 2–6 remain — this doc is the whole plan, pick it up cold.**
+
+> **Step 1 — DONE**: clone entity + character-sheet foundry + Clone tab in the
+> studio + clonePlan manifest persistence (types/store/route) + cost tables +
+> voice-programming resolvers + tests (tests/lib/clone.test.ts) + changelog
+> 2.8.0. What shipped and the anchors it landed on: docs/AI_CLONE_VIDEO_PORT.md.
 
 The Clipping Studio (Reel Studio, /admin/reel-studio) gains an **AI Clone**
 aspect: create and use AI avatars, script → storyboard → 5/10/15-second

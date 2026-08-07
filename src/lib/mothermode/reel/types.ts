@@ -18,6 +18,9 @@
 // only TYPES from this file (`import type { CaptionPreset, ReelWord }`) — type
 // imports are erased, so there is no runtime cycle.
 import { captionDefFor, CAPTION_ANIMS } from './captions';
+// clone.ts imports nothing from this file, so this value import creates no
+// runtime cycle (same reasoning as the captions import above).
+import { normalizeClonePlan } from './clone';
 
 // ---------------------------------------------------------------------------
 // Clips + audio
@@ -287,6 +290,8 @@ export interface ReelProject {
   overlays?: ReelOverlayClip[];
   /** Word-triggered media cues (image fly-ins keyed to spoken words). */
   mediaCues?: ReelMediaCue[];
+  /** AI Clone: the per-reel clone manifest (clone, beats, gate, cost basis). */
+  clonePlan?: import('./clone').ClonePlan;
   createdAt: string | null;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -558,6 +563,7 @@ export function normalizeProjectJson(raw: unknown): {
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
   mediaCues?: ReelMediaCue[];
+  clonePlan?: import('./clone').ClonePlan;
 } {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const clips = (Array.isArray(o.clips) ? o.clips : [])
@@ -586,7 +592,15 @@ export function normalizeProjectJson(raw: unknown): {
       : {}),
     ...(overlays.length ? { overlays } : {}),
     ...(mediaCues.length ? { mediaCues } : {}),
+    ...(normalizeClonePlanField(o.clonePlan)
+      ? { clonePlan: normalizeClonePlanField(o.clonePlan) }
+      : {}),
   };
+}
+
+/** The "returns undefined when unusable" shape the spread above needs. */
+function normalizeClonePlanField(raw: unknown): import('./clone').ClonePlan | undefined {
+  return normalizeClonePlan(raw) ?? undefined;
 }
 
 export function rowToReelProject(row: ReelProjectRow): ReelProject {
@@ -603,6 +617,7 @@ export function rowToReelProject(row: ReelProjectRow): ReelProject {
     ...(json.captionOverrides ? { captionOverrides: json.captionOverrides } : {}),
     ...(json.overlays ? { overlays: json.overlays } : {}),
     ...(json.mediaCues ? { mediaCues: json.mediaCues } : {}),
+    ...(json.clonePlan ? { clonePlan: json.clonePlan } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
@@ -620,6 +635,7 @@ export function projectToJson(project: {
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
   mediaCues?: ReelMediaCue[];
+  clonePlan?: import('./clone').ClonePlan;
 }): Record<string, unknown> {
   return {
     clips: project.clips,
@@ -631,6 +647,7 @@ export function projectToJson(project: {
     ...(project.captionOverrides ? { captionOverrides: project.captionOverrides } : {}),
     ...(project.overlays && project.overlays.length ? { overlays: project.overlays } : {}),
     ...(project.mediaCues && project.mediaCues.length ? { mediaCues: project.mediaCues } : {}),
+    ...(project.clonePlan ? { clonePlan: project.clonePlan } : {}),
   };
 }
 

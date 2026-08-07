@@ -85,6 +85,8 @@ export async function POST(request: NextRequest) {
       captionStyle: p.captionStyle,
       captionOverrides: p.captionOverrides,
       overlays: Array.isArray(p.overlays) ? p.overlays : undefined,
+      mediaCues: Array.isArray(p.mediaCues) ? p.mediaCues : undefined,
+      clonePlan: p.clonePlan as ReelProject['clonePlan'],
       updatedBy: guard.email ?? null,
     });
 

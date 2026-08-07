@@ -71,6 +71,7 @@ export async function upsertReelProject(input: {
   captionOverrides?: ReelProject['captionOverrides'];
   overlays?: ReelProject['overlays'];
   mediaCues?: ReelProject['mediaCues'];
+  clonePlan?: ReelProject['clonePlan'];
   updatedBy?: string | null;
 }): Promise<ReelProject | null> {
   try {
@@ -85,6 +86,7 @@ export async function upsertReelProject(input: {
         captionOverrides: input.captionOverrides,
         overlays: input.overlays,
         mediaCues: input.mediaCues,
+        clonePlan: input.clonePlan,
       }),
     );
 
@@ -125,6 +127,8 @@ export async function markReelComposed(
     captionStyle: existing.captionStyle,
     captionOverrides: existing.captionOverrides,
     overlays: existing.overlays,
+    mediaCues: existing.mediaCues,
+    clonePlan: existing.clonePlan,
     updatedBy: existing.updatedBy,
   });
 

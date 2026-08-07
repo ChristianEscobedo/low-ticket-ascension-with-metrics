@@ -451,6 +451,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.8.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Clone, step 1: the Clone tab and the character-sheet foundry',
+    body: cl([
+      '<p>The Clipping Studio gains a <strong>Clone</strong> tab — step 1 of the AI Clone video wizard. A clone is a saved cast member: a name, reference photos, an ElevenLabs voice (pick from your account or paste a clone id), and a locked <strong>look bible</strong> — wardrobe, backdrop, lighting, lens — one string every downstream prompt quotes verbatim, so the character never drifts.</p>',
+      '<p>No photos? The <strong>character-sheet foundry</strong> forges one with GPT Image 2: a 2×2 turnaround grid (front / three-quarter / profile / close-up) plus an expression strip (neutral, excited, serious), with an optional full-body cell for walking b-roll. One image call, <em>once per character — not per video</em> (~$0.08, the cheapest consistency lever in the stack). The sheet lands in the Media Library tagged <code>character-sheet</code>, reusable across reels.</p>',
+      '<p>The clone saves into the reel itself as the plan manifest (beats, storyboard gate, and cost readouts build on it in the next steps), and the full 6-step wizard shows on the tab so you always know where this is going.</p>',
+      '<p><strong>Where to start:</strong> Clipping Studio → Clone tab → describe your person, forge the sheet, save the clone.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

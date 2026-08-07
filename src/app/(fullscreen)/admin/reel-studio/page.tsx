@@ -120,7 +120,9 @@ import {
   type VaultKind,
 } from '@/lib/mothermode/reel/vault';
 
-import { Wand2 } from 'lucide-react';
+import { PersonStanding, Wand2 } from 'lucide-react';
+import ClonePanel from './ClonePanel';
+import type { ClonePlan } from '@/lib/mothermode/reel/clone';
 
 
 import {
@@ -2806,7 +2808,7 @@ function ScheduleSheet({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'clips' | 'captions' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes';
+type Tab = 'clips' | 'captions' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes' | 'clone';
 
 /** R6a Board shot: one line of the story — prompt + footage, in order. */
 interface BoardShot {
@@ -4095,6 +4097,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     await post({ action: 'save', project: updated });
   }
 
+  /** Persist the clone manifest (same save path as media cues). */
+  async function saveClonePlan(next: ClonePlan) {
+    if (!project) return;
+    const updated: ReelProject = { ...project, clonePlan: next };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+  }
+
   /** Cue mode word click: open the image picker for that word. */
   function beginCueAttach(wordIndex: number) {
     setCuePickerWord(wordIndex);
@@ -5316,6 +5326,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
               {(
                 [
                   ['post', 'Post', Layers],
+                  ['clone', 'Clone', PersonStanding],
                   ['clips', 'Scenes', Film],
                   ['captions', 'Captions', Mic],
                   ['board', 'Board', LayoutList],
@@ -5351,6 +5362,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
               <div className="flex h-10 shrink-0 items-center justify-between border-b border-bone/10 px-3">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-bone/50">
                   {tab === 'post' && 'Post assets'}
+                  {tab === 'clone' && 'AI Clone'}
                   {tab === 'clips' && 'Scenes'}
                   {tab === 'captions' && 'Captions'}
                   {tab === 'board' && 'The Board'}
@@ -5366,6 +5378,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {tab === 'clone' && (
+                <ClonePanel project={project} onSavePlan={saveClonePlan} onNote={setNote} />
+              )}
               {tab === 'clips' && (
                 <div className="space-y-2">
                   {/* add scene — new material enters at the TOP of the panel */}
