@@ -88,6 +88,24 @@ export function normalizeTags(tags: string[]): string[] {
   return Array.from(out);
 }
 
+/**
+ * The clone cast: character sheets forged in the Clone tab's foundry land in
+ * the library tagged `character-sheet`. This is the Content Hub handoff — a
+ * storyboard picks one as its @reference (the same character shows up inside
+ * the generated footage). Accepts any asset-ish row (the API's list shape).
+ */
+export function characterSheetAssets<
+  T extends { url?: string; kind?: string; tags?: string[] },
+>(assets: T[]): T[] {
+  return assets.filter(
+    (a) =>
+      typeof a.url === 'string' &&
+      /^https?:\/\//i.test(a.url) &&
+      (a.kind === 'image' || !a.kind) &&
+      (a.tags ?? []).includes('character-sheet'),
+  );
+}
+
 /** Case-insensitive name + tag match for client-side grid search. */
 export function assetMatches(asset: MediaAsset, query: string): boolean {
   const q = query.trim().toLowerCase();

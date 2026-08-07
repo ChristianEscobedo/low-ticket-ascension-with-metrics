@@ -28,11 +28,15 @@
  * built — deterministic for the same manifest.
  */
 import {
+  beatGridForWords,
   beatWordCount,
   cloneBeatRefSlots,
+  cloneMasterRef,
   lookBibleString,
+  makeBeatId,
   storyboardIssues,
   type CloneBeat,
+  type CloneBeatKind,
   type ClonePlan,
   type CloneShotAngle,
   type ReelClone,
@@ -128,6 +132,10 @@ export function cloneShotFraming(shot: CloneShotAngle): string {
   return 'a medium shot, chest up';
 }
 
+/** The look-back line: a continuing beat's prompt gains this verbatim. */
+export const CLONE_CONTINUITY_NOTE =
+  'This shot continues directly from the previous one — same person, same wardrobe, same setting, unbroken motion.';
+
 /**
  * The avatar direction: framing + the performance note (the beat's energy
  * and pace, so the delivery matches the voice programming) + the look bible
@@ -140,6 +148,7 @@ export function cloneAvatarPrompt(beat: CloneBeat, clone: ReelClone): string {
   return [
     `The person in the reference image, ${cloneShotFraming(beat.shot)}, speaking directly to camera.`,
     `Delivery: ${energy} energy, ${pace} pace.`,
+    beat.continuesFrom ? CLONE_CONTINUITY_NOTE : '',
     bible ? `${bible}.` : '',
     'Photorealistic, natural lip sync to the audio, steady camera, real skin texture, no text, no watermark, no logos.',
   ]
@@ -161,6 +170,7 @@ export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone): string {
     slots.variant
       ? '@image2 is the variant reference (wardrobe change, location, or product-in-hand) — match it for this shot.'
       : '',
+    beat.continuesFrom ? CLONE_CONTINUITY_NOTE : '',
     bible ? `${bible}.` : '',
     'Cinematic, photorealistic, natural motion, no text, no watermark, no logos.',
   ]
@@ -193,4 +203,58 @@ export function cloneAssembleBeats(plan: ClonePlan): CloneBeat[] {
   return [...plan.beats]
     .sort((a, b) => a.index - b.index)
     .filter((b) => b.status === 'generated' && !!b.videoUrl);
+}
+
+// ---------------------------------------------------------------------------
+// Extend + re-roll (manifest operations — extend/re-roll is step 5's sibling)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extend: append a beat after the last one. @1 rides automatically; when the
+ * previous beat is generated the new beat marks the look-back
+ * (`continuesFrom` = the previous beat's clip — the generate route grabs its
+ * last frame for the image-to-video start). Appending changes the
+ * storyboard, so the caller un-approves the gate. VSLs are just longer
+ * chains appended this way.
+ */
+export function cloneExtendBeat(
+  plan: ClonePlan,
+  input: { kind: CloneBeatKind; line?: string; brollPrompt?: string },
+): CloneBeat {
+  const sorted = [...plan.beats].sort((a, b) => a.index - b.index);
+  const prev = sorted[sorted.length - 1];
+  const line = (input.line ?? '').trim().slice(0, 300);
+  const master = cloneMasterRef(plan.clone);
+  const beat: CloneBeat = {
+    id: makeBeatId(),
+    index: prev ? prev.index + 1 : 0,
+    kind: input.kind,
+    line,
+    shot: 'medium',
+    // The honest grid: the seconds the words need (5s for a visual beat).
+    durationSec: beatGridForWords(beatWordCount(line)),
+    refs: master ? [master] : [],
+    status: 'planned',
+  };
+  if (input.kind === 'broll' && input.brollPrompt?.trim()) {
+    beat.brollPrompt = input.brollPrompt.trim().slice(0, 500);
+  }
+  if (prev?.status === 'generated' && prev.videoUrl) beat.continuesFrom = prev.videoUrl;
+  return beat;
+}
+
+/**
+ * Re-roll: strip a beat's generation outputs back to 'planned'. The plan is
+ * unchanged, so the gate stays stamped — re-rolling re-buys THIS beat's
+ * outputs only. Pure: a new beat with the output keys dropped (id, refs,
+ * line, voice, and any continuesFrom survive).
+ */
+export function cloneBeatForReroll(beat: CloneBeat): CloneBeat {
+  const out: CloneBeat = { ...beat, status: 'planned' };
+  delete out.audioUrl;
+  delete out.videoUrl;
+  delete out.voiceRequestId;
+  delete out.videoRequestId;
+  delete out.error;
+  return out;
 }

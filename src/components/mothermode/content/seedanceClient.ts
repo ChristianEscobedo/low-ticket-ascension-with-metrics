@@ -38,6 +38,12 @@ export interface SeedanceSubmitInput {
   seed?: number;
   /** Optional model override; empty falls back to the server default. */
   model?: string;
+  /**
+   * Optional omni-reference images (character sheets, prop stills) — the
+   * cast. Forwarded to the route, which passes them to omni-reference
+   * Seedance models (@image1, @image2… in slot order).
+   */
+  referenceImages?: string[];
 }
 
 async function post(body: Record<string, unknown>): Promise<SeedanceResponse> {

@@ -24,6 +24,7 @@ import {
   PersonStanding,
   Play,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -62,6 +63,8 @@ import {
 } from '@/lib/mothermode/reel/clone';
 import {
   cloneAssembleBeats,
+  cloneBeatForReroll,
+  cloneExtendBeat,
   cloneGenProgress,
   cloneGenStep,
 } from '@/lib/mothermode/reel/cloneGenerate';
@@ -164,6 +167,10 @@ export default function ClonePanel({
   // Step 5 (wizard) — generation: the beat being worked ('all' = the pass).
   const [genBusy, setGenBusy] = useState<string | null>(null);
   const [assembleBusy, setAssembleBusy] = useState(false);
+
+  // Extend/re-roll — append a beat (the look-back rides the last beat).
+  const [extendKind, setExtendKind] = useState<'avatar' | 'broll'>('avatar');
+  const [extendText, setExtendText] = useState('');
 
   useEffect(() => {
     void aiListVoices().then(setVoices);
@@ -426,6 +433,43 @@ export default function ClonePanel({
     } finally {
       setGenBusy(null);
     }
+  }
+
+  /** Extend: append a beat. The storyboard changed — the gate re-opens. */
+  async function addExtendBeat() {
+    if (!existing || !extendText.trim()) return;
+    const beat = cloneExtendBeat(existing, {
+      kind: extendKind,
+      line: extendText,
+      brollPrompt: extendKind === 'broll' ? extendText : undefined,
+    });
+    setExtendText('');
+    await onSavePlan({
+      ...existing,
+      beats: [...existing.beats, beat],
+      approvedAt: null,
+      updatedAt: new Date().toISOString(),
+    });
+    onNote?.(
+      beat.continuesFrom
+        ? `Beat ${beat.index + 1} appended — it continues from the previous beat's last frame. Re-approve the storyboard to generate it.`
+        : `Beat ${beat.index + 1} appended — re-approve the storyboard to generate it.`,
+    );
+  }
+
+  /** Re-roll: clear a beat's outputs back to planned — the gate stays stamped. */
+  async function rerollBeat(b: CloneBeat) {
+    if (!existing || genBusy) return;
+    const clean = cloneBeatForReroll(b);
+    const next: ClonePlan = {
+      ...existing,
+      // REPLACE, not merge — the dropped output keys must actually drop.
+      beats: existing.beats.map((x) => (x.id === b.id ? clean : x)),
+      updatedAt: new Date().toISOString(),
+    };
+    setPlanOverride({ projectId: project.id, plan: next });
+    await onSavePlan(next);
+    onNote?.(`Beat ${b.index + 1} cleared — hit generate to re-roll it.`);
   }
 
   /** Step 6: the generated beats land on the timeline as scenes, in order. */
@@ -737,6 +781,49 @@ export default function ClonePanel({
               )}
             </div>
           ))}
+
+          {/* extend — append a beat; the look-back rides the previous beat */}
+          <div className="space-y-1.5 rounded-xl border border-dashed border-bone/15 p-2">
+            <div className="flex items-center gap-1">
+              {(['avatar', 'broll'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setExtendKind(k)}
+                  className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                    extendKind === k ? 'bg-brass text-ink' : 'text-bone/45 hover:bg-bone/10'
+                  }`}
+                >
+                  {k === 'avatar' ? 'talking head' : 'b-roll'}
+                </button>
+              ))}
+              <span className="ml-auto text-[8px] text-bone/30">
+                extends the chain — continues from the last beat
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                value={extendText}
+                onChange={(e) => setExtendText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addExtendBeat();
+                }}
+                placeholder={
+                  extendKind === 'avatar'
+                    ? 'The next line, spoken to camera…'
+                    : 'The b-roll visual — the character inside the footage…'
+                }
+                className={INPUT}
+              />
+              <button
+                onClick={() => void addExtendBeat()}
+                disabled={!extendText.trim()}
+                title="Append this beat — then re-approve the storyboard"
+                className="shrink-0 rounded-lg border border-brass/40 px-2 py-1.5 text-[9px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+              >
+                + beat
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1107,6 +1194,16 @@ export default function ClonePanel({
                       >
                         watch
                       </a>
+                    )}
+                    {(done || b.status === 'failed') && (
+                      <button
+                        onClick={() => void rerollBeat(b)}
+                        disabled={genBusy !== null}
+                        title="Re-roll this beat — clears its outputs so generate re-renders it (the plan is unchanged; the gate stays stamped)"
+                        className="shrink-0 rounded-md border border-bone/15 p-1 text-bone/50 hover:bg-bone/10 hover:text-brass disabled:opacity-40"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
                     )}
                   </div>
                 );

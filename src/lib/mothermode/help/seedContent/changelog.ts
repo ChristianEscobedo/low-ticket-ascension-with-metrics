@@ -500,6 +500,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.12.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Clone, the finale: extend + re-roll + the Content Hub cast',
+    body: cl([
+      '<p>The Clone wizard is complete. <strong>Extend</strong> appends a beat to the chain — talking head or b-roll — and when the previous beat is rendered, the new one continues from its LAST FRAME (the generate route grabs it server-side and Seedance starts from it), so long chains and VSLs hold visual continuity instead of hard-cutting between beats. Appending re-opens the gate, because the storyboard changed. <strong>Re-roll</strong> clears one beat\'s outputs back to planned and re-renders just that beat — the plan is untouched, so the gate stays stamped and you never re-buy the voice of the beats you kept.</p>',
+      '<p>And the cast goes everywhere: every forged character sheet now appears in the Content Hub\'s storyboard panel as <strong>the cast</strong> — one click adds it as the board\'s @reference, and the Reel Director\'s Seedance renders carry it as an omni-reference automatically. One sheet, both surfaces: the same character shows up inside the footage, not just between cuts.</p>',
+      '<p><strong>Where to start:</strong> Clone tab → the dashed extend box under the script; Content Hub → a post\'s Storyboard panel → the cast row.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

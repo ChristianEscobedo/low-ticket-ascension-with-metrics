@@ -22,7 +22,12 @@ import {
 } from '@/utils/integrations/elevenlabs';
 import { isSeedanceConfigured, renderSeedanceClip } from '@/utils/integrations/muapi-seedance';
 import { isMuapiAvatarConfigured, renderMuapiAvatar } from '@/utils/integrations/muapi';
-import { uploadAudioBuffer, uploadVideoBuffer } from '@/utils/mothermode/storage';
+import { extractFrameBuffer } from '@/utils/integrations/ffmpeg-worker';
+import {
+  uploadAudioBuffer,
+  uploadImageDataUrl,
+  uploadVideoBuffer,
+} from '@/utils/mothermode/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -198,10 +203,26 @@ export async function POST(request: NextRequest) {
     }
 
     // b-roll — Seedance with the @reference images INSIDE the footage.
+    // Look-back: a continuing beat starts from the PREVIOUS beat's last frame
+    // (image-to-video continuity) when we can grab it — the clone refs still
+    // ride as omni-references either way.
+    let startFrame = primary;
+    if (beat.continuesFrom) {
+      const prev = plan.beats.find((x) => x.videoUrl === beat.continuesFrom);
+      try {
+        const atSec = Math.max(0.1, (prev?.durationSec ?? beat.durationSec) - 0.1);
+        const frame = await extractFrameBuffer({ url: beat.continuesFrom, atSec });
+        startFrame = await uploadImageDataUrl(
+          `data:image/jpeg;base64,${frame.toString('base64')}`,
+        );
+      } catch {
+        /* no frame — @1 stays the start frame */
+      }
+    }
     const tier = beat.seedanceTier ?? plan.seedanceTier;
     const rendered = await renderSeedanceClip({
       prompt: cloneBrollPrompt(beat, plan.clone),
-      imageUrl: primary,
+      imageUrl: startFrame,
       aspectRatio: CLONE_ASPECT_RATIO,
       durationSec: beat.durationSec,
       model:

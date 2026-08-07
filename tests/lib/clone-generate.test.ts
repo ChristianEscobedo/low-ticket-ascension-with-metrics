@@ -11,10 +11,13 @@ import {
 } from '@/lib/mothermode/reel/clone';
 import {
   CLONE_AVATAR_MODEL,
+  CLONE_CONTINUITY_NOTE,
   CLONE_SEEDANCE_MODELS,
   cloneAssembleBeats,
   cloneAvatarPrompt,
+  cloneBeatForReroll,
   cloneBrollPrompt,
+  cloneExtendBeat,
   cloneGenerationBlockers,
   cloneGenProgress,
   cloneGenStep,
@@ -22,6 +25,8 @@ import {
   cloneSceneName,
   cloneShotFraming,
 } from '@/lib/mothermode/reel/cloneGenerate';
+import { characterSheetAssets } from '@/lib/mothermode/reel/mediaLibrary';
+import { normalizeClonePlan } from '@/lib/mothermode/reel/clone';
 
 const CLONE: ReelClone = {
   id: 'clone-test01',
@@ -188,5 +193,85 @@ describe('the model tables', () => {
     expect(CLONE_SEEDANCE_MODELS['seedance-2.0']).toBeTruthy();
     expect(CLONE_SEEDANCE_MODELS['seedance-2.5']).toBeTruthy();
     expect(CLONE_AVATAR_MODEL).toBe('omnihuman-1');
+  });
+});
+
+describe('extend (the look-back)', () => {
+  it('appends after the last index with @1 riding and the honest grid', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat()];
+    const next = cloneExtendBeat(plan, { kind: 'avatar', line: 'and here is the payoff, watch this' });
+    expect(next.index).toBe(1);
+    expect(next.refs).toEqual([CLONE.sheetUrl]);
+    expect(next.durationSec).toBe(5); // 8 words → 5s
+    expect(next.status).toBe('planned');
+    // the previous beat isn't generated — no look-back yet
+    expect(next.continuesFrom).toBeUndefined();
+  });
+
+  it('marks the look-back when the previous beat is generated', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat({ status: 'generated', videoUrl: 'https://cdn.example.com/beat1.mp4' }),
+    ];
+    const next = cloneExtendBeat(plan, { kind: 'broll', brollPrompt: 'walks out of the gym' });
+    expect(next.continuesFrom).toBe('https://cdn.example.com/beat1.mp4');
+    expect(next.brollPrompt).toBe('walks out of the gym');
+    // and the prompts gain the continuity note only for continuing beats
+    expect(cloneBrollPrompt(next, CLONE)).toContain('continues directly from the previous one');
+    expect(cloneBrollPrompt(makeBeat({ kind: 'broll', brollPrompt: 'x' }), CLONE)).not.toContain(
+      'continues directly from the previous one',
+    );
+    expect(CLONE_CONTINUITY_NOTE).toContain('unbroken motion');
+  });
+
+  it('the normalizer round-trips an appended beat (line-less avatar beats would drop — extend always carries the line)', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat({ status: 'generated', videoUrl: 'https://cdn.example.com/beat1.mp4' })];
+    const next = cloneExtendBeat(plan, { kind: 'avatar', line: 'one more thing' });
+    const back = normalizeClonePlan({ ...plan, beats: [...plan.beats, next] });
+    expect(back!.beats).toHaveLength(2);
+    expect(back!.beats[1].continuesFrom).toBe('https://cdn.example.com/beat1.mp4');
+  });
+});
+
+describe('re-roll', () => {
+  it('strips every output back to planned, keeping the plan fields', () => {
+    const beat = makeBeat({
+      status: 'generated',
+      audioUrl: 'https://cdn.example.com/a.mp3',
+      videoUrl: 'https://cdn.example.com/v.mp4',
+      videoRequestId: 'req-1',
+      voiceRequestId: 'req-v',
+      continuesFrom: 'https://cdn.example.com/prev.mp4',
+      error: 'stale',
+      voice: { pace: 'fast', energy: 'high' },
+    });
+    const clean = cloneBeatForReroll(beat);
+    expect(clean.status).toBe('planned');
+    expect(clean.audioUrl).toBeUndefined();
+    expect(clean.videoUrl).toBeUndefined();
+    expect(clean.videoRequestId).toBeUndefined();
+    expect(clean.voiceRequestId).toBeUndefined();
+    expect(clean.error).toBeUndefined();
+    // the plan survives: line, voice programming, refs, the look-back
+    expect(clean.voice).toEqual({ pace: 'fast', energy: 'high' });
+    expect(clean.continuesFrom).toBe('https://cdn.example.com/prev.mp4');
+    expect(cloneGenStep(clean)).toBe('voice'); // it re-enters at voice
+    expect(beat.status).toBe('generated'); // the original is untouched
+  });
+});
+
+describe('the cast (Content Hub handoff)', () => {
+  it('characterSheetAssets keeps only tagged image URLs', () => {
+    const assets = [
+      { url: 'https://cdn.example.com/sheet.png', kind: 'image', tags: ['character-sheet', 'clone'] },
+      { url: 'https://cdn.example.com/other.png', kind: 'image', tags: ['cue'] },
+      { url: 'not-a-url', kind: 'image', tags: ['character-sheet'] },
+      { url: 'https://cdn.example.com/clip.mp4', kind: 'video', tags: ['character-sheet'] },
+    ];
+    const cast = characterSheetAssets(assets);
+    expect(cast).toHaveLength(1);
+    expect(cast[0].url).toBe('https://cdn.example.com/sheet.png');
   });
 });

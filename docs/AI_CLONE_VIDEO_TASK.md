@@ -1,6 +1,6 @@
 # AI Clone Video — TASK (handoff)
 
-**Status: IN PROGRESS. Steps 1–4 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 5–6 remain (extend/re-roll + the Content Hub cast handoff) — this doc is the whole plan, pick it up cold.**
+**Status: COMPLETE. All six steps shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md — the record of what lives where). One open follow-up at first live render: confirm `MUAPI_AVATAR_MODEL`'s slug + field names against the live muapi catalog, and refresh `CLONE_COSTS` from muapi's live pricing.**
 
 > **Step 1 — DONE**: clone entity + character-sheet foundry + Clone tab in the
 > studio + clonePlan manifest persistence (types/store/route) + cost tables +
@@ -166,9 +166,8 @@ sheet as @reference automatically. One component, both surfaces.
    verify the muapi avatar slug (`MUAPI_AVATAR_MODEL`, default
    `omnihuman-1`) + field names against the live catalog on first render,
    and refresh `CLONE_COSTS` from muapi's live pricing.
-5. **Extend + re-roll** — the manifest; append beats, re-roll one beat,
-   last-frame continuation.
-6. **Content Hub cast handoff** — the same sheet behind the Hub storyboard.
+5. **Extend + re-roll** — DONE (2026-08-07, changelog 2.12.0).
+6. **Content Hub cast handoff** — DONE (2026-08-07, changelog 2.12.0).
 
 ## Verify (house style, every step)
 

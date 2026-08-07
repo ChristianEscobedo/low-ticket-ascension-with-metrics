@@ -217,3 +217,68 @@ audio/image field names against the live catalog on first render),
 **Not in step 4 (the last two own these).** Extend/re-roll (append beats,
 re-roll one beat, last-frame continuation via `continuesFrom`) and the
 Content Hub cast handoff.
+
+## Step 5 — Extend + re-roll (shipped 2026-08-07)
+
+**What it is.** The manifest operations on the wizard's tail. **Extend**
+(the dashed box under the script): append a talking-head or b-roll beat —
+@1 rides automatically, the honest grid sets its seconds from the word
+count, and when the previous beat is rendered the new one stamps
+`continuesFrom` with its clip. Appending re-opens the gate (the storyboard
+changed). **Re-roll** (the ↺ on a rendered/failed beat in step 5): clears
+one beat's outputs back to `planned` — line, voice programming, refs, and
+the look-back all survive — so generate re-renders just that beat while the
+gate stays stamped.
+
+**Where it lives.**
+
+- `src/lib/mothermode/reel/cloneGenerate.ts` — `cloneExtendBeat` (append +
+  the look-back stamp), `cloneBeatForReroll` (drops the five output keys,
+  pure), and `CLONE_CONTINUITY_NOTE` — the verbatim continuity line both
+  prompt builders gain when `continuesFrom` is set.
+- `src/app/api/admin/reel-clone-generate/route.ts` — a continuing b-roll
+  beat's start frame is the PREVIOUS beat's last frame, grabbed server-side
+  (`extractFrameBuffer` at prev.durationSec − 0.1) and re-hosted
+  (`uploadImageDataUrl`); the clone refs still ride as omni-references. No
+  frame → @1 stays the start frame (never blocks the render).
+- `ClonePanel.tsx` — the extend box (kind chips + one input, Enter adds)
+  and the per-beat re-roll button (REPLACE-semantics save so dropped keys
+  actually drop).
+- `tests/lib/clone-generate.test.ts` — extend index/refs/grid, the
+  look-back stamp + continuity note gating, the normalizer round-trip of an
+  appended beat, re-roll key-stripping + re-entry at voice.
+- Changelog 2.12.0.
+
+## Step 6 — The Content Hub cast handoff (shipped 2026-08-07)
+
+**What it is.** The foundry's sheets are the Hub's cast. Every forged
+character sheet (Media Library, tagged `character-sheet`) now appears in
+the Hub's storyboard panel as **the cast** row — one click appends it to
+the board's reference images, and the Reel Director's Seedance renders
+carry the refs as omni-references automatically. One component, both
+surfaces: the same character shows up inside the footage.
+
+**Where it lives.**
+
+- `src/lib/mothermode/reel/mediaLibrary.ts` — `characterSheetAssets`: the
+  tagged-image filter (http image URLs + the `character-sheet` tag).
+- `src/components/mothermode/content/CloneCastPicker.tsx` — NEW: the cast
+  row (renders nothing when the library has no sheets).
+- `src/components/mothermode/content/StoryboardPanel.tsx` — mounts the
+  picker in the References block; a pick appends to `refs` (deduped,
+  capped at MAX_STORYBOARD_REFERENCES, "Save refs to pack" persists).
+- `src/components/mothermode/content/seedanceClient.ts` —
+  `SeedanceSubmitInput.referenceImages` (the client spreads input verbatim
+  into the POST; the route already reads them).
+- `src/components/mothermode/content/ReelDirectorPanel.tsx` — every board
+  render forwards `pack.referenceImages` (http-only filter) so the cast
+  rides as omni-references in slot order.
+- The helper's coverage rides in `tests/lib/clone-generate.test.ts` (the
+  cast describe). Changelog 2.12.0 covers 5 + 6.
+
+**Verify (5 + 6).** `npx tsc --noEmit` clean; 54/54 clone + media-library
+tests green (18 in clone-generate, 31 in clone, 5 in media-library).
+
+**That completes the wizard.** The task doc's open question remains the one
+to close at first live render: confirm `MUAPI_AVATAR_MODEL`'s slug + field
+names and refresh `CLONE_COSTS` from muapi's live pricing.

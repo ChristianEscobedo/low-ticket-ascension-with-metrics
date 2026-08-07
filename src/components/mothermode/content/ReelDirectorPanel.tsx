@@ -289,7 +289,19 @@ export default function ReelDirectorPanel({
 
     try {
       const videoUrl = await renderSeedanceClip(
-        { prompt, imageUrl, aspectRatio, durationSec, model: model || undefined },
+        {
+          prompt,
+          imageUrl,
+          aspectRatio,
+          durationSec,
+          model: model || undefined,
+          // The cast rides every board's render: the storyboard's reference
+          // images (a picked character sheet, product stills) go to the
+          // omni-reference model in slot order.
+          referenceImages: (pack?.referenceImages ?? []).filter(
+            (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+          ),
+        },
         {
           onStatus: (s: SeedanceTaskStatus) => {
             setLiveStatus((l) => ({ ...l, [board.index]: s }));

@@ -38,6 +38,7 @@ import {
 } from './reviewClient';
 import { aiGenerateStoryboardPlan } from './aiClient';
 import ReelDirectorPanel from './ReelDirectorPanel';
+import CloneCastPicker from './CloneCastPicker';
 
 import {
   useAiAction,
@@ -365,6 +366,17 @@ export const StoryboardPanel: React.FC<{
               multiple
               className="hidden"
               onChange={onRefFiles}
+            />
+            {/* the cast — forged character sheets from the Clone tab, one click
+                adds one as this board's @reference */}
+            <CloneCastPicker
+              onPick={(url) =>
+                setRefs((prev) =>
+                  prev.includes(url)
+                    ? prev
+                    : [...prev, url].slice(0, MAX_STORYBOARD_REFERENCES),
+                )
+              }
             />
             {refs.length > 0 ? (
               <div className="mt-2 flex flex-wrap gap-1.5">
