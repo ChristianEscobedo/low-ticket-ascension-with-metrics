@@ -221,3 +221,54 @@ export async function listVoices(): Promise<ElevenLabsVoice[]> {
 export function isElevenLabsConfigured(): boolean {
   return !!process.env.ELEVENLABS_API_KEY?.trim();
 }
+
+/**
+ * Instant Voice Clone: create a voice from a recorded sample (the AI Twins
+ * "record your voice" flow). POSTs the audio to /v1/voices/add and returns
+ * the new voice id. Throws a readable Error on a missing key or API failure.
+ */
+export async function cloneVoiceFromAudio(opts: {
+  name: string;
+  audio: Buffer;
+  mime: string;
+  fileName: string;
+}): Promise<string> {
+  const apiKey = requireApiKey();
+  const form = new FormData();
+  form.append('name', opts.name.trim().slice(0, 80) || 'My voice');
+  form.append(
+    'files',
+    new Blob([new Uint8Array(opts.audio)], { type: opts.mime || 'audio/mpeg' }),
+    opts.fileName || 'sample.mp3',
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/voices/add`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey },
+      body: form,
+    });
+  } catch (e) {
+    throw new Error(
+      e instanceof Error ? `ElevenLabs request failed: ${e.message}` : 'ElevenLabs request failed',
+    );
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const err = (await res.json()) as Record<string, unknown>;
+      const d = err?.detail;
+      if (typeof d === 'string') detail = d;
+      else if (d && typeof d === 'object' && typeof (d as Record<string, unknown>).message === 'string') {
+        detail = (d as Record<string, unknown>).message as string;
+      }
+    } catch {
+      /* body was not JSON */
+    }
+    throw new Error(`Voice clone failed (${res.status})${detail ? `: ${detail}` : ''}`);
+  }
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = typeof json.voice_id === 'string' ? json.voice_id : '';
+  if (!id) throw new Error('ElevenLabs returned no voice id');
+  return id;
+}

@@ -29,9 +29,12 @@ import { characterSheetAssets } from '@/lib/mothermode/reel/mediaLibrary';
 import {
   characterSheetPrompt,
   cloneLibraryEntries,
+  clonePlanCost,
   cloneSheetStyleFor,
   isTwinReel,
   normalizeClonePlan,
+  sceneSheetPrompt,
+  sceneSheetStale,
   twinReelName,
   twinRoster,
 } from '@/lib/mothermode/reel/clone';
@@ -355,5 +358,49 @@ describe('the sheet styles', () => {
     expect(ugc).toContain('camera roll');
     expect(ugc).not.toContain('black matte spacing');
     expect(cloneSheetStyleFor('nope').id).toBe('cinematic');
+  });
+});
+
+describe('timestamps + the scene sheet + scratch VO', () => {
+  it('the normalizer stamps every beat window from order + duration', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat({ durationSec: 5 }), makeBeat({ id: 'b2', index: 1, durationSec: 10 })];
+    const back = normalizeClonePlan(plan)!;
+    expect(back.beats[0]).toMatchObject({ startSec: 0, endSec: 5 });
+    expect(back.beats[1]).toMatchObject({ startSec: 5, endSec: 15 });
+  });
+
+  it('the scene sheet prices in until forged, and the prompt carries the beats + the bible', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat()];
+    expect(clonePlanCost(plan).sceneSheet).toBeCloseTo(0.08, 3);
+    const forged = normalizeClonePlan({
+      ...plan,
+      sceneSheetUrl: 'https://cdn.example.com/scene.png',
+      sceneSheetAt: '2026-08-07T01:00:00.000Z',
+      updatedAt: '2026-08-07T00:30:00.000Z', // before the forge — not stale
+    })!;
+    expect(clonePlanCost(forged).sceneSheet).toBe(0);
+    const prompt = sceneSheetPrompt(forged);
+    expect(prompt).toContain('SCENE SHEET');
+    expect(prompt).toContain('Panel 1');
+    expect(prompt).toContain('Wardrobe: navy crewneck');
+    expect(sceneSheetStale(forged)).toBe(false);
+    expect(sceneSheetStale({ ...forged, updatedAt: '2026-08-07T02:00:00.000Z' })).toBe(true);
+  });
+
+  it('a scratch take round-trips the normalizer and skips TTS', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat({
+        audioUrl: 'https://cdn.example.com/take.webm',
+        status: 'voiced',
+        voiceRequestId: 'scratch',
+      }),
+    ];
+    const back = normalizeClonePlan(plan)!;
+    expect(back.beats[0].status).toBe('voiced');
+    expect(back.beats[0].voiceRequestId).toBe('scratch');
+    expect(cloneGenStep(back.beats[0])).toBe('video'); // a scratch take skips TTS
   });
 });

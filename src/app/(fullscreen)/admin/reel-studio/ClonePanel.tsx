@@ -54,6 +54,8 @@ import {
   lookBibleString,
   makeBeatId,
   makeCloneId,
+  sceneSheetPrompt,
+  sceneSheetStale,
   storyboardIssues,
   withBeatRefSlot,
   type CloneBeat,
@@ -77,6 +79,8 @@ import {
   aiListVoices,
   type AiVoice,
 } from '@/components/mothermode/content/aiClient';
+import { usePieceLinks } from '@/components/mothermode/content/pieceLinks';
+import VoiceRecorder from '@/components/mothermode/content/VoiceRecorder';
 
 const WIZARD_STEPS = [
   { n: 1, label: 'The Clone', live: true },
@@ -182,6 +186,15 @@ export default function ClonePanel({
   // Extend/re-roll — append a beat (the look-back rides the last beat).
   const [extendKind, setExtendKind] = useState<'avatar' | 'broll'>('avatar');
   const [extendText, setExtendText] = useState('');
+
+  // Step 2 grounding: an offer / lead magnet / owner notes, resolved
+  // server-side into the context block the writer must stay consistent with.
+  const { funnels, optinFunnels } = usePieceLinks('');
+  const [ctxPick, setCtxPick] = useState(''); // 'offer:<slug>' | 'lead:<slug>' | ''
+  const [ctxNotes, setCtxNotes] = useState('');
+  // The scene sheet forge + per-beat scratch VO.
+  const [sceneBusy, setSceneBusy] = useState(false);
+  const [scratchBusy, setScratchBusy] = useState<string | null>(null);
 
   // The twin editor is COLLAPSED once this reel has its twin — the summary
   // card + an edit toggle carry it. A fresh reel opens with it expanded.
@@ -340,8 +353,13 @@ export default function ClonePanel({
     try {
       const type = cloneVideoTypeFor(videoType);
       const fw = cloneFrameworkFor(framework);
-      const { beats } = await aiGenerateCloneScript({
+      const { beats, contextLabel } = await aiGenerateCloneScript({
         topic: topic.trim(),
+        context: {
+          offerSlug: ctxPick.startsWith('offer:') ? ctxPick.slice(6) : undefined,
+          optinSlug: ctxPick.startsWith('lead:') ? ctxPick.slice(5) : undefined,
+          notes: ctxNotes.trim() || undefined,
+        },
         typeLabel: type.label,
         frameworkLabel: fw.label,
         frameworkBeats: fw.beats,
@@ -376,6 +394,7 @@ export default function ClonePanel({
         framework,
         beats: mapped,
         approvedAt: null,
+        ...(contextLabel ? { contextLabel } : {}),
         updatedAt: new Date().toISOString(),
       });
       onNote?.(`Script written — ${mapped.length} beats on ${fw.label}. Edit any line below.`);
@@ -453,6 +472,71 @@ export default function ClonePanel({
   async function revokeStoryboard() {
     if (!existing) return;
     await onSavePlan({ ...existing, approvedAt: null, updatedAt: new Date().toISOString() });
+  }
+
+  /** The scene sheet: ONE board forged from the script — the world, decided
+   *  once. Rides every b-roll render as an omni-reference. ~$0.08/revision. */
+  async function forgeSceneSheet() {
+    if (!existing || existing.beats.length === 0 || sceneBusy) return;
+    setSceneBusy(true);
+    setError(null);
+    try {
+      const url = await aiGenerateImage(
+        sceneSheetPrompt(existing, sheetStyle),
+        'reel',
+        CLONE_SHEET_MODEL,
+      );
+      await onSavePlan({
+        ...existing,
+        sceneSheetUrl: url,
+        sceneSheetAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await ingestSheet(`${existing.clone.name} — scene sheet`, url);
+      onNote?.('Scene sheet forged — it rides every b-roll render, so the world never re-invents.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scene sheet failed');
+    } finally {
+      setSceneBusy(false);
+    }
+  }
+
+  /** Scratch VO: your own read of the line becomes the beat's audio (no TTS). */
+  async function scratchVoice(b: CloneBeat, blob: Blob) {
+    setScratchBusy(b.id);
+    setError(null);
+    try {
+      const mint = await fetch('/api/admin/reel-upload-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ext: 'webm',
+          contentType: blob.type || 'audio/webm',
+          kind: 'audio',
+        }),
+      });
+      const mintJson = await mint.json();
+      if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const put = await fetch(mintJson.signedUrl, {
+        method: 'PUT',
+        headers: { 'content-type': blob.type || 'audio/webm' },
+        body: blob,
+      });
+      if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
+      const url = String(mintJson.publicUrl || '');
+      if (!url) throw new Error('Upload returned no public URL');
+      await applyGenPatch(b.id, {
+        audioUrl: url,
+        status: 'voiced',
+        voiceRequestId: 'scratch',
+        error: undefined,
+      });
+      onNote?.(`Beat ${b.index + 1} voiced with your take — generate renders the video to it.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scratch upload failed');
+    } finally {
+      setScratchBusy(null);
+    }
   }
 
   // ———— Wizard step 5: generate, per beat (voice → video, gated) ————
@@ -902,6 +986,35 @@ export default function ClonePanel({
             placeholder="What is this video about / selling? (the topic or offer — one or two sentences)"
             className={INPUT}
           />
+          {/* grounding — the script stays consistent with the picked offer /
+              lead magnet (or pasted research notes), resolved server-side */}
+          <select
+            value={ctxPick}
+            onChange={(e) => setCtxPick(e.target.value)}
+            className={INPUT}
+            title="Ground the script in one of your offers or lead magnets — every claim stays consistent with it"
+          >
+            <option value="">no grounding (topic only)</option>
+            {funnels.map((f) => (
+              <option key={f.id} value={`offer:${f.slug}`}>
+                Offer — {f.name}
+              </option>
+            ))}
+            {optinFunnels.map((f) => (
+              <option key={f.id} value={`lead:${f.slug}`}>
+                Lead magnet — {f.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={ctxNotes}
+            onChange={(e) => setCtxNotes(e.target.value)}
+            placeholder="research / notes (optional — rides as grounding)"
+            className={INPUT}
+          />
+          {existing.contextLabel && (
+            <p className="text-[8px] text-bone/35">grounded in: {existing.contextLabel}</p>
+          )}
           <button
             onClick={() => void writeScript()}
             disabled={!topic.trim() || scriptBusy}
@@ -934,8 +1047,11 @@ export default function ClonePanel({
                 <span className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60">
                   {b.kind === 'broll' ? 'b-roll' : b.shot}
                 </span>
-                <span className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] text-bone/45">
-                  {b.durationSec}s · {beatWordCount(b.line)} words
+                <span
+                  className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] text-bone/45"
+                  title="The beat's window on the timeline (stamped from order + duration)"
+                >
+                  {b.startSec ?? 0}–{b.endSec ?? b.durationSec}s · {beatWordCount(b.line)} words
                 </span>
                 {b.voice && b.kind === 'avatar' && (
                   <span
@@ -1049,6 +1165,39 @@ export default function ClonePanel({
                   : `2.5 hero${storyboardDelta > 0 ? ` (+$${storyboardDelta.toFixed(2)})` : ''}`}
               </button>
             ))}
+          </div>
+
+          {/* the scene sheet — the world, decided ONCE from the script; rides
+              every b-roll render as an omni-reference (~$0.08 per revision) */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-bone/45">Scene sheet:</span>
+            {existing.sceneSheetUrl && (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={existing.sceneSheetUrl}
+                  alt="scene sheet"
+                  className="h-8 w-8 rounded-md border border-brass/30 object-cover"
+                  title="The forged scene sheet"
+                />
+                {sceneSheetStale(existing) && (
+                  <span className="text-[8px] text-amber-300">script changed — re-forge</span>
+                )}
+              </>
+            )}
+            <button
+              onClick={() => void forgeSceneSheet()}
+              disabled={sceneBusy}
+              className="inline-flex items-center gap-1 rounded border border-brass/40 px-1.5 py-0.5 text-[8px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+              title="One GPT Image 2 call (~$0.08): a panel per beat — the world pre-decided, so b-roll never re-invents it"
+            >
+              {sceneBusy ? (
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-2.5 w-2.5" />
+              )}
+              {existing.sceneSheetUrl ? 're-forge' : 'forge the scene sheet'}
+            </button>
           </div>
 
           {/* per-beat: the shot, the @reference slots, the price */}
@@ -1252,6 +1401,14 @@ export default function ClonePanel({
                 {storyboardCost.sheet === 0 ? '$0.00 (forged)' : `$${storyboardCost.sheet.toFixed(2)}`}
               </span>
             </div>
+            <div className="flex justify-between text-bone/60">
+              <span>scene sheet — once per script revision</span>
+              <span>
+                {storyboardCost.sceneSheet === 0
+                  ? '$0.00 (forged)'
+                  : `$${storyboardCost.sceneSheet.toFixed(2)}`}
+              </span>
+            </div>
             <div className="flex justify-between border-t border-brass/15 pt-0.5 text-[11px] font-bold text-brass">
               <span>total if you generate now</span>
               <span>${storyboardCost.total.toFixed(2)}</span>
@@ -1377,6 +1534,14 @@ export default function ClonePanel({
                       )}
                       {busy ? 'working…' : b.status === 'failed' ? 'retry' : done ? 'rendered' : 'generate'}
                     </button>
+                    {!done && stepState === 'voice' && (
+                      <VoiceRecorder
+                        compact
+                        label="scratch"
+                        busy={scratchBusy === b.id}
+                        onTake={(blob) => void scratchVoice(b, blob)}
+                      />
+                    )}
                     {b.videoUrl && (
                       <a
                         href={b.videoUrl}

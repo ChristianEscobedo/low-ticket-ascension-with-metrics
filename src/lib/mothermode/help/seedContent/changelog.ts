@@ -559,6 +559,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.16.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'Grounded scripts, the scene sheet, and your own voice',
+    body: cl([
+      '<p>The Clone wizard\'s step 2 grounds now: pick one of your <strong>offers or lead magnets</strong> (or paste research notes) and the script writer stays consistent with it — every claim traces to the offer, no invented numbers. Every beat also carries its <strong>timeline window</strong> (0–5s, 5–15s…) stamped from order + duration, always right after any edit.</p>',
+      '<p>And the <strong>scene sheet</strong>: one GPT Image 2 board forged FROM the script — a panel per beat, the character inside each scene, in the same style as the character sheet. It rides every b-roll render as an omni-reference, so the world is decided once and never re-invented per clip. ~$0.08 once per script revision, on the gate\'s cost readout; edit the script and it flags itself stale.</p>',
+      '<p>Your voice, two ways: <strong>record → clone</strong> on the twin form (a 30–120s read becomes a real ElevenLabs voice on the twin), and <strong>scratch VO</strong> on step 5 — record any line yourself and it becomes that beat\'s audio, skipping TTS entirely.</p>',
+      '<p><strong>Where to start:</strong> Clone tab → step 2 → the grounding dropdown under the topic; step 4 → forge the scene sheet; AI Twins → New twin → record your voice.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

@@ -229,7 +229,7 @@ export default function PersonalizationAdminPage() {
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/100/10 px-3 py-2 text-sm text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}
@@ -329,7 +329,7 @@ export default function PersonalizationAdminPage() {
                   <button
                     onClick={() => void save(f)}
                     disabled={busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
                   >
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     Save settings
@@ -360,7 +360,7 @@ export default function PersonalizationAdminPage() {
                   <button
                     onClick={() => void clear(f)}
                     disabled={busy}
-                    className="ml-auto inline-flex items-center gap-1 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-red-300/70 hover:bg-red-500/100/100/10 disabled:opacity-40"
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-red-300/70 hover:bg-red-500/100/10 disabled:opacity-40"
                   >
                     <Trash2 className="h-3 w-3" /> clear payloads
                   </button>
@@ -387,7 +387,7 @@ export default function PersonalizationAdminPage() {
                     <button
                       onClick={() => void mintLink(f)}
                       disabled={busy || e.mode === 'off'}
-                      className="rounded bg-brass px-2.5 py-1 text-[10px] font-semibold text-bone disabled:opacity-40"
+                      className="rounded bg-brass px-2.5 py-1 text-[10px] font-semibold text-ink disabled:opacity-40"
                     >
                       mint link
                     </button>

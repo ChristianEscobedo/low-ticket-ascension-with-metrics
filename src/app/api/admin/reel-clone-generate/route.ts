@@ -166,6 +166,12 @@ export async function POST(request: NextRequest) {
   }
   const slots = cloneRefImagesFor(beat, plan.clone);
   const primary = slots[0];
+  // The scene sheet rides every b-roll render as the trailing omni-reference —
+  // the world, decided once at the storyboard, never re-invented per render.
+  const refsWithScene =
+    plan.sceneSheetUrl && !slots.includes(plan.sceneSheetUrl)
+      ? [...slots, plan.sceneSheetUrl].slice(0, 4)
+      : slots;
   if (!primary) {
     return NextResponse.json(
       { ok: false, error: 'No @reference 1 — forge the character sheet first.' },
@@ -229,7 +235,7 @@ export async function POST(request: NextRequest) {
         tier === 'seedance-2.5'
           ? process.env.MUAPI_SEEDANCE_25_MODEL?.trim() || CLONE_SEEDANCE_MODELS['seedance-2.5']
           : process.env.MUAPI_SEEDANCE_MODEL?.trim() || CLONE_SEEDANCE_MODELS['seedance-2.0'],
-      referenceImages: slots,
+      referenceImages: refsWithScene,
     });
     if (!rendered.ok) {
       return NextResponse.json(

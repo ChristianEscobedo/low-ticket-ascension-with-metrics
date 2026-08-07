@@ -460,7 +460,7 @@ export default function ExpertsPage() {
                 type="button"
                 onClick={save}
                 disabled={busy || !draft.slug}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-sm font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-sm font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
               >
                 {busy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

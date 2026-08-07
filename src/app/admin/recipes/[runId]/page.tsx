@@ -259,7 +259,7 @@ function TranscriptTurn({
         <span
           className={clsx(
             'rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
-            isUser ? 'bg-bone/10 text-bone/50' : 'bg-brass/15 text-brass',
+            isUser ? 'bg-bone/10 text-ink/50' : 'bg-brass/15 text-brass',
           )}
         >
           {speaker}
@@ -447,7 +447,7 @@ export default function RunDetailPage() {
                   act({ action: 'gate', runId: run.id, decision: 'approve' })
                 }
                 disabled={busy}
-                className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
               >
                 <Check className="h-3 w-3" />
                 Approve & continue
@@ -508,7 +508,7 @@ export default function RunDetailPage() {
 
       {error && (
 
-        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/100/100/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}

@@ -368,7 +368,7 @@ export default function RecipeDraftEditor({
           type="button"
           onClick={onSave}
           disabled={busy || errors.length > 0}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />

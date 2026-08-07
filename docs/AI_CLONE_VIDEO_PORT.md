@@ -330,3 +330,11 @@ the studio's Clone tab stopped being a wall of forms.
 - **Roster polish (same commit round):** reference photos UPLOAD now (signed-URL flow → Media Library tagged clone/reference-photo → the list) on BOTH the twin modal and the studio ClonePanel; the roster page + modal are on the dark house palette (bone/ink/brass).
 
 - **Sheet styles + script depth (2026-08-07):** CLONE_SHEET_STYLES in clone.ts (cinematic board / ugc / vsl / editorial — the direction block quotes into characterSheetPrompt via styleId; unknown ids fall back to cinematic). Style chips on both foundry surfaces. generateCloneScript gained the craft bars (open-loop hooks, one idea per line, roles-as-jobs). Burgundy cards: the house card is border-mode/25 bg-mode/[0.07] — theme-dark-sweep.cjs carries MODE_MAP now (re-runnable). Changelog 2.15.0.
+
+## Grounding + scene sheet + voice (2026-08-07, changelog 2.16.0)
+
+- **Script grounding:** the cloneScript route resolves context {offerSlug|optinSlug|notes} server-side (funnelContextBlock — defensive text-field extraction over the funnel record) into CloneScriptInput.contextBlock; the writer must stay consistent. The plan stores contextLabel. Picker on step 2 (usePieceLinks).
+- **Timestamps:** normalizeClonePlan stamps startSec/endSec per beat from order+duration — always right after any edit. Shown on the script chips.
+- **The scene sheet:** sceneSheetPrompt(plan, styleId) — one board, a panel per beat, the style + bible quoted. sceneSheetUrl/sceneSheetAt on the manifest; sceneSheetStale() flags a post-forge edit; clonePlanCost gains the sceneSheet line (.08 until forged). The generate route appends it as the trailing omni-reference on b-roll renders (refsWithScene).
+- **Voice:** cloneVoiceFromAudio in elevenlabs.ts (POST /v1/voices/add) behind /api/admin/reel-voice-clone; the shared VoiceRecorder (MediaRecorder, 120s cap) drives the twin form's record→clone AND step 5's per-beat scratch VO (signed upload → audioUrl + status voiced + voiceRequestId scratch — skips TTS).
+- Tests: the timestamps/scene-sheet/scratch describe in clone-generate.test.ts.

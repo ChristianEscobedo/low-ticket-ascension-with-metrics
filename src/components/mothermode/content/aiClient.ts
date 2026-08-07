@@ -791,7 +791,7 @@ export async function aiCloneAutofill(description: string): Promise<AiCloneAutof
 }
 
 export async function aiGenerateCloneScript(args: {
-  topic: string;
+topic: string;
   typeLabel: string;
   frameworkLabel: string;
   frameworkBeats: string[];
@@ -801,7 +801,9 @@ export async function aiGenerateCloneScript(args: {
   lookBible: string;
   guides?: string;
   model?: string;
-}): Promise<{ beats: AiCloneScriptBeat[]; model?: string }> {
+  /** Grounding: an offer / lead magnet slug, and/or free-text owner notes. */
+  context?: { offerSlug?: string; optinSlug?: string; notes?: string };
+}): Promise<{ beats: AiCloneScriptBeat[]; model?: string; contextLabel?: string }> {
   const json = await postAi({ action: 'cloneScript', ...args });
   if (!Array.isArray(json.beats) || json.beats.length === 0) {
     throw new Error('No script was returned');
@@ -809,6 +811,7 @@ export async function aiGenerateCloneScript(args: {
   return {
     beats: json.beats as AiCloneScriptBeat[],
     model: typeof json.model === 'string' ? json.model : undefined,
+    contextLabel: typeof json.contextLabel === 'string' ? json.contextLabel : undefined,
   };
 }
 

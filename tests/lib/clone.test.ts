@@ -184,7 +184,7 @@ describe('the cost tables', () => {
     const cost = clonePlanCost(withSheet);
     expect(cost.sheet).toBe(0); // the clone already has a sheet
     expect(cost.beats).toHaveLength(2);
-    expect(cost.total).toBeCloseTo(cost.voiceTotal + cost.videoTotal, 3);
+    expect(cost.total).toBeCloseTo(cost.voiceTotal + cost.videoTotal + cost.sceneSheet, 3);
 
     const noSheet = blankClonePlan({ ...CLONE, sheetUrl: undefined });
     noSheet.beats = withSheet.beats;
@@ -192,7 +192,8 @@ describe('the cost tables', () => {
     expect(clonePlanCost(noSheet).total).toBeCloseTo(
       clonePlanCost(noSheet).voiceTotal +
         clonePlanCost(noSheet).videoTotal +
-        CLONE_COSTS.characterSheetImage,
+        CLONE_COSTS.characterSheetImage +
+        clonePlanCost(noSheet).sceneSheet,
       3,
     );
   });

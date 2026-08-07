@@ -49,6 +49,7 @@ import {
   aiListVoices,
   type AiVoice,
 } from '@/components/mothermode/content/aiClient';
+import VoiceRecorder from '@/components/mothermode/content/VoiceRecorder';
 
 const API = '/api/admin/mothermode-reel';
 
@@ -106,6 +107,7 @@ function TwinFormModal({
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const refFileInput = useRef<HTMLInputElement>(null);
   const [voices, setVoices] = useState<AiVoice[]>([]);
+  const [cloneVoiceBusy, setCloneVoiceBusy] = useState(false);
   const [autofillBusy, setAutofillBusy] = useState(false);
   const [forgeBusy, setForgeBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
@@ -205,6 +207,47 @@ function TwinFormModal({
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setRefUploadBusy(false);
+    }
+  }
+
+  /** Record → clone: the take uploads, ElevenLabs clones it, the voice fills. */
+  async function recordAndClone(blob: Blob) {
+    setCloneVoiceBusy(true);
+    setError(null);
+    try {
+      const mint = await fetch('/api/admin/reel-upload-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ext: 'webm',
+          contentType: blob.type || 'audio/webm',
+          kind: 'audio',
+        }),
+      });
+      const mintJson = await mint.json();
+      if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const put = await fetch(mintJson.signedUrl, {
+        method: 'PUT',
+        headers: { 'content-type': blob.type || 'audio/webm' },
+        body: blob,
+      });
+      if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
+      const audioUrl = String(mintJson.publicUrl || '');
+      if (!audioUrl) throw new Error('Upload returned no public URL');
+      const voiceNameForClone = (name.trim() || 'My twin').slice(0, 80);
+      const res = await fetch('/api/admin/reel-voice-clone', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ audioUrl, name: `${voiceNameForClone} voice` }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Voice clone failed');
+      setVoiceId(String(json.voiceId));
+      setVoiceName(String(json.voiceName ?? voiceNameForClone));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Voice clone failed');
+    } finally {
+      setCloneVoiceBusy(false);
     }
   }
 
@@ -320,6 +363,16 @@ function TwinFormModal({
               placeholder="…or paste a voice id (clone or stock)"
               className={INPUT}
             />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <VoiceRecorder
+                label="record your voice → clone"
+                busy={cloneVoiceBusy}
+                onTake={(blob) => void recordAndClone(blob)}
+              />
+              <span className="text-[9px] text-bone/30">
+                30–120s of clean read, your own voice — by recording you confirm it's yours.
+              </span>
+            </div>
           </div>
 
           {/* the foundry */}
@@ -333,7 +386,7 @@ function TwinFormModal({
                   title={s.hint}
                   className={`rounded px-2 py-1 text-[10px] font-semibold ${
                     sheetStyle === s.id
-                      ? 'bg-brass text-bone'
+                      ? 'bg-brass text-ink'
                       : 'text-bone/50 hover:bg-bone/10'
                   }`}
                 >
@@ -352,7 +405,7 @@ function TwinFormModal({
             <button
               onClick={() => void forgeSheet()}
               disabled={!description.trim() || forgeBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[11px] font-semibold text-bone hover:bg-brass/90 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[11px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
             >
               {forgeBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               forge character sheet
@@ -442,7 +495,7 @@ function TwinFormModal({
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-[11px] text-red-200">
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
               {error}
             </p>
           )}
@@ -452,7 +505,7 @@ function TwinFormModal({
           <button
             onClick={() => void save()}
             disabled={!canSave}
-            className="w-full rounded-xl bg-brass px-4 py-2.5 text-xs font-bold text-bone hover:bg-brass/90 disabled:opacity-40"
+            className="w-full rounded-xl bg-brass px-4 py-2.5 text-xs font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
           >
             {saveBusy ? 'saving…' : seed ? 'save changes' : 'add to the roster'}
           </button>
@@ -592,7 +645,7 @@ export default function AiTwinsPage() {
         </div>
         <button
           onClick={() => setEditing('new')}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brass px-3.5 py-2 text-xs font-semibold text-bone hover:bg-brass/90"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brass px-3.5 py-2 text-xs font-semibold text-ink hover:bg-brass/90"
         >
           <Plus className="h-3.5 w-3.5" /> New twin
         </button>
@@ -604,7 +657,7 @@ export default function AiTwinsPage() {
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-xs text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
           {error}
         </p>
       )}
@@ -623,7 +676,7 @@ export default function AiTwinsPage() {
           </p>
           <button
             onClick={() => setEditing('new')}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brass px-4 py-2 text-xs font-semibold text-bone hover:bg-brass/90"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brass px-4 py-2 text-xs font-semibold text-ink hover:bg-brass/90"
           >
             <Plus className="h-3.5 w-3.5" /> Build your first twin
           </button>
@@ -677,7 +730,7 @@ export default function AiTwinsPage() {
                           ? 'Cast this twin into a fresh video (opens the Clipping Studio wizard)'
                           : 'This twin needs a sheet (or ref photo) and a voice first'
                       }
-                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-bone hover:bg-brass/90 disabled:opacity-40"
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
                     >
                       {busyId === entry.reelId ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -694,7 +747,7 @@ export default function AiTwinsPage() {
                     </button>
                     <button
                       onClick={() => void deleteTwin(entry)}
-                      className="rounded-lg border border-red-500/25 px-2 py-1.5 text-red-300/70 hover:bg-red-500/100/10"
+                      className="rounded-lg border border-red-500/25 px-2 py-1.5 text-red-300/70 hover:bg-red-500/10"
                       title="Remove from the roster"
                     >
                       <Trash2 className="h-3 w-3" />

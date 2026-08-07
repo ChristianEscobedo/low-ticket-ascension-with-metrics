@@ -30,6 +30,8 @@ import {
 } from '@/utils/integrations/openai-compliance';
 import { generateYouTubeKit } from '@/utils/integrations/openai-youtube';
 import { scoreLocalCompliance } from '@/lib/mothermode/content/platformCompliance';
+import { getFunnelBySlug as getSalesFunnelBySlug } from '@/lib/mothermode/sales/store';
+import { getFunnelBySlug as getOptinFunnelBySlug } from '@/lib/mothermode/optin/store';
 
 
 
@@ -103,6 +105,60 @@ import {
   directReelShots,
 } from '@/utils/integrations/openai-reel';
 import type { ReelStory } from '@/lib/mothermode/content/review';
+
+/**
+ * Pull a compact grounding block out of a funnel record: the name plus the
+ * short text fields that carry the pitch (headlines, promises, problem
+ * lines), wherever they sit in the record. Defensive: strings ≤300 chars,
+ * deduped, capped — a bonus for the writer, never a failure mode.
+ */
+function funnelContextBlock(kind: string, record: Record<string, unknown>): string {
+  const name =
+    typeof record.name === 'string' && record.name.trim() ? record.name.trim() : `the ${kind}`;
+  const KEYS = [
+    'headline',
+    'tagline',
+    'subheadline',
+    'promise',
+    'description',
+    'cost',
+    'audience',
+    'mechanism',
+    'offerName',
+    'productName',
+    'priceLabel',
+    'guarantee',
+  ];
+  const picks: string[] = [];
+  const seen = new Set<string>();
+  const walk = (v: unknown, depth: number) => {
+    if (depth > 4 || picks.length >= 14) return;
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item, depth + 1);
+      return;
+    }
+    if (!v || typeof v !== 'object') return;
+    for (const [k, val] of Object.entries(v)) {
+      if (picks.length >= 14) return;
+      if (
+        KEYS.includes(k) &&
+        typeof val === 'string' &&
+        val.trim().length > 3 &&
+        val.length <= 300
+      ) {
+        const t = val.trim();
+        if (!seen.has(t)) {
+          seen.add(t);
+          picks.push(t);
+        }
+      } else if (val && typeof val === 'object') {
+        walk(val, depth + 1);
+      }
+    }
+  };
+  walk(record, 0);
+  return [`GROUNDING (${kind}: ${name}):`, ...picks].join(' ').slice(0, 1500);
+}
 
 export async function POST(request: NextRequest) {
   const guard = await requireAdminRoute();
@@ -625,8 +681,40 @@ export async function POST(request: NextRequest) {
     if (!topic) {
       return NextResponse.json({ ok: false, error: 'topic is required' }, { status: 400 });
     }
+    // GROUNDING: an offer / lead magnet / owner notes, resolved server-side.
+    let contextBlock: string | undefined;
+    let contextLabel: string | undefined;
+    const ctx = ((body.context ?? {}) as Record<string, unknown>) || {};
+    try {
+      const offerSlug = str(ctx.offerSlug);
+      const optinSlug = str(ctx.optinSlug);
+      if (offerSlug) {
+        const funnel = await getSalesFunnelBySlug(offerSlug);
+        if (funnel) {
+          contextBlock = funnelContextBlock('offer', funnel as unknown as Record<string, unknown>);
+          contextLabel = `Offer: ${((funnel as { name?: string }).name ?? offerSlug).slice(0, 80)}`;
+        }
+      } else if (optinSlug) {
+        const funnel = await getOptinFunnelBySlug(optinSlug);
+        if (funnel) {
+          contextBlock = funnelContextBlock(
+            'lead magnet',
+            funnel as unknown as Record<string, unknown>,
+          );
+          contextLabel = `Lead magnet: ${((funnel as { name?: string }).name ?? optinSlug).slice(0, 80)}`;
+        }
+      }
+    } catch {
+      /* grounding never fails the script */
+    }
+    const ctxNotes = str(ctx.notes)?.slice(0, 800);
+    if (ctxNotes) {
+      contextBlock = [contextBlock, `Owner notes: ${ctxNotes}`].filter(Boolean).join(' ');
+      contextLabel = contextLabel ?? 'Owner notes';
+    }
     const result = await generateCloneScript({
       topic: topic.slice(0, 600),
+      contextBlock,
       typeLabel: str(body.typeLabel) ?? 'Hook ad',
       frameworkLabel: str(body.frameworkLabel) ?? 'Hook · Story · Offer',
       frameworkBeats: strList(body.frameworkBeats).slice(0, 12),
@@ -647,6 +735,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       beats: result.data.beats,
       model: result.data.model,
+      contextLabel: contextLabel ?? null,
     });
   }
 

@@ -2765,6 +2765,11 @@ export async function generateVariationPlan(
 export interface CloneScriptInput {
   /** What the video is about / selling (the topic or offer). */
   topic: string;
+  /**
+   * Offer/lead-magnet/research grounding, resolved server-side (the route's
+   * funnelContextBlock + owner notes). Every claim must stay consistent.
+   */
+  contextBlock?: string;
   /** Video type label (Hook ad, UGC testimonial, VSL, tutorial, announcement). */
   typeLabel: string;
   /** The framework label + the ordered beat roles the script must execute. */
@@ -2923,6 +2928,9 @@ export async function generateCloneScript(
     `Framework: ${input.frameworkLabel} — the beats execute these roles in order: ${input.frameworkBeats.join(' → ')}. One beat per role (drop the tail roles if the count is shorter).`,
     "Each role is a JOB, not a label — the line DOES the job, never talks about it: agitate twists the knife with a specific cost; proof is a scene or a number, never a claim; cta is one soft next step. A b-roll beat's visual shows the line's claim or its cost with the character inside the footage — never decoration.",
     `The speaker: ${input.persona}.`,
+    input.contextBlock?.trim()
+      ? `GROUNDING — every claim in the script must stay consistent with these facts (the promise, the problem, the proof); never invent numbers that aren't here:\n${input.contextBlock.trim().slice(0, 1500)}`
+      : '',
     input.lookBible
       ? `The locked look (b-roll prompts must agree with it): ${input.lookBible}.`
       : '',

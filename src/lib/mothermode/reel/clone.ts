@@ -404,6 +404,12 @@ export interface CloneBeat {
   /** Last frame of the previous beat, for look-back continuation. */
   continuesFrom?: string;
   error?: string;
+  /**
+   * The beat's window on the video timeline (seconds). Stamped by the
+   * normalizer from order + durationSec — always right after any save.
+   */
+  startSec?: number;
+  endSec?: number;
 }
 
 export type SeedanceTier = 'seedance-2.0' | 'seedance-2.5';
@@ -418,6 +424,18 @@ export interface ClonePlan {
   approvedAt: string | null;
   /** Default Seedance tier for b-roll beats (the 2.0↔2.5 toggle). */
   seedanceTier: SeedanceTier;
+  /**
+   * THE SCENE SHEET — one multi-panel board forged FROM the script (a panel
+   * per beat, the character inside each scene, same style as the character
+   * sheet). B-roll beats render with it riding as an omni-reference, so the
+   * world is pre-decided, not re-invented per render. ~$0.08 once per
+   * script revision.
+   */
+  sceneSheetUrl?: string;
+  /** When the scene sheet was forged — older than updatedAt = stale. */
+  sceneSheetAt?: string | null;
+  /** What the script was grounded in (an offer / lead magnet / notes). */
+  contextLabel?: string;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -467,6 +485,8 @@ export interface ClonePlanCost {
   voiceTotal: number;
   /** The sheet line — $0 when the clone already has one (once per character). */
   sheet: number;
+  /** The scene sheet line — $0.08 until one is forged for this script, then $0. */
+  sceneSheet: number;
   total: number;
 }
 
@@ -477,12 +497,16 @@ export function clonePlanCost(plan: ClonePlan): ClonePlanCost {
   const voiceTotal = round(beats.reduce((s, b) => s + b.voice, 0));
   const videoTotal = round(beats.reduce((s, b) => s + b.video, 0));
   const sheet = plan.clone.sheetUrl ? 0 : CLONE_COSTS.characterSheetImage;
+  // The scene sheet rides the same once-per-revision honesty: it prices in
+  // only while beats exist and none is forged yet.
+  const sceneSheet = beats.length > 0 && !plan.sceneSheetUrl ? CLONE_COSTS.characterSheetImage : 0;
   return {
     beats,
     voiceTotal,
     videoTotal,
     sheet,
-    total: round(voiceTotal + videoTotal + sheet),
+    sceneSheet,
+    total: round(voiceTotal + videoTotal + sheet + sceneSheet),
   };
 }
 
@@ -723,6 +747,8 @@ export function normalizeCloneBeat(raw: unknown, index: number): CloneBeat | nul
     ...(asString(o.videoRequestId) ? { videoRequestId: asString(o.videoRequestId).slice(0, 120) } : {}),
     ...(isHttpUrl(o.continuesFrom) ? { continuesFrom: asString(o.continuesFrom).trim() } : {}),
     ...(asString(o.error) ? { error: asString(o.error).slice(0, 300) } : {}),
+    ...(Number.isFinite(asNumber(o.startSec, NaN)) ? { startSec: asNumber(o.startSec) } : {}),
+    ...(Number.isFinite(asNumber(o.endSec, NaN)) ? { endSec: asNumber(o.endSec) } : {}),
   };
 }
 
@@ -737,6 +763,14 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
     .filter((b): b is CloneBeat => !!b)
     .sort((a, b) => a.index - b.index)
     .slice(0, 60);
+  // THE TIMESTAMP STAMP: every beat carries its timeline window, derived
+  // from order + duration — always right, after any edit, by construction.
+  let cursor = 0;
+  for (const b of beats) {
+    b.startSec = cursor;
+    b.endSec = cursor + b.durationSec;
+    cursor = b.endSec;
+  }
   return {
     clone,
     videoType: asString(o.videoType) || CLONE_VIDEO_TYPES[0].id,
@@ -746,9 +780,50 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
     seedanceTier: SEEDANCE_TIERS.includes(o.seedanceTier as SeedanceTier)
       ? (o.seedanceTier as SeedanceTier)
       : 'seedance-2.0',
+    ...(isHttpUrl(o.sceneSheetUrl) ? { sceneSheetUrl: asString(o.sceneSheetUrl).trim() } : {}),
+    ...(asString(o.sceneSheetAt) ? { sceneSheetAt: asString(o.sceneSheetAt) } : {}),
+    ...(asString(o.contextLabel).trim()
+      ? { contextLabel: asString(o.contextLabel).trim().slice(0, 120) }
+      : {}),
     createdAt: asString(o.createdAt) || null,
     updatedAt: asString(o.updatedAt) || null,
   };
+}
+
+/**
+ * The scene-sheet forge prompt: ONE multi-panel board, a panel per beat —
+ * the character inside each beat's scene, in the picked style, the look
+ * bible quoted. This is the congruence contract: the world is decided ONCE,
+ * here, and every render quotes it.
+ */
+export function sceneSheetPrompt(plan: ClonePlan, styleId?: string): string {
+  const style = cloneSheetStyleFor(styleId);
+  const bible = lookBibleString(plan.clone.lookBible);
+  const panels = plan.beats.map((b, i) => {
+    const what =
+      b.kind === 'broll'
+        ? (b.brollPrompt ?? 'visual beat')
+        : `${b.shot} talking-head frame of the character delivering: "${b.line.slice(0, 80)}"`;
+    return `Panel ${i + 1} (${b.startSec ?? 0}-${b.endSec ?? b.durationSec}s): ${what}`;
+  });
+  return [
+    'A single SCENE SHEET for one video — a multi-panel storyboard board where each panel is ONE beat of the script below, the SAME character in every panel:',
+    `${plan.clone.name}.`,
+    style.direction,
+    'The panels, in script order:',
+    ...panels,
+    bible ? `${bible}.` : '',
+    'CHARACTER + WORLD CONSISTENCY (STRICT): identical facial structure, hairstyle, and wardrobe logic in every panel; the world evolves naturally panel to panel like one continuous shoot — never stock poses, never a reset.',
+    'Photorealistic, sharp focus, no text, no watermark, no logos.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** The scene sheet is stale when the plan changed after it was forged. */
+export function sceneSheetStale(plan: ClonePlan): boolean {
+  if (!plan.sceneSheetUrl || !plan.sceneSheetAt) return false;
+  return !!plan.updatedAt && plan.updatedAt > plan.sceneSheetAt;
 }
 
 /** A fresh plan around a clone — zero beats, unapproved, 2.0 default. */
