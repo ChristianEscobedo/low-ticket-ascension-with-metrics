@@ -326,3 +326,5 @@ the studio's Clone tab stopped being a wall of forms.
   an "edit twin" toggle once the reel has its twin (`formOpen`); a fresh
   reel (or a deep-linked new-video reel) opens with it expanded.
 - Coverage: the twin-roster describe in tests/lib/clone-generate.test.ts.
+
+- **Roster polish (same commit round):** reference photos UPLOAD now (signed-URL flow → Media Library tagged clone/reference-photo → the list) on BOTH the twin modal and the studio ClonePanel; the roster page + modal are on the dark house palette (bone/ink/brass).

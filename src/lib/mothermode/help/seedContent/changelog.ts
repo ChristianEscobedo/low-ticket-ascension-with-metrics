@@ -536,6 +536,17 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.14.1',
+    releasedOn: '2026-08-07',
+    entryType: 'fixed',
+    title: 'Reference-photo uploads, and the burgundy card pass',
+    body: cl([
+      '<p>Reference photos upload now — no more link-only. Both the AI Twins creation modal and the Clipping Studio\'s clone editor take a photo straight from your machine (it lands in the Media Library, tagged and reusable) alongside the paste-a-URL path.</p>',
+      '<p>And the stragglers joined the house style: the Personalization, Experts, Recipes, Skills, and Media Library pages now wear the same burgundy cards as the rest of /admin — the light-card leftovers are swept.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

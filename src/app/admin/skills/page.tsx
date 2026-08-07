@@ -278,7 +278,7 @@ export default function SkillsPage() {
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}
@@ -385,7 +385,7 @@ export default function SkillsPage() {
                         type="button"
                         onClick={() => runTest(s.id)}
                         disabled={busy}
-                        className="rounded bg-brass px-2 py-1 text-[10px] font-semibold text-ink disabled:opacity-50"
+                        className="rounded bg-brass px-2 py-1 text-[10px] font-semibold text-bone disabled:opacity-50"
                       >
                         run once
                       </button>
@@ -519,7 +519,7 @@ export default function SkillsPage() {
                 type="button"
                 onClick={() => save(true)}
                 disabled={busy || errors.length > 0}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-xs font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-xs font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
               >
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 Save + activate

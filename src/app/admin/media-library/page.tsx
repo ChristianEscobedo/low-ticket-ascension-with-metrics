@@ -216,7 +216,7 @@ export default function MediaLibraryPage() {
           </div>
           <button
             onClick={() => uploadInput.current?.click()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-xs font-semibold text-ink hover:bg-brass/90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-1.5 text-xs font-semibold text-bone hover:bg-brass/90"
           >
             <Upload className="h-3.5 w-3.5" /> Upload
           </button>
@@ -311,7 +311,7 @@ export default function MediaLibraryPage() {
             <button
               onClick={() => void createFolder()}
               disabled={!newFolder.trim()}
-              className="rounded bg-brass px-1.5 py-1 text-[10px] font-semibold text-ink disabled:opacity-40"
+              className="rounded bg-brass px-1.5 py-1 text-[10px] font-semibold text-bone disabled:opacity-40"
             >
               <Plus className="h-3 w-3" />
             </button>
@@ -329,7 +329,7 @@ export default function MediaLibraryPage() {
                     onClick={() => setTagFilter(tagFilter === t.tag ? null : t.tag)}
                     className={clsx(
                       'rounded-full px-2 py-0.5 text-[9px] font-semibold',
-                      tagFilter === t.tag ? 'bg-brass text-ink' : 'border border-bone/15 text-bone/50 hover:bg-bone/10',
+                      tagFilter === t.tag ? 'bg-brass text-bone' : 'border border-bone/15 text-bone/50 hover:bg-bone/10',
                     )}
                   >
                     {t.tag} · {t.count}
@@ -347,7 +347,7 @@ export default function MediaLibraryPage() {
                   onClick={() => setKindFilter(k)}
                   className={clsx(
                     'flex-1 rounded px-1 py-1 text-[9px] font-semibold',
-                    kindFilter === k ? 'bg-brass text-ink' : 'text-bone/45 hover:bg-bone/10',
+                    kindFilter === k ? 'bg-brass text-bone' : 'text-bone/45 hover:bg-bone/10',
                   )}
                 >
                   {k}
@@ -485,7 +485,7 @@ export default function MediaLibraryPage() {
                   <button
                     onClick={() => void addTag(selected, tagInput)}
                     disabled={!tagInput.trim()}
-                    className="rounded-lg bg-brass px-2 py-1 text-[10px] font-semibold text-ink disabled:opacity-40"
+                    className="rounded-lg bg-brass px-2 py-1 text-[10px] font-semibold text-bone disabled:opacity-40"
                   >
                     <Plus className="h-3 w-3" />
                   </button>
@@ -493,7 +493,7 @@ export default function MediaLibraryPage() {
               </div>
               <button
                 onClick={() => void deleteAsset(selected)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-[10px] font-semibold text-red-300/70 hover:bg-red-500/10"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-[10px] font-semibold text-red-300/70 hover:bg-red-500/100/10"
               >
                 <Trash2 className="h-3 w-3" /> Delete from library
               </button>

@@ -252,3 +252,8 @@ becomes active.
 - **Environment note:** inline `node -e` reliably mangles quotes and `[` under
   this PowerShell setup. Write a `.cjs` and run it. Chain commands with `;`, not
   `&&`.
+
+
+## 2026-08-07 sweep — scripts/theme-dark-sweep.cjs
+The reusable token sweeper: light Tailwind tokens (bg-white, text-ink, border-ink, light red/emerald/amber chips, brass-button text-white→text-ink) → the dark house palette. Ran over personalization, experts, recipes (+editor +run detail), skills, media-library, and the ai-twins roster was hand-styled the same round. Re-run it on any page that still shows light cards.
+

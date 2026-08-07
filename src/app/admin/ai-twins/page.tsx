@@ -13,7 +13,7 @@
  * clone library's derive). When the flow proves itself, the store promotes
  * to a real table — see docs/AI_CLONE_VIDEO_PORT.md.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Check,
@@ -101,6 +101,8 @@ function TwinFormModal({
   const [sheetUrl, setSheetUrl] = useState(seed?.sheetUrl ?? '');
   const [refUrl, setRefUrl] = useState('');
   const [includeFullBody, setIncludeFullBody] = useState(false);
+  const [refUploadBusy, setRefUploadBusy] = useState(false);
+  const refFileInput = useRef<HTMLInputElement>(null);
   const [voices, setVoices] = useState<AiVoice[]>([]);
   const [autofillBusy, setAutofillBusy] = useState(false);
   const [forgeBusy, setForgeBusy] = useState(false);
@@ -155,6 +157,51 @@ function TwinFormModal({
       setError(err instanceof Error ? err.message : 'Sheet generation failed');
     } finally {
       setForgeBusy(false);
+    }
+  }
+
+  /** Upload a reference photo — signed-URL flow → the Media Library → the list. */
+  async function uploadRefPhoto(file: File) {
+    setRefUploadBusy(true);
+    setError(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const mint = await fetch('/api/admin/reel-upload-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ext, contentType: file.type || undefined, kind: 'image' }),
+      });
+      const mintJson = await mint.json();
+      if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const put = await fetch(mintJson.signedUrl, {
+        method: 'PUT',
+        headers: { 'content-type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
+      const url = String(mintJson.publicUrl || '');
+      if (!url) throw new Error('Upload returned no public URL');
+      setRefPhotos((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, 8)));
+      try {
+        await fetch('/api/admin/media-library', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'ingest',
+            name: (file.name.replace(/\.[^.]+$/, '') || 'Reference photo').slice(0, 150),
+            url,
+            kind: 'image',
+            source: 'upload',
+            tags: ['clone', 'reference-photo'],
+          }),
+        });
+      } catch {
+        /* the library entry is a convenience — the ref still attaches */
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setRefUploadBusy(false);
     }
   }
 
@@ -344,10 +391,35 @@ function TwinFormModal({
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-bone/35">
-              <Upload className="mr-0.5 inline h-2.5 w-2.5" /> Upload via the Media Library, then
-              paste the URL here — the sheet above already counts as the master reference.
-            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => refFileInput.current?.click()}
+                disabled={refUploadBusy}
+                className="inline-flex items-center gap-1 rounded-lg border border-brass/40 px-2.5 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+                title="Upload a photo — it lands in the Media Library and attaches here"
+              >
+                {refUploadBusy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Upload className="h-3 w-3" />
+                )}
+                upload a photo
+              </button>
+              <input
+                ref={refFileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadRefPhoto(f);
+                  e.target.value = '';
+                }}
+              />
+              <p className="text-[10px] text-bone/35">
+                or paste a URL above — uploads land in the Media Library.
+              </p>
+            </div>
           </div>
 
           {error && (

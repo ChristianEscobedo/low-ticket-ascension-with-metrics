@@ -287,7 +287,7 @@ function RecipeCard({
           type="button"
           onClick={onStart}
           disabled={busy || !canRun}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -381,7 +381,7 @@ function RecipeCard({
                 type="button"
                 onClick={submitTrigger}
                 disabled={busy || !triggerValue.trim()}
-                className="rounded bg-brass px-1.5 py-0.5 font-semibold text-ink disabled:opacity-50"
+                className="rounded bg-brass px-1.5 py-0.5 font-semibold text-bone disabled:opacity-50"
               >
                 Set
               </button>
@@ -681,7 +681,7 @@ function RunRow({
             type="button"
             onClick={() => onGate(run.id, 'approve')}
             disabled={busy}
-            className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-ink hover:bg-brass/90 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1 text-xs font-semibold text-bone hover:bg-brass/90 disabled:opacity-50"
           >
             <Check className="h-3 w-3" />
             Approve & continue
@@ -1018,7 +1018,7 @@ export default function RecipesPage() {
       </div>
 
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}

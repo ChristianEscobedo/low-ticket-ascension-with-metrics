@@ -104,3 +104,8 @@ The `ScheduleSheet` in `page.tsx` was rebuilt from a narrow single-column form i
 | `src/app/admin/AdminSidebar.tsx` | nav entry |
 | `tests/lib/media-library.test.ts` | 5 tests |
 | `tests/lib/thumbnail-lab.test.ts` | 11 tests |
+
+
+## Theme alignment (2026-08-07)
+/admin/media-library swept onto the dark house palette via scripts/theme-dark-sweep.cjs (6 token swaps: remaining bg-white cards + ink text → bone/ink). tsc clean.
+

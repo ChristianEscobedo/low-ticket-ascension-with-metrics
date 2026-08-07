@@ -449,3 +449,8 @@ research language, not just the target intake.
   host matches the platform's allowlist (`urlSafety.ts` — lookalike hosts
   blocked). Quote the audience's words, never their names: no author fields
   ride the cards or the evidence rail.
+
+
+## Theme alignment (2026-08-07)
+/admin/experts, /admin/recipes (+ RecipeDraftEditor + the run detail page), and /admin/skills swept onto the dark house palette via scripts/theme-dark-sweep.cjs — residual light tokens only (the fleet was aligned once before); tsc clean.
+

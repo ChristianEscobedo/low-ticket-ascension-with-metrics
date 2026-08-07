@@ -92,3 +92,8 @@ capture routes ─ fire-and-forget ─► generateLeadPersonalization ─► aiG
 
 - `npx vitest run tests/lib/personalize-token.test.ts tests/lib/personalize-merge.test.ts` — 29 passing (token tamper/expiry/determinism, URL builder, image sig/sanitize, merge whitelist + money invariant, `{name}` fallback, payload hygiene).
 - `npx tsc --noEmit` — clean.
+
+
+## Theme alignment (2026-08-07)
+/admin/personalization swept onto the dark house palette (bone text / bone borders / ink inputs, brass buttons reading ink) via scripts/theme-dark-sweep.cjs — 4 token swaps, tsc clean.
+
