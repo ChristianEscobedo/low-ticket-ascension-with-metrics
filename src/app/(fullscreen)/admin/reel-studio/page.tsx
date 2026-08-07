@@ -122,7 +122,12 @@ import {
 
 import { PersonStanding, Wand2 } from 'lucide-react';
 import ClonePanel from './ClonePanel';
-import { cloneLibraryEntries, type CloneBeat, type ClonePlan } from '@/lib/mothermode/reel/clone';
+import {
+  cloneLibraryEntries,
+  isTwinReel,
+  type CloneBeat,
+  type ClonePlan,
+} from '@/lib/mothermode/reel/clone';
 import { cloneSceneName } from '@/lib/mothermode/reel/cloneGenerate';
 
 
@@ -3152,6 +3157,27 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   }, [project?.id, project?.clips.length]);
 
 
+  // Deep-link bridge: /admin/reel-studio?reel=<id> opens that reel on the
+  // Clone tab (the twins page's "New video" lands here).
+  const reelLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (projects === null || reelLinkHandledRef.current) return;
+    reelLinkHandledRef.current = true;
+    try {
+      const id = new URL(window.location.href).searchParams.get('reel');
+      if (!id) return;
+      const p = projects.find((x) => x.id === id);
+      if (!p) return;
+      window.history.replaceState(null, '', window.location.pathname);
+      setProject(p);
+      setSelectedClip(null);
+      setTab('clone');
+    } catch {
+      /* malformed URL — ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects]);
+
   // Deep-link bridge: /admin/reel-studio?import=<video-url> auto-builds a reel
   // from a Content Hub render. Runs once the project list has loaded.
   const importHandledRef = useRef(false);
@@ -5185,11 +5211,15 @@ const [cueDragLocal, setCueDragLocal] = useState<{
           className="ml-3 rounded-lg border border-bone/15 bg-ink px-2 py-1.5 text-xs text-bone/80"
         >
           <option value="">— pick a reel —</option>
-          {(projects ?? []).map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name || 'Untitled reel'} ({p.clips.length})
-            </option>
-          ))}
+          {(projects ?? [])
+            // Roster records (`Twin: …`) are twin storage, not edits — they
+            // never show in the studio's picker.
+            .filter((p) => !isTwinReel(p.name))
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || 'Untitled reel'} ({p.clips.length})
+              </option>
+            ))}
         </select>
         <button
           onClick={() => void newProject()}

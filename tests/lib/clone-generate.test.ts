@@ -26,7 +26,13 @@ import {
   cloneShotFraming,
 } from '@/lib/mothermode/reel/cloneGenerate';
 import { characterSheetAssets } from '@/lib/mothermode/reel/mediaLibrary';
-import { cloneLibraryEntries, normalizeClonePlan } from '@/lib/mothermode/reel/clone';
+import {
+  cloneLibraryEntries,
+  isTwinReel,
+  normalizeClonePlan,
+  twinReelName,
+  twinRoster,
+} from '@/lib/mothermode/reel/clone';
 
 const CLONE: ReelClone = {
   id: 'clone-test01',
@@ -296,5 +302,36 @@ describe('the clone library', () => {
     expect(entries[0].clone.name).toBe('The Founder');
     expect(entries[0].ready).toBe(true); // sheet + voice id
     expect(entries[1].ready).toBe(false); // no refs at all
+  });
+});
+
+describe('the twin roster (the /admin/ai-twins bridge)', () => {
+  it('roster records first, with plan stats + the ready flag; prefix helpers hold', () => {
+    const plan = blankClonePlan(CLONE);
+    const withBeats = {
+      ...plan,
+      approvedAt: '2026-08-07T02:00:00.000Z',
+      beats: [
+        makeBeat({ status: 'generated', videoUrl: 'https://cdn.example.com/v.mp4' }),
+        makeBeat({ id: 'b2', index: 1 }),
+      ],
+    };
+    const roster = twinRoster([
+      { id: 'working-reel', name: 'My hook reel', clonePlan: withBeats },
+      { id: 'roster-reel', name: twinReelName('The Founder'), clonePlan: plan },
+      { id: 'plain', name: 'No plan here' },
+    ]);
+    expect(roster.map((e) => e.reelId)).toEqual(['roster-reel', 'working-reel']);
+    expect(roster[0].rosterRecord).toBe(true);
+    expect(roster[1]).toMatchObject({
+      rosterRecord: false,
+      approved: true,
+      beats: 2,
+      rendered: 1,
+      ready: true,
+    });
+    expect(isTwinReel('Twin: The Founder')).toBe(true);
+    expect(isTwinReel('My hook reel')).toBe(false);
+    expect(twinReelName('  The Founder  ')).toBe('Twin: The Founder');
   });
 });

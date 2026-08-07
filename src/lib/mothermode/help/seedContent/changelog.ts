@@ -524,6 +524,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.14.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Twins: the roster page — your cast is a library now',
+    body: cl([
+      '<p>The Clone wizard got its home. <strong>/admin/ai-twins</strong> is the roster: every twin as a card — face, voice, how many videos it stars in — library-first, no forms in sight. <strong>New twin</strong> opens the creation modal (the only place that form lives: the description + AI fill, the look bible, the voice picker, and the character-sheet foundry). Click a card to edit it; <strong>New video</strong> casts the twin into a fresh reel and drops you into the Clipping Studio with the wizard already open on it.</p>',
+      '<p>And the studio\'s Clone tab slimmed down to match: once a reel has its twin, the form collapses behind an "edit twin" toggle — the tab is the twin card, the script, the storyboard, and generation, not a wall of inputs. Twins built inside a working reel show up on the roster too.</p>',
+      '<p><strong>Where to start:</strong> Admin sidebar → AI Twins → New twin.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

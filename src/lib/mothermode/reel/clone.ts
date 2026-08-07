@@ -734,3 +734,62 @@ export function cloneLibraryEntries(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// The twin roster (the /admin/ai-twins bridge over per-reel manifests)
+// ---------------------------------------------------------------------------
+
+/**
+ * Twin records ride reel projects until the roster earns its own table: a
+ * roster reel is named `Twin: <name>`, has no scenes, and its clonePlan's
+ * clone IS the twin. The studio hides roster reels from its reel picker.
+ */
+export const TWIN_REEL_PREFIX = 'Twin: ';
+
+export function isTwinReel(name: string): boolean {
+  return name.trim().startsWith(TWIN_REEL_PREFIX);
+}
+
+export function twinReelName(cloneName: string): string {
+  return `${TWIN_REEL_PREFIX}${cloneName.trim().slice(0, 60)}`;
+}
+
+/** One card on the twins page. */
+export interface TwinRosterEntry {
+  reelId: string;
+  reelName: string;
+  clone: ReelClone;
+  /** True when the record is a dedicated roster reel (`Twin: …`). */
+  rosterRecord: boolean;
+  /** Ready to cast: a sheet (or ref photo) + a voice id. */
+  ready: boolean;
+  beats: number;
+  rendered: number;
+  approved: boolean;
+}
+
+/**
+ * The twin roster: every reel carrying a clonePlan, roster records first.
+ * This is the UI-first bridge — the data model promotes to a real table
+ * when the flow proves itself (docs/AI_CLONE_VIDEO_PORT.md).
+ */
+export function twinRoster(
+  projects: { id: string; name: string; clonePlan?: unknown }[],
+): TwinRosterEntry[] {
+  const out: TwinRosterEntry[] = [];
+  for (const p of projects) {
+    const plan = normalizeClonePlan(p.clonePlan ?? null);
+    if (!plan) continue;
+    out.push({
+      reelId: p.id,
+      reelName: p.name || 'Untitled reel',
+      clone: plan.clone,
+      rosterRecord: isTwinReel(p.name),
+      ready: !!(plan.clone.sheetUrl ?? plan.clone.refPhotos[0]) && !!plan.clone.voice.voiceId,
+      beats: plan.beats.length,
+      rendered: plan.beats.filter((b) => b.status === 'generated' && !!b.videoUrl).length,
+      approved: !!plan.approvedAt,
+    });
+  }
+  return out.sort((a, b) => Number(b.rosterRecord) - Number(a.rosterRecord));
+}

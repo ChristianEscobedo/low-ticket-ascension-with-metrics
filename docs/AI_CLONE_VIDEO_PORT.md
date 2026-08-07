@@ -300,3 +300,29 @@ Post-launch UX round on step 1 (the clone card):
   manifest (no plan → 1; no beats → 2; unapproved → 4; generating → 5;
   rendered → 6); finished stages check off, the current one glows.
 - Coverage: the library describe in tests/lib/clone-generate.test.ts.
+
+## The AI Twins roster (shipped 2026-08-07, changelog 2.14.0)
+
+The architecture round: the twin is an ASSET with a library-first home, and
+the studio's Clone tab stopped being a wall of forms.
+
+- **`/admin/ai-twins`** (`src/app/admin/ai-twins/page.tsx`) — THE ROSTER:
+  twin cards (sheet thumb, voice, rendered/beats counts, ready chip),
+  derived from `twinRoster(projects)` in clone.ts. **New twin** opens
+  `TwinFormModal` — the ONLY place the creation form lives (description +
+  AI fill, the look bible, the voice picker, the foundry). Edit writes the
+  clone back to its owning reel; **New video** creates a fresh reel seeded
+  with the twin and deep-links into the studio's Clone tab; delete rides
+  the reel route. Sidebar entry in AdminSidebar.tsx.
+- **The bridge (UI-first, data-second):** a roster record is a reel named
+  `Twin: <name>` (`TWIN_REEL_PREFIX` / `isTwinReel` / `twinReelName`) with
+  no scenes whose clonePlan carries the twin — the studio's reel picker
+  hides those names. A twin built inside a working reel appears on the
+  roster too (`rosterRecord: false`). When the flow proves itself, promote
+  the store to a real table and flip the write path.
+- **The studio deep-link** — `/admin/reel-studio?reel=<id>` opens that
+  reel ON the Clone tab (page.tsx `reelLinkHandledRef` bridge).
+- **The studio tab slims** — ClonePanel collapses the twin editor behind
+  an "edit twin" toggle once the reel has its twin (`formOpen`); a fresh
+  reel (or a deep-linked new-video reel) opens with it expanded.
+- Coverage: the twin-roster describe in tests/lib/clone-generate.test.ts.

@@ -179,6 +179,12 @@ export default function ClonePanel({
   const [extendKind, setExtendKind] = useState<'avatar' | 'broll'>('avatar');
   const [extendText, setExtendText] = useState('');
 
+  // The twin editor is COLLAPSED once this reel has its twin — the summary
+  // card + an edit toggle carry it. A fresh reel opens with it expanded.
+  const [formOpenOverride, setFormOpenOverride] = useState<boolean | null>(null);
+  const formOpen = formOpenOverride ?? !existing;
+  useEffect(() => setFormOpenOverride(null), [project.id]);
+
   useEffect(() => {
     void aiListVoices().then(setVoices);
   }, []);
@@ -586,9 +592,19 @@ export default function ClonePanel({
               {existing.clone.sheetUrl ? ' · sheet forged' : ''}
             </p>
           </div>
-          <Check className="h-3.5 w-3.5 shrink-0 text-brass" />
+          <button
+            onClick={() => setFormOpenOverride(!formOpen)}
+            className="shrink-0 rounded-md border border-brass/30 px-1.5 py-0.5 text-[8px] font-semibold text-brass/80 hover:bg-brass/10"
+            title={formOpen ? 'Collapse the twin editor' : 'Edit this reel’s twin'}
+          >
+            {formOpen ? 'hide editor' : 'edit twin'}
+          </button>
         </div>
       )}
+
+      {/* the twin editor — collapsed once the reel has its twin */}
+      {formOpen && (
+        <>
 
       {/* the clone asset form */}
       <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
@@ -762,6 +778,8 @@ export default function ClonePanel({
         <p className="text-center text-[9px] text-bone/30">
           Needs a name, a voice, and at least one reference (or a forged sheet).
         </p>
+      )}
+        </>
       )}
 
       {/* ———— Step 2: video type + framework + the script ———— */}
