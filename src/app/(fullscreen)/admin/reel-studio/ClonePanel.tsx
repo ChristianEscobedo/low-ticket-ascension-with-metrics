@@ -1,39 +1,62 @@
 'use client';
 
 /**
- * The AI Clone tab — Step 1 of the guided wizard: THE CLONE (the asset) +
- * the character-sheet foundry.
+ * The AI Clone tab — the guided wizard over the reel's `clonePlan` manifest.
  *
- * A clone is a saved cast member: name, reference photos, an ElevenLabs
- * voice, and a locked LOOK BIBLE (wardrobe / backdrop / lighting / lens)
- * that every downstream prompt quotes verbatim. No photos? The foundry
- * forges a character sheet with GPT Image 2 — one call, ONCE per character
- * (the cheapest consistency lever in the stack) — and the sheet lands in
- * the Media Library tagged `character-sheet`, reusable across reels.
- *
- * The clone persists as `clonePlan` on the reel project (the manifest
- * steps 2–6 build on). The stepper shows the full wizard; steps 2–6 light
+ * Steps 1–4 are live: THE CLONE (the asset + the GPT Image 2 character-sheet
+ * foundry), VIDEO TYPE + SCRIPT (frameworks, per-line voice programming),
+ * and THE STORYBOARD — the approval gate with per-beat shots, the two
+ * @reference slots (@1 always the locked sheet, @2 the optional variant),
+ * and the full cost readout (per-beat prices, the 2.0↔2.5 delta live, the
+ * sheet charged once per character). Nothing spends without a number on
+ * screen; any edit re-opens the gate. Steps 5–6 (generate, assemble) light
  * up as they ship.
  */
 import { useEffect, useState } from 'react';
-import { Check, Loader2, Mic, PersonStanding, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import {
+  Camera,
+  Check,
+  Film,
+  Loader2,
+  Lock,
+  Mic,
+  PersonStanding,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Undo2,
+  Upload,
+} from 'lucide-react';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
 import {
+  approveClonePlan,
+  beatGridForWords,
   beatWordCount,
   blankClonePlan,
   characterSheetPrompt,
+  CLONE_BEAT_GRID_SEC,
   CLONE_COSTS,
   CLONE_FRAMEWORKS,
   CLONE_SHEET_MODEL,
   CLONE_VIDEO_TYPES,
+  cloneBeatCost,
+  cloneBeatRefSlots,
   cloneFrameworkFor,
+  clonePlanCost,
+  clonePlanDurationSec,
+  cloneTierCostDelta,
   cloneVideoTypeFor,
   lookBibleString,
   makeBeatId,
   makeCloneId,
+  storyboardIssues,
+  withBeatRefSlot,
   type CloneBeat,
   type ClonePlan,
+  type CloneShotAngle,
   type ReelClone,
+  type SeedanceTier,
 } from '@/lib/mothermode/reel/clone';
 import {
   aiGenerateCloneScript,
@@ -45,8 +68,8 @@ import {
 const WIZARD_STEPS = [
   { n: 1, label: 'The Clone', live: true },
   { n: 2, label: 'Video type', live: true },
-  { n: 3, label: 'Script', live: false },
-  { n: 4, label: 'Storyboard', live: false },
+  { n: 3, label: 'Script', live: true },
+  { n: 4, label: 'Storyboard', live: true },
   { n: 5, label: 'Generate', live: false },
   { n: 6, label: 'Assemble', live: false },
 ];
@@ -114,6 +137,9 @@ export default function ClonePanel({
     existing?.framework ?? CLONE_VIDEO_TYPES[0].framework,
   );
   const [scriptBusy, setScriptBusy] = useState(false);
+
+  // Step 4 (wizard) — the storyboard gate: per-beat @reference-2 URL drafts.
+  const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void aiListVoices().then(setVoices);
@@ -261,6 +287,52 @@ export default function ClonePanel({
       approvedAt: null,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  // ———— Wizard step 4: the storyboard — the gate + the cost readout ————
+  const storyboardCost = existing ? clonePlanCost(existing) : null;
+  const storyboardDelta = existing ? cloneTierCostDelta(existing) : 0;
+  const gateIssues = existing ? storyboardIssues(existing) : [];
+  const approved = !!existing?.approvedAt;
+
+  /** The plan-level 2.0↔2.5 toggle — reprices every un-pinned b-roll beat. */
+  async function setPlanTier(tier: SeedanceTier) {
+    if (!existing || existing.seedanceTier === tier) return;
+    await onSavePlan({
+      ...existing,
+      seedanceTier: tier,
+      approvedAt: null,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  /** Flip a beat avatar ↔ b-roll (a b-roll beat needs a line to go avatar). */
+  async function toggleBeatKind(b: CloneBeat) {
+    const next = b.kind === 'avatar' ? ('broll' as const) : ('avatar' as const);
+    if (next === 'avatar' && !b.line.trim()) return;
+    await patchBeat(b.id, { kind: next });
+  }
+
+  /** Set / clear a beat's @reference 2 (the variant). @1 stays the sheet. */
+  async function setVariantRef(beat: CloneBeat, url: string | null) {
+    if (!existing) return;
+    const next = withBeatRefSlot(beat, existing.clone, 1, url);
+    setSlotDrafts((d) => ({ ...d, [beat.id]: '' }));
+    await patchBeat(beat.id, { refs: next.refs });
+  }
+
+  /** The gate: stamp it. Generation (step 5) refuses an unapproved plan. */
+  async function approveStoryboard() {
+    if (!existing || gateIssues.length > 0 || !storyboardCost) return;
+    await onSavePlan(approveClonePlan(existing));
+    onNote?.(
+      `Storyboard approved at $${storyboardCost.total.toFixed(2)} — generation unlocks in step 5. Any edit re-opens the gate.`,
+    );
+  }
+
+  async function revokeStoryboard() {
+    if (!existing) return;
+    await onSavePlan({ ...existing, approvedAt: null, updatedAt: new Date().toISOString() });
   }
 
   return (
@@ -558,6 +630,290 @@ export default function ClonePanel({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ———— Wizard step 4: the storyboard — the gate + the cost readout ———— */}
+      {existing && existing.beats.length > 0 && storyboardCost && (
+        <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
+          <div className="flex items-center justify-between">
+            <span className={LABEL}>Step 4 — the storyboard · the gate</span>
+            {approved && (
+              <span className="inline-flex items-center gap-1 rounded bg-emerald-400/15 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-300">
+                <ShieldCheck className="h-2.5 w-2.5" /> approved
+              </span>
+            )}
+          </div>
+
+          {/* the 2.0 ↔ 2.5 toggle — the delta shows live on the chip */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-bone/45">Seedance for b-roll:</span>
+            {(['seedance-2.0', 'seedance-2.5'] as SeedanceTier[]).map((tier) => (
+              <button
+                key={tier}
+                onClick={() => void setPlanTier(tier)}
+                className={`rounded px-2 py-1 text-[9px] font-semibold ${
+                  existing.seedanceTier === tier
+                    ? 'bg-brass text-ink'
+                    : 'text-bone/50 hover:bg-bone/10'
+                }`}
+              >
+                {tier === 'seedance-2.0'
+                  ? '2.0 standard'
+                  : `2.5 hero${storyboardDelta > 0 ? ` (+$${storyboardDelta.toFixed(2)})` : ''}`}
+              </button>
+            ))}
+          </div>
+
+          {/* per-beat: the shot, the @reference slots, the price */}
+          {existing.beats.map((b, i) => {
+            const cost = cloneBeatCost(b, existing.seedanceTier);
+            const slots = cloneBeatRefSlots(b, existing.clone);
+            const words = beatWordCount(b.line);
+            const floor = beatGridForWords(words);
+            const brollTier = b.seedanceTier ?? existing.seedanceTier;
+            return (
+              <div
+                key={b.id}
+                className="space-y-1 rounded-xl border border-bone/10 bg-bone/[0.03] p-2"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-brass/80">{i + 1}</span>
+                  <button
+                    onClick={() => void toggleBeatKind(b)}
+                    disabled={b.kind === 'broll' && !b.line.trim()}
+                    title={
+                      b.kind === 'avatar'
+                        ? 'Switch to a b-roll cutaway (Seedance)'
+                        : b.line.trim()
+                          ? 'Switch to a talking-head beat (avatar)'
+                          : 'A b-roll beat needs a spoken line to become an avatar beat'
+                    }
+                    className="inline-flex items-center gap-0.5 rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60 hover:bg-bone/15 disabled:opacity-40"
+                  >
+                    {b.kind === 'broll' ? <Film className="h-2.5 w-2.5" /> : <Camera className="h-2.5 w-2.5" />}
+                    {b.kind === 'broll' ? 'b-roll' : 'avatar'}
+                  </button>
+                  <div className="flex gap-0.5">
+                    {CLONE_BEAT_GRID_SEC.map((sec) => (
+                      <button
+                        key={sec}
+                        disabled={sec < floor}
+                        onClick={() => void patchBeat(b.id, { durationSec: sec })}
+                        title={
+                          sec < floor
+                            ? `${words} words need at least ${floor}s — the grid stays honest`
+                            : `${sec}s`
+                        }
+                        className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                          b.durationSec === sec
+                            ? 'bg-brass text-ink'
+                            : 'text-bone/45 hover:bg-bone/10 disabled:opacity-30'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                  {b.kind === 'broll' && (
+                    <button
+                      onClick={() =>
+                        void patchBeat(b.id, {
+                          seedanceTier: brollTier === 'seedance-2.0' ? 'seedance-2.5' : 'seedance-2.0',
+                        })
+                      }
+                      title="Pin this beat's Seedance tier (beats the plan toggle)"
+                      className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                        brollTier === 'seedance-2.5'
+                          ? 'bg-brass/20 text-brass'
+                          : 'bg-bone/10 text-bone/50 hover:bg-bone/15'
+                      }`}
+                    >
+                      {brollTier === 'seedance-2.5' ? '2.5 hero' : '2.0'}
+                    </button>
+                  )}
+                  <span
+                    className="ml-auto rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60"
+                    title={`voice $${cost.voice.toFixed(3)} + video $${cost.video.toFixed(3)}`}
+                  >
+                    ${cost.total.toFixed(3)}
+                  </span>
+                </div>
+
+                {b.kind === 'avatar' ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] uppercase tracking-wider text-bone/35">shot</span>
+                    {(['close', 'medium', 'wide'] as CloneShotAngle[]).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => void patchBeat(b.id, { shot: s })}
+                        className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                          b.shot === s
+                            ? 'bg-brass/20 text-brass'
+                            : 'text-bone/45 hover:bg-bone/10'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    key={`${b.id}:${b.brollPrompt ?? ''}`}
+                    defaultValue={b.brollPrompt ?? ''}
+                    rows={2}
+                    placeholder="The b-roll visual — name the character so they show up INSIDE the footage"
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (b.brollPrompt ?? '')) void patchBeat(b.id, { brollPrompt: v });
+                    }}
+                    className={INPUT}
+                  />
+                )}
+
+                {/* the @reference slots — @1 is always the sheet, @2 the variant */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[8px] uppercase tracking-wider text-bone/35">@ref</span>
+                  {slots.primary ? (
+                    <div className="relative shrink-0" title="@reference 1 — the locked character sheet">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={slots.primary}
+                        alt="@1"
+                        className="h-8 w-8 rounded-md border border-brass/30 object-cover"
+                      />
+                      <Lock className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-ink p-0.5 text-brass" />
+                    </div>
+                  ) : (
+                    <span className="text-[8px] text-red-300">@1 missing — forge the sheet</span>
+                  )}
+                  {slots.variant ? (
+                    <div className="group relative shrink-0" title="@reference 2 — the variant">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={slots.variant}
+                        alt="@2"
+                        className="h-8 w-8 rounded-md border border-bone/15 object-cover"
+                      />
+                      <button
+                        onClick={() => void setVariantRef(b, null)}
+                        className="absolute -right-1 -top-1 rounded-full bg-ink p-0.5 text-bone/60 opacity-0 transition group-hover:opacity-100"
+                        title="Clear @reference 2"
+                      >
+                        <Trash2 className="h-2 w-2" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        value={slotDrafts[b.id] ?? ''}
+                        onChange={(e) => setSlotDrafts((d) => ({ ...d, [b.id]: e.target.value }))}
+                        placeholder="@2 variant URL (wardrobe / location / product)"
+                        className="min-w-0 flex-1 rounded-md border border-bone/10 bg-ink px-1.5 py-1 text-[9px] text-bone/70 outline-none placeholder:text-bone/25"
+                      />
+                      <button
+                        onClick={() => void setVariantRef(b, slotDrafts[b.id] ?? '')}
+                        disabled={!/^https?:\/\//i.test((slotDrafts[b.id] ?? '').trim())}
+                        className="shrink-0 rounded-md border border-bone/15 px-1.5 py-1 text-bone/60 hover:bg-bone/10 disabled:opacity-40"
+                        title="Set @reference 2"
+                      >
+                        <Plus className="h-2.5 w-2.5" />
+                      </button>
+                      {existing.clone.refPhotos
+                        .filter((u) => u !== slots.primary)
+                        .slice(0, 4)
+                        .map((u) => (
+                          <button
+                            key={u}
+                            onClick={() => void setVariantRef(b, u)}
+                            title="Use as @reference 2"
+                            className="shrink-0"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={u}
+                              alt="pick"
+                              className="h-6 w-6 rounded-md border border-bone/10 object-cover hover:border-brass/50"
+                            />
+                          </button>
+                        ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* the totals — nothing spends without a number on screen */}
+          <div className="space-y-0.5 rounded-xl border border-brass/20 bg-brass/5 p-2 text-[10px]">
+            <div className="flex justify-between text-bone/45">
+              <span>
+                {existing.beats.length} beats · {clonePlanDurationSec(existing)}s runtime
+              </span>
+              <span>per-beat prices above</span>
+            </div>
+            <div className="flex justify-between text-bone/60">
+              <span>voice (ElevenLabs)</span>
+              <span>${storyboardCost.voiceTotal.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between text-bone/60">
+              <span>video (avatar + Seedance)</span>
+              <span>${storyboardCost.videoTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-bone/60">
+              <span>character sheet — once per character, not per video</span>
+              <span>
+                {storyboardCost.sheet === 0 ? '$0.00 (forged)' : `$${storyboardCost.sheet.toFixed(2)}`}
+              </span>
+            </div>
+            <div className="flex justify-between border-t border-brass/15 pt-0.5 text-[11px] font-bold text-brass">
+              <span>total if you generate now</span>
+              <span>${storyboardCost.total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* the gate — approval stamps it, any edit re-opens it */}
+          {approved ? (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-2">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-300" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold text-emerald-200">
+                  Storyboard approved · {new Date(existing.approvedAt ?? '').toLocaleString()}
+                </p>
+                <p className="text-[9px] text-emerald-200/50">
+                  Step 5 (generate) reads this gate. Any edit above re-opens it.
+                </p>
+              </div>
+              <button
+                onClick={() => void revokeStoryboard()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300/25 px-2 py-1 text-[9px] font-semibold text-emerald-200 hover:bg-emerald-400/10"
+              >
+                <Undo2 className="h-3 w-3" /> revise
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {gateIssues.length > 0 && (
+                <ul className="space-y-0.5 rounded-lg bg-red-500/10 px-2 py-1.5">
+                  {gateIssues.map((issue) => (
+                    <li key={issue} className="text-[9px] text-red-300">
+                      {issue}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                onClick={() => void approveStoryboard()}
+                disabled={gateIssues.length > 0}
+                className="w-full rounded-xl bg-brass px-3 py-2 text-[11px] font-bold text-ink disabled:opacity-40"
+              >
+                approve the storyboard — ${storyboardCost.total.toFixed(2)} on screen
+              </button>
+              <p className="text-center text-[9px] text-bone/30">
+                Nothing generates until this gate is stamped. Edits after approval re-open it.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

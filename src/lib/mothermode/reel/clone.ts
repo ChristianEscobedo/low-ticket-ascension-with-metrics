@@ -417,6 +417,113 @@ export function clonePlanCost(plan: ClonePlan): ClonePlanCost {
   };
 }
 
+/** The live 2.0↔2.5 delta for the toggle: total(2.5) − total(2.0). */
+export function cloneTierCostDelta(plan: ClonePlan): number {
+  const at = (tier: SeedanceTier) => clonePlanCost({ ...plan, seedanceTier: tier }).total;
+  return Math.round((at('seedance-2.5') - at('seedance-2.0')) * 1000) / 1000;
+}
+
+/** Total runtime the beats add up to — the storyboard's context line. */
+export function clonePlanDurationSec(plan: ClonePlan): number {
+  return plan.beats.reduce((s, b) => s + Math.max(0, b.durationSec), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The storyboard gate (approve before a dollar is spent)
+// ---------------------------------------------------------------------------
+
+/**
+ * The @reference 1 resolver: the character sheet wins, then the first ref
+ * photo. This is THE consistency anchor — every avatar/Seedance call quotes
+ * it, so a beat with no explicit slot 1 still rides the master.
+ */
+export function cloneMasterRef(clone: ReelClone): string | null {
+  return clone.sheetUrl ?? clone.refPhotos[0] ?? null;
+}
+
+export interface CloneBeatRefSlots {
+  /** @reference 1 — the beat override, else the master (sheet → first ref). */
+  primary: string | null;
+  /** @reference 2 — the optional variant (wardrobe / location / product). */
+  variant: string | null;
+}
+
+/** Resolve a beat's two @reference slots for the storyboard + generation. */
+export function cloneBeatRefSlots(beat: CloneBeat, clone: ReelClone): CloneBeatRefSlots {
+  return {
+    primary: beat.refs[0] ?? cloneMasterRef(clone),
+    variant: beat.refs[1] ?? null,
+  };
+}
+
+/**
+ * Set (or clear, url=null) one @reference slot on a beat. Slot 0 = primary,
+ * slot 1 = the variant. Clearing the primary falls back to the master at
+ * resolve time, so a beat is never truly reference-less while the clone has
+ * refs. Junk URLs are treated as clears; the array stays dense.
+ */
+export function withBeatRefSlot(
+  beat: CloneBeat,
+  clone: ReelClone,
+  slot: 0 | 1,
+  url: string | null,
+): CloneBeat {
+  const refs = [...beat.refs];
+  const clean = typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : null;
+  if (clean) {
+    if (slot === 1 && !refs[0]) {
+      const master = cloneMasterRef(clone);
+      if (master) refs[0] = master;
+    }
+    refs[slot] = clean;
+  } else {
+    refs.splice(slot, 1);
+  }
+  return { ...beat, refs: refs.filter(Boolean).slice(0, 4) };
+}
+
+/**
+ * The gate's honesty rules — every issue blocks approval until fixed. The
+ * storyboard UI lists these verbatim; the generate step refuses an
+ * unapproved plan. The 5/10/15 grid stays honest: a line that can't fit
+ * its beat's seconds is an issue, not a suggestion.
+ */
+export function storyboardIssues(plan: ClonePlan): string[] {
+  const issues: string[] = [];
+  if (plan.beats.length === 0) {
+    issues.push('No beats yet — write the script first (step 2).');
+    return issues;
+  }
+  plan.beats.forEach((b, i) => {
+    const n = `Beat ${i + 1}`;
+    if (!cloneBeatRefSlots(b, plan.clone).primary) {
+      issues.push(`${n}: no @reference 1 — forge the character sheet or add a ref photo.`);
+    }
+    const words = beatWordCount(b.line);
+    if (b.kind === 'avatar' && words === 0) {
+      issues.push(`${n}: an avatar beat needs a spoken line.`);
+    }
+    if (b.kind === 'broll' && !(b.brollPrompt ?? '').trim()) {
+      issues.push(`${n}: a b-roll beat needs a visual prompt.`);
+    }
+    if (words > 0 && beatGridForWords(words) > b.durationSec) {
+      issues.push(
+        `${n}: ${words} words can't fit ${b.durationSec}s — lengthen the beat or trim the line.`,
+      );
+    }
+  });
+  return issues;
+}
+
+export function clonePlanApprovable(plan: ClonePlan): boolean {
+  return storyboardIssues(plan).length === 0;
+}
+
+/** Approve the gate. Any later edit re-opens it (approvedAt → null upstream). */
+export function approveClonePlan(plan: ClonePlan, now = new Date().toISOString()): ClonePlan {
+  return { ...plan, approvedAt: now, updatedAt: now };
+}
+
 // ---------------------------------------------------------------------------
 // Normalizers (pure, never throw — same house style as types.ts)
 // ---------------------------------------------------------------------------

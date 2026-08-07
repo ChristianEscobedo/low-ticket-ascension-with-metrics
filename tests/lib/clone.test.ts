@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  approveClonePlan,
   beatDurationForWords,
   beatGridForWords,
   beatLineForTts,
@@ -15,13 +16,19 @@ import {
   CLONE_FRAMEWORKS,
   CLONE_VIDEO_TYPES,
   cloneBeatCost,
+  cloneBeatRefSlots,
   cloneFrameworkFor,
+  clonePlanApprovable,
   clonePlanCost,
+  clonePlanDurationSec,
+  cloneTierCostDelta,
   cloneVideoTypeFor,
   lookBibleString,
   makeCloneId,
   normalizeClonePlan,
   resolveBeatVoiceParams,
+  storyboardIssues,
+  withBeatRefSlot,
   type CloneBeat,
   type ReelClone,
 } from '@/lib/mothermode/reel/clone';
@@ -295,5 +302,138 @@ describe('the manifest normalizer', () => {
 
   it('ids are unique enough to key beats', () => {
     expect(makeCloneId()).not.toBe(makeCloneId());
+  });
+});
+
+describe('the storyboard @reference slots', () => {
+  it('slot 1 resolves the sheet first, then the first ref photo', () => {
+    const beat = makeBeat({ refs: [] });
+    expect(cloneBeatRefSlots(beat, CLONE).primary).toBe(CLONE.sheetUrl);
+    const noSheet = { ...CLONE, sheetUrl: undefined };
+    expect(cloneBeatRefSlots(beat, noSheet).primary).toBe(CLONE.refPhotos[0]);
+    expect(cloneBeatRefSlots(beat, { ...noSheet, refPhotos: [] }).primary).toBeNull();
+  });
+
+  it('a beat override wins slot 1; slot 2 is the variant', () => {
+    const beat = makeBeat({
+      refs: ['https://cdn.example.com/override.png', 'https://cdn.example.com/variant.png'],
+    });
+    const slots = cloneBeatRefSlots(beat, CLONE);
+    expect(slots.primary).toBe('https://cdn.example.com/override.png');
+    expect(slots.variant).toBe('https://cdn.example.com/variant.png');
+    expect(cloneBeatRefSlots(makeBeat(), CLONE).variant).toBeNull();
+  });
+
+  it('withBeatRefSlot sets and clears the variant, keeping the array dense', () => {
+    const beat = makeBeat(); // refs: [sheet]
+    const withVariant = withBeatRefSlot(beat, CLONE, 1, ' https://cdn.example.com/variant.png ');
+    expect(withVariant.refs).toEqual([CLONE.refPhotos[0], 'https://cdn.example.com/variant.png']);
+    const cleared = withBeatRefSlot(withVariant, CLONE, 1, null);
+    expect(cleared.refs).toEqual([CLONE.refPhotos[0]]);
+    // the original beat is untouched (pure in, pure out)
+    expect(beat.refs).toEqual([CLONE.refPhotos[0]]);
+  });
+
+  it('setting slot 2 on an empty refs backfills slot 1 with the master', () => {
+    const beat = makeBeat({ refs: [] });
+    const set = withBeatRefSlot(beat, CLONE, 1, 'https://cdn.example.com/variant.png');
+    expect(set.refs).toEqual([CLONE.sheetUrl, 'https://cdn.example.com/variant.png']);
+  });
+
+  it('clearing the primary falls back to the master; junk urls are clears', () => {
+    const noPrimary = withBeatRefSlot(makeBeat(), CLONE, 0, null);
+    expect(noPrimary.refs).toEqual([]);
+    expect(cloneBeatRefSlots(noPrimary, CLONE).primary).toBe(CLONE.sheetUrl);
+    const junk = withBeatRefSlot(makeBeat(), CLONE, 1, 'not-a-url');
+    expect(junk.refs).toEqual([CLONE.refPhotos[0]]);
+  });
+});
+
+describe('the storyboard gate', () => {
+  it('a plan with no beats cannot approve', () => {
+    const issues = storyboardIssues(blankClonePlan(CLONE));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(/no beats/i);
+    expect(clonePlanApprovable(blankClonePlan(CLONE))).toBe(false);
+  });
+
+  it('blocks when a beat has no resolvable @reference 1', () => {
+    const clone = { ...CLONE, sheetUrl: undefined, refPhotos: [] };
+    const plan = blankClonePlan(clone);
+    plan.beats = [makeBeat({ refs: [] })];
+    const issues = storyboardIssues(plan);
+    expect(issues.some((i) => i.includes('@reference 1'))).toBe(true);
+    expect(clonePlanApprovable(plan)).toBe(false);
+  });
+
+  it('blocks avatar beats without lines and b-roll beats without a visual', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat({ line: '' }),
+      makeBeat({ id: 'b2', index: 1, kind: 'broll', brollPrompt: undefined }),
+    ];
+    const issues = storyboardIssues(plan);
+    expect(issues.some((i) => i.includes('spoken line'))).toBe(true);
+    expect(issues.some((i) => i.includes('visual prompt'))).toBe(true);
+  });
+
+  it('the grid stays honest — words that cannot fit the seconds block approval', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat({
+        durationSec: 5,
+        line: 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twentyone',
+      }),
+    ];
+    const issues = storyboardIssues(plan);
+    expect(issues.some((i) => i.includes("can't fit 5s"))).toBe(true);
+    // lengthening the beat to what the words need clears the issue
+    plan.beats = [{ ...plan.beats[0], durationSec: 10 }];
+    expect(storyboardIssues(plan)).toEqual([]);
+  });
+
+  it('a clean plan approves and stamps both timestamps', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat(),
+      makeBeat({
+        id: 'b2',
+        index: 1,
+        kind: 'broll',
+        line: '',
+        brollPrompt: 'walks the gym holding the bottle',
+        durationSec: 10,
+      }),
+    ];
+    expect(storyboardIssues(plan)).toEqual([]);
+    expect(clonePlanApprovable(plan)).toBe(true);
+    const stamped = approveClonePlan(plan, '2026-08-07T02:00:00.000Z');
+    expect(stamped.approvedAt).toBe('2026-08-07T02:00:00.000Z');
+    expect(stamped.updatedAt).toBe('2026-08-07T02:00:00.000Z');
+    // the pre-approval plan is untouched (the gate never mutates in place)
+    expect(plan.approvedAt).toBeNull();
+    expect(clonePlanDurationSec(stamped)).toBe(15);
+  });
+});
+
+describe('the tier delta + runtime', () => {
+  it('is $0 for an avatar-only plan', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat({ durationSec: 10 })];
+    expect(cloneTierCostDelta(plan)).toBe(0);
+    expect(clonePlanDurationSec(plan)).toBe(10);
+  });
+
+  it('prices the 2.5 hero jump per un-pinned b-roll second only', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [
+      makeBeat({ kind: 'broll', durationSec: 10 }),
+      makeBeat({ id: 'b2', index: 1, kind: 'broll', durationSec: 5, seedanceTier: 'seedance-2.5' }),
+    ];
+    // the pinned beat already prices at 2.5 in both legs — only the 10s beat moves
+    const expected =
+      10 * (CLONE_COSTS.seedancePerSec['seedance-2.5'] - CLONE_COSTS.seedancePerSec['seedance-2.0']);
+    expect(cloneTierCostDelta(plan)).toBeCloseTo(expected, 3);
+    expect(clonePlanDurationSec(plan)).toBe(15);
   });
 });

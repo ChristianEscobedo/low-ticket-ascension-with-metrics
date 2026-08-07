@@ -476,6 +476,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.10.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Clone, step 3: the storyboard gate with the full cost readout',
+    body: cl([
+      '<p>The Clone tab\'s <strong>storyboard</strong> is live — the approval gate before a dollar moves. Every beat shows its shot: flip a beat between talking-head and b-roll, re-frame the angle (close / medium / wide), rewrite the b-roll visual, and nudge its seconds on the honest 5/10/15 grid — options shorter than the word count allows are disabled, so the grid never lies. Each beat carries the two <strong>@reference slots</strong>: @1 is always the locked character sheet, @2 is your optional variant (wardrobe change, location still, product-in-hand) picked from the clone\'s refs or any URL.</p>',
+      '<p>And the money stays on screen: every beat wears its price chip (voice + video), the <strong>Seedance 2.0 ↔ 2.5 hero</strong> toggle shows the plan delta live (pin a single b-roll beat to 2.5 and only that beat moves), and the totals box lines out voice, video, runtime, and the character sheet — charged <em>once per character, never per video</em>. Nothing spends without a number on screen: the approve button carries the total, approval stamps the gate, and any edit re-opens it. Generation (step 5) reads this gate.</p>',
+      '<p><strong>Where to start:</strong> Clipping Studio → Clone tab → write a script, then scroll to the storyboard — set the shots, check the total, approve the gate.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

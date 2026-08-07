@@ -92,3 +92,57 @@ photo) automatically. A new script un-approves the storyboard gate.
 
 **Verify.** `npx tsc --noEmit` clean; the 19 clone tests still pass (the
 manifest normalizer already covers the fields the script writer fills).
+
+## Step 3 — The storyboard gate + cost readout (shipped 2026-08-07)
+
+**What it is.** The Clone tab's wizard step 4: the storyboard, and the gate
+that keeps spend honest. Every beat shows its shot — flip avatar ↔ b-roll
+(a line-less b-roll beat can't go avatar), re-frame the angle
+(close / medium / wide), rewrite the b-roll visual prompt, nudge the seconds
+on the 5/10/15 grid with the dishonest options disabled (a 21-word line
+can't sit on a 5s beat). Each beat carries its two **@reference slots**:
+@1 is always the locked character sheet (the master resolver backfills it),
+@2 is the optional variant (wardrobe / location / product) set from a URL or
+a quick-pick of the clone's refs. The **cost readout** never leaves the
+screen: a per-beat price chip (voice + video on hover), the Seedance
+2.0 ↔ 2.5 toggle showing the plan delta live on the chip, per-beat 2.5 hero
+pins, and the totals box (voice / video / runtime / the sheet line —
+"$0.00 (forged)" once the character owns a sheet, the once-per-character
+honesty copy always on the line). The approve button carries the grand
+total; approval stamps `approvedAt`; every edit path (script rewrite, line
+edit, shot / kind / duration / tier / ref change, beat removal) re-opens
+the gate. Generation (build-order step 4) reads this stamp.
+
+**Where it lives.**
+
+- `src/lib/mothermode/reel/clone.ts` — the gate section:
+  `cloneMasterRef` (sheet → first ref), `cloneBeatRefSlots` (the @1/@2
+  resolver), `withBeatRefSlot` (pure slot writes — dense array, junk URLs
+  are clears, slot-2 writes backfill @1 with the master),
+  `storyboardIssues` + `clonePlanApprovable` (the honesty rules, listed
+  verbatim in the UI), `approveClonePlan` (stamps both timestamps, never
+  mutates), `cloneTierCostDelta` (the live 2.0↔2.5 readout — pinned beats
+  price identically in both legs, so only un-pinned seconds move), and
+  `clonePlanDurationSec`. No manifest shape changes — the normalizer
+  already covered every field this step writes.
+- `src/app/(fullscreen)/admin/reel-studio/ClonePanel.tsx` — the step-4 UI:
+  the tier toggle with the live delta, per-beat cards (kind flip, grid
+  chips with the honest floor, shot chips, b-roll prompt, per-beat hero
+  pin, price chip), the @reference slot row (@1 locked thumbnail, @2
+  draft input + quick-pick thumbnails), the totals box, and the gate
+  (issues list blocks approval; approved banner with timestamp + revise).
+  Wizard stepper steps 3 (Script) and 4 (Storyboard) now read live.
+- `tests/lib/clone.test.ts` — 31 tests now (12 new): slot resolution order,
+  override wins, dense set/clear, master backfill, junk-URL clears, every
+  gate rule (no beats, no @1, line-less avatar, prompt-less b-roll, words
+  that can't fit), the approve stamp, and the tier delta math.
+- Changelog 2.10.0.
+
+**Verify.** `npx tsc --noEmit` clean; 31/31 clone tests + the 121-test reel
+neighborhood (media-cues, media-library, veed-presets, reel-schedule,
+reel-trim-playback, caption-presets, render-plan) pass.
+
+**Not in step 3 (next steps own these).** The actual generation calls
+(muapi avatar + ElevenLabs per-beat voice + Seedance with refs — the gate
+stamp is what they check), extend/re-roll with last-frame continuation, and
+the Content Hub cast handoff.

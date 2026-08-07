@@ -1,11 +1,22 @@
 # AI Clone Video — TASK (handoff)
 
-**Status: IN PROGRESS. Steps 1 + 2 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 3–6 remain — this doc is the whole plan, pick it up cold.**
+**Status: IN PROGRESS. Steps 1–3 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 4–6 remain — this doc is the whole plan, pick it up cold.**
 
 > **Step 1 — DONE**: clone entity + character-sheet foundry + Clone tab in the
 > studio + clonePlan manifest persistence (types/store/route) + cost tables +
 > voice-programming resolvers + tests (tests/lib/clone.test.ts) + changelog
 > 2.8.0. What shipped and the anchors it landed on: docs/AI_CLONE_VIDEO_PORT.md.
+>
+> **Step 2 — DONE**: video-type picker carrying its framework + the
+> `cloneScript` action + the step-2 UI (per-line voice programming, editable
+> lines, @reference-1 auto-set) + changelog 2.9.0.
+>
+> **Step 3 — DONE**: the storyboard gate + cost readout — per-beat shots
+> (kind flip, angle, honest-grid seconds), the @reference slots (@1 locked
+> sheet, @2 variant), per-beat price chips, the live 2.0↔2.5 delta, the
+> totals box (sheet charged once per character), and the approve stamp
+> (`approvedAt`) every edit re-opens. Gate rules live in
+> `storyboardIssues`/`clonePlanApprovable` (clone.ts) + changelog 2.10.0.
 
 The Clipping Studio (Reel Studio, /admin/reel-studio) gains an **AI Clone**
 aspect: create and use AI avatars, script → storyboard → 5/10/15-second
@@ -54,13 +65,14 @@ AI writes per-line beats, each capped at ~25 words (≈10s of speech — the
 emphasis words, pause placement, energy — passed as ElevenLabs
 stability/similarity/style/speed per beat.
 
-### Step 4 — The storyboard (gate)
+### Step 4 — The storyboard (gate) — DONE (build-order step 3)
 
 Each beat gets a shot: talking-head angle (close/medium/wide), optional
 b-roll insert, background — plus the **@reference slots**: @reference 1 =
 the character sheet, @reference 2 = an optional variant (wardrobe change,
 location still, product-in-hand still). Approve or edit before a dollar is
-spent — house gate pattern.
+spent — house gate pattern. (The look bible owns the backdrop, quoted
+verbatim downstream, so the manifest carries no per-beat background field.)
 
 ### Step 5 — Generate, per beat
 
@@ -140,8 +152,7 @@ sheet as @reference automatically. One component, both surfaces.
    cells → Media Library. New tab scaffold in the studio.
 2. **Script + framework picker** — type → framework → beats with voice
    programming per line.
-3. **Storyboard + cost readout** — the gate, with @reference slots per beat
-   and the full $ breakdown.
+3. **Storyboard + cost readout** — DONE (2026-08-07, changelog 2.10.0).
 4. **Per-beat generation** — voice (ElevenLabs) → avatar (muapi) → Seedance
    with refs → scenes on the timeline.
 5. **Extend + re-roll** — the manifest; append beats, re-roll one beat,
