@@ -1,6 +1,6 @@
 # AI Clone Video — TASK (handoff)
 
-**Status: IN PROGRESS. Steps 1–3 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 4–6 remain — this doc is the whole plan, pick it up cold.**
+**Status: IN PROGRESS. Steps 1–4 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 5–6 remain (extend/re-roll + the Content Hub cast handoff) — this doc is the whole plan, pick it up cold.**
 
 > **Step 1 — DONE**: clone entity + character-sheet foundry + Clone tab in the
 > studio + clonePlan manifest persistence (types/store/route) + cost tables +
@@ -17,6 +17,15 @@
 > totals box (sheet charged once per character), and the approve stamp
 > (`approvedAt`) every edit re-opens. Gate rules live in
 > `storyboardIssues`/`clonePlanApprovable` (clone.ts) + changelog 2.10.0.
+>
+> **Step 4 — DONE**: per-beat generation + assemble — `cloneGenerate.ts`
+> (step resolver, `cloneGenerationBlockers` spend gate, deterministic
+> prompts, model tables), `src/utils/integrations/muapi.ts` (the
+> OmniHuman-class avatar client), the `reel-clone-generate` route (one beat
+> one step: ElevenLabs with per-beat voice params → muapi avatar / Seedance
+> with refs, re-hosted before it lands), the step-5 UI + generate-all pass,
+> and step-6 assemble → scenes on the timeline. 13 new tests +
+> changelog 2.11.0.
 
 The Clipping Studio (Reel Studio, /admin/reel-studio) gains an **AI Clone**
 aspect: create and use AI avatars, script → storyboard → 5/10/15-second
@@ -153,8 +162,10 @@ sheet as @reference automatically. One component, both surfaces.
 2. **Script + framework picker** — type → framework → beats with voice
    programming per line.
 3. **Storyboard + cost readout** — DONE (2026-08-07, changelog 2.10.0).
-4. **Per-beat generation** — voice (ElevenLabs) → avatar (muapi) → Seedance
-   with refs → scenes on the timeline.
+4. **Per-beat generation** — DONE (2026-08-07, changelog 2.11.0). NOTE:
+   verify the muapi avatar slug (`MUAPI_AVATAR_MODEL`, default
+   `omnihuman-1`) + field names against the live catalog on first render,
+   and refresh `CLONE_COSTS` from muapi's live pricing.
 5. **Extend + re-roll** — the manifest; append beats, re-roll one beat,
    last-frame continuation.
 6. **Content Hub cast handoff** — the same sheet behind the Hub storyboard.

@@ -122,7 +122,8 @@ import {
 
 import { PersonStanding, Wand2 } from 'lucide-react';
 import ClonePanel from './ClonePanel';
-import type { ClonePlan } from '@/lib/mothermode/reel/clone';
+import type { CloneBeat, ClonePlan } from '@/lib/mothermode/reel/clone';
+import { cloneSceneName } from '@/lib/mothermode/reel/cloneGenerate';
 
 
 import {
@@ -4105,6 +4106,29 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     await post({ action: 'save', project: updated });
   }
 
+  /** Clone beats land on the timeline as scenes, in manifest order (step 6). */
+  async function assembleCloneBeats(beats: CloneBeat[]) {
+    if (!project) return;
+    const scenes = [];
+    for (let i = 0; i < beats.length; i++) {
+      const b = beats[i];
+      if (!b.videoUrl) continue;
+      const dur = (await probeDuration(b.videoUrl)) || b.durationSec;
+      scenes.push({
+        id: makeClipId(),
+        name: cloneSceneName(b, i),
+        url: b.videoUrl,
+        durationSec: dur,
+        trimEndSec: 0,
+      });
+    }
+    if (!scenes.length) return;
+    const updated: ReelProject = { ...project, clips: [...project.clips, ...scenes] };
+    setProject(updated);
+    await post({ action: 'save', project: updated });
+    setTab('clips');
+  }
+
   /** Cue mode word click: open the image picker for that word. */
   function beginCueAttach(wordIndex: number) {
     setCuePickerWord(wordIndex);
@@ -5379,7 +5403,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {tab === 'clone' && (
-                <ClonePanel project={project} onSavePlan={saveClonePlan} onNote={setNote} />
+                <ClonePanel
+                  project={project}
+                  onSavePlan={saveClonePlan}
+                  onAssemble={assembleCloneBeats}
+                  onNote={setNote}
+                />
               )}
               {tab === 'clips' && (
                 <div className="space-y-2">

@@ -17,10 +17,12 @@ import {
   Camera,
   Check,
   Film,
+  ListVideo,
   Loader2,
   Lock,
   Mic,
   PersonStanding,
+  Play,
   Plus,
   ShieldCheck,
   Sparkles,
@@ -59,6 +61,11 @@ import {
   type SeedanceTier,
 } from '@/lib/mothermode/reel/clone';
 import {
+  cloneAssembleBeats,
+  cloneGenProgress,
+  cloneGenStep,
+} from '@/lib/mothermode/reel/cloneGenerate';
+import {
   aiGenerateCloneScript,
   aiGenerateImage,
   aiListVoices,
@@ -70,8 +77,8 @@ const WIZARD_STEPS = [
   { n: 2, label: 'Video type', live: true },
   { n: 3, label: 'Script', live: true },
   { n: 4, label: 'Storyboard', live: true },
-  { n: 5, label: 'Generate', live: false },
-  { n: 6, label: 'Assemble', live: false },
+  { n: 5, label: 'Generate', live: true },
+  { n: 6, label: 'Assemble', live: true },
 ];
 
 const INPUT =
@@ -101,13 +108,26 @@ async function ingestSheet(name: string, url: string) {
 export default function ClonePanel({
   project,
   onSavePlan,
+  onAssemble,
   onNote,
 }: {
   project: ReelProject;
   onSavePlan: (plan: ClonePlan) => Promise<void> | void;
+  /** Generated beats land on the timeline as scenes (page.tsx owns clips). */
+  onAssemble?: (beats: CloneBeat[]) => Promise<void> | void;
   onNote?: (msg: string) => void;
 }) {
-  const existing = project.clonePlan ?? null;
+  // Local mirror of the saved manifest — a generation CHAIN (voice → video)
+  // writes twice, and step 2 of the chain must read step 1's audioUrl, so
+  // this ref always holds the freshest plan. Keyed by project id: a project
+  // switch never reads another reel's mirror.
+  const [planOverride, setPlanOverride] = useState<{ projectId: string; plan: ClonePlan } | null>(
+    null,
+  );
+  const existing =
+    (planOverride && planOverride.projectId === project.id ? planOverride.plan : null) ??
+    project.clonePlan ??
+    null;
 
   // The clone being edited (seeded from the saved plan when one exists).
   const [name, setName] = useState(existing?.clone.name ?? '');
@@ -140,6 +160,10 @@ export default function ClonePanel({
 
   // Step 4 (wizard) — the storyboard gate: per-beat @reference-2 URL drafts.
   const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
+
+  // Step 5 (wizard) — generation: the beat being worked ('all' = the pass).
+  const [genBusy, setGenBusy] = useState<string | null>(null);
+  const [assembleBusy, setAssembleBusy] = useState(false);
 
   useEffect(() => {
     void aiListVoices().then(setVoices);
@@ -333,6 +357,89 @@ export default function ClonePanel({
   async function revokeStoryboard() {
     if (!existing) return;
     await onSavePlan({ ...existing, approvedAt: null, updatedAt: new Date().toISOString() });
+  }
+
+  // ———— Wizard step 5: generate, per beat (voice → video, gated) ————
+  const genProgress = existing ? cloneGenProgress(existing) : null;
+  const assembleReady = existing ? cloneAssembleBeats(existing) : [];
+
+  /** Save a generation patch onto one beat AND mirror it locally. */
+  async function applyGenPatch(beatId: string, patch: Partial<CloneBeat>) {
+    if (!existing) return;
+    const next: ClonePlan = {
+      ...existing,
+      beats: existing.beats.map((b) => (b.id === beatId ? { ...b, ...patch } : b)),
+      updatedAt: new Date().toISOString(),
+    };
+    setPlanOverride({ projectId: project.id, plan: next }); // the chain reads this next leg
+    await onSavePlan(next);
+  }
+
+  /** One beat, one route call per pending step (voice, then video). */
+  async function generateBeat(beatId: string): Promise<boolean> {
+    for (let leg = 0; leg < 2; leg++) {
+      const current = existing?.beats.find((b) => b.id === beatId);
+      if (!current || cloneGenStep(current) === 'done') return true;
+      const res = await fetch('/api/admin/reel-clone-generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, beatId }),
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const patch = json?.patch as Partial<CloneBeat> | undefined;
+      if (patch) await applyGenPatch(beatId, patch);
+      if (!res.ok || json?.ok !== true) {
+        setError(typeof json?.error === 'string' ? json.error : 'Generation failed');
+        return false;
+      }
+      if (json.alreadyDone) return true;
+    }
+    return true;
+  }
+
+  /** Generate ONE beat (voice → video in a single click). */
+  async function generateOne(beatId: string) {
+    if (!existing || genBusy) return;
+    setGenBusy(beatId);
+    setError(null);
+    try {
+      await generateBeat(beatId);
+    } finally {
+      setGenBusy(null);
+    }
+  }
+
+  /** The full pass: every pending beat, in manifest order. */
+  async function generateAll() {
+    if (!existing || genBusy) return;
+    setGenBusy('all');
+    setError(null);
+    try {
+      for (;;) {
+        const next = existing.beats.find((b) => cloneGenStep(b) !== 'done');
+        if (!next) break;
+        const ok = await generateBeat(next.id);
+        if (!ok) break; // the failed stamp landed; the note says where
+      }
+      const done = existing.beats.filter((b) => b.status === 'generated' && b.videoUrl).length;
+      onNote?.(`Generation pass finished — ${done}/${existing.beats.length} beats rendered.`);
+    } finally {
+      setGenBusy(null);
+    }
+  }
+
+  /** Step 6: the generated beats land on the timeline as scenes, in order. */
+  async function assemble() {
+    if (!existing || !onAssemble || assembleReady.length === 0 || assembleBusy) return;
+    setAssembleBusy(true);
+    try {
+      await onAssemble(assembleReady);
+      onNote?.(
+        `${assembleReady.length} clone beat(s) on the timeline — captions, fly-ins, and the render all work on them.`,
+      );
+    } finally {
+      setAssembleBusy(false);
+    }
   }
 
   return (
@@ -914,6 +1021,137 @@ export default function ClonePanel({
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ———— Wizard step 5: generate, per beat (voice → video, gated) ———— */}
+      {existing && existing.beats.length > 0 && genProgress && (
+        <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
+          <div className="flex items-center justify-between">
+            <span className={LABEL}>Step 5 — generate, per beat</span>
+            <span className="text-[9px] text-bone/40">
+              {genProgress.generated}/{genProgress.total} rendered
+              {genProgress.voiced > 0 ? ` · ${genProgress.voiced} voiced` : ''}
+              {genProgress.failed > 0 ? ` · ${genProgress.failed} failed` : ''}
+            </span>
+          </div>
+
+          {!approved ? (
+            <p className="rounded-lg bg-bone/[0.06] px-2 py-1.5 text-[9px] text-bone/40">
+              The storyboard gate locks this step — approve it above and these buttons light up.
+            </p>
+          ) : (
+            <>
+              {existing.beats.map((b, i) => {
+                const stepState = cloneGenStep(b);
+                const done = stepState === 'done';
+                const busy = genBusy === b.id || genBusy === 'all';
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-1.5 rounded-lg border border-bone/10 bg-bone/[0.03] px-2 py-1.5"
+                  >
+                    <span className="text-[10px] font-bold text-brass/80">{i + 1}</span>
+                    <span className="text-[9px] text-bone/50">
+                      {b.kind === 'broll' ? 'b-roll' : b.shot} · {b.durationSec}s
+                    </span>
+                    {b.status === 'failed' ? (
+                      <span
+                        className="rounded bg-red-500/15 px-1.5 py-0.5 text-[8px] font-semibold text-red-300"
+                        title={b.error}
+                      >
+                        failed
+                      </span>
+                    ) : done ? (
+                      <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-300">
+                        rendered
+                      </span>
+                    ) : stepState === 'voice' ? (
+                      <span className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] text-bone/50">
+                        needs voice
+                      </span>
+                    ) : (
+                      <span className="rounded bg-brass/10 px-1.5 py-0.5 text-[8px] text-brass/80">
+                        voiced — needs video
+                      </span>
+                    )}
+                    <button
+                      onClick={() => void generateOne(b.id)}
+                      disabled={genBusy !== null || done}
+                      title={
+                        done
+                          ? 'Rendered'
+                          : b.status === 'failed'
+                            ? 'Re-run the step that failed'
+                            : stepState === 'voice'
+                              ? 'ElevenLabs with this beat’s voice programming, then the video'
+                              : 'Render the video (the audio is already on the manifest)'
+                      }
+                      className="ml-auto inline-flex items-center gap-1 rounded-lg bg-brass px-2 py-1 text-[9px] font-semibold text-ink disabled:opacity-40"
+                    >
+                      {busy ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : stepState === 'voice' ? (
+                        <Mic className="h-3 w-3" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      {busy ? 'working…' : b.status === 'failed' ? 'retry' : done ? 'rendered' : 'generate'}
+                    </button>
+                    {b.videoUrl && (
+                      <a
+                        href={b.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 rounded-md border border-bone/15 px-1.5 py-1 text-[8px] font-semibold text-bone/60 hover:bg-bone/10"
+                      >
+                        watch
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={() => void generateAll()}
+                disabled={genBusy !== null || genProgress.generated === genProgress.total}
+                className="w-full rounded-xl bg-brass px-3 py-2 text-[11px] font-bold text-ink disabled:opacity-40"
+              >
+                {genBusy === 'all'
+                  ? 'generating…'
+                  : genProgress.generated === genProgress.total
+                    ? 'every beat is rendered'
+                    : `generate all (${genProgress.total - genProgress.generated} to go)`}
+              </button>
+              <p className="text-[9px] text-bone/35">
+                One call per beat per step: ElevenLabs reads each line with ITS voice programming,
+                then muapi renders the talking head (@1 + that audio) or Seedance the b-roll (the
+                @references ride inside the footage). The total is the one you approved at the gate.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ———— Wizard step 6: assemble — beats land on the timeline ———— */}
+      {existing && onAssemble && assembleReady.length > 0 && (
+        <div className="space-y-1.5 rounded-xl border border-brass/20 bg-brass/5 p-2">
+          <span className={LABEL}>
+            <ListVideo className="mr-1 inline h-3 w-3" /> Step 6 — assemble
+          </span>
+          <p className="text-[9px] text-bone/45">
+            {assembleReady.length} generated beat(s) land on the timeline in order, as scenes —
+            captions, fly-ins, SFX, and the Remotion render all work on them.
+          </p>
+          <button
+            onClick={() => void assemble()}
+            disabled={assembleBusy}
+            className="w-full rounded-xl bg-brass px-3 py-2 text-[11px] font-bold text-ink disabled:opacity-40"
+          >
+            {assembleBusy
+              ? 'assembling…'
+              : `assemble ${assembleReady.length} beat${assembleReady.length === 1 ? '' : 's'} onto the timeline`}
+          </button>
         </div>
       )}
     </div>

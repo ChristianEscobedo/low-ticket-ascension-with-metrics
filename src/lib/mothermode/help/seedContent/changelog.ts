@@ -488,6 +488,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.11.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Clone, steps 5–6: per-beat generation and one-click assemble',
+    body: cl([
+      '<p>The Clone wizard generates now. With the storyboard gate stamped, step 5 renders each beat: <strong>voice first</strong> — ElevenLabs reads every line with THAT beat\'s voice programming (one call per beat = per-beat emotion) — then the video: talking-head beats go to the muapi OmniHuman-class avatar model fed @1 (the locked character sheet) plus the beat\'s audio, and b-roll beats go to Seedance with the @reference images riding so the same character shows up INSIDE the footage. Every clip re-hosts to our storage before it lands on the manifest (provider URLs expire), and every beat carries a watch link the second it\'s done.</p>',
+      '<p>Run it per beat or hit <strong>generate all</strong> — the pass works the manifest in order, a failed beat stamps itself and waits for a retry (it re-enters at the step that failed, never re-buying the voice). And step 6: <strong>assemble</strong> drops every generated beat onto the timeline as scenes, in order — captions, fly-ins, SFX, keyframes, and the Remotion render all work on clone videos for free.</p>',
+      '<p><strong>Where to start:</strong> Clipping Studio → Clone tab → approve the storyboard, then step 5 → generate all.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

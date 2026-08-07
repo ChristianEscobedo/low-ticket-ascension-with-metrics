@@ -146,3 +146,74 @@ reel-trim-playback, caption-presets, render-plan) pass.
 (muapi avatar + ElevenLabs per-beat voice + Seedance with refs — the gate
 stamp is what they check), extend/re-roll with last-frame continuation, and
 the Content Hub cast handoff.
+
+## Step 4 — Per-beat generation + assemble (shipped 2026-08-07)
+
+**What it is.** Wizard steps 5 + 6. With the gate stamped, **generate** runs
+per beat (or one pass for all): voice first — ElevenLabs reads each line
+with THAT beat's voice programming (`resolveBeatVoiceParams` +
+`beatLineForTts`, one call per beat) → hosted mp3 (`status: 'voiced'`) —
+then video: avatar beats render on the muapi OmniHuman-class talking head
+(@1 + the beat's audio + the deterministic direction: shot framing,
+delivery note from the beat's energy/pace, the look bible verbatim);
+b-roll beats render on Seedance (2.0 default, 2.5 hero pins) WITH the
+@reference images riding, so the same character shows up inside the
+footage. Provider clips re-host to our storage before they land on the
+manifest. A failed beat stamps `status: 'failed'` + the provider's message
+and re-enters at the step that failed (never re-buys the voice). Step 6
+**assemble** drops every generated beat onto the timeline as scenes, in
+manifest order — captions, cues, and the Remotion render work on them for
+free.
+
+**Where it lives.**
+
+- `src/lib/mothermode/reel/cloneGenerate.ts` — the pure layer:
+  `cloneGenStep` (voice → video → done; failed beats re-enter at the failed
+  step), `cloneGenProgress`, `cloneGenerationBlockers` (THE spend gate:
+  `approvedAt` + the storyboard honesty rules, failing closed), the
+  deterministic prompts (`cloneAvatarPrompt` — framing + delivery + bible;
+  `cloneBrollPrompt` — the visual + `@image1`/`@image2` addressing +
+  bible), `cloneRefImagesFor` (dense slot-ordered refs), the model tables
+  (`CLONE_AVATAR_MODEL = 'omnihuman-1'` — verify against the live muapi
+  catalog; `CLONE_SEEDANCE_MODELS` per tier), and the assemble helpers
+  (`cloneAssembleBeats`, `cloneSceneName`).
+- `src/utils/integrations/muapi.ts` — NEW: the OmniHuman-class avatar
+  client on muapi's model-slug-in-path contract (submit → poll → hosted
+  URL), FastAPI `detail[]` error flattening, env-overridable model +
+  field names (`MUAPI_AVATAR_MODEL`, `MUAPI_AVATAR_AUDIO_FIELD`,
+  `MUAPI_AVATAR_IMAGE_FIELD`).
+- `src/app/api/admin/reel-clone-generate/route.ts` — NEW: `POST
+  { projectId, beatId }` renders ONE beat one step (the client chains
+  voice → video). The gate check runs before any provider call (409 on an
+  unstamped/dirty plan); ElevenLabs voice params resolve per beat;
+  Seedance reads the beat's pinned tier else the plan toggle; every output
+  re-hosts via `uploadAudioBuffer`/`uploadVideoBuffer` before the patch
+  returns. Failures return the `failed` patch WITH the error so the
+  manifest records it.
+- `src/app/(fullscreen)/admin/reel-studio/ClonePanel.tsx` — the step-5 UI:
+  per-beat status chips (needs voice / voiced / rendered / failed) with
+  generate + retry + watch, the generate-all pass, the locked-until-approved
+  copy, and the step-6 assemble card. A project-id-keyed local mirror
+  (`planOverride`) keeps the voice→video chain reading the freshest
+  manifest without waiting on a save round-trip.
+- `src/app/(fullscreen)/admin/reel-studio/page.tsx` — `assembleCloneBeats`:
+  beats → `ReelClip[]` scenes appended in order (duration probed, manifest
+  duration as fallback), saved, then the tab flips to Scenes.
+- `tests/lib/clone-generate.test.ts` — 13 tests: step resolution (incl.
+  failed re-entry + visual-only b-roll), the gate (unapproved blocks,
+  approved passes, dirty-fails-closed), the prompts (framing per shot,
+  delivery defaults, bible verbatim, @image addressing, dense refs),
+  assemble order/filtering, the model tables.
+- Changelog 2.11.0.
+
+**Verify.** `npx tsc --noEmit` clean; 44/44 clone tests green.
+
+**Env to know.** `MUAPI_API_KEY` (shared with the Seedance pipeline),
+`MUAPI_AVATAR_MODEL` (default `omnihuman-1` — confirm the slug + its
+audio/image field names against the live catalog on first render),
+`MUAPI_SEEDANCE_25_MODEL` (the 2.5 hero slug), `ELEVENLABS_API_KEY`.
+`CLONE_COSTS` estimates stay build-time until muapi's live pricing lands.
+
+**Not in step 4 (the last two own these).** Extend/re-roll (append beats,
+re-roll one beat, last-frame continuation via `continuesFrom`) and the
+Content Hub cast handoff.
