@@ -796,7 +796,12 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
  * bible quoted. This is the congruence contract: the world is decided ONCE,
  * here, and every render quotes it.
  */
-export function sceneSheetPrompt(plan: ClonePlan, styleId?: string): string {
+export function sceneSheetPrompt(
+  plan: ClonePlan,
+  styleId?: string,
+  /** True when the character sheet rides the call as the seed/reference. */
+  seeded?: boolean,
+): string {
   const style = cloneSheetStyleFor(styleId);
   const bible = lookBibleString(plan.clone.lookBible);
   const panels = plan.beats.map((b, i) => {
@@ -809,6 +814,9 @@ export function sceneSheetPrompt(plan: ClonePlan, styleId?: string): string {
   return [
     'A single SCENE SHEET for one video — a multi-panel storyboard board where each panel is ONE beat of the script below, the SAME character in every panel:',
     `${plan.clone.name}.`,
+    seeded
+      ? 'The attached reference image IS the character — the exact same person (face, hair, wardrobe) appears in every panel.'
+      : '',
     style.direction,
     'The panels, in script order:',
     ...panels,
@@ -818,6 +826,34 @@ export function sceneSheetPrompt(plan: ClonePlan, styleId?: string): string {
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+/**
+ * Resize the scene list: pad with blank b-roll scenes (the Sheet Studio
+ * fills their visuals) or trim from the end. Pure — the caller saves.
+ */
+export function cloneSceneCountAdjust(plan: ClonePlan, count: number): ClonePlan {
+  const target = Math.max(1, Math.min(12, Math.round(count)));
+  const beats = plan.beats.slice();
+  while (beats.length < target) {
+    beats.push({
+      id: makeBeatId(),
+      index: beats.length,
+      kind: 'broll',
+      line: '',
+      shot: 'medium',
+      durationSec: 5,
+      refs: [],
+      brollPrompt: '',
+      status: 'planned',
+    });
+  }
+  return {
+    ...plan,
+    beats: beats.slice(0, target).map((b, i) => ({ ...b, index: i })),
+    approvedAt: null,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 /** The scene sheet is stale when the plan changed after it was forged. */

@@ -52,7 +52,9 @@ export async function POST(req: NextRequest) {
     if (!res.ok) throw new Error(`Could not load the recording (${res.status})`);
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength < 4000) throw new Error('The recording is too short — give it a full read.');
-    if (buf.byteLength > 20 * 1024 * 1024) throw new Error('The recording is too large.');
+    // Video uploads (a clip of you talking) are welcome — ElevenLabs IVC
+    // extracts the audio track from common containers (mp4/mov/webm).
+    if (buf.byteLength > 60 * 1024 * 1024) throw new Error('The file is too large (60MB max).');
     const mime = res.headers.get('content-type')?.split(';')[0]?.trim() || 'audio/mpeg';
     const fileName = audioUrl.split('/').pop()?.split('?')[0] || 'sample.mp3';
     const voiceId = await cloneVoiceFromAudio({ name, audio: buf, mime, fileName });

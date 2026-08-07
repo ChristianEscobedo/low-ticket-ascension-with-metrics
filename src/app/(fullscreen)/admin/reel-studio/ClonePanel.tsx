@@ -74,6 +74,7 @@ import {
 } from '@/lib/mothermode/reel/cloneGenerate';
 import {
   aiCloneAutofill,
+  aiEditImage,
   aiGenerateCloneScript,
   aiGenerateImage,
   aiListVoices,
@@ -216,13 +217,24 @@ export default function ClonePanel({
     setForgeBusy(true);
     setError(null);
     try {
+      const anchor = refPhotos[0];
       const prompt = characterSheetPrompt({
         description: description.trim(),
         lookBible,
         includeFullBody,
         styleId: sheetStyle,
       });
-      const url = await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
+      // A ref photo anchors the forge — the sheet is the REAL person, not an
+      // invented face (pure text-to-image only when there is no photo).
+      const url = anchor
+        ? await aiEditImage({
+            prompt: `${prompt} The attached photo IS this person — same face in every cell.`,
+            seed: anchor,
+            references: [anchor],
+            format: 'reel',
+            model: CLONE_SHEET_MODEL,
+          })
+        : await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
       setSheetUrl(url);
       // The sheet is the master — it also rides as the primary ref photo.
       setRefPhotos((prev) => (prev.includes(url) ? prev : [url, ...prev].slice(0, 8)));
@@ -481,11 +493,19 @@ export default function ClonePanel({
     setSceneBusy(true);
     setError(null);
     try {
-      const url = await aiGenerateImage(
-        sceneSheetPrompt(existing, sheetStyle),
-        'reel',
-        CLONE_SHEET_MODEL,
-      );
+      const master = existing.clone.sheetUrl ?? existing.clone.refPhotos[0];
+      const prompt = sceneSheetPrompt(existing, sheetStyle, !!master);
+      // THE BUG FIX: the character sheet rides the forge — the person in
+      // every panel is the twin, never an invented stranger.
+      const url = master
+        ? await aiEditImage({
+            prompt,
+            seed: master,
+            references: [master],
+            format: 'reel',
+            model: CLONE_SHEET_MODEL,
+          })
+        : await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
       await onSavePlan({
         ...existing,
         sceneSheetUrl: url,

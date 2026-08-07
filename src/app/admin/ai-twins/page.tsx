@@ -45,11 +45,13 @@ import {
 import type { ReelProject } from '@/lib/mothermode/reel/types';
 import {
   aiCloneAutofill,
+  aiEditImage,
   aiGenerateImage,
   aiListVoices,
   type AiVoice,
 } from '@/components/mothermode/content/aiClient';
 import VoiceRecorder from '@/components/mothermode/content/VoiceRecorder';
+import SheetStudio from './SheetStudio';
 
 const API = '/api/admin/mothermode-reel';
 
@@ -106,6 +108,7 @@ function TwinFormModal({
   const [sheetStyle, setSheetStyle] = useState('cinematic');
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const refFileInput = useRef<HTMLInputElement>(null);
+  const voiceFileInput = useRef<HTMLInputElement>(null);
   const [voices, setVoices] = useState<AiVoice[]>([]);
   const [cloneVoiceBusy, setCloneVoiceBusy] = useState(false);
   const [autofillBusy, setAutofillBusy] = useState(false);
@@ -142,19 +145,29 @@ function TwinFormModal({
     }
   }
 
-  /** The foundry: one GPT Image 2 call forges the turnaround sheet. */
+  /** The foundry: one GPT Image 2 call forges the turnaround sheet — SEEDED
+   *  with a ref photo when one exists (the real person, not an invented face). */
   async function forgeSheet() {
     if (!description.trim() || forgeBusy) return;
     setForgeBusy(true);
     setError(null);
     try {
+      const anchor = refPhotos[0];
       const prompt = characterSheetPrompt({
         description: description.trim(),
         lookBible,
         includeFullBody,
         styleId: sheetStyle,
       });
-      const url = await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
+      const url = anchor
+        ? await aiEditImage({
+            prompt: `${prompt} The attached photo IS this person — same face in every cell.`,
+            seed: anchor,
+            references: [anchor],
+            format: 'reel',
+            model: CLONE_SHEET_MODEL,
+          })
+        : await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
       setSheetUrl(url);
       setRefPhotos((prev) => (prev.includes(url) ? prev : [url, ...prev].slice(0, 8)));
       await ingestSheet(`${name.trim() || 'Twin'} — character sheet`, url);
@@ -210,25 +223,27 @@ function TwinFormModal({
     }
   }
 
-  /** Record → clone: the take uploads, ElevenLabs clones it, the voice fills. */
-  async function recordAndClone(blob: Blob) {
+  /** Record/upload → clone: the take uploads, ElevenLabs clones it, the
+   *  voice fills. A video of you talking works too (IVC pulls the audio). */
+  async function recordAndClone(blob: Blob, ext = 'webm') {
     setCloneVoiceBusy(true);
     setError(null);
     try {
+      const mime = blob.type || 'audio/webm';
       const mint = await fetch('/api/admin/reel-upload-url', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          ext: 'webm',
-          contentType: blob.type || 'audio/webm',
-          kind: 'audio',
+          ext,
+          contentType: mime,
+          kind: mime.startsWith('video/') ? 'video' : 'audio',
         }),
       });
       const mintJson = await mint.json();
       if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
       const put = await fetch(mintJson.signedUrl, {
         method: 'PUT',
-        headers: { 'content-type': blob.type || 'audio/webm' },
+        headers: { 'content-type': mime },
         body: blob,
       });
       if (!put.ok) throw new Error(`Upload rejected (${put.status})`);
@@ -369,8 +384,27 @@ function TwinFormModal({
                 busy={cloneVoiceBusy}
                 onTake={(blob) => void recordAndClone(blob)}
               />
+              <button
+                onClick={() => voiceFileInput.current?.click()}
+                disabled={cloneVoiceBusy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brass/40 px-2.5 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+                title="Upload a video (or audio) of you talking — we clone the voice from it"
+              >
+                <Upload className="h-3 w-3" /> video/audio → clone
+              </button>
+              <input
+                ref={voiceFileInput}
+                type="file"
+                accept="video/*,audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void recordAndClone(f, f.name.split('.').pop()?.toLowerCase() || 'mp4');
+                  e.target.value = '';
+                }}
+              />
               <span className="text-[9px] text-bone/30">
-                30–120s of clean read, your own voice — by recording you confirm it's yours.
+                30–120s of clean read, your own voice — by recording/uploading you confirm it's yours.
               </span>
             </div>
           </div>
@@ -530,6 +564,8 @@ export default function AiTwinsPage() {
   const [error, setError] = useState<string | null>(null);
   /** The modal: 'new' or the entry being edited. */
   const [editing, setEditing] = useState<'new' | TwinRosterEntry | null>(null);
+  /** The Sheet Studio: the entry whose sheet process is open full-size. */
+  const [studio, setStudio] = useState<TwinRosterEntry | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -746,6 +782,13 @@ export default function AiTwinsPage() {
                       Edit
                     </button>
                     <button
+                      onClick={() => setStudio(entry)}
+                      title="The Sheet Studio — the scene sheet full-size, per-scene control"
+                      className="rounded-lg border border-brass/30 px-2 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/10"
+                    >
+                      Sheet
+                    </button>
+                    <button
                       onClick={() => void deleteTwin(entry)}
                       className="rounded-lg border border-red-500/25 px-2 py-1.5 text-red-300/70 hover:bg-red-500/10"
                       title="Remove from the roster"
@@ -771,6 +814,22 @@ export default function AiTwinsPage() {
           seed={editing === 'new' ? null : editing.clone}
           onSave={saveTwin}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {studio && (
+        <SheetStudio
+          clone={studio.clone}
+          plan={(projects ?? []).find((p) => p.id === studio.reelId)?.clonePlan}
+          onSavePlan={async (plan) => {
+            const project = (projects ?? []).find((p) => p.id === studio.reelId);
+            if (!project) return;
+            const json = await post({
+              action: 'save',
+              project: { ...project, clonePlan: plan },
+            });
+            if (json?.project) void load();
+          }}
+          onClose={() => setStudio(null)}
         />
       )}
       {/* keep Check referenced (saved-state chip styling) */}

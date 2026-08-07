@@ -338,3 +338,10 @@ the studio's Clone tab stopped being a wall of forms.
 - **The scene sheet:** sceneSheetPrompt(plan, styleId) — one board, a panel per beat, the style + bible quoted. sceneSheetUrl/sceneSheetAt on the manifest; sceneSheetStale() flags a post-forge edit; clonePlanCost gains the sceneSheet line (.08 until forged). The generate route appends it as the trailing omni-reference on b-roll renders (refsWithScene).
 - **Voice:** cloneVoiceFromAudio in elevenlabs.ts (POST /v1/voices/add) behind /api/admin/reel-voice-clone; the shared VoiceRecorder (MediaRecorder, 120s cap) drives the twin form's record→clone AND step 5's per-beat scratch VO (signed upload → audioUrl + status voiced + voiceRequestId scratch — skips TTS).
 - Tests: the timestamps/scene-sheet/scratch describe in clone-generate.test.ts.
+
+## Sheet Studio + seeded forges + video→voice (2026-08-07, changelog 2.17.0)
+
+- **Seeded forges (the bug fix):** the scene sheet + the character sheet (when a ref photo exists) forge via aiEditImage seeded with the reference — the person in every panel is the twin. sceneSheetPrompt(plan, styleId, seeded) names the reference when seeded.
+- **The Sheet Studio** (src/app/admin/ai-twins/SheetStudio.tsx, the Sheet button on a roster card): the sheet full-size + style chips + the scene-count control (cloneSceneCountAdjust pads blank b-roll scenes / trims, re-opens the gate) + per-scene rows (visual/line + voice energy) writing back to the manifest.
+- **Video→voice:** the twin form accepts video/audio uploads (recordAndClone(blob, ext)); the voice-clone route caps at 60MB and forwards the container to ElevenLabs IVC (it extracts the audio track).
+- Tests: the Sheet Studio helpers describe in clone-generate.test.ts (seeded prompt line, pad/trim).

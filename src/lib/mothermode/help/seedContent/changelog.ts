@@ -572,6 +572,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.17.0',
+    releasedOn: '2026-08-07',
+    entryType: 'fixed',
+    title: 'The Sheet Studio, seeded forges, and video→voice',
+    body: cl([
+      '<p><strong>Fixed:</strong> the scene sheet (and the character sheet, when you\'ve uploaded a reference photo) now forges SEEDED with the reference image — the person in every panel is your twin, not an invented stranger. The forge runs as an image edit anchored on the character sheet.</p>',
+      '<p><strong>The Sheet Studio</strong> on the AI Twins roster (the "Sheet" button on any card): the sheet full-size on the left, and on the right the style, the scene count (3–7 — pads or trims the scene list), and one row per scene — its visual, its line, and its voice energy — all editable before you forge. The world, decided once, at a size you can actually see.</p>',
+      '<p>And <strong>video → voice</strong>: the twin form now takes an uploaded video (or audio) of you talking — ElevenLabs clones the voice straight from it, no recorder session needed.</p>',
+      '<p><strong>Where to start:</strong> AI Twins → any card → Sheet; New twin → video/audio → clone.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

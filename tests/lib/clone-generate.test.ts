@@ -30,6 +30,7 @@ import {
   characterSheetPrompt,
   cloneLibraryEntries,
   clonePlanCost,
+  cloneSceneCountAdjust,
   cloneSheetStyleFor,
   isTwinReel,
   normalizeClonePlan,
@@ -402,5 +403,33 @@ describe('timestamps + the scene sheet + scratch VO', () => {
     expect(back.beats[0].status).toBe('voiced');
     expect(back.beats[0].voiceRequestId).toBe('scratch');
     expect(cloneGenStep(back.beats[0])).toBe('video'); // a scratch take skips TTS
+  });
+});
+
+describe('the Sheet Studio helpers', () => {
+  it('the seeded prompt names the reference; the unseeded one does not', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat()];
+    expect(sceneSheetPrompt(plan, 'cinematic', true)).toContain(
+      'The attached reference image IS the character',
+    );
+    expect(sceneSheetPrompt(plan, 'cinematic')).not.toContain(
+      'The attached reference image IS the character',
+    );
+  });
+
+  it('cloneSceneCountAdjust pads with blank b-roll scenes and trims from the end', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.beats = [makeBeat()];
+    const padded = cloneSceneCountAdjust(plan, 4);
+    expect(padded.beats).toHaveLength(4);
+    expect(padded.beats[1].kind).toBe('broll');
+    expect(padded.beats[1].status).toBe('planned');
+    expect(padded.approvedAt).toBeNull(); // the gate re-opens
+    const trimmed = cloneSceneCountAdjust(padded, 2);
+    expect(trimmed.beats).toHaveLength(2);
+    expect(trimmed.beats.map((b) => b.index)).toEqual([0, 1]);
+    // the original is untouched (pure in, pure out)
+    expect(plan.beats).toHaveLength(1);
   });
 });
