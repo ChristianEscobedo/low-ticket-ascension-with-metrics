@@ -464,6 +464,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.9.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'AI Clone, step 2: the script writer with per-line voice programming',
+    body: cl([
+      '<p>The Clone tab\'s step 2 is live. Pick the <strong>video type</strong> — Hook ad, UGC testimonial, VSL, tutorial, or announcement — and it carries its proven <strong>framework</strong> with it (PAS, AIDA, hook-story-offer, or the Mindshift VSL structure). Type the topic and the script writer produces the beats: one spoken line per beat on the honest 5/10/15-second grid (never more words than the seconds can hold), with optional b-roll cutaway beats that name your character so they show up INSIDE the footage.</p>',
+      '<p>Every line carries its <strong>voice programming</strong> — the director\'s notes for the read: pace (slow / natural / fast), energy (low / medium / high), the emphasis words that get the stress, and where the pause lands. You can see it on each beat\'s chip, edit any line in place, or drop a beat — and a re-write regenerates the whole pass while your clone stays locked.</p>',
+      '<p><strong>Where to start:</strong> Clipping Studio → Clone tab → save a clone, then step 2 → pick a type, write the topic, hit "write the script".</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

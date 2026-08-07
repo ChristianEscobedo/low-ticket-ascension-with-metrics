@@ -57,3 +57,38 @@ script/framework picker UI, the storyboard gate + cost readout UI, per-beat
 generation, extend/re-roll, and the Content Hub cast handoff. The catalogs,
 cost tables, manifest shape, and voice resolvers they need are already in
 `clone.ts`.
+
+## Step 2 — Script + framework picker (shipped 2026-08-07)
+
+**What it is.** The Clone tab's step 2: pick the video type (Hook ad / UGC
+testimonial / VSL / tutorial / announcement — each carries its default
+pacing, beat count, and framework), override the framework if you want
+(PAS / AIDA / hook-story-offer / the Mindshift VSL structure), type the
+topic, and the script writer produces the beats — one spoken line per beat
+on the honest 5/10/15s grid, each carrying its **voice programming**
+(pace, energy, emphasis words, pause placement). Lines edit in place
+(commit on blur), beats delete, a re-write regenerates while the clone
+stays locked. Every beat's `@reference 1` is the sheet (or the first ref
+photo) automatically. A new script un-approves the storyboard gate.
+
+**Where it lives.**
+
+- `src/utils/integrations/openai-content.ts` — `generateCloneScript` (the
+  `cloneScript` action's engine): resolves the text model
+  (`resolveTextModel`, key-aware Auto), prompts for `{beats[]}` with line /
+  kind / shot / durationSec / pace / energy / emphasis / pauseAfterWord /
+  brollPrompt, and normalizes defensively (`normalizeCloneScriptBeats`
+  clamps the grid + enums, drops line-less avatar beats).
+- `src/app/api/mothermode/ai/route.ts` — the `cloneScript` action
+  (admin-gated, clamps inputs, mirrors the videoScript handler).
+- `src/components/mothermode/content/aiClient.ts` — `aiGenerateCloneScript`
+  browser wrapper (`AiCloneScriptBeat`).
+- `src/app/(fullscreen)/admin/reel-studio/ClonePanel.tsx` — the step-2 UI:
+  type chips, framework chips (type sets the default), the topic field,
+  "write the script", and the beat list with per-beat voice chips
+  (`energy · pace · "emphasis" · …@pause`), word counts, line editing, and
+  beat removal. Beats persist on the manifest via `onSavePlan`.
+- Changelog 2.9.0.
+
+**Verify.** `npx tsc --noEmit` clean; the 19 clone tests still pass (the
+manifest normalizer already covers the fields the script writer fills).

@@ -19,20 +19,32 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2, Mic, PersonStanding, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
 import {
+  beatWordCount,
   blankClonePlan,
   characterSheetPrompt,
   CLONE_COSTS,
+  CLONE_FRAMEWORKS,
   CLONE_SHEET_MODEL,
+  CLONE_VIDEO_TYPES,
+  cloneFrameworkFor,
+  cloneVideoTypeFor,
   lookBibleString,
+  makeBeatId,
   makeCloneId,
+  type CloneBeat,
   type ClonePlan,
   type ReelClone,
 } from '@/lib/mothermode/reel/clone';
-import { aiGenerateImage, aiListVoices, type AiVoice } from '@/components/mothermode/content/aiClient';
+import {
+  aiGenerateCloneScript,
+  aiGenerateImage,
+  aiListVoices,
+  type AiVoice,
+} from '@/components/mothermode/content/aiClient';
 
 const WIZARD_STEPS = [
   { n: 1, label: 'The Clone', live: true },
-  { n: 2, label: 'Video type', live: false },
+  { n: 2, label: 'Video type', live: true },
   { n: 3, label: 'Script', live: false },
   { n: 4, label: 'Storyboard', live: false },
   { n: 5, label: 'Generate', live: false },
@@ -92,6 +104,16 @@ export default function ClonePanel({
   const [forgeBusy, setForgeBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Step 2 — video type + framework + the script.
+  const [topic, setTopic] = useState('');
+  const [videoType, setVideoType] = useState(
+    existing?.videoType ?? CLONE_VIDEO_TYPES[0].id,
+  );
+  const [framework, setFramework] = useState(
+    existing?.framework ?? CLONE_VIDEO_TYPES[0].framework,
+  );
+  const [scriptBusy, setScriptBusy] = useState(false);
 
   useEffect(() => {
     void aiListVoices().then(setVoices);
@@ -156,12 +178,89 @@ export default function ClonePanel({
       // Keep any downstream progress (beats/gate) when the clone is re-saved.
       const base = existing ?? blankClonePlan(clone);
       await onSavePlan({ ...base, clone, updatedAt: new Date().toISOString() });
-      onNote?.('Clone saved to this reel — step 2 (video type) unlocks as it ships.');
+      onNote?.('Clone saved — step 2 (video type + script) is live below.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaveBusy(false);
     }
+  }
+
+  /** Step 2: write the script — per-beat lines with voice programming. */
+  async function writeScript() {
+    if (!existing || !topic.trim() || scriptBusy) return;
+    setScriptBusy(true);
+    setError(null);
+    try {
+      const type = cloneVideoTypeFor(videoType);
+      const fw = cloneFrameworkFor(framework);
+      const { beats } = await aiGenerateCloneScript({
+        topic: topic.trim(),
+        typeLabel: type.label,
+        frameworkLabel: fw.label,
+        frameworkBeats: fw.beats,
+        beatSec: type.beatSec,
+        beatCount: type.beats,
+        persona: existing.clone.name,
+        lookBible: lookBibleString(existing.clone.lookBible),
+      });
+      // @reference 1 on every beat: the sheet (or the first ref photo).
+      const master = existing.clone.sheetUrl ?? existing.clone.refPhotos[0];
+      const mapped: CloneBeat[] = beats.map((b, i) => ({
+        id: makeBeatId(),
+        index: i,
+        kind: b.kind,
+        line: b.line,
+        voice: {
+          pace: b.pace,
+          energy: b.energy,
+          ...(b.emphasis.length ? { emphasis: b.emphasis } : {}),
+          ...(b.pauseAfterWord > 0 ? { pauseAfterWord: b.pauseAfterWord } : {}),
+        },
+        shot: b.shot,
+        durationSec: b.durationSec,
+        refs: master ? [master] : [],
+        ...(b.brollPrompt ? { brollPrompt: b.brollPrompt } : {}),
+        status: 'planned',
+      }));
+      // A new script un-approves the storyboard gate (step 4 owns it).
+      await onSavePlan({
+        ...existing,
+        videoType,
+        framework,
+        beats: mapped,
+        approvedAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+      onNote?.(`Script written — ${mapped.length} beats on ${fw.label}. Edit any line below.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Script failed');
+    } finally {
+      setScriptBusy(false);
+    }
+  }
+
+  /** Edit one beat's line (commits on blur — one save, not one per keystroke). */
+  async function patchBeat(id: string, partial: Partial<CloneBeat>) {
+    if (!existing) return;
+    await onSavePlan({
+      ...existing,
+      beats: existing.beats.map((b) => (b.id === id ? { ...b, ...partial } : b)),
+      approvedAt: null,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function removeBeat(id: string) {
+    if (!existing) return;
+    await onSavePlan({
+      ...existing,
+      beats: existing.beats
+        .filter((b) => b.id !== id)
+        .map((b, i) => ({ ...b, index: i })),
+      approvedAt: null,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   return (
@@ -340,6 +439,126 @@ export default function ClonePanel({
         <p className="text-center text-[9px] text-bone/30">
           Needs a name, a voice, and at least one reference (or a forged sheet).
         </p>
+      )}
+
+      {/* ———— Step 2: video type + framework + the script ———— */}
+      {existing && (
+        <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
+          <span className={LABEL}>Step 2 — video type + script</span>
+          <div className="flex flex-wrap gap-1">
+            {CLONE_VIDEO_TYPES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setVideoType(t.id);
+                  setFramework(t.framework); // the type carries its default framework
+                }}
+                title={t.hint}
+                className={`rounded px-2 py-1 text-[9px] font-semibold ${
+                  videoType === t.id
+                    ? 'bg-brass text-ink'
+                    : 'text-bone/50 hover:bg-bone/10'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {CLONE_FRAMEWORKS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFramework(f.id)}
+                title={f.beats.join(' → ')}
+                className={`rounded border px-1.5 py-0.5 text-[8px] font-semibold ${
+                  framework === f.id
+                    ? 'border-brass/50 bg-brass/10 text-brass'
+                    : 'border-bone/15 text-bone/45 hover:bg-bone/10'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            rows={2}
+            placeholder="What is this video about / selling? (the topic or offer — one or two sentences)"
+            className={INPUT}
+          />
+          <button
+            onClick={() => void writeScript()}
+            disabled={!topic.trim() || scriptBusy}
+            className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-ink disabled:opacity-40"
+          >
+            {scriptBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {existing.beats.length ? 're-write the script' : 'write the script'}
+          </button>
+          <p className="text-[9px] text-bone/35">
+            {cloneVideoTypeFor(videoType).beats} beats · {cloneVideoTypeFor(videoType).beatSec}s
+            each · every line carries its voice direction (pace, energy, emphasis, pauses).
+          </p>
+        </div>
+      )}
+
+      {/* the script — the beats the storyboard (step 4) gates on */}
+      {existing && existing.beats.length > 0 && (
+        <div className="space-y-1.5">
+          <span className={LABEL}>
+            The script — {existing.beats.length} beats ·{' '}
+            {cloneFrameworkFor(existing.framework).label}
+          </span>
+          {existing.beats.map((b, i) => (
+            <div
+              key={b.id}
+              className="space-y-1 rounded-xl border border-bone/10 bg-bone/[0.03] p-2"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-brass/80">{i + 1}</span>
+                <span className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60">
+                  {b.kind === 'broll' ? 'b-roll' : b.shot}
+                </span>
+                <span className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] text-bone/45">
+                  {b.durationSec}s · {beatWordCount(b.line)} words
+                </span>
+                {b.voice && b.kind === 'avatar' && (
+                  <span
+                    className="rounded bg-brass/10 px-1.5 py-0.5 text-[8px] text-brass/80"
+                    title="The voice programming for this line"
+                  >
+                    {b.voice.energy} · {b.voice.pace}
+                    {b.voice.emphasis?.length ? ` · "${b.voice.emphasis.join(', ')}"` : ''}
+                    {b.voice.pauseAfterWord ? ` · …@${b.voice.pauseAfterWord}` : ''}
+                  </span>
+                )}
+                <button
+                  onClick={() => void removeBeat(b.id)}
+                  className="ml-auto text-bone/30 hover:text-red-300"
+                  title="Remove this beat"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+              {b.kind === 'avatar' ? (
+                <textarea
+                  key={`${b.id}:${b.line}`}
+                  defaultValue={b.line}
+                  rows={2}
+                  onBlur={(e) => {
+                    const line = e.target.value.trim();
+                    if (line && line !== b.line) void patchBeat(b.id, { line });
+                  }}
+                  className={INPUT}
+                />
+              ) : (
+                <p className="text-[10px] italic leading-snug text-bone/50">
+                  {b.brollPrompt || 'visual beat'}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

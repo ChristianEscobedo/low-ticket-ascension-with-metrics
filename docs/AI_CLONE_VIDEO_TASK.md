@@ -1,6 +1,6 @@
 # AI Clone Video — TASK (handoff)
 
-**Status: IN PROGRESS. Step 1 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 2–6 remain — this doc is the whole plan, pick it up cold.**
+**Status: IN PROGRESS. Steps 1 + 2 shipped 2026-08-07 (see docs/AI_CLONE_VIDEO_PORT.md). Steps 3–6 remain — this doc is the whole plan, pick it up cold.**
 
 > **Step 1 — DONE**: clone entity + character-sheet foundry + Clone tab in the
 > studio + clonePlan manifest persistence (types/store/route) + cost tables +

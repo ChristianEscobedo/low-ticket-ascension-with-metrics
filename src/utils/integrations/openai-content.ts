@@ -2758,3 +2758,143 @@ export async function generateVariationPlan(
   return { ok: true, data: { items, model } };
 }
 
+// ---------------------------------------------------------------------------
+// AI Clone: per-beat script with voice programming (the Clone tab, step 2)
+// ---------------------------------------------------------------------------
+
+export interface CloneScriptInput {
+  /** What the video is about / selling (the topic or offer). */
+  topic: string;
+  /** Video type label (Hook ad, UGC testimonial, VSL, tutorial, announcement). */
+  typeLabel: string;
+  /** The framework label + the ordered beat roles the script must execute. */
+  frameworkLabel: string;
+  frameworkBeats: string[];
+  /** Seconds per beat on the honest 5/10/15 grid. */
+  beatSec: number;
+  /** Target beat count. */
+  beatCount: number;
+  /** Who is speaking (clone name + description) and the locked look bible. */
+  persona: string;
+  lookBible: string;
+  guides?: string;
+  model?: string;
+}
+
+export interface CloneScriptBeatOut {
+  /** The spoken line (avatar beats) or empty for visual-only b-roll. */
+  line: string;
+  kind: 'avatar' | 'broll';
+  shot: 'close' | 'medium' | 'wide';
+  durationSec: number;
+  /** Voice programming: pace, energy, emphasis words, pause placement. */
+  pace: 'slow' | 'natural' | 'fast';
+  energy: 'low' | 'medium' | 'high';
+  emphasis: string[];
+  pauseAfterWord: number;
+  brollPrompt?: string;
+}
+
+const CLONE_PACES = ['slow', 'natural', 'fast'];
+const CLONE_ENERGIES = ['low', 'medium', 'high'];
+const CLONE_SHOTS = ['close', 'medium', 'wide'];
+
+/** Defensive per-beat normalizer — the grid and enums hold no matter what the model says. */
+function normalizeCloneScriptBeats(
+  raw: unknown,
+  beatCount: number,
+  beatSec: number,
+): CloneScriptBeatOut[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CloneScriptBeatOut[] = [];
+  for (const item of raw.slice(0, 12)) {
+    const o = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const kind = o.kind === 'broll' ? ('broll' as const) : ('avatar' as const);
+    const line = toText(o.line) ?? '';
+    if (kind === 'avatar' && !line) continue;
+    const dur = Math.round(Number(o.durationSec) || beatSec);
+    const emphasis = Array.isArray(o.emphasis)
+      ? o.emphasis
+          .filter((s): s is string => typeof s === 'string' && !!s.trim())
+          .map((s) => s.trim().slice(0, 40))
+          .slice(0, 6)
+      : [];
+    out.push({
+      line: line.slice(0, 300),
+      kind,
+      shot: CLONE_SHOTS.includes(String(o.shot))
+        ? (o.shot as CloneScriptBeatOut['shot'])
+        : 'medium',
+      durationSec: Math.max(5, Math.min(15, dur)),
+      pace: CLONE_PACES.includes(String(o.pace))
+        ? (o.pace as CloneScriptBeatOut['pace'])
+        : 'natural',
+      energy: CLONE_ENERGIES.includes(String(o.energy))
+        ? (o.energy as CloneScriptBeatOut['energy'])
+        : 'medium',
+      emphasis,
+      pauseAfterWord: Math.max(0, Math.min(40, Math.round(Number(o.pauseAfterWord) || 0))),
+      ...(toText(o.brollPrompt) ? { brollPrompt: toText(o.brollPrompt)!.slice(0, 500) } : {}),
+    });
+  }
+  return out.slice(0, Math.max(1, beatCount));
+}
+
+/**
+ * Write the clone script: one line per beat (max ~25 words — the 5/10/15s
+ * grid is honest), each line carrying its voice programming (pace, energy,
+ * emphasis words, pause placement). B-roll beats carry a visual prompt that
+ * names the character so the same person shows up INSIDE the footage.
+ */
+export async function generateCloneScript(
+  input: CloneScriptInput,
+): Promise<AiResult<{ beats: CloneScriptBeatOut[]; model: string }>> {
+  const topic = input.topic.trim();
+  if (!topic) return { ok: false, status: 400, error: 'A topic is required' };
+  const beatCount = Math.max(1, Math.min(12, Math.round(input.beatCount) || 3));
+  const beatSec = Math.max(5, Math.min(15, Math.round(input.beatSec) || 10));
+  const maxWords = Math.floor((beatSec * 5) / 2); // ~2.5 words/sec of speech
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    "You are the MotherMode clone-video scriptwriter — you write short spoken scripts for an AI avatar, one line per beat, with the director's voice notes attached to every line.",
+    VOICE_RULES,
+    `Every line is SPOKEN WORD by the avatar: literal, sayable, never stage directions. Each line max ${maxWords} words (that is the honest speech budget for its beat). Return ONLY a JSON object. No prose, no code fences.`,
+  ].join(' ');
+  const user = [
+    `Write a ${beatCount}-beat ${input.typeLabel} script about: ${topic}.`,
+    `Framework: ${input.frameworkLabel} — the beats execute these roles in order: ${input.frameworkBeats.join(' → ')}. One beat per role (drop the tail roles if the count is shorter).`,
+    `The speaker: ${input.persona}.`,
+    input.lookBible
+      ? `The locked look (b-roll prompts must agree with it): ${input.lookBible}.`
+      : '',
+    `Each beat is ${beatSec}s. Return {"beats": [...]} where each beat is:`,
+    `{ "line": the spoken words (max ${maxWords} words; empty string ONLY for a b-roll beat),`,
+    `  "kind": "avatar" (talking head) or "broll" (visual cutaway — at most ${Math.max(1, Math.floor(beatCount / 3))} b-roll beats, never the first or the last),`,
+    `  "shot": "close" | "medium" | "wide" (the talking-head angle for avatar beats),`,
+    `  "durationSec": ${beatSec},`,
+    `  "pace": "slow" | "natural" | "fast" — the read speed for THIS line,`,
+    `  "energy": "low" | "medium" | "high" — the emotional charge for THIS line,`,
+    `  "emphasis": [up to 3 words from the line that get the stress],`,
+    `  "pauseAfterWord": a word index (1-based) where the voice takes a beat, or 0,`,
+    `  "brollPrompt": only for broll beats — a visual prompt naming the same character so they appear INSIDE the footage }`,
+    input.guides?.trim() ? `Direction from the owner: ${input.guides.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model, provider);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const beats = normalizeCloneScriptBeats(parsed?.beats, beatCount, beatSec);
+  if (!beats.length) {
+    console.warn(
+      `generateCloneScript: no beats parsed (model ${model}). Raw:`,
+      raw.data.slice(0, 500),
+    );
+    return { ok: false, status: 502, error: 'No usable script was returned' };
+  }
+  return { ok: true, data: { beats, model } };
+}
+

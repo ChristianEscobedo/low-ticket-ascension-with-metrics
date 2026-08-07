@@ -745,6 +745,46 @@ export async function aiGenerateYouTubeKit(args: {
   };
 }
 
+/** One beat of an AI Clone script, with its voice programming attached. */
+export interface AiCloneScriptBeat {
+  line: string;
+  kind: 'avatar' | 'broll';
+  shot: 'close' | 'medium' | 'wide';
+  durationSec: number;
+  pace: 'slow' | 'natural' | 'fast';
+  energy: 'low' | 'medium' | 'high';
+  emphasis: string[];
+  pauseAfterWord: number;
+  brollPrompt?: string;
+}
+
+/**
+ * Write the clone script (Clone tab, step 2): one spoken line per beat on the
+ * honest 5/10/15s grid, each carrying its voice direction. Throws a readable
+ * Error on failure so the panel can surface it inline.
+ */
+export async function aiGenerateCloneScript(args: {
+  topic: string;
+  typeLabel: string;
+  frameworkLabel: string;
+  frameworkBeats: string[];
+  beatSec: number;
+  beatCount: number;
+  persona: string;
+  lookBible: string;
+  guides?: string;
+  model?: string;
+}): Promise<{ beats: AiCloneScriptBeat[]; model?: string }> {
+  const json = await postAi({ action: 'cloneScript', ...args });
+  if (!Array.isArray(json.beats) || json.beats.length === 0) {
+    throw new Error('No script was returned');
+  }
+  return {
+    beats: json.beats as AiCloneScriptBeat[],
+    model: typeof json.model === 'string' ? json.model : undefined,
+  };
+}
+
 /** A selectable ElevenLabs voice for the voiceover picker. */
 export interface AiVoice {
   id: string;

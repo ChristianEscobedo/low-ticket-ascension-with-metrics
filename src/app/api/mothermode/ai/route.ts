@@ -10,6 +10,7 @@ import {
   amplifyParts,
   amplifyImagePrompts,
   generateVideoScript,
+  generateCloneScript,
   generateStoryboardPlan,
   generateFramePackPlan,
   generateVariationBrief,
@@ -589,6 +590,40 @@ export async function POST(request: NextRequest) {
       beats: result.data.beats,
       model: result.data.model,
       totalSeconds: durationSec,
+    });
+  }
+
+  // -- cloneScript (AI Clone step 2: per-beat lines with voice programming) ----
+  if (action === 'cloneScript') {
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const strList = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && !!s.trim()) : [];
+    const topic = str(body.topic);
+    if (!topic) {
+      return NextResponse.json({ ok: false, error: 'topic is required' }, { status: 400 });
+    }
+    const result = await generateCloneScript({
+      topic: topic.slice(0, 600),
+      typeLabel: str(body.typeLabel) ?? 'Hook ad',
+      frameworkLabel: str(body.frameworkLabel) ?? 'Hook · Story · Offer',
+      frameworkBeats: strList(body.frameworkBeats).slice(0, 12),
+      beatSec: Math.max(5, Math.min(15, Math.round(Number(body.beatSec) || 10))),
+      beatCount: Math.max(1, Math.min(12, Math.round(Number(body.beatCount) || 3))),
+      persona: (str(body.persona) ?? 'the founder').slice(0, 400),
+      lookBible: (str(body.lookBible) ?? '').slice(0, 500),
+      guides: str(body.guides)?.slice(0, 800),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      beats: result.data.beats,
+      model: result.data.model,
     });
   }
 
