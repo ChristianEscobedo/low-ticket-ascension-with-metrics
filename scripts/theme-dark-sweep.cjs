@@ -15,6 +15,16 @@ const FILES = [
   'src/app/admin/recipes/[runId]/page.tsx',
   'src/app/admin/skills/page.tsx',
   'src/app/admin/media-library/page.tsx',
+  'src/app/admin/ai-twins/page.tsx',
+];
+
+// Burgundy cards (the /admin house card = border-mode/25 bg-mode/[0.07]).
+// These run FIRST on a re-run: the earlier pass made cards bone-tinted; the
+// house card is burgundy-tinted.
+const MODE_MAP = [
+  ['border-bone/10 bg-bone/[0.04]', 'border-mode/25 bg-mode/[0.07]'],
+  ['border-bone/15 bg-bone/[0.03]', 'border-mode/30 bg-mode/[0.07]'],
+  ['bg-bone/[0.05]', 'bg-mode/[0.10]'],
 ];
 
 // [search, replace] — longest/most-specific first.
@@ -61,6 +71,7 @@ const MAP = [
   ['divide-ink', 'divide-bone'],
   ['ring-ink', 'ring-bone'],
 ];
+for (const [from, to] of MODE_MAP) MAP.unshift([from, to]);
 
 let grand = 0;
 for (const file of FILES) {

@@ -508,7 +508,7 @@ export default function RunDetailPage() {
 
       {error && (
 
-        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
+        <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/100/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}

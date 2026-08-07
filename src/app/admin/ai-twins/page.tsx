@@ -34,6 +34,7 @@ import {
   characterSheetPrompt,
   CLONE_COSTS,
   CLONE_SHEET_MODEL,
+  CLONE_SHEET_STYLES,
   lookBibleString,
   makeCloneId,
   twinReelName,
@@ -101,6 +102,7 @@ function TwinFormModal({
   const [sheetUrl, setSheetUrl] = useState(seed?.sheetUrl ?? '');
   const [refUrl, setRefUrl] = useState('');
   const [includeFullBody, setIncludeFullBody] = useState(false);
+  const [sheetStyle, setSheetStyle] = useState('cinematic');
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const refFileInput = useRef<HTMLInputElement>(null);
   const [voices, setVoices] = useState<AiVoice[]>([]);
@@ -148,6 +150,7 @@ function TwinFormModal({
         description: description.trim(),
         lookBible,
         includeFullBody,
+        styleId: sheetStyle,
       });
       const url = await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
       setSheetUrl(url);
@@ -284,7 +287,7 @@ function TwinFormModal({
             <input value={lighting} onChange={(e) => setLighting(e.target.value)} placeholder="Lighting (soft key from camera-left)" className={INPUT} />
             <input value={lens} onChange={(e) => setLens(e.target.value)} placeholder="Lens (50mm, shallow depth of field)" className={INPUT} />
             {bibleLine && (
-              <p className="rounded-lg bg-bone/[0.05] px-2 py-1 text-[10px] italic text-bone/40">{bibleLine}</p>
+              <p className="rounded-lg bg-mode/[0.10] px-2 py-1 text-[10px] italic text-bone/40">{bibleLine}</p>
             )}
           </div>
 
@@ -322,6 +325,22 @@ function TwinFormModal({
           {/* the foundry */}
           <div className="space-y-1.5">
             <span className={LABEL}>Character-sheet foundry</span>
+            <div className="flex flex-wrap gap-1">
+              {CLONE_SHEET_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSheetStyle(s.id)}
+                  title={s.hint}
+                  className={`rounded px-2 py-1 text-[10px] font-semibold ${
+                    sheetStyle === s.id
+                      ? 'bg-brass text-bone'
+                      : 'text-bone/50 hover:bg-bone/10'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-1.5 text-[11px] text-bone/55">
               <input
                 type="checkbox"
@@ -333,7 +352,7 @@ function TwinFormModal({
             <button
               onClick={() => void forgeSheet()}
               disabled={!description.trim() || forgeBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[11px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[11px] font-semibold text-bone hover:bg-brass/90 disabled:opacity-40"
             >
               {forgeBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               forge character sheet
@@ -423,7 +442,7 @@ function TwinFormModal({
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+            <p className="rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-[11px] text-red-200">
               {error}
             </p>
           )}
@@ -433,7 +452,7 @@ function TwinFormModal({
           <button
             onClick={() => void save()}
             disabled={!canSave}
-            className="w-full rounded-xl bg-brass px-4 py-2.5 text-xs font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
+            className="w-full rounded-xl bg-brass px-4 py-2.5 text-xs font-bold text-bone hover:bg-brass/90 disabled:opacity-40"
           >
             {saveBusy ? 'saving…' : seed ? 'save changes' : 'add to the roster'}
           </button>
@@ -573,7 +592,7 @@ export default function AiTwinsPage() {
         </div>
         <button
           onClick={() => setEditing('new')}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brass px-3.5 py-2 text-xs font-semibold text-ink hover:bg-brass/90"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brass px-3.5 py-2 text-xs font-semibold text-bone hover:bg-brass/90"
         >
           <Plus className="h-3.5 w-3.5" /> New twin
         </button>
@@ -585,7 +604,7 @@ export default function AiTwinsPage() {
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-xs text-red-200">
           {error}
         </p>
       )}
@@ -595,7 +614,7 @@ export default function AiTwinsPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Opening the roster…
         </p>
       ) : roster.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-bone/15 bg-bone/[0.03] p-12 text-center">
+        <div className="rounded-2xl border border-dashed border-mode/30 bg-mode/[0.07] p-12 text-center">
           <PersonStanding className="mx-auto h-10 w-10 text-brass/60" />
           <p className="mt-3 text-sm font-semibold text-bone/80">No twins yet</p>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-bone/45">
@@ -604,7 +623,7 @@ export default function AiTwinsPage() {
           </p>
           <button
             onClick={() => setEditing('new')}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brass px-4 py-2 text-xs font-semibold text-ink hover:bg-brass/90"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brass px-4 py-2 text-xs font-semibold text-bone hover:bg-brass/90"
           >
             <Plus className="h-3.5 w-3.5" /> Build your first twin
           </button>
@@ -616,7 +635,7 @@ export default function AiTwinsPage() {
             return (
               <div
                 key={entry.reelId}
-                className="overflow-hidden rounded-2xl border border-bone/10 bg-bone/[0.04] shadow-sm"
+                className="overflow-hidden rounded-2xl border border-mode/25 bg-mode/[0.07] shadow-sm"
               >
                 <div className="relative aspect-[16/10] bg-bone/[0.04]">
                   {thumb ? (
@@ -658,7 +677,7 @@ export default function AiTwinsPage() {
                           ? 'Cast this twin into a fresh video (opens the Clipping Studio wizard)'
                           : 'This twin needs a sheet (or ref photo) and a voice first'
                       }
-                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
+                      className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-bone hover:bg-brass/90 disabled:opacity-40"
                     >
                       {busyId === entry.reelId ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -675,7 +694,7 @@ export default function AiTwinsPage() {
                     </button>
                     <button
                       onClick={() => void deleteTwin(entry)}
-                      className="rounded-lg border border-red-500/25 px-2 py-1.5 text-red-300/70 hover:bg-red-500/10"
+                      className="rounded-lg border border-red-500/25 px-2 py-1.5 text-red-300/70 hover:bg-red-500/100/10"
                       title="Remove from the roster"
                     >
                       <Trash2 className="h-3 w-3" />

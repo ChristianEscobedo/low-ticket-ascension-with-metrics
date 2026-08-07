@@ -328,3 +328,5 @@ the studio's Clone tab stopped being a wall of forms.
 - Coverage: the twin-roster describe in tests/lib/clone-generate.test.ts.
 
 - **Roster polish (same commit round):** reference photos UPLOAD now (signed-URL flow → Media Library tagged clone/reference-photo → the list) on BOTH the twin modal and the studio ClonePanel; the roster page + modal are on the dark house palette (bone/ink/brass).
+
+- **Sheet styles + script depth (2026-08-07):** CLONE_SHEET_STYLES in clone.ts (cinematic board / ugc / vsl / editorial — the direction block quotes into characterSheetPrompt via styleId; unknown ids fall back to cinematic). Style chips on both foundry surfaces. generateCloneScript gained the craft bars (open-loop hooks, one idea per line, roles-as-jobs). Burgundy cards: the house card is border-mode/25 bg-mode/[0.07] — theme-dark-sweep.cjs carries MODE_MAP now (re-runnable). Changelog 2.15.0.

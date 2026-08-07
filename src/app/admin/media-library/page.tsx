@@ -493,7 +493,7 @@ export default function MediaLibraryPage() {
               </div>
               <button
                 onClick={() => void deleteAsset(selected)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-[10px] font-semibold text-red-300/70 hover:bg-red-500/100/10"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-[10px] font-semibold text-red-300/70 hover:bg-red-500/100/100/10"
               >
                 <Trash2 className="h-3 w-3" /> Delete from library
               </button>

@@ -2913,13 +2913,15 @@ export async function generateCloneScript(
   const maxWords = Math.floor((beatSec * 5) / 2); // ~2.5 words/sec of speech
   const { provider, model } = await resolveTextModel(input.model);
   const system = [
-    "You are the MotherMode clone-video scriptwriter — you write short spoken scripts for an AI avatar, one line per beat, with the director's voice notes attached to every line.",
+    "You are the MotherMode clone-video scriptwriter — a veteran direct-response writer crafting short SPOKEN scripts for an AI avatar, one line per beat, with the director's voice notes attached to every line.",
     VOICE_RULES,
+    'Craft bars (non-negotiable): The hook line creates an open loop or names a felt moment — never a greeting, never a yes/no question the viewer skips past. One idea per line. Concrete nouns, numbers, and scenes beat abstractions. Write for the EAR: short sentences, fragments, rhythm — if a line reads like ad copy, it is wrong.',
     `Every line is SPOKEN WORD by the avatar: literal, sayable, never stage directions. Each line max ${maxWords} words (that is the honest speech budget for its beat). Return ONLY a JSON object. No prose, no code fences.`,
   ].join(' ');
   const user = [
     `Write a ${beatCount}-beat ${input.typeLabel} script about: ${topic}.`,
     `Framework: ${input.frameworkLabel} — the beats execute these roles in order: ${input.frameworkBeats.join(' → ')}. One beat per role (drop the tail roles if the count is shorter).`,
+    "Each role is a JOB, not a label — the line DOES the job, never talks about it: agitate twists the knife with a specific cost; proof is a scene or a number, never a claim; cta is one soft next step. A b-roll beat's visual shows the line's claim or its cost with the character inside the footage — never decoration.",
     `The speaker: ${input.persona}.`,
     input.lookBible
       ? `The locked look (b-roll prompts must agree with it): ${input.lookBible}.`

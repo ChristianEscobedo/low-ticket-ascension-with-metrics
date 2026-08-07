@@ -111,26 +111,95 @@ export const DEFAULT_SHEET_CELLS: SheetCell[] = [
   'serious',
 ];
 
+/** One sheet style: the art-direction block the foundry quotes. */
+export interface CloneSheetStyle {
+  id: string;
+  label: string;
+  hint: string;
+  direction: string;
+}
+
+/**
+ * The foundry speaks the VIDEO's language: the sheet for a UGC testimonial
+ * must look like a camera roll, the sheet for a VSL like an expert press
+ * kit, and the cinematic board like a Netflix production contact sheet.
+ * The locked cell layout (turnaround + expressions) never changes — only
+ * the art direction does.
+ */
+export const CLONE_SHEET_STYLES: CloneSheetStyle[] = [
+  {
+    id: 'cinematic',
+    label: 'Cinematic board',
+    hint: 'The production contact sheet — film-grade, every frame distinct',
+    direction: [
+      'ART DIRECTION — a premium cinematic multi-panel storyboard contact sheet, like a Netflix production board or a luxury commercial previsualization:',
+      'ultra realistic cinematic photography — film-grade motivated lighting (practicals, window light, atmospheric shadow), real-world environments, natural skin texture, natural fabric folds and wear, soft depth of field, cinematic color grading, atmospheric realism — never AI-looking, never cartoonish, never over-polished CGI.',
+      'Every panel is intentionally art directed and visually DISTINCT: a natural mix of close-ups, medium shots, wide shots, over-the-shoulder, profile, and environmental framing — never a symmetrical grid, never the same angle or composition twice, each panel a frame from a real film with believable emotional continuity between them.',
+      'Layout: cinematic production-board aesthetic — black matte spacing between panels, slightly asymmetrical composition, premium studio pitch-board design.',
+    ].join(' '),
+  },
+  {
+    id: 'ugc',
+    label: 'UGC / organic',
+    hint: "Phone-real — a real person's camera roll, never a production",
+    direction: [
+      "ART DIRECTION — an ORGANIC UGC contact sheet that reads as a real person's phone photos, never a production:",
+      'front-camera selfie perspective and mirror checks, everyday real settings (a desk, a car seat, a kitchen counter, a gym floor), mixed natural indoor light, slight phone-photo noise, imperfect handheld framing — no studio backdrop, no color grade, no polish.',
+      'Panels vary like a camera roll: a direct selfie, a mirror check, a candid mid-sentence, a looking-away laugh — natural, imperfect, believable.',
+    ].join(' '),
+  },
+  {
+    id: 'vsl',
+    label: 'VSL / authority',
+    hint: 'The polished expert press kit — trusted inside three seconds',
+    direction: [
+      'ART DIRECTION — a polished expert press-kit sheet:',
+      'confident direct-to-camera gaze, premium but human — soft commercial key light, clean seamless backdrop, one prop of authority at the edge (a notebook, a laptop, a whiteboard).',
+      'Direct-response energy: the person you trust within three seconds. Panels vary between direct-address portrait, thoughtful three-quarter, and mid-explanation gesture.',
+    ].join(' '),
+  },
+  {
+    id: 'editorial',
+    label: 'Editorial / clean',
+    hint: 'Magazine-neutral — even daylight, clean wall, natural poses',
+    direction: [
+      'ART DIRECTION — a clean editorial lookbook sheet:',
+      'even soft daylight, a simple textured wall, relaxed natural poses, quiet premium catalog spacing — unfussy and real.',
+    ].join(' '),
+  },
+];
+
+export function cloneSheetStyleFor(id?: string): CloneSheetStyle {
+  return CLONE_SHEET_STYLES.find((s) => s.id === id) ?? CLONE_SHEET_STYLES[0];
+}
+
 /**
  * Build the ONE GPT Image 2 prompt that forges a character sheet. The look
- * bible is quoted verbatim; the description names the person. Deterministic
- * for the same inputs (modulo the model), so re-forging is a re-roll.
+ * bible is quoted verbatim; the description names the person; the STYLE
+ * picks the art direction (cinematic board / UGC camera roll / VSL press
+ * kit / editorial). Deterministic for the same inputs (modulo the model),
+ * so re-forging is a re-roll.
  */
 export function characterSheetPrompt(opts: {
   description: string;
   lookBible: CloneLookBible;
   includeFullBody?: boolean;
+  /** A CLONE_SHEET_STYLES id — unknown/empty resolves to the cinematic board. */
+  styleId?: string;
 }): string {
   const bible = lookBibleString(opts.lookBible);
+  const style = cloneSheetStyleFor(opts.styleId);
   const cells = opts.includeFullBody
     ? 'a 2x2 turnaround grid (front view, three-quarter view, profile view, close-up headshot), a strip of three expressions (neutral, excited, serious), and one full-body walking pose'
     : 'a 2x2 turnaround grid (front view, three-quarter view, profile view, close-up headshot) and a strip of three expressions (neutral, excited, serious)';
   return [
     'A single locked character reference sheet of ONE person, consistent face and identity in every cell:',
     `${opts.description.trim()}.`,
+    style.direction,
     `The sheet contains ${cells}. Same face, same hairstyle, same wardrobe in every cell.`,
     bible ? `${bible}.` : '',
-    'Clean neutral studio backdrop, even soft lighting, photorealistic, sharp focus, no text, no watermark, no logos.',
+    'CHARACTER CONSISTENCY (STRICT): identical facial structure, hairstyle, and body proportions in every cell; only natural variations (expression, subtle lighting, realistic movement) — like a real actor captured across one day.',
+    'Photorealistic, sharp focus, no text, no watermark, no logos.',
   ]
     .filter(Boolean)
     .join(' ');

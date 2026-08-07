@@ -229,7 +229,7 @@ export default function PersonalizationAdminPage() {
         </p>
       )}
       {error && (
-        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/10 px-3 py-2 text-sm text-red-200">
+        <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/100/100/10 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
       )}
@@ -360,7 +360,7 @@ export default function PersonalizationAdminPage() {
                   <button
                     onClick={() => void clear(f)}
                     disabled={busy}
-                    className="ml-auto inline-flex items-center gap-1 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-red-300/70 hover:bg-red-500/100/10 disabled:opacity-40"
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg border border-red-500/25 px-2.5 py-1.5 text-red-300/70 hover:bg-red-500/100/100/10 disabled:opacity-40"
                   >
                     <Trash2 className="h-3 w-3" /> clear payloads
                   </button>

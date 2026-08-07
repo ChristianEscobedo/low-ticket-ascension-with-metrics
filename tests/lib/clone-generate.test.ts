@@ -27,7 +27,9 @@ import {
 } from '@/lib/mothermode/reel/cloneGenerate';
 import { characterSheetAssets } from '@/lib/mothermode/reel/mediaLibrary';
 import {
+  characterSheetPrompt,
   cloneLibraryEntries,
+  cloneSheetStyleFor,
   isTwinReel,
   normalizeClonePlan,
   twinReelName,
@@ -333,5 +335,25 @@ describe('the twin roster (the /admin/ai-twins bridge)', () => {
     expect(isTwinReel('Twin: The Founder')).toBe(true);
     expect(isTwinReel('My hook reel')).toBe(false);
     expect(twinReelName('  The Founder  ')).toBe('Twin: The Founder');
+  });
+});
+
+describe('the sheet styles', () => {
+  it('the foundry speaks the video language — cinematic default, ugc on pick, unknown falls back', () => {
+    const cinematic = characterSheetPrompt({
+      description: 'A founder',
+      lookBible: { wardrobe: 'navy crewneck', backdrop: '', lighting: '', lens: '' },
+    });
+    expect(cinematic).toContain('cinematic multi-panel storyboard contact sheet');
+    expect(cinematic).toContain('black matte spacing');
+    expect(cinematic).toContain('Wardrobe: navy crewneck'); // the bible still quotes verbatim
+    const ugc = characterSheetPrompt({
+      description: 'A founder',
+      lookBible: { wardrobe: '', backdrop: '', lighting: '', lens: '' },
+      styleId: 'ugc',
+    });
+    expect(ugc).toContain('camera roll');
+    expect(ugc).not.toContain('black matte spacing');
+    expect(cloneSheetStyleFor('nope').id).toBe('cinematic');
   });
 });

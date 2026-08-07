@@ -42,6 +42,7 @@ import {
   CLONE_COSTS,
   CLONE_FRAMEWORKS,
   CLONE_SHEET_MODEL,
+  CLONE_SHEET_STYLES,
   CLONE_VIDEO_TYPES,
   cloneBeatCost,
   cloneBeatRefSlots,
@@ -150,6 +151,7 @@ export default function ClonePanel({
   const [sheetUrl, setSheetUrl] = useState(existing?.clone.sheetUrl ?? '');
   const [refUrl, setRefUrl] = useState('');
   const [includeFullBody, setIncludeFullBody] = useState(false);
+  const [sheetStyle, setSheetStyle] = useState('cinematic');
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const refFileInput = useRef<HTMLInputElement>(null);
 
@@ -205,6 +207,7 @@ export default function ClonePanel({
         description: description.trim(),
         lookBible,
         includeFullBody,
+        styleId: sheetStyle,
       });
       const url = await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
       setSheetUrl(url);
@@ -728,6 +731,20 @@ export default function ClonePanel({
       {/* the foundry */}
       <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
         <span className={LABEL}>Character-sheet foundry</span>
+        <div className="flex flex-wrap gap-1">
+          {CLONE_SHEET_STYLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSheetStyle(s.id)}
+              title={s.hint}
+              className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                sheetStyle === s.id ? 'bg-brass text-ink' : 'text-bone/45 hover:bg-bone/10'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         <label className="flex items-center gap-1.5 text-[10px] text-bone/55">
           <input
             type="checkbox"

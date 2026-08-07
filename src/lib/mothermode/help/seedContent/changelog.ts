@@ -547,6 +547,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.15.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'Sheet styles per video type, a sharper script writer, burgundy cards',
+    body: cl([
+      '<p>The foundry speaks the video\'s language now. Four sheet styles on the character-sheet foundry (both the AI Twins modal and the studio\'s clone editor): <strong>Cinematic board</strong> — the Netflix production contact sheet: film-grade motivated light, real environments, every panel a distinct frame, black matte spacing — <strong>UGC / organic</strong> — a real person\'s camera roll, never a production — <strong>VSL / authority</strong> — the polished expert press kit — and <strong>Editorial / clean</strong>. Same locked turnaround cells, different art direction.</p>',
+      '<p>The script writer leveled up too: hooks must open a loop or name a felt moment, one idea per line, concrete over abstract, written for the ear — and every framework role executes as a JOB (agitate twists a specific cost, proof is a scene or a number, never a claim). And the /admin cards are the proper burgundy tint everywhere, roster included.</p>',
+      '<p><strong>Where to start:</strong> AI Twins → New twin → pick a sheet style above the forge button.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
