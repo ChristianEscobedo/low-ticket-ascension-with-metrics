@@ -91,7 +91,11 @@ export default function ProducerPage() {
   const [charPrompt, setCharPrompt] = useState('');
   const [charBusy, setCharBusy] = useState(false);
   // Burn the timestamped script into the sheet image + per-sheet edit notes.
-  const [burnScript, setBurnScript] = useState(false);
+  const [burnScript, setBurnScript] = useState(true); // the script on the sheet, on by default
+  // THE VOICE SAMPLE — an audio reference of the twin's real voice; when set,
+  // NO TTS at all: the sample rides the manifest and stamps every voice leg.
+  const [sampleUrl, setSampleUrl] = useState('');
+  const [sampleBusy, setSampleBusy] = useState(false);
   const [sheetEdits, setSheetEdits] = useState<string[]>([]);
   const [sheetEditBusy, setSheetEditBusy] = useState(-1);
   // THE 80% + the steer — optional intake that sharpens the writer.
@@ -711,6 +715,9 @@ export default function ProducerPage() {
               captionPreset: plan.captionPreset,
               // The product rides the manifest — b-roll refs + the sheets.
               ...(productUrl.startsWith('http') ? { productImageUrl: productUrl } : {}),
+              // The voice sample rides the manifest — when set, NO TTS: the
+              // sample IS the voice every render matches.
+              ...(sampleUrl.startsWith('http') ? { voiceSampleUrl: sampleUrl } : {}),
               // The reviewed sheets ride the manifest — beat k quotes ITS sheet.
               ...(sheets.length
                 ? {
@@ -1162,6 +1169,61 @@ export default function ProducerPage() {
             )}
           </div>
         </div>
+        {/* THE VOICE SAMPLE — the twin's real voice, no TTS needed. Paste or
+            upload; it rides the manifest and the render matches it. */}
+        <div>
+          <span className={LABEL}>The voice sample (the twin's real voice — no TTS needed)</span>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              value={sampleUrl}
+              onChange={(e) => setSampleUrl(e.target.value)}
+              placeholder="paste an audio URL (mp3/wav/m4a — 20–60s of them talking)…"
+              className={INPUT}
+            />
+            <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-brass/40 px-2.5 py-2 text-[9px] font-semibold text-brass hover:bg-brass/10">
+              {sampleBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'upload'}
+              <input
+                type="file"
+                accept="audio/*,video/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f || sampleBusy) return;
+                  setSampleBusy(true);
+                  setError(null);
+                  try {
+                    const res = await fetch('/api/admin/reel-upload-url', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({
+                        kind: 'audio',
+                        ext: f.name.split('.').pop() ?? 'mp3',
+                        contentType: f.type || 'audio/mpeg',
+                      }),
+                    });
+                    const j = await res.json();
+                    if (!j.success) throw new Error(j.error || 'upload url failed');
+                    const put = await fetch(j.signedUrl, { method: 'PUT', body: f });
+                    if (!put.ok) throw new Error(`the upload failed (${put.status})`);
+                    setSampleUrl(j.publicUrl);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Upload failed');
+                  } finally {
+                    setSampleBusy(false);
+                  }
+                }}
+              />
+            </label>
+            {sampleUrl.startsWith('http') && (
+              <span className="shrink-0 rounded bg-emerald-500/15 px-2 py-1.5 text-[8px] font-semibold text-emerald-300">
+                sample on
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-[8px] text-bone/30">
+            A video of them works too — the audio is what rides. With a sample set, no ElevenLabs call ever happens.
+          </p>
+        </div>
         <button
           onClick={() => void scope()}
           disabled={!brief.trim() || !twinId || busy !== null}
@@ -1476,14 +1538,31 @@ export default function ProducerPage() {
                   )}
                 </div>
               ))}
-            <label className="flex items-center gap-1.5 text-[9px] text-bone/50">
-              <input
-                type="checkbox"
-                checked={burnScript}
-                onChange={(e) => setBurnScript(e.target.checked)}
-              />
-              burn the script into the sheet — each panel wears its timestamp + line (re-scope or re-forge to apply)
-            </label>
+            <button
+              type="button"
+              onClick={() => setBurnScript(!burnScript)}
+              className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                burnScript ? 'border-brass/40 bg-brass/10' : 'border-bone/10 bg-bone/[0.03]'
+              }`}
+            >
+              <span
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  burnScript ? 'bg-brass' : 'bg-bone/20'
+                }`}
+              >
+                <span
+                  className={`absolute h-3.5 w-3.5 rounded-full bg-ink transition-transform ${
+                    burnScript ? 'translate-x-4.5 left-0.5' : 'translate-x-0.5 left-0'
+                  }`}
+                />
+              </span>
+              <span className="text-[10px] font-semibold text-bone/75">
+                burn the script into the sheet
+                <span className="block text-[8px] font-normal text-bone/40">
+                  ON by default — each panel wears its timestamp + line. Flip off for clean panels (re-scope or re-forge to apply).
+                </span>
+              </span>
+            </button>
             {plan.scenePanels > 0 && (twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
               <button
                 onClick={() => void forgeSheets()}

@@ -462,6 +462,13 @@ export interface ClonePlan {
    * so the product shows up INSIDE the footage, not just talked about.
    */
   productImageUrl?: string;
+  /**
+   * THE VOICE SAMPLE — an audio reference of the twin's real voice (uploaded
+   * or ripped). When set, the voice leg SKIPS ElevenLabs entirely: the sample
+   * stamps every spoken beat as the audio reference, and the avatar/b-roll
+   * render gets it as the voice the model matches.
+   */
+  voiceSampleUrl?: string;
   /** The caption preset the Producer's style picked — the assemble note names it. */
   captionPreset?: string;
   createdAt: string | null;
@@ -843,6 +850,9 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
       : {}),
     ...(isHttpUrl(o.productImageUrl)
       ? { productImageUrl: asString(o.productImageUrl).trim() }
+      : {}),
+    ...(isHttpUrl(o.voiceSampleUrl)
+      ? { voiceSampleUrl: asString(o.voiceSampleUrl).trim() }
       : {}),
     createdAt: asString(o.createdAt) || null,
     updatedAt: asString(o.updatedAt) || null,

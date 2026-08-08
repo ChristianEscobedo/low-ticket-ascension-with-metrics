@@ -116,6 +116,16 @@ export async function POST(request: NextRequest) {
 
   // -- voice (ElevenLabs, per-beat programming) --------------------------------
   if (step === 'voice') {
+    // THE VOICE SAMPLE wins: when the manifest carries one, no TTS at all —
+    // the sample IS the audio reference the render matches. The beat stamps
+    // voiced with the sample as its audioUrl (the script line rides the
+    // render prompt; the sample is the voice the model speaks in).
+    if (plan.voiceSampleUrl) {
+      return NextResponse.json({
+        ok: true,
+        patch: { status: 'voiced' as const, audioUrl: plan.voiceSampleUrl },
+      });
+    }
     // DB-first: a key saved in /admin/integrations wins over (or stands in
     // for) the env var — the elevenlabs lib reads process.env, so set it.
     if (!isElevenLabsConfigured()) {
