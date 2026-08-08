@@ -359,6 +359,84 @@ export default function ProducerPage() {
     }
   }
 
+  /** Start over: clear the intake, the plan, the run card, and the draft. */
+  function newSession() {
+    setTwinId('');
+    setStyleId(PRODUCER_STYLES[0].id);
+    setBrief('');
+    setCtxPick('');
+    setArtifactPick('');
+    setEighty('');
+    setAwareness('');
+    setHookFamily('');
+    setBankPick('');
+    setProductUrl('');
+    setPlan(null);
+    setSheets([]);
+    setSheetPrompts([]);
+    setCharPrompt('');
+    setRunReel(null);
+    setRunDone(false);
+    setRunLog([]);
+    setHooks([]);
+    setError(null);
+    try {
+      window.localStorage.removeItem('producer-draft');
+    } catch {
+      /* fine */
+    }
+  }
+
+  /**
+   * THE VOICE PASS — voice every spoken beat (audio only, no video) so you
+   * HEAR the read before a render dollar moves. Stamps the gate once (the
+   * route requires it), then walks the beats — a beat with audio skips.
+   */
+  async function voicePass() {
+    if (!runReel || runBusy) return;
+    setRunBusy(true);
+    setError(null);
+    try {
+      let planNow = normalizeClonePlan(runReel.clonePlan ?? null);
+      if (!planNow) throw new Error('The reel lost its plan');
+      if (!planNow.approvedAt) {
+        const saved = await saveRunPlan(approveClonePlan(planNow));
+        planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? planNow;
+        setRunLog((l) => [...l, 'Storyboard gate stamped.']);
+      }
+      for (const b of planNow.beats) {
+        if (b.audioUrl) continue; // already voiced — never re-buy
+        setRunLog((l) => [...l, `Scene ${b.index + 1}: voice…`]);
+        const res = await fetch('/api/admin/reel-clone-generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ projectId: runReel.id, beatId: b.id }),
+        });
+        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const patch = json?.patch as Partial<CloneBeat> | undefined;
+        if (patch) {
+          const next: ClonePlan = {
+            ...planNow,
+            beats: planNow.beats.map((x) => (x.id === b.id ? { ...x, ...patch } : x)),
+            updatedAt: new Date().toISOString(),
+          };
+          const saved = await saveRunPlan(next);
+          planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? next;
+        }
+        if (!res.ok || json?.ok !== true) {
+          throw new Error(
+            `Scene ${b.index + 1}: ${typeof json?.error === 'string' ? json.error : 'voice failed'}`,
+          );
+        }
+      }
+      setRunLog((l) => [...l, 'Voice pass done — every line has a take. Listen, then render.']);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The voice pass stopped');
+    } finally {
+      setRunBusy(false);
+    }
+  }
+
   /** Swap a generated hook in as scene 1's line (the gate honestly re-opens). */
   async function useHook(line: string) {
     if (!runReel) return;
@@ -763,6 +841,13 @@ export default function ProducerPage() {
             Say the video in plain words — the AI scopes the whole pipeline, you approve the plan.
           </p>
         </div>
+        <button
+          onClick={newSession}
+          title="Start a fresh session — clears the intake, the plan, and the run card"
+          className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-bone/15 px-3 py-2 text-[10px] font-semibold text-bone/60 hover:border-brass/40 hover:text-brass"
+        >
+          + new session
+        </button>
       </div>
 
       {/* THE SESSION LIBRARY — named producer sessions, resume in one tap */}
@@ -801,25 +886,40 @@ export default function ProducerPage() {
               <PersonStanding className="h-3.5 w-3.5" /> No twins yet — build one on AI Twins first.
             </p>
           ) : (
-            <div className="mt-1 flex items-center gap-2">
-              <select value={twinId} onChange={(e) => setTwinId(e.target.value)} className={INPUT}>
-                <option value="">Pick the twin…</option>
-                {roster.map((e) => (
-                  <option key={e.reelId} value={e.reelId}>
-                    {e.clone.name}
-                    {e.ready ? '' : ' (incomplete)'}
-                  </option>
-                ))}
-              </select>
-              {twin && (twin.clone.sheetUrl ?? twin.clone.refPhotos[0]) && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={(twin.clone.sheetUrl ?? twin.clone.refPhotos[0]) as string}
-                  alt={twin.clone.name}
-                  className="h-12 w-12 shrink-0 rounded-lg border border-brass/30 object-cover"
-                  title={`${twin.clone.name} — ${twin.ready ? 'ready' : 'incomplete'}`}
-                />
-              )}
+            <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+              {roster.map((e) => {
+                const face = e.clone.sheetUrl ?? e.clone.refPhotos[0];
+                const picked = twinId === e.reelId;
+                return (
+                  <button
+                    key={e.reelId}
+                    onClick={() => setTwinId(e.reelId)}
+                    title={e.ready ? e.clone.name : `${e.clone.name} — incomplete (no sheet or voice)`}
+                    className={`flex w-24 shrink-0 flex-col items-center gap-1 rounded-xl border p-1.5 text-center transition-colors ${
+                      picked
+                        ? 'border-brass bg-brass/15'
+                        : 'border-bone/10 bg-bone/[0.03] hover:border-bone/30'
+                    }`}
+                  >
+                    {face ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={face}
+                        alt={e.clone.name}
+                        className="h-20 w-full rounded-lg object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-20 w-full items-center justify-center rounded-lg bg-bone/5 text-bone/25">
+                        <PersonStanding className="h-6 w-6" />
+                      </span>
+                    )}
+                    <span className={`w-full truncate text-[9px] font-semibold ${picked ? 'text-brass' : 'text-bone/60'}`}>
+                      {e.clone.name}
+                    </span>
+                    {!e.ready && <span className="text-[7px] text-bone/30">incomplete</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1496,6 +1596,18 @@ export default function ProducerPage() {
                               ? `Seedance ${(b.seedanceTier ?? p.seedanceTier) === 'seedance-2.5' ? '2.5 hero' : '2.0'}`
                               : 'avatar'}{' '}
                             · {b.durationSec}s · 9:16
+                            {b.startSec != null && b.endSec != null && (
+                              <span className="text-brass/60">
+                                {' '}· audio {Math.round(b.startSec)}–{Math.round(b.endSec)}s
+                              </span>
+                            )}
+                            {b.voice && (
+                              <span className="text-bone/35">
+                                {' '}· {b.voice.energy} energy · {b.voice.pace} pace
+                                {b.voice.emphasis?.length ? ` · stress "${b.voice.emphasis[0]}"` : ''}
+                                {b.voice.pauseAfterWord ? ` · breathe after word ${b.voice.pauseAfterWord}` : ''}
+                              </span>
+                            )}
                           </span>
                           {ordered.map((url, k) => (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -1597,6 +1709,22 @@ export default function ProducerPage() {
           </div>
           {!runDone ? (
             <>
+            {(() => {
+              const p = normalizeClonePlan(runReel.clonePlan ?? null);
+              const unvoiced =
+                p?.beats.filter((b) => (b.kind === 'avatar' || b.line.trim()) && !b.audioUrl).length ?? 0;
+              return unvoiced > 0 ? (
+                <button
+                  onClick={() => void voicePass()}
+                  disabled={runBusy}
+                  className="w-full rounded-xl border border-brass/40 px-4 py-2.5 text-xs font-bold text-brass hover:bg-brass/10 disabled:opacity-40"
+                >
+                  {runBusy
+                    ? 'working — watch the log…'
+                    : `voice pass — hear every line first (${unvoiced} take${unvoiced > 1 ? 's' : ''}, audio only)`}
+                </button>
+              ) : null;
+            })()}
             <button
               onClick={() => void autoRun()}
               disabled={runBusy}

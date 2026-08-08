@@ -680,6 +680,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.28.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The cast strip, new sessions, and the voice pass',
+    body: cl([
+      '<p><strong>The cast strip.</strong> "Who stars in it" is a row of twin cards now — the face big, the name under it, the picked one lit in brass. No more long dropdown with a stamp-sized thumbnail.</p>',
+      '<p><strong>New session.</strong> One button in the header starts over — intake, plan, run card, and the saved draft all clear.</p>',
+      '<p><strong>The voice pass.</strong> On the run card, above the run button: <strong>voice pass — hear every line first</strong>. It voices every spoken beat (audio only, no video) so you hear the twin\'s read before a render dollar moves — a beat with audio already never re-buys. And every scene card now shows its audio context: the timeline window (audio 0–10s…), the voice direction (energy, pace, the stress word, the breath), and a hear-the-read link the moment the take exists.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
