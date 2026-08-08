@@ -618,7 +618,8 @@ export function storyboardIssues(plan: ClonePlan): string[] {
     if (b.kind === 'avatar' && words === 0) {
       issues.push(`${n}: an avatar beat needs a spoken line.`);
     }
-    if (b.kind === 'broll' && !(b.brollPrompt ?? '').trim()) {
+    // A hand-written final prompt (the run card's override) counts as the visual.
+    if (b.kind === 'broll' && !(b.brollPrompt ?? '').trim() && !(b.finalPrompt ?? '').trim()) {
       issues.push(`${n}: a b-roll beat needs a visual prompt.`);
     }
     if (words > 0 && beatGridForWords(words) > b.durationSec) {

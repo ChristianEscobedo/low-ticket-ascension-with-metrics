@@ -402,7 +402,11 @@ export default function ProducerPage() {
         shot: b.shot,
         durationSec: b.durationSec,
         refs: master ? [master] : [],
-        ...(b.brollPrompt ? { brollPrompt: b.brollPrompt } : {}),
+        // The writer's b-roll prompt — backfilled from the plan's scene idea
+        // when it left one empty, so the gate never meets a prompt-less beat.
+        ...((b.brollPrompt ?? '').trim() || plan.scenes[i]?.idea
+          ? { brollPrompt: (b.brollPrompt ?? '').trim() || plan.scenes[i]!.idea }
+          : {}),
         ...(plan.scenes[i]?.seedanceTier ? { seedanceTier: plan.scenes[i].seedanceTier } : {}),
         status: 'planned',
       }));
@@ -446,6 +450,70 @@ export default function ProducerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Approve failed');
       setBusy(null);
+    }
+  }
+
+  /** Per-scene cost label for the one-scene button. */
+  function sceneCostLabel(b: CloneBeat, planTier: string): string {
+    const voice = (b.line.length / 1000) * CLONE_COSTS.elevenlabsPer1kChars;
+    const video =
+      b.kind === 'broll'
+        ? b.durationSec *
+          CLONE_COSTS.seedancePerSec[
+            (b.seedanceTier ?? planTier) as 'seedance-2.0' | 'seedance-2.5'
+          ]
+        : b.durationSec * CLONE_COSTS.avatarPerSec;
+    return `$${(voice + video).toFixed(2)}`;
+  }
+
+  /** Run ONE scene (stamp the gate first if needed) — test scene 1 first. */
+  async function runScene(index: number) {
+    if (!runReel || runBusy) return;
+    setRunBusy(true);
+    setError(null);
+    try {
+      let planNow = normalizeClonePlan(runReel.clonePlan ?? null);
+      if (!planNow) throw new Error('The reel lost its plan');
+      if (!planNow.approvedAt) {
+        const saved = await saveRunPlan(approveClonePlan(planNow));
+        planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? planNow;
+        setRunLog((l) => [...l, 'Storyboard gate stamped.']);
+      }
+      let beat = planNow.beats[index];
+      if (!beat) return;
+      if (beat.status === 'generated' && beat.videoUrl) return;
+      for (let leg = 0; leg < 2; leg++) {
+        if (beat.status === 'generated' && beat.videoUrl) break;
+        if (beat.status !== 'failed' && (beat.status === 'voiced' || beat.status === 'generated') && leg === 0) continue;
+        setRunLog((l) => [...l, `Scene ${index + 1}: ${beat.audioUrl ? 'video' : 'voice'}…`]);
+        const res = await fetch('/api/admin/reel-clone-generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ projectId: runReel.id, beatId: beat.id }),
+        });
+        const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const patch = json?.patch as Partial<CloneBeat> | undefined;
+        if (patch) {
+          const next: ClonePlan = {
+            ...planNow,
+            beats: planNow.beats.map((b) => (b.id === beat.id ? { ...b, ...patch } : b)),
+            updatedAt: new Date().toISOString(),
+          };
+          const saved = await saveRunPlan(next);
+          planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? next;
+          beat = planNow.beats.find((b) => b.id === beat.id) ?? beat;
+        }
+        if (!res.ok || json?.ok !== true) {
+          throw new Error(
+            `Scene ${index + 1}: ${typeof json?.error === 'string' ? json.error : 'generation failed'}`,
+          );
+        }
+      }
+      setRunLog((l) => [...l, `Scene ${index + 1} rendered.`]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scene render stopped');
+    } finally {
+      setRunBusy(false);
     }
   }
 
@@ -1092,6 +1160,26 @@ export default function ProducerPage() {
                             <span className="rounded bg-brass/15 px-1 py-0.5 text-[7px] font-semibold text-brass">
                               edited
                             </span>
+                          )}
+                          <span className="flex-1" />
+                          {b.status === 'generated' && b.videoUrl ? (
+                            <a
+                              href={b.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-300"
+                            >
+                              watch ↗
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => void runScene(i)}
+                              disabled={runBusy}
+                              className="rounded bg-brass px-1.5 py-0.5 text-[8px] font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
+                              title="Render JUST this scene (voice then video) — test scene 1 first"
+                            >
+                              render this scene · {sceneCostLabel(b, p.seedanceTier)}
+                            </button>
                           )}
                         </div>
                         <textarea

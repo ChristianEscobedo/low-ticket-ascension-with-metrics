@@ -364,3 +364,5 @@ the studio's Clone tab stopped being a wall of forms.
 - **Grounding by selection:** offer/lead-magnet dropdown (the cloneScript context path) + a research-artifact dropdown (defensive GET /api/admin/mothermode-research; the artifact summary rides the plan grounding + the script notes).
 
 - **2.20.1 (live fix):** muapi omni aliases image_url + reference_images to one image param — with refs we now send ONE array [startFrame, ...refs] under MUAPI_SEEDANCE_IMAGE_FIELD (default image).
+
+- **2.24.0:** per-scene render buttons on the run card (runScene — stamps the gate, voice then video for just that scene; test scene 1 first). approve() backfills a b-roll beat's visual from the plan scene idea when the writer left it empty; storyboardIssues accepts a finalPrompt as the visual. Omni/audio note: b-roll is silent by design — the ElevenLabs voice layers at assembly; the avatar model carries the voice for talking heads.
