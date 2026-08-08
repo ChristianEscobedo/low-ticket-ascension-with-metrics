@@ -269,7 +269,26 @@ export default function ProducerPage() {
   }, []);
 
   const artifact = artifacts.find((a) => a.id === artifactPick);
-  const groundingNotes = [artifact?.summary].filter(Boolean).join('\n\n');
+  // THE STEER rides the planner too — the 80% + the hook family + the CTA +
+  // the framework guide the PRODUCTION PLAN (scenes + sheets), not just the
+  // script written after.
+  const steerLines = [
+    eighty.trim() ? `THE 80% (the pre-writing truth):\n${eighty.trim().slice(0, 600)}` : '',
+    awareness ? `AUDIENCE AWARENESS: ${awareness}` : '',
+    hookFamily
+      ? `THE HOOK: scene 1 executes the "${HOOK_FAMILIES.find((f) => f.id === hookFamily)?.label ?? hookFamily}" family — visual: ${HOOK_FAMILIES.find((f) => f.id === hookFamily)?.visual ?? ''}`
+      : '',
+    ctaTarget !== 'comment' ? `THE CTA sends the viewer to: ${ctaTarget}` : '',
+    bankPick
+      ? `SCRIPT FRAMEWORK: steer by the prompt-bank framework "${bankRecipes.find((r) => r.id === bankPick)?.name ?? bankPick}".`
+      : '',
+  ].filter(Boolean);
+  const groundingNotes = [
+    artifact?.summary,
+    steerLines.length ? `THE PRODUCER'S STEER (shape the plan + the scenes around this):\n${steerLines.join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
   const load = useCallback(async () => {
     try {
@@ -528,7 +547,41 @@ export default function ProducerPage() {
       // manifest field) and the forge sees it (the reference array below).
       ...(productUrl.startsWith('http') ? { productImageUrl: productUrl } : {}),
     };
-    return sceneSheetPrompt(pseudo, styleId, true, burnScript);
+    const base = sceneSheetPrompt(pseudo, styleId, true, burnScript);
+    // THE HOOK steers the sheet too — scene 1's panel IS the pattern-interrupt.
+    const fam = HOOK_FAMILIES.find((f) => f.id === hookFamily);
+    return fam && indices.includes(0)
+      ? `${base}\nSCENE 1 IS THE HOOK (the "${fam.label}" family): the first panel IS the visual pattern-interrupt — ${fam.visual}`
+      : base;
+  }
+
+  /** Re-forge ONE sheet from scratch WITH appended context (add/remove/change). */
+  async function regenSheet(k: number) {
+    const note = (sheetEdits[k] ?? '').trim();
+    if (!note || sheetEditBusy >= 0 || !twin) return;
+    const master = twin.clone.sheetUrl ?? twin.clone.refPhotos[0];
+    if (!master) return;
+    setSheetEditBusy(k);
+    setError(null);
+    try {
+      const url = await aiEditImage({
+        prompt: `${sheetPrompts[k]}\n\nPRODUCER ADJUSTMENT (honor this above the rest): ${note}`,
+        seed: master,
+        references: [master, ...(productUrl.startsWith('http') ? [productUrl] : [])],
+        format: 'reel',
+        model: CLONE_SHEET_MODEL,
+      });
+      setSheets((prev) => {
+        const next = [...prev];
+        next[k] = url;
+        return next;
+      });
+      setSheetEdits((prev) => prev.map((s, j) => (j === k ? '' : s)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The re-forge failed');
+    } finally {
+      setSheetEditBusy(-1);
+    }
   }
 
   /** Re-forge ONE sheet with an edit note — the current sheet is the seed. */
@@ -1352,6 +1405,41 @@ export default function ProducerPage() {
                         alt={`scene sheet ${k + 1}`}
                         className="w-full rounded-lg border border-brass/30"
                       />
+                      {/* WHAT RIDES THE FORGE — the refs this sheet's next
+                          re-forge appends: the character, the product, the
+                          previous sheet as the lookback. */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7px] uppercase tracking-wider text-bone/30">
+                          refs riding the forge:
+                        </span>
+                        {(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) as string}
+                            alt="the character"
+                            title="the character sheet"
+                            className="h-6 w-6 rounded border border-brass/30 object-cover"
+                          />
+                        )}
+                        {productUrl.startsWith('http') && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={productUrl}
+                            alt="the product"
+                            title="the product"
+                            className="h-6 w-6 rounded border border-brass/20 object-cover"
+                          />
+                        )}
+                        {k > 0 && sheets[k - 1] && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={sheets[k - 1]}
+                            alt="the previous sheet"
+                            title="the previous sheet (the lookback)"
+                            className="h-6 w-6 rounded border border-brass/20 object-cover"
+                          />
+                        )}
+                      </div>
                       {/* EDIT THIS SHEET — a note re-forges it, seeded with itself */}
                       <div className="flex items-center gap-1.5">
                         <input
@@ -1374,6 +1462,14 @@ export default function ProducerPage() {
                           title="Re-forge THIS sheet with your edit (the current sheet is the seed)"
                         >
                           {sheetEditBusy === k ? <Loader2 className="h-3 w-3 animate-spin" /> : 'apply edit'}
+                        </button>
+                        <button
+                          onClick={() => void regenSheet(k)}
+                          disabled={!(sheetEdits[k] ?? '').trim() || sheetEditBusy >= 0}
+                          className="shrink-0 rounded-md border border-brass/40 px-2 py-1.5 text-[8px] font-bold text-brass disabled:opacity-40"
+                          title="Re-forge FROM SCRATCH — the base prompt + your note wins over the rest (add/remove/change anything)"
+                        >
+                          regen + note
                         </button>
                       </div>
                     </>
