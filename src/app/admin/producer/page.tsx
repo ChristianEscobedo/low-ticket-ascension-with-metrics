@@ -1968,6 +1968,68 @@ export default function ProducerPage() {
               {error}
             </p>
           )}
+          {/* THE VOICE SAMPLE, on the run card — attach or swap it ANY time;
+              it saves straight onto the manifest and every voice leg stamps
+              with it (no ElevenLabs call ever). Upload audio or a video. */}
+          {(() => {
+            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+            if (!p) return null;
+            const on = p.voiceSampleUrl;
+            return (
+              <div className="flex items-center gap-1.5 rounded-lg bg-ink/60 p-2">
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-bold ${on ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>
+                  {on ? 'sample on' : 'no voice sample'}
+                </span>
+                <input
+                  key={on ?? ''}
+                  defaultValue={on ?? ''}
+                  placeholder="paste the voice sample URL (mp3/wav)…"
+                  onBlur={async (e) => {
+                    const v = e.target.value.trim();
+                    if (!v.startsWith('http') || v === on) return;
+                    await saveRunPlan({ ...p, voiceSampleUrl: v, updatedAt: new Date().toISOString() });
+                    setRunLog((l) => [...l, 'Voice sample set — every voice leg stamps with it (no TTS).']);
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-bone/10 bg-ink px-2 py-1.5 text-[9px] text-bone/70 outline-none placeholder:text-bone/25"
+                />
+                <label className="inline-flex shrink-0 cursor-pointer items-center rounded-md border border-brass/40 px-2 py-1.5 text-[8px] font-bold text-brass hover:bg-brass/10">
+                  upload
+                  <input
+                    type="file"
+                    accept="audio/*,video/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (!f || sampleBusy) return;
+                      setSampleBusy(true);
+                      setError(null);
+                      try {
+                        const res = await fetch('/api/admin/reel-upload-url', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({
+                            kind: 'audio',
+                            ext: f.name.split('.').pop() ?? 'mp3',
+                            contentType: f.type || 'audio/mpeg',
+                          }),
+                        });
+                        const j = await res.json();
+                        if (!j.success) throw new Error(j.error || 'upload url failed');
+                        const put = await fetch(j.signedUrl, { method: 'PUT', body: f });
+                        if (!put.ok) throw new Error(`the upload failed (${put.status})`);
+                        await saveRunPlan({ ...p, voiceSampleUrl: j.publicUrl, updatedAt: new Date().toISOString() });
+                        setRunLog((l) => [...l, 'Voice sample uploaded — every voice leg stamps with it (no TTS).']);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Upload failed');
+                      } finally {
+                        setSampleBusy(false);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            );
+          })()}
           <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-lg bg-ink/60 p-2">
             {runLog.map((line, i) => (
               <p key={i} className="text-[9px] text-bone/55">
