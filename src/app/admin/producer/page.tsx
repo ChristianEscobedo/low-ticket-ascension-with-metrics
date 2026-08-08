@@ -524,6 +524,9 @@ export default function ProducerPage() {
           status: 'planned' as const,
         };
       }),
+      // The product stages INTO the panels — the prompt names it (via the
+      // manifest field) and the forge sees it (the reference array below).
+      ...(productUrl.startsWith('http') ? { productImageUrl: productUrl } : {}),
     };
     return sceneSheetPrompt(pseudo, styleId, true, burnScript);
   }
@@ -564,7 +567,12 @@ export default function ProducerPage() {
         const url = await aiEditImage({
           prompt: sheetPrompts[k],
           seed: master,
-          references: [master, ...(out.length ? [out[out.length - 1]] : [])],
+          // The product rides the forge — the panels stage the REAL thing.
+          references: [
+            master,
+            ...(productUrl.startsWith('http') ? [productUrl] : []),
+            ...(out.length ? [out[out.length - 1]] : []),
+          ],
           format: 'reel',
           model: CLONE_SHEET_MODEL,
         });
@@ -774,7 +782,7 @@ export default function ProducerPage() {
         const url = await aiEditImage({
           prompt,
           seed: master,
-          references: [master],
+          references: [master, ...(planNow.productImageUrl ? [planNow.productImageUrl] : [])],
           format: 'reel',
           model: CLONE_SHEET_MODEL,
         });
