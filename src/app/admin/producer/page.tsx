@@ -14,6 +14,7 @@ import { Clapperboard, Loader2, PersonStanding, Sparkles, Wand2 } from 'lucide-r
 import {
   approveClonePlan,
   blankClonePlan,
+  characterSheetPrompt,
   CLONE_COSTS,
   CLONE_SHEET_MODEL,
   cloneFrameworkFor,
@@ -41,6 +42,7 @@ import {
 import {
   aiEditImage,
   aiGenerateCloneScript,
+  aiGenerateImage,
   aiProductionPlan,
 } from '@/components/mothermode/content/aiClient';
 import { usePieceLinks } from '@/components/mothermode/content/pieceLinks';
@@ -78,6 +80,15 @@ export default function ProducerPage() {
   const [sheets, setSheets] = useState<string[]>([]);
   const [sheetPrompts, setSheetPrompts] = useState<string[]>([]);
   const [sheetBusy, setSheetBusy] = useState(false);
+  // The CHARACTER sheet forge — when the plan needs one (or the twin lacks
+  // one), its prompt is editable here and the forge SAVES ONTO THE TWIN.
+  const [charPrompt, setCharPrompt] = useState('');
+  const [charBusy, setCharBusy] = useState(false);
+  // The SESSION LIBRARY — named producer sessions (intake + plan + sheet
+  // prompts + forged sheets) that survive between visits.
+  const [sessions, setSessions] = useState<
+    { id: string; name: string; savedAt: string; data: Record<string, unknown> }[]
+  >([]);
 
   // The DRAFT: everything pre-approve persists to local storage (a refresh
   // never loses the scoped plan); post-approve it all rides the reel's
@@ -101,6 +112,97 @@ export default function ProducerPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Load the session library once.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('producer-sessions');
+      if (raw) setSessions(JSON.parse(raw));
+    } catch {
+      /* empty library is fine */
+    }
+  }, []);
+
+  /** The current session snapshot — what save/resume round-trips. */
+  function sessionSnapshot(): Record<string, unknown> {
+    return { twinId, styleId, brief, ctxPick, artifactPick, plan, sheetPrompts, sheets };
+  }
+  function restoreSession(d: Record<string, unknown>) {
+    if (typeof d.twinId === 'string') setTwinId(d.twinId);
+    if (typeof d.styleId === 'string') setStyleId(d.styleId);
+    if (typeof d.brief === 'string') setBrief(d.brief);
+    if (typeof d.ctxPick === 'string') setCtxPick(d.ctxPick);
+    if (typeof d.artifactPick === 'string') setArtifactPick(d.artifactPick);
+    const p = normalizeProductionPlan(d.plan ?? null);
+    setPlan(p);
+    setSheetPrompts(Array.isArray(d.sheetPrompts) ? d.sheetPrompts.filter((s) => typeof s === 'string') : []);
+    setSheets(Array.isArray(d.sheets) ? d.sheets.filter((s) => typeof s === 'string') : []);
+    setRunReel(null);
+    setRunDone(false);
+    setRunLog([]);
+  }
+  function saveSession() {
+    const name = (plan?.title ?? brief).slice(0, 60) || 'untitled session';
+    const next = [
+      { id: `s-${Date.now().toString(36)}`, name, savedAt: new Date().toISOString(), data: sessionSnapshot() },
+      ...sessions.filter((s) => s.name !== name),
+    ].slice(0, 20);
+    setSessions(next);
+    try {
+      window.localStorage.setItem('producer-sessions', JSON.stringify(next));
+    } catch {
+      /* full — keep the in-memory list */
+    }
+  }
+  function deleteSession(id: string) {
+    const next = sessions.filter((s) => s.id !== id);
+    setSessions(next);
+    try {
+      window.localStorage.setItem('producer-sessions', JSON.stringify(next));
+    } catch {
+      /* fine */
+    }
+  }
+
+  /** Forge the character sheet from the producer — saves ONTO the twin. */
+  async function forgeCharacter() {
+    if (!twin || charBusy) return;
+    setCharBusy(true);
+    setError(null);
+    try {
+      const prompt =
+        charPrompt.trim() ||
+        characterSheetPrompt({
+          description: twin.clone.name,
+          lookBible: twin.clone.lookBible,
+          styleId: style.sheetStyle,
+        });
+      const seed = twin.clone.sheetUrl ?? twin.clone.refPhotos[0];
+      const url = seed
+        ? await aiEditImage({ prompt, seed, references: [], format: 'reel', model: CLONE_SHEET_MODEL })
+        : await aiGenerateImage(prompt);
+      // Save onto the twin's reel record — the roster updates everywhere.
+      const project = (projects ?? []).find((p) => p.id === twin.reelId);
+      if (project) {
+        const planNow = normalizeClonePlan(project.clonePlan ?? null) ?? blankClonePlan(twin.clone);
+        await fetch(API, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save',
+            project: {
+              ...project,
+              clonePlan: { ...planNow, clone: { ...planNow.clone, sheetUrl: url } },
+            },
+          }),
+        });
+        await load();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Character sheet forge failed');
+    } finally {
+      setCharBusy(false);
+    }
+  }
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -471,6 +573,33 @@ export default function ProducerPage() {
         </div>
       </div>
 
+      {/* THE SESSION LIBRARY — named producer sessions, resume in one tap */}
+      {sessions.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-bone/10 bg-bone/[0.03] px-3 py-2">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-bone/35">
+            sessions:
+          </span>
+          {sessions.slice(0, 8).map((s) => (
+            <span key={s.id} className="inline-flex items-center gap-1 rounded-lg bg-ink px-2 py-1">
+              <button
+                onClick={() => restoreSession(s.data)}
+                className="text-[9px] font-semibold text-bone/70 hover:text-brass"
+                title={`saved ${new Date(s.savedAt).toLocaleString()}`}
+              >
+                {s.name}
+              </button>
+              <button
+                onClick={() => deleteSession(s.id)}
+                className="text-[9px] text-bone/25 hover:text-red-300"
+                title="drop this session"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* intake */}
       <div className="space-y-3 rounded-2xl border border-mode/25 bg-mode/[0.07] p-4">
         <div>
@@ -567,6 +696,15 @@ export default function ProducerPage() {
           )}
           scope the production
         </button>
+        {(plan || sheets.length > 0) && (
+          <button
+            onClick={saveSession}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-brass/40 px-3 py-2.5 text-[10px] font-semibold text-brass hover:bg-brass/10"
+            title="Save this session to the library — intake + plan + sheet prompts + forged sheets"
+          >
+            save this session
+          </button>
+        )}
         {error && (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
             {error}
@@ -729,6 +867,41 @@ export default function ProducerPage() {
                 />
               </div>
             )}
+            {/* THE CHARACTER SHEET'S TRIGGER — forge it right here when the
+                plan needs one or the twin has none. Prompt first, always. */}
+            {twin && (plan.needsCharacterSheet || !twin.clone.sheetUrl) && (
+              <div className="space-y-1 rounded-lg border border-brass/25 bg-brass/[0.05] p-2">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-brass/80">
+                  the character sheet — forge it here, it saves onto the twin
+                </p>
+                <textarea
+                  value={
+                    charPrompt ||
+                    characterSheetPrompt({
+                      description: twin.clone.name,
+                      lookBible: twin.clone.lookBible,
+                      styleId: style.sheetStyle,
+                    })
+                  }
+                  onChange={(e) => setCharPrompt(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-bone/10 bg-ink px-2 py-1.5 font-mono text-[9px] leading-relaxed text-bone/60 outline-none"
+                  title="The character-sheet prompt — edit before forging"
+                />
+                <button
+                  onClick={() => void forgeCharacter()}
+                  disabled={charBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[10px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
+                >
+                  {charBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  forge the character sheet (~${CLONE_COSTS.characterSheetImage.toFixed(2)})
+                </button>
+              </div>
+            )}
             {/* ONE SHEET PER WORLD — uneven by construction, prompt editable */}
             {plan.scenePanels > 0 &&
               producerWorldGroups(plan.scenes).map((g, k) => (
@@ -808,6 +981,44 @@ export default function ProducerPage() {
             <span className={LABEL}>The run — {runReel.name}</span>
             {runDone && <span className="text-[9px] font-semibold text-emerald-300">rendered</span>}
           </div>
+
+          {/* the cast on screen — the character sheet + the world sheets */}
+          {(() => {
+            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+            const charSheet = p?.clone.sheetUrl ?? p?.clone.refPhotos[0];
+            const worlds = p?.sceneSheetUrls ?? [];
+            if (!charSheet && worlds.length === 0) return null;
+            return (
+              <div className="flex flex-wrap items-start gap-2 rounded-lg bg-ink/60 p-2">
+                {charSheet && (
+                  <figure className="space-y-0.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={charSheet}
+                      alt="the character"
+                      className="h-24 rounded-lg border border-brass/30 object-cover"
+                    />
+                    <figcaption className="text-[7px] uppercase tracking-wider text-bone/35">
+                      @1 the character
+                    </figcaption>
+                  </figure>
+                )}
+                {worlds.map((url, k) => (
+                  <figure key={url} className="space-y-0.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`world sheet ${k + 1}`}
+                      className="h-24 rounded-lg border border-brass/20 object-cover"
+                    />
+                    <figcaption className="text-[7px] uppercase tracking-wider text-bone/35">
+                      world sheet {k + 1}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* THE SCRIPT — written at approve, shown before a dollar moves */}
           {(() => {

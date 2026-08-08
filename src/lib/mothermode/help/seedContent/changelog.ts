@@ -644,6 +644,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.23.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'Producer: the session library, the character-sheet trigger, the cast on the run card',
+    body: cl([
+      '<p>Producer sessions save now. <strong>Save this session</strong> (under the scope button) banks the intake + plan + every sheet prompt + the forged sheets into the <strong>session library</strong> at the top of the page — tap a name to resume exactly there, the × drops it. The one-shot draft still auto-saves as you work.</p>',
+      '<p>And the character sheet has its trigger: when the plan needs one (or the twin has none), its own prompt-first forge block sits in the sheet review — edit the prompt, forge, and it <strong>saves onto the twin</strong> (the roster updates everywhere). The run card shows the cast up top: the character sheet and every world sheet, on screen before a dollar moves.</p>',
+      '<p><strong>Where to start:</strong> Producer → scope → save this session; the character forge lives in the sheet review.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
