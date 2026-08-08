@@ -716,6 +716,16 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.30.1',
+    releasedOn: '2026-08-08',
+    entryType: 'fixed',
+    title: 'The talking-head prompt joins the production brief',
+    body: cl([
+      '<p>Round one of the brief covered b-roll; the <strong>avatar (talking-head) prompt</strong> still rendered the old flat string. It\'s the same production document now: the <strong>[REFERENCE SYSTEM]</strong> header tags <code>@image1 — THE CHARACTER</code> (the sheet owns identity + wardrobe), an <strong>[AUDIO REFERENCES]</strong> block names the attached voice track (lip-sync to it exactly; the words are final), the priority table sits under it, and the beat block runs SCENE → BEAT → ACTION → SCRIPT → DELIVERY → CUT → CONTINUITY with the timeline window inline. Both legs of every clone render now speak the same brief.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

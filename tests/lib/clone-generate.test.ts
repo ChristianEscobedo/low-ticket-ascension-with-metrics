@@ -142,7 +142,7 @@ describe('the prompts (deterministic, bible verbatim)', () => {
     expect(prompt).toContain('tight close-up, head and shoulders');
     expect(prompt).toContain('high energy, fast pace');
     expect(prompt).toContain('Wardrobe: navy crewneck. Backdrop: warm gray wall.');
-    expect(prompt).toContain('reference image');
+    expect(prompt).toContain('@image1 — THE CHARACTER');
   });
 
   it('shot framing covers all three angles with a medium default', () => {

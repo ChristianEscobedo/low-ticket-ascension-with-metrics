@@ -137,26 +137,46 @@ export const CLONE_CONTINUITY_NOTE =
   'This shot continues directly from the previous one — same person, same wardrobe, same setting, unbroken motion.';
 
 /**
- * The avatar direction: framing + the performance note (the beat's energy
- * and pace, so the delivery matches the voice programming) + the look bible
- * verbatim. The model gets @1 (the sheet) + the beat's audio alongside.
+ * The avatar beat, as the same production brief: @image1 is the character
+ * sheet (the source of truth for identity + wardrobe), the attached audio is
+ * the voice track (lip-sync to it exactly), and the beat block carries the
+ * window, the framing, the delivery, and the continuity note — lean, never
+ * re-describing what the sheet already owns.
  */
 export function cloneAvatarPrompt(beat: CloneBeat, clone: ReelClone): string {
   const bible = lookBibleString(clone.lookBible);
-  const energy = beat.voice?.energy ?? 'medium';
-  const pace = beat.voice?.pace ?? 'natural';
-  return [
-    `The person in the reference image, ${cloneShotFraming(beat.shot)}, speaking directly to camera.`,
+  const win =
     beat.startSec != null && beat.endSec != null
-      ? `TIMELINE: this shot covers ${Math.round(beat.startSec)}–${Math.round(beat.endSec)}s of the video (beat ${beat.index + 1} of the script) — the read fills exactly that window.`
-      : '',
-    `Delivery: ${energy} energy, ${pace} pace.`,
-    beat.continuesFrom ? CLONE_CONTINUITY_NOTE : '',
-    bible ? `${bible}.` : '',
-    'Photorealistic, natural lip sync to the audio, steady camera, real skin texture, no text, no watermark, no logos.',
+      ? `${T(beat.startSec)}–${T(beat.endSec)}`
+      : `${T(beat.index * beat.durationSec)}–${T((beat.index + 1) * beat.durationSec)}`;
+  return [
+    '[REFERENCE SYSTEM]',
+    'IMPORTANT: the supplied Character Sheet and the attached audio carry different responsibilities — do not treat the reference image as an independent creative instruction. The SHEET is the source of truth for continuity.',
+    '',
+    '[CHARACTER SHEETS]',
+    '@image1 — THE CHARACTER. Source of truth for identity, face, hair, body, approximate age, wardrobe, accessories, distinguishing features. The character stays recognizable as the same person across every scene, beat, and cut. If the sheet shows multiple views, poses, or expressions, they are all the SAME person — never different people.',
+    '',
+    '[AUDIO REFERENCES]',
+    "The attached audio — THE VOICE TRACK. The exact read of this beat's line: lip-sync to it precisely (mouth shapes, timing, the pauses in it). Do not re-write the words; the audio is final.",
+    '',
+    '[SOURCE OF TRUTH PRIORITY]',
+    'CHARACTER SHEET → identity + wardrobe. AUDIO REFERENCE → the voice + the exact words + their timing. BEAT → action + performance + framing. CUT → camera behavior. If two references conflict, the one responsible for that category wins.',
+    '',
+    `SCENE — ${win}`,
+    '━━━━━━━━━━━━━━━━━━━━',
+    `BEAT ${beat.index + 1} — ${win}`,
+    `ACTION: the character, ${cloneShotFraming(beat.shot)}, speaking directly to camera.`,
+    beat.line.trim() ? `SCRIPT (this is what the voice track says): "${beat.line.trim()}"` : '',
+    beat.voice
+      ? `DELIVERY: ${beat.voice.energy} energy, ${beat.voice.pace} pace${beat.voice.emphasis?.length ? `, stress "${beat.voice.emphasis[0]}"` : ''}${beat.voice.pauseAfterWord ? `, breathe after word ${beat.voice.pauseAfterWord}` : ''} — the face and body sell the same read.`
+      : 'DELIVERY: medium energy, natural pace — the face and body sell the read.',
+    `CUT: ${beat.shot} shot · 9:16 · ${beat.durationSec}s. Steady cinematic camera.`,
+    beat.continuesFrom ? `CONTINUITY IN: ${CLONE_CONTINUITY_NOTE}` : 'CONTINUITY OUT: the character ends the beat in the same wardrobe and environment, ready to continue.',
+    bible ? `LOOK: ${bible}.` : '',
+    'Photorealistic, natural lip sync to the audio, real skin texture, no text, no watermark, no logos.',
   ]
-    .filter(Boolean)
-    .join(' ');
+    .filter((l) => l !== '')
+    .join('\n');
 }
 
 /** What rides a b-roll render, so the prompt can tag the refs BY ROLE. */
