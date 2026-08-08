@@ -442,6 +442,13 @@ export interface ClonePlan {
   sceneSheetUrls?: string[];
   /** How many scene panels each sheet covers (the slice size). */
   sheetPanels?: number;
+  /**
+   * SHEETS BY WORLD — the scene indices each sheet covers, in sheet order
+   * (uneven by construction: the gym sheet covers scenes 1–4, the office tag
+   * scene 5). Beat k renders with the sheet whose list contains k. When
+   * absent, the floor(index/sheetPanels) math is the fallback.
+   */
+  sheetScenes?: number[][];
   /** What the script was grounded in (an offer / lead magnet / notes). */
   contextLabel?: string;
   /** The caption preset the Producer's style picked — the assemble note names it. */
@@ -801,6 +808,19 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
     ...(Number.isFinite(asNumber(o.sheetPanels, NaN))
       ? { sheetPanels: Math.max(1, Math.min(12, Math.round(asNumber(o.sheetPanels)))) }
       : {}),
+    ...(Array.isArray(o.sheetScenes)
+      ? {
+          sheetScenes: (o.sheetScenes as unknown[])
+            .map((g) =>
+              (Array.isArray(g) ? g : [])
+                .map((n) => Math.round(asNumber(n, -1)))
+                .filter((n) => n >= 0)
+                .slice(0, 24),
+            )
+            .filter((g) => g.length > 0)
+            .slice(0, 8),
+        }
+      : {}),
     ...(asString(o.sceneSheetAt) ? { sceneSheetAt: asString(o.sceneSheetAt) } : {}),
     ...(asString(o.contextLabel).trim()
       ? { contextLabel: asString(o.contextLabel).trim().slice(0, 120) }
@@ -885,6 +905,46 @@ export function sceneSheetStale(plan: ClonePlan): boolean {
   return !!plan.updatedAt && plan.updatedAt > plan.sceneSheetAt;
 }
 
+/**
+ * THE sheet resolver for a beat: sheets-by-world first (the sheet whose scene
+ * list contains this beat), then the even-slice fallback, then the single
+ * sheet. The generate route quotes THIS sheet for the beat.
+ */
+export function cloneSheetForBeat(plan: ClonePlan, beatIndex: number): string | null {
+  const sheets = plan.sceneSheetUrls ?? (plan.sceneSheetUrl ? [plan.sceneSheetUrl] : []);
+  if (sheets.length === 0) return null;
+  if (plan.sheetScenes && plan.sheetScenes.length === sheets.length) {
+    const k = plan.sheetScenes.findIndex((g) => g.includes(beatIndex));
+    if (k >= 0) return sheets[k];
+  }
+  const perBeat = Math.max(1, plan.sheetPanels ?? plan.beats.length);
+  return sheets[Math.min(sheets.length - 1, Math.floor(beatIndex / perBeat))];
+}
+
+/**
+ * Group a Production Plan's scenes into WORLDS (first-appearance order).
+ * Unlabeled scenes fold into the previous world (or 'the main world').
+ */
+export function producerWorldGroups(
+  scenes: { world?: string }[],
+): { world: string; indices: number[] }[] {
+  const out: { world: string; indices: number[] }[] = [];
+  scenes.forEach((s, i) => {
+    const label = (s.world ?? '').trim().slice(0, 60);
+    const last = out[out.length - 1];
+    if (label && last && last.world === label) {
+      last.indices.push(i);
+    } else if (label) {
+      out.push({ world: label, indices: [i] });
+    } else if (last) {
+      last.indices.push(i); // unlabeled — rides the previous world
+    } else {
+      out.push({ world: 'the main world', indices: [i] });
+    }
+  });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // THE PRODUCER — the AI-scoped video pipeline (intake → plan → the manifest)
 // ---------------------------------------------------------------------------
@@ -930,8 +990,8 @@ export interface ProductionPlan {
   /** Scenes the writer should produce (count + seconds each). */
   beatCount: number;
   beatSec: number;
-  /** Per-scene intent, in order — kind + the visual/line idea. */
-  scenes: { kind: CloneBeatKind; idea: string; seedanceTier?: SeedanceTier }[];
+  /** Per-scene intent, in order — kind + the visual/line idea + its WORLD. */
+  scenes: { kind: CloneBeatKind; idea: string; seedanceTier?: SeedanceTier; world?: string }[];
   /** Sheet needs: forge the character sheet? how many scene panels? */
   needsCharacterSheet: boolean;
   scenePanels: number;
@@ -960,6 +1020,7 @@ export function normalizeProductionPlan(raw: unknown): ProductionPlan | null {
         ...(SEEDANCE_TIERS.includes(r.seedanceTier as SeedanceTier)
           ? { seedanceTier: r.seedanceTier as SeedanceTier }
           : {}),
+        ...(asString(r.world).trim() ? { world: asString(r.world).trim().slice(0, 60) } : {}),
       };
     })
     .filter((s): s is NonNullable<typeof s> => !!s)

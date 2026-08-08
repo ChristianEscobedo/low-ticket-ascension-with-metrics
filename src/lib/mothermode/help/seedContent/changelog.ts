@@ -623,6 +623,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     published: true,
   },
   {
+    version: '2.21.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'Sheets by world, prompts first — and the duplicate-image fix, door two',
+    body: cl([
+      '<p>The sheet review is how a production actually works now. The planner labels every scene with its <strong>world</strong> (the gym, the desk, the car) and the review shows <strong>one sheet per world</strong> — uneven by construction: the gym sheet covers scenes 1–4, the office tag scene 5, with each sheet\'s exact prompt VISIBLE AND EDITABLE before anything forges. Edit the words, then forge — sheets still chain with lookback, and every scene renders quoting ITS world\'s sheet.</p>',
+      '<p><strong>Also fixed (the same bug, second door):</strong> the sheet forge itself could 422 with "Duplicate parameter: image" on providers that want array syntax — the image-edit call now self-heals: it retries once with the array field when the first attempt is rejected.</p>',
+      '<p><strong>Where to start:</strong> Producer → scope → the sheet review: per-world prompts, then forge.</p>',
+    ]),
+    published: true,
+  },
+  {
     version: '2.20.1',
     releasedOn: '2026-08-07',
     entryType: 'fixed',

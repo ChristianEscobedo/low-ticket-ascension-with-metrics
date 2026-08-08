@@ -23,6 +23,7 @@ import {
   normalizeProductionPlan,
   PRODUCER_STYLES,
   producerStyleFor,
+  producerWorldGroups,
   sceneSheetPrompt,
   twinRoster,
   type CloneBeat,
@@ -65,10 +66,11 @@ export default function ProducerPage() {
   const [ctxPick, setCtxPick] = useState(''); // 'offer:<slug>' | 'lead:<slug>' | ''
   const [artifactPick, setArtifactPick] = useState('');
   const [artifacts, setArtifacts] = useState<{ id: string; label: string; summary: string }[]>([]);
-  // The sheet review — the character sheet + the scene sheets, seen BEFORE
-  // approval. sheets[k] covers scenes[k*panelsPer …], forged with lookback.
-  const [panelsPer, setPanelsPer] = useState(4);
+  // The sheet review — sheets BY WORLD (uneven by construction), each with
+  // its prompt visible + editable BEFORE the forge. sheets[k] covers the
+  // scenes of world k; forged in order with the previous sheet as lookback.
   const [sheets, setSheets] = useState<string[]>([]);
+  const [sheetPrompts, setSheetPrompts] = useState<string[]>([]);
   const [sheetBusy, setSheetBusy] = useState(false);
 
   useEffect(() => {
@@ -138,6 +140,11 @@ export default function ProducerPage() {
       const p = normalizeProductionPlan(raw);
       if (!p) throw new Error('The plan came back empty — tighten the brief and try again');
       setPlan(p);
+      // PROMPT-FIRST: the per-world sheet prompts land immediately — you read
+      // and edit the exact words BEFORE anything forges.
+      setSheetPrompts(
+        producerWorldGroups(p.scenes).map((g) => worldSheetPrompt(p, twin?.clone.name ?? 'the founder', g.indices, style.sheetStyle)),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scoping failed');
     } finally {
@@ -149,10 +156,41 @@ export default function ProducerPage() {
     setPlan((p) => (p ? { ...p, ...partial } : p));
   }
 
+  /** The default prompt for one world's sheet — a pseudo-plan of its scenes. */
+  function worldSheetPrompt(p: ProductionPlan, persona: string, indices: number[], styleId: string): string {
+    const pseudo: ClonePlan = {
+      ...blankClonePlan({
+        id: 'preview',
+        name: persona,
+        refPhotos: [],
+        lookBible: { wardrobe: '', backdrop: '', lighting: '', lens: '' },
+        voice: { voiceId: '', name: '', stability: 0.5, similarityBoost: 0.75, style: 0.3 },
+        createdAt: null,
+      }),
+      videoType: p.videoType,
+      framework: p.framework,
+      beats: indices.map((sceneIdx, i) => {
+        const s = p.scenes[sceneIdx];
+        return {
+          id: `w-${sceneIdx}`,
+          index: i,
+          kind: s?.kind ?? 'avatar',
+          line: s?.kind === 'avatar' ? (s?.idea ?? '') : '',
+          shot: 'medium' as const,
+          durationSec: p.beatSec,
+          refs: [],
+          ...(s?.kind === 'broll' ? { brollPrompt: s?.idea ?? '' } : {}),
+          status: 'planned' as const,
+        };
+      }),
+    };
+    return sceneSheetPrompt(pseudo, styleId, true);
+  }
+
   /**
-   * THE SHEET REVIEW: forge the scene sheets BEFORE approval — sheet k covers
-   * scenes[k*panelsPer …], seeded with the character sheet, with the previous
-   * sheet riding as the lookback reference so the world stays one shoot.
+   * THE SHEET REVIEW: forge the scene sheets BEFORE approval — one sheet per
+   * WORLD (uneven by construction), the prompt visible + editable first,
+   * seeded with the character sheet, the previous sheet riding as lookback.
    */
   async function forgeSheets() {
     if (!plan || !twin || sheetBusy) return;
@@ -161,29 +199,10 @@ export default function ProducerPage() {
     setSheetBusy(true);
     setError(null);
     try {
-      const count = Math.ceil(plan.scenePanels / panelsPer);
       const out: string[] = [];
-      for (let k = 0; k < count; k++) {
-        const slice = plan.scenes.slice(k * panelsPer, (k + 1) * panelsPer);
-        const pseudo: ClonePlan = {
-          ...blankClonePlan(twin.clone),
-          videoType: plan.videoType,
-          framework: plan.framework,
-          beats: slice.map((s, i) => ({
-            id: `sheet-${k}-${i}`,
-            index: i,
-            kind: s.kind,
-            line: s.kind === 'avatar' ? s.idea : '',
-            shot: 'medium' as const,
-            durationSec: plan.beatSec,
-            refs: [],
-            ...(s.kind === 'broll' ? { brollPrompt: s.idea } : {}),
-            status: 'planned' as const,
-          })),
-        };
-        const prompt = sceneSheetPrompt(pseudo, style.sheetStyle, true);
+      for (let k = 0; k < sheetPrompts.length; k++) {
         const url = await aiEditImage({
-          prompt,
+          prompt: sheetPrompts[k],
           seed: master,
           references: [master, ...(out.length ? [out[out.length - 1]] : [])],
           format: 'reel',
@@ -267,7 +286,7 @@ export default function ProducerPage() {
                     sceneSheetUrl: sheets[0],
                     sceneSheetAt: new Date().toISOString(),
                     sceneSheetUrls: sheets,
-                    sheetPanels: panelsPer,
+                    sheetScenes: producerWorldGroups(plan.scenes).map((g) => g.indices),
                   }
                 : {}),
             },
@@ -652,26 +671,7 @@ export default function ProducerPage() {
               BEFORE approving. Sheets carry scene slices in order, lookback-
               forged, and ride the manifest (beat k quotes ITS sheet). */}
           <div className="space-y-2 rounded-xl border border-bone/10 bg-ink/40 p-2.5">
-            <div className="flex items-center justify-between">
-              <span className={LABEL}>Review the sheets</span>
-              <label className="flex items-center gap-1 text-[10px] text-bone/55">
-                panels per sheet
-                <select
-                  value={panelsPer}
-                  onChange={(e) => {
-                    setPanelsPer(Number(e.target.value));
-                    setSheets([]);
-                  }}
-                  className="rounded border border-bone/15 bg-ink px-1.5 py-0.5 text-bone/80"
-                >
-                  {[3, 4, 6].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <span className={LABEL}>Review the sheets — prompts first, then the forge</span>
             {(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
               <div>
                 <p className="mb-1 text-[9px] uppercase tracking-wider text-bone/35">
@@ -685,39 +685,48 @@ export default function ProducerPage() {
                 />
               </div>
             )}
+            {/* ONE SHEET PER WORLD — uneven by construction, prompt editable */}
+            {plan.scenePanels > 0 &&
+              producerWorldGroups(plan.scenes).map((g, k) => (
+                <div key={k} className="space-y-1 rounded-lg border border-bone/10 bg-bone/[0.03] p-2">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-brass/80">
+                    sheet {k + 1} · {g.world} — scene{g.indices.length > 1 ? 's' : ''}{' '}
+                    {g.indices.map((i) => i + 1).join(', ')} · ~{g.indices.length * plan.beatSec}s
+                  </p>
+                  <textarea
+                    value={sheetPrompts[k] ?? ''}
+                    onChange={(e) =>
+                      setSheetPrompts((prev) => prev.map((p, j) => (j === k ? e.target.value : p)))
+                    }
+                    rows={4}
+                    className="w-full rounded-md border border-bone/10 bg-ink px-2 py-1.5 font-mono text-[9px] leading-relaxed text-bone/60 outline-none"
+                    title="The exact prompt this sheet forges with — edit it before forging"
+                  />
+                  {sheets[k] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={sheets[k]}
+                      alt={`scene sheet ${k + 1}`}
+                      className="w-full rounded-lg border border-brass/30"
+                    />
+                  )}
+                </div>
+              ))}
             {plan.scenePanels > 0 && (twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
               <button
                 onClick={() => void forgeSheets()}
-                disabled={sheetBusy}
+                disabled={sheetBusy || sheetPrompts.length === 0}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[10px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
               >
                 {sheetBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                 {sheets.length
-                  ? 're-forge the scene sheets'
-                  : `forge the scene sheets (${Math.ceil(plan.scenePanels / panelsPer)} × ~$${CLONE_COSTS.characterSheetImage.toFixed(2)})`}
+                  ? 're-forge the sheets'
+                  : `forge the sheets (${sheetPrompts.length} × ~$${CLONE_COSTS.characterSheetImage.toFixed(2)})`}
               </button>
             )}
-            {sheets.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                {sheets.map((url, i) => (
-                  <figure key={url} className="space-y-0.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={url}
-                      alt={`scene sheet ${i + 1}`}
-                      className="w-full rounded-lg border border-brass/30"
-                    />
-                    <figcaption className="text-[8px] text-bone/35">
-                      sheet {i + 1} — scenes {i * panelsPer + 1}–
-                      {Math.min((i + 1) * panelsPer, plan.scenePanels)}
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
-            )}
             <p className="text-[9px] text-bone/30">
-              Sheets forge in order — each carries the previous as its lookback, so the world stays
-              one continuous shoot. Beat k renders with ITS sheet.
+              One sheet per world — edit its prompt, then forge. Sheets forge in order, each
+              carrying the previous as its lookback, so the world stays one continuous shoot.
             </p>
           </div>
 

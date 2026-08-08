@@ -31,12 +31,14 @@ import {
   cloneLibraryEntries,
   clonePlanCost,
   cloneSceneCountAdjust,
+  cloneSheetForBeat,
   cloneSheetStyleFor,
   isTwinReel,
   normalizeClonePlan,
   normalizeProductionPlan,
   PRODUCER_STYLES,
   producerStyleFor,
+  producerWorldGroups,
   sceneSheetPrompt,
   sceneSheetStale,
   twinReelName,
@@ -471,5 +473,47 @@ describe('THE PRODUCER', () => {
     expect(plan.scenes[1].seedanceTier).toBe('seedance-2.5');
     expect(plan.scenes[2].kind).toBe('avatar');
     expect(plan.scenePanels).toBe(12); // defaults to the (clamped) beat count
+    // world labels survive the normalizer
+    const withWorlds = normalizeProductionPlan({
+      topic: 'x',
+      scenes: [{ kind: 'broll', idea: 'walk', world: 'the gym' }],
+    })!;
+    expect(withWorlds.scenes[0].world).toBe('the gym');
+  });
+});
+
+describe('sheets by world', () => {
+  it('producerWorldGroups: labels group contiguously, unlabeled ride the previous', () => {
+    const groups = producerWorldGroups([
+      { world: 'the gym' },
+      { world: 'the gym' },
+      {},
+      { world: 'the office' },
+    ]);
+    expect(groups.map((g) => g.world)).toEqual(['the gym', 'the office']);
+    expect(groups[0].indices).toEqual([0, 1, 2]);
+    expect(groups[1].indices).toEqual([3]);
+    // all unlabeled → one main world
+    expect(producerWorldGroups([{}, {}])).toEqual([
+      { world: 'the main world', indices: [0, 1] },
+    ]);
+  });
+
+  it('cloneSheetForBeat: world lists win, the slice math is the fallback, one sheet covers all', () => {
+    const plan = blankClonePlan(CLONE);
+    plan.sceneSheetUrls = ['https://cdn.example.com/gym.png', 'https://cdn.example.com/office.png'];
+    plan.sheetScenes = [[0, 1, 2], [3]];
+    expect(cloneSheetForBeat(plan, 2)).toBe('https://cdn.example.com/gym.png');
+    expect(cloneSheetForBeat(plan, 3)).toBe('https://cdn.example.com/office.png');
+    // no world lists → the even-slice fallback
+    delete plan.sheetScenes;
+    plan.sheetPanels = 2;
+    expect(cloneSheetForBeat(plan, 3)).toBe('https://cdn.example.com/office.png');
+    expect(cloneSheetForBeat(plan, 1)).toBe('https://cdn.example.com/gym.png');
+    // the single-sheet back-compat path
+    const legacy = { ...blankClonePlan(CLONE), sceneSheetUrl: 'https://cdn.example.com/one.png' };
+    expect(cloneSheetForBeat(legacy, 5)).toBe('https://cdn.example.com/one.png');
+    // and nothing at all → null
+    expect(cloneSheetForBeat(blankClonePlan(CLONE), 0)).toBeNull();
   });
 });

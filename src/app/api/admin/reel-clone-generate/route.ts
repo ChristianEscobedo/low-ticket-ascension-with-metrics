@@ -3,6 +3,7 @@ import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import { getReelProject } from '@/lib/mothermode/reel/store';
 import {
   beatLineForTts,
+  cloneSheetForBeat,
   normalizeClonePlan,
   resolveBeatVoiceParams,
 } from '@/lib/mothermode/reel/clone';
@@ -168,13 +169,8 @@ export async function POST(request: NextRequest) {
   const primary = slots[0];
   // The scene sheet rides every b-roll render as the trailing omni-reference —
   // the world, decided once at the storyboard, never re-invented per render.
-  // Multi-sheet plans: beat k quotes ITS sheet (the slice that covers it).
-  const perBeat = Math.max(1, plan.sheetPanels ?? plan.beats.length);
-  const sceneForBeat =
-    plan.sceneSheetUrls && plan.sceneSheetUrls.length > 0
-      ? (plan.sceneSheetUrls[Math.floor(beat.index / perBeat)] ??
-        plan.sceneSheetUrls[plan.sceneSheetUrls.length - 1])
-      : plan.sceneSheetUrl;
+  // Beat k quotes ITS sheet — by world (sheetScenes) or the slice fallback.
+  const sceneForBeat = cloneSheetForBeat(plan, beat.index);
   const refsWithScene =
     sceneForBeat && !slots.includes(sceneForBeat)
       ? [...slots, sceneForBeat].slice(0, 4)

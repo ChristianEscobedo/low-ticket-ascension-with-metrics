@@ -477,25 +477,44 @@ async function editOpenAiImage(
   const key = await apiKey();
   if (!key) return { ok: false, status: 501, error: 'OPENAI_API_KEY is not configured' };
   try {
-    const form = new FormData();
-    form.append('model', model);
-    form.append('prompt', prompt);
-    form.append('size', size);
-    form.append('n', '1');
     // GPT Image accepts multiple images; seed first so it anchors the edit.
     // Repeat the `image` field (OpenAI multipart convention for multi-image edits).
     const all = [seed, ...references];
-    for (const img of all) {
-      const bytes = new Uint8Array(Buffer.from(img.base64, 'base64'));
-      form.append('image', new Blob([bytes], { type: img.mime }), img.name);
-    }
+    const buildForm = (imageField: string) => {
+      const form = new FormData();
+      form.append('model', model);
+      form.append('prompt', prompt);
+      form.append('size', size);
+      form.append('n', '1');
+      for (const img of all) {
+        const bytes = new Uint8Array(Buffer.from(img.base64, 'base64'));
+        form.append(imageField, new Blob([bytes], { type: img.mime }), img.name);
+      }
+      return form;
+    };
 
-    const res = await fetch(`${OPENAI_BASE}/images/edits`, {
+    let res = await fetch(`${OPENAI_BASE}/images/edits`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}` },
-      body: form,
+      body: buildForm('image'),
     });
-    const json = (await res.json().catch(() => ({}))) as any;
+    let json = (await res.json().catch(() => ({}))) as any;
+    // A proxy that only accepts array syntax rejects repeated `image` fields
+    // ("Duplicate parameter: 'image'"). Retry once with `image[]` — self-heals.
+    if (
+      !res.ok &&
+      all.length > 1 &&
+      /duplicate parameter|only one is allowed/i.test(
+        String(json?.error?.message ?? json?.message ?? ''),
+      )
+    ) {
+      res = await fetch(`${OPENAI_BASE}/images/edits`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${key}` },
+        body: buildForm('image[]'),
+      });
+      json = (await res.json().catch(() => ({}))) as any;
+    }
     if (!res.ok) {
       return {
         ok: false,
@@ -3009,7 +3028,7 @@ export async function generateProductionPlan(input: {
     '  "framework": "pas" | "aida" | "hook-story-offer" | "vsl",',
     '  "beatCount": 3-7 (the scene count; VSL may go to 8),',
     '  "beatSec": 5 | 10 | 15,',
-    '  "scenes": [ one per beat, in order: { "kind": "avatar" | "broll", "idea": the concrete scene/line idea, "seedanceTier": "seedance-2.5" ONLY for hero b-roll moments } ],',
+    '  "scenes": [ one per beat, in order: { "kind": "avatar" | "broll", "idea": the concrete scene/line idea, "world": a short location label for this scene (e.g. "gym", "desk", "car") — scenes sharing a world forge ONE scene sheet together, so label consistently, "seedanceTier": "seedance-2.5" ONLY for hero b-roll moments } ],',
     '  "needsCharacterSheet": true only when the cast has NO sheet and the video shows the person,',
     '  "scenePanels": how many panels the scene sheet should carry (usually = beatCount),',
     '  "voicePlan": "twin-voice" (a voice exists / talking head) | "stock-voice" | "record-voice" (they should record theirs),',
