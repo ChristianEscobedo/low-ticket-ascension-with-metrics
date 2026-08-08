@@ -802,6 +802,40 @@ export default function ProducerPage() {
             <span className={LABEL}>The run — {runReel.name}</span>
             {runDone && <span className="text-[9px] font-semibold text-emerald-300">rendered</span>}
           </div>
+
+          {/* THE SCRIPT — written at approve, shown before a dollar moves */}
+          {(() => {
+            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+            if (!p || p.beats.length === 0) return null;
+            return (
+              <div className="space-y-1 rounded-lg bg-ink/60 p-2">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-bone/40">
+                  the script — read it before you run
+                </p>
+                {p.beats.map((b, i) => (
+                  <p key={b.id} className="text-[10px] leading-snug text-bone/70">
+                    <span className="font-bold text-brass/80">{i + 1}.</span>{' '}
+                    <span className="text-bone/40">
+                      [{b.kind === 'broll' ? 'b-roll' : 'talking head'} · {b.durationSec}s]{' '}
+                    </span>
+                    {b.kind === 'broll' ? (b.brollPrompt ?? 'visual beat') : b.line}
+                  </p>
+                ))}
+                <a
+                  href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
+                  className="block pt-0.5 text-[9px] font-semibold text-brass hover:underline"
+                >
+                  edit any line in the studio storyboard →
+                </a>
+              </div>
+            );
+          })()}
+
+          {error && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+              {error}
+            </p>
+          )}
           <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-lg bg-ink/60 p-2">
             {runLog.map((line, i) => (
               <p key={i} className="text-[9px] text-bone/55">
@@ -810,6 +844,7 @@ export default function ProducerPage() {
             ))}
           </div>
           {!runDone ? (
+            <>
             <button
               onClick={() => void autoRun()}
               disabled={runBusy}
@@ -820,9 +855,13 @@ export default function ProducerPage() {
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> running — watch the log…
                 </span>
               ) : (
-                'run it — forge the sheet, stamp the gate, render every scene'
+                `run it — render every scene (~$${(estVideo + estSheets).toFixed(2)}, watch the log)`
               )}
             </button>
+            <p className="text-center text-[9px] text-bone/35">
+              The sheets you forged ride every scene; the gate stamps when you hit run.
+            </p>
+            </>
           ) : (
             <>
               <a
