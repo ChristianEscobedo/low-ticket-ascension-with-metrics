@@ -37,12 +37,9 @@ import {
   beatGridForWords,
   beatWordCount,
   blankClonePlan,
-  characterSheetPrompt,
   CLONE_BEAT_GRID_SEC,
   CLONE_COSTS,
   CLONE_FRAMEWORKS,
-  CLONE_SHEET_MODEL,
-  CLONE_SHEET_STYLES,
   CLONE_VIDEO_TYPES,
   cloneBeatCost,
   cloneBeatRefSlots,
@@ -54,7 +51,6 @@ import {
   lookBibleString,
   makeBeatId,
   makeCloneId,
-  sceneSheetPrompt,
   sceneSheetStale,
   storyboardIssues,
   withBeatRefSlot,
@@ -74,9 +70,7 @@ import {
 } from '@/lib/mothermode/reel/cloneGenerate';
 import {
   aiCloneAutofill,
-  aiEditImage,
   aiGenerateCloneScript,
-  aiGenerateImage,
   aiListVoices,
   type AiVoice,
 } from '@/components/mothermode/content/aiClient';
@@ -155,13 +149,10 @@ export default function ClonePanel({
   const [refPhotos, setRefPhotos] = useState<string[]>(existing?.clone.refPhotos ?? []);
   const [sheetUrl, setSheetUrl] = useState(existing?.clone.sheetUrl ?? '');
   const [refUrl, setRefUrl] = useState('');
-  const [includeFullBody, setIncludeFullBody] = useState(false);
-  const [sheetStyle, setSheetStyle] = useState('cinematic');
   const [refUploadBusy, setRefUploadBusy] = useState(false);
   const refFileInput = useRef<HTMLInputElement>(null);
 
   const [voices, setVoices] = useState<AiVoice[]>([]);
-  const [forgeBusy, setForgeBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** The step-1 helpers: library pick + AI fill. */
@@ -193,8 +184,7 @@ export default function ClonePanel({
   const { funnels, optinFunnels } = usePieceLinks('');
   const [ctxPick, setCtxPick] = useState(''); // 'offer:<slug>' | 'lead:<slug>' | ''
   const [ctxNotes, setCtxNotes] = useState('');
-  // The scene sheet forge + per-beat scratch VO.
-  const [sceneBusy, setSceneBusy] = useState(false);
+  // Per-beat scratch VO (record a line yourself — it becomes the beat's audio).
   const [scratchBusy, setScratchBusy] = useState<string | null>(null);
 
   // The twin editor is COLLAPSED once this reel has its twin — the summary
@@ -209,43 +199,7 @@ export default function ClonePanel({
 
   const lookBible = { wardrobe, backdrop, lighting, lens };
   const bibleLine = lookBibleString(lookBible);
-  const canForge = !!description.trim() && !forgeBusy;
   const canSave = !!name.trim() && !!voiceId.trim() && (refPhotos.length > 0 || !!sheetUrl) && !saveBusy;
-
-  /** The foundry: one GPT Image 2 call forges the turnaround sheet. */
-  async function forgeSheet() {
-    setForgeBusy(true);
-    setError(null);
-    try {
-      const anchor = refPhotos[0];
-      const prompt = characterSheetPrompt({
-        description: description.trim(),
-        lookBible,
-        includeFullBody,
-        styleId: sheetStyle,
-      });
-      // A ref photo anchors the forge — the sheet is the REAL person, not an
-      // invented face (pure text-to-image only when there is no photo).
-      const url = anchor
-        ? await aiEditImage({
-            prompt: `${prompt} The attached photo IS this person — same face in every cell.`,
-            seed: anchor,
-            references: [anchor],
-            format: 'reel',
-            model: CLONE_SHEET_MODEL,
-          })
-        : await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
-      setSheetUrl(url);
-      // The sheet is the master — it also rides as the primary ref photo.
-      setRefPhotos((prev) => (prev.includes(url) ? prev : [url, ...prev].slice(0, 8)));
-      await ingestSheet(`${name.trim() || 'Clone'} — character sheet`, url);
-      onNote?.('Character sheet forged — it is in the Media Library tagged character-sheet.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sheet generation failed');
-    } finally {
-      setForgeBusy(false);
-    }
-  }
 
   /** The library: a clone built on another reel fills this reel's form. */
   function pickFromLibrary(reelId: string) {
@@ -484,41 +438,6 @@ export default function ClonePanel({
   async function revokeStoryboard() {
     if (!existing) return;
     await onSavePlan({ ...existing, approvedAt: null, updatedAt: new Date().toISOString() });
-  }
-
-  /** The scene sheet: ONE board forged from the script — the world, decided
-   *  once. Rides every b-roll render as an omni-reference. ~$0.08/revision. */
-  async function forgeSceneSheet() {
-    if (!existing || existing.beats.length === 0 || sceneBusy) return;
-    setSceneBusy(true);
-    setError(null);
-    try {
-      const master = existing.clone.sheetUrl ?? existing.clone.refPhotos[0];
-      const prompt = sceneSheetPrompt(existing, sheetStyle, !!master);
-      // THE BUG FIX: the character sheet rides the forge — the person in
-      // every panel is the twin, never an invented stranger.
-      const url = master
-        ? await aiEditImage({
-            prompt,
-            seed: master,
-            references: [master],
-            format: 'reel',
-            model: CLONE_SHEET_MODEL,
-          })
-        : await aiGenerateImage(prompt, 'reel', CLONE_SHEET_MODEL);
-      await onSavePlan({
-        ...existing,
-        sceneSheetUrl: url,
-        sceneSheetAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      await ingestSheet(`${existing.clone.name} — scene sheet`, url);
-      onNote?.('Scene sheet forged — it rides every b-roll render, so the world never re-invents.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Scene sheet failed');
-    } finally {
-      setSceneBusy(false);
-    }
   }
 
   /** Scratch VO: your own read of the line becomes the beat's audio (no TTS). */
@@ -832,50 +751,23 @@ export default function ClonePanel({
         />
       </div>
 
-      {/* the foundry */}
-      <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
-        <span className={LABEL}>Character-sheet foundry</span>
-        <div className="flex flex-wrap gap-1">
-          {CLONE_SHEET_STYLES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSheetStyle(s.id)}
-              title={s.hint}
-              className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
-                sheetStyle === s.id ? 'bg-brass text-ink' : 'text-bone/45 hover:bg-bone/10'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <label className="flex items-center gap-1.5 text-[10px] text-bone/55">
-          <input
-            type="checkbox"
-            checked={includeFullBody}
-            onChange={(e) => setIncludeFullBody(e.target.checked)}
-          />
-          add a full-body cell (for walking b-roll shots)
-        </label>
-        <button
-          onClick={() => void forgeSheet()}
-          disabled={!canForge}
-          className="inline-flex items-center gap-1 rounded-lg bg-brass px-2.5 py-1.5 text-[10px] font-semibold text-ink disabled:opacity-40"
-        >
-          {forgeBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-          forge character sheet
-        </button>
-        <p className="text-[9px] text-bone/35">
-          One GPT Image 2 call (~${CLONE_COSTS.characterSheetImage.toFixed(2)}) ONCE per character —
-          not per video. The sheet lands in the Media Library tagged character-sheet.
-        </p>
-        {sheetUrl && (
+      {/* Sheets are made on the AI Twins page — the Producer scopes the whole
+          video there (/admin/producer). The panel only SHOWS the sheet. */}
+      {sheetUrl && (
+        <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
+          <span className={LABEL}>Character sheet</span>
           <div className="overflow-hidden rounded-lg border border-brass/25">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={sheetUrl} alt="Character sheet" className="w-full" />
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      <a
+        href="/admin/producer"
+        className="block rounded-lg border border-brass/25 bg-brass/5 px-2 py-1.5 text-center text-[9px] font-semibold text-brass hover:bg-brass/10"
+      >
+        plan the whole video with the Producer → sheets forge there, full size
+      </a>
 
       {/* reference photos */}
       <div className="space-y-1.5 rounded-xl border border-bone/10 bg-bone/[0.04] p-2">
@@ -1187,38 +1079,25 @@ export default function ClonePanel({
             ))}
           </div>
 
-          {/* the scene sheet — the world, decided ONCE from the script; rides
-              every b-roll render as an omni-reference (~$0.08 per revision) */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] text-bone/45">Scene sheet:</span>
-            {existing.sceneSheetUrl && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={existing.sceneSheetUrl}
-                  alt="scene sheet"
-                  className="h-8 w-8 rounded-md border border-brass/30 object-cover"
-                  title="The forged scene sheet"
-                />
-                {sceneSheetStale(existing) && (
-                  <span className="text-[8px] text-amber-300">script changed — re-forge</span>
-                )}
-              </>
-            )}
-            <button
-              onClick={() => void forgeSceneSheet()}
-              disabled={sceneBusy}
-              className="inline-flex items-center gap-1 rounded border border-brass/40 px-1.5 py-0.5 text-[8px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
-              title="One GPT Image 2 call (~$0.08): a panel per beat — the world pre-decided, so b-roll never re-invents it"
-            >
-              {sceneBusy ? (
-                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-2.5 w-2.5" />
+          {/* the scene sheet — the world, decided once. The forge itself lives
+              in the Sheet Studio on AI Twins (the panel shows + links). */}
+          {existing.sceneSheetUrl && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] text-bone/45">Scene sheet:</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={existing.sceneSheetUrl}
+                alt="scene sheet"
+                className="h-8 w-8 rounded-md border border-brass/30 object-cover"
+                title="The forged scene sheet (rides every b-roll render)"
+              />
+              {sceneSheetStale(existing) && (
+                <span className="text-[8px] text-amber-300">
+                  script changed — re-forge on AI Twins → Sheet
+                </span>
               )}
-              {existing.sceneSheetUrl ? 're-forge' : 'forge the scene sheet'}
-            </button>
-          </div>
+            </div>
+          )}
 
           {/* per-beat: the shot, the @reference slots, the price */}
           {existing.beats.map((b, i) => {

@@ -34,6 +34,9 @@ import {
   cloneSheetStyleFor,
   isTwinReel,
   normalizeClonePlan,
+  normalizeProductionPlan,
+  PRODUCER_STYLES,
+  producerStyleFor,
   sceneSheetPrompt,
   sceneSheetStale,
   twinReelName,
@@ -431,5 +434,42 @@ describe('the Sheet Studio helpers', () => {
     expect(trimmed.beats.map((b) => b.index)).toEqual([0, 1]);
     // the original is untouched (pure in, pure out)
     expect(plan.beats).toHaveLength(1);
+  });
+});
+
+describe('THE PRODUCER', () => {
+  it('every style preset points at a real video type + carries its rails', () => {
+    for (const s of PRODUCER_STYLES) {
+      expect(s.videoType).toBeTruthy();
+      expect(s.sheetStyle).toBeTruthy();
+      expect(s.captionPreset).toBeTruthy();
+    }
+    expect(producerStyleFor('nope').id).toBe(PRODUCER_STYLES[0].id);
+    expect(producerStyleFor('vsl').videoType).toBe('vsl');
+  });
+
+  it('normalizeProductionPlan clamps the grid, drops idea-less scenes, defaults enums', () => {
+    expect(normalizeProductionPlan(null)).toBeNull();
+    expect(normalizeProductionPlan({ topic: '  ' })).toBeNull();
+    const plan = normalizeProductionPlan({
+      title: 'The 40-tabs ad',
+      topic: 'The Ascension offer for tab-overloaded founders',
+      beatCount: 99,
+      beatSec: 7,
+      voicePlan: 'pirate',
+      scenes: [
+        { kind: 'avatar', idea: 'Hook to camera' },
+        { kind: 'broll', idea: 'gym walk', seedanceTier: 'seedance-2.5' },
+        { kind: 'broll' }, // no idea — dropped
+        { kind: 'spaceship', idea: 'junk kind defaults to avatar' },
+      ],
+    })!;
+    expect(plan.beatCount).toBe(12); // clamped to the writer's ceiling
+    expect(plan.beatSec).toBe(7); // the clamp is 5–15; the grid snaps downstream
+    expect(plan.voicePlan).toBe('twin-voice'); // junk enum defaults
+    expect(plan.scenes).toHaveLength(3);
+    expect(plan.scenes[1].seedanceTier).toBe('seedance-2.5');
+    expect(plan.scenes[2].kind).toBe('avatar');
+    expect(plan.scenePanels).toBe(12); // defaults to the (clamped) beat count
   });
 });

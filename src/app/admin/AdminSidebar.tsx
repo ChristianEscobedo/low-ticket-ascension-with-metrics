@@ -11,6 +11,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin/content', label: 'Content Hub' },
   { href: '/admin/reel-studio', label: 'Clipping Studio' },
   { href: '/admin/ai-twins', label: 'AI Twins' },
+  { href: '/admin/producer', label: 'Producer' },
   { href: '/admin/prompt-bank', label: 'Prompt Bank' },
   { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/brand-bible', label: 'Brand Bible' },

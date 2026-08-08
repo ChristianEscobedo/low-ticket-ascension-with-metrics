@@ -585,6 +585,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.18.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'The Producer — the AI scopes the whole video, you approve the plan',
+    body: cl([
+      '<p><strong>/admin/producer</strong> is the new front door for video. Answer in plain words — pick your twin, pick a style (UGC ad, hook ad, VSL, tutorial, announcement, cinematic story), write the brief — and the AI returns the full <strong>Production Plan</strong>: the scenes in order (talking head vs b-roll, hero-tier pins), the sheets it needs, the voice plan, the caption preset, and the honest estimate. Everything on the plan card is editable — flip a scene, retime it, rewrite its idea.</p>',
+      '<p>Approve the plan and it writes the script (per-line voice programming, per-scene Seedance tiers pinned), lands the beats on a fresh reel\'s manifest, and drops you into the Clipping Studio at the storyboard gate — the spend check, where sheets forge. Nothing spends before that gate, ever.</p>',
+      '<p>And the consolidation it carries: sheet creation moved OUT of the reel-editor panel — the panel now just shows the sheet and links to the Producer. One place scopes a video, full size, nothing buried.</p>',
+      '<p><strong>Where to start:</strong> Admin sidebar → Producer → pick a twin, a style, write the brief → scope the production.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

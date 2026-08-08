@@ -2965,3 +2965,67 @@ export async function generateCloneScript(
   return { ok: true, data: { beats, model } };
 }
 
+
+// ---------------------------------------------------------------------------
+// THE PRODUCER — brief + style → the Production Plan (the pipeline, scoped)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Producer's planner: a plain-words brief + a style preset becomes the
+ * full Production Plan — type, framework, scene count/seconds, per-scene
+ * intent (kind + idea + tier), sheet needs, the voice plan, and the caption
+ * preset. The plan card renders it editable; approving writes the manifest.
+ */
+export async function generateProductionPlan(input: {
+  brief: string;
+  styleLabel: string;
+  styleVideoType: string;
+  styleCaption: string;
+  persona: string;
+  hasSheet: boolean;
+  hasVoice: boolean;
+  grounding?: string;
+  model?: string;
+}): Promise<AiResult<{ plan: Record<string, unknown>; model: string }>> {
+  const brief = (input.brief ?? '').trim().slice(0, 600);
+  if (!brief) return { ok: false, status: 400, error: 'A brief is required' };
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are a veteran short-form video producer scoping ONE video for an AI pipeline. Given a brief and a style preset, you return a production plan the pipeline executes: script scenes, sheet needs, voice, captions.',
+    'Be concrete and honest: scenes are shootable ideas, never labels. The plan is edited by a human before anything is spent.',
+    'Return ONLY a JSON object. No prose, no code fences.',
+  ].join(' ');
+  const user = [
+    `The brief: ${brief}.`,
+    `The style preset: ${input.styleLabel} (video type ${input.styleVideoType}, captions ${input.styleCaption}). Stay inside its rails.`,
+    `The cast: ${input.persona} — ${input.hasSheet ? 'a character sheet EXISTS' : 'NO character sheet yet'}; ${input.hasVoice ? 'a cloned/picked voice EXISTS' : 'NO voice picked yet'}.`,
+    input.grounding?.trim()
+      ? `GROUNDING — the plan must stay consistent with these facts:\n${input.grounding.trim().slice(0, 1000)}`
+      : '',
+    'Return this exact shape:',
+    '{ "title": a short working title,',
+    '  "topic": the one-two sentence topic the script writer runs on (grounded, specific),',
+    '  "videoType": "hook-ad" | "ugc" | "vsl" | "tutorial" | "announcement" (the preset, unless the brief demands another),',
+    '  "framework": "pas" | "aida" | "hook-story-offer" | "vsl",',
+    '  "beatCount": 3-7 (the scene count; VSL may go to 8),',
+    '  "beatSec": 5 | 10 | 15,',
+    '  "scenes": [ one per beat, in order: { "kind": "avatar" | "broll", "idea": the concrete scene/line idea, "seedanceTier": "seedance-2.5" ONLY for hero b-roll moments } ],',
+    '  "needsCharacterSheet": true only when the cast has NO sheet and the video shows the person,',
+    '  "scenePanels": how many panels the scene sheet should carry (usually = beatCount),',
+    '  "voicePlan": "twin-voice" (a voice exists / talking head) | "stock-voice" | "record-voice" (they should record theirs),',
+    '  "captionPreset": a caption preset id from the style,',
+    '  "notes": one-two sentences of producer direction for the script writer }',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model, provider);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  if (!parsed || typeof parsed !== 'object') {
+    return { ok: false, status: 502, error: 'No plan was returned' };
+  }
+  return { ok: true, data: { plan: parsed as Record<string, unknown>, model } };
+}

@@ -815,6 +815,28 @@ topic: string;
   };
 }
 
+/**
+ * THE PRODUCER — a brief + a style preset becomes the Production Plan
+ * (the whole pipeline, scoped by the AI, editable before anything spends).
+ */
+export async function aiProductionPlan(args: {
+  brief: string;
+  styleLabel: string;
+  styleVideoType: string;
+  styleCaption: string;
+  persona: string;
+  hasSheet: boolean;
+  hasVoice: boolean;
+  grounding?: string;
+  model?: string;
+}): Promise<Record<string, unknown>> {
+  const json = await postAi({ action: 'producerPlan', ...args });
+  if (!json.plan || typeof json.plan !== 'object') {
+    throw new Error('No plan was returned');
+  }
+  return json.plan as Record<string, unknown>;
+}
+
 /** A selectable ElevenLabs voice for the voiceover picker. */
 export interface AiVoice {
   id: string;

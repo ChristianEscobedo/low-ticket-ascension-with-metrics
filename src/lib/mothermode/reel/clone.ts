@@ -862,6 +862,104 @@ export function sceneSheetStale(plan: ClonePlan): boolean {
   return !!plan.updatedAt && plan.updatedAt > plan.sceneSheetAt;
 }
 
+// ---------------------------------------------------------------------------
+// THE PRODUCER — the AI-scoped video pipeline (intake → plan → the manifest)
+// ---------------------------------------------------------------------------
+
+/**
+ * A producer style preset: the rails the AI plans inside. Each maps to a
+ * video type + framework + sheet style + the caption feel — the intake
+ * question "what kind of video?" answers itself with one of these.
+ */
+export interface ProducerStyle {
+  id: string;
+  label: string;
+  hint: string;
+  videoType: string;
+  sheetStyle: string;
+  /** The caption preset id the assemble step suggests. */
+  captionPreset: string;
+}
+
+export const PRODUCER_STYLES: ProducerStyle[] = [
+  { id: 'ugc-ad', label: 'UGC ad', hint: 'phone-real first-person proof', videoType: 'ugc', sheetStyle: 'ugc', captionPreset: 'karaoke-pop' },
+  { id: 'hook-ad', label: 'Hook ad', hint: '5/10/15s scroll-stopper', videoType: 'hook-ad', sheetStyle: 'cinematic', captionPreset: 'karaoke-pop' },
+  { id: 'vsl', label: 'VSL', hint: 'long-form sales argument', videoType: 'vsl', sheetStyle: 'vsl', captionPreset: 'minimal-clean' },
+  { id: 'tutorial', label: 'Tutorial', hint: 'teach one thing well', videoType: 'tutorial', sheetStyle: 'editorial', captionPreset: 'minimal-clean' },
+  { id: 'announcement', label: 'Announcement', hint: 'one piece of news, fast', videoType: 'announcement', sheetStyle: 'cinematic', captionPreset: 'bold-title' },
+  { id: 'cinematic-story', label: 'Cinematic story', hint: 'the filmic arc, scene-linked', videoType: 'vsl', sheetStyle: 'cinematic', captionPreset: 'cinematic-lower' },
+];
+
+export function producerStyleFor(id?: string): ProducerStyle {
+  return PRODUCER_STYLES.find((s) => s.id === id) ?? PRODUCER_STYLES[0];
+}
+
+/**
+ * The Production Plan — what the producer decides from the brief, before a
+ * dollar moves. Editable on the plan card; approving it writes the manifest.
+ */
+export interface ProductionPlan {
+  /** The working title + the topic the script writer runs on. */
+  title: string;
+  topic: string;
+  videoType: string;
+  framework: string;
+  /** Scenes the writer should produce (count + seconds each). */
+  beatCount: number;
+  beatSec: number;
+  /** Per-scene intent, in order — kind + the visual/line idea. */
+  scenes: { kind: CloneBeatKind; idea: string; seedanceTier?: SeedanceTier }[];
+  /** Sheet needs: forge the character sheet? how many scene panels? */
+  needsCharacterSheet: boolean;
+  scenePanels: number;
+  /** The voice plan. */
+  voicePlan: 'twin-voice' | 'stock-voice' | 'record-voice';
+  /** The caption preset id for the assemble step. */
+  captionPreset: string;
+  /** The producer's direction notes (rides as script guides). */
+  notes: string;
+}
+
+/** Defensive normalizer — the plan card never crashes on a stray model word. */
+export function normalizeProductionPlan(raw: unknown): ProductionPlan | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const topic = asString(o.topic).trim().slice(0, 400);
+  if (!topic) return null;
+  const scenes = (Array.isArray(o.scenes) ? o.scenes : [])
+    .map((s) => {
+      const r = s && typeof s === 'object' ? (s as Record<string, unknown>) : {};
+      const idea = asString(r.idea).trim().slice(0, 200);
+      if (!idea) return null;
+      return {
+        kind: (r.kind === 'broll' ? 'broll' : 'avatar') as CloneBeatKind,
+        idea,
+        ...(SEEDANCE_TIERS.includes(r.seedanceTier as SeedanceTier)
+          ? { seedanceTier: r.seedanceTier as SeedanceTier }
+          : {}),
+      };
+    })
+    .filter((s): s is NonNullable<typeof s> => !!s)
+    .slice(0, 12);
+  const beatCount = Math.max(1, Math.min(12, Math.round(asNumber(o.beatCount, scenes.length || 3))));
+  return {
+    title: asString(o.title).trim().slice(0, 80) || topic.slice(0, 60),
+    topic,
+    videoType: asString(o.videoType) || CLONE_VIDEO_TYPES[0].id,
+    framework: asString(o.framework) || CLONE_FRAMEWORKS[0].id,
+    beatCount,
+    beatSec: Math.max(5, Math.min(15, Math.round(asNumber(o.beatSec, 10)))),
+    scenes,
+    needsCharacterSheet: o.needsCharacterSheet === true,
+    scenePanels: Math.max(0, Math.min(12, Math.round(asNumber(o.scenePanels, beatCount)))),
+    voicePlan: ['twin-voice', 'stock-voice', 'record-voice'].includes(asString(o.voicePlan))
+      ? (asString(o.voicePlan) as ProductionPlan['voicePlan'])
+      : 'twin-voice',
+    captionPreset: asString(o.captionPreset).slice(0, 60) || 'karaoke-pop',
+    notes: asString(o.notes).slice(0, 500),
+  };
+}
+
 /** A fresh plan around a clone — zero beats, unapproved, 2.0 default. */
 export function blankClonePlan(clone: ReelClone): ClonePlan {
   const now = new Date().toISOString();

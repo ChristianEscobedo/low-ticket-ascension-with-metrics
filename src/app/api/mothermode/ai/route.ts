@@ -12,6 +12,7 @@ import {
   generateVideoScript,
   generateCloneAutofill,
   generateCloneScript,
+  generateProductionPlan,
   generateStoryboardPlan,
   generateFramePackPlan,
   generateVariationBrief,
@@ -648,6 +649,33 @@ export async function POST(request: NextRequest) {
       model: result.data.model,
       totalSeconds: durationSec,
     });
+  }
+
+  // -- producerPlan (THE PRODUCER: brief + style -> the Production Plan) ----
+  if (action === 'producerPlan') {
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const brief = str(body.brief);
+    if (!brief) {
+      return NextResponse.json({ ok: false, error: 'A brief is required' }, { status: 400 });
+    }
+    const result = await generateProductionPlan({
+      brief: brief.slice(0, 600),
+      styleLabel: str(body.styleLabel) ?? 'UGC ad',
+      styleVideoType: str(body.styleVideoType) ?? 'ugc',
+      styleCaption: str(body.styleCaption) ?? 'karaoke-pop',
+      persona: (str(body.persona) ?? 'the founder').slice(0, 400),
+      hasSheet: body.hasSheet === true,
+      hasVoice: body.hasVoice === true,
+      grounding: str(body.grounding)?.slice(0, 1000),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { ok: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true, plan: result.data.plan, model: result.data.model });
   }
 
   // -- cloneAutofill (AI Clone step 1: loose description -> the clone fields) --

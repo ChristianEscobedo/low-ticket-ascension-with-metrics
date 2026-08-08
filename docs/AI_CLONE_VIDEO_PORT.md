@@ -345,3 +345,9 @@ the studio's Clone tab stopped being a wall of forms.
 - **The Sheet Studio** (src/app/admin/ai-twins/SheetStudio.tsx, the Sheet button on a roster card): the sheet full-size + style chips + the scene-count control (cloneSceneCountAdjust pads blank b-roll scenes / trims, re-opens the gate) + per-scene rows (visual/line + voice energy) writing back to the manifest.
 - **Video→voice:** the twin form accepts video/audio uploads (recordAndClone(blob, ext)); the voice-clone route caps at 60MB and forwards the container to ElevenLabs IVC (it extracts the audio track).
 - Tests: the Sheet Studio helpers describe in clone-generate.test.ts (seeded prompt line, pad/trim).
+
+## The Producer (2026-08-07, changelog 2.18.0)
+
+- **/admin/producer** — the AI-scoped pipeline front door. PRODUCER_STYLES presets (clone.ts) carry videoType+sheetStyle+captionPreset; generateProductionPlan (openai-content.ts) behind the producerPlan action returns the ProductionPlan (normalizeProductionPlan clamps the grid + drops idea-less scenes). The plan card is editable; approve writes the script (cloneScript) with per-scene tiers pinned, saves a fresh reel manifest, deep-links to the studio storyboard gate.
+- **The panel strip:** ClonePanel lost its foundry + scene-forge — it shows sheets and links to /admin/producer. The twin modal + Sheet Studio keep their forges (the twins-page surfaces).
+- Tests: the PRODUCER describe in clone-generate.test.ts.
