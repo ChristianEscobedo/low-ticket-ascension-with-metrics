@@ -598,6 +598,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.19.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'The Producer, phase 2: the auto-run',
+    body: cl([
+      '<p>The Producer drives now. Approve the plan and the run card takes over: <strong>run it</strong> forges the scene sheet (seeded with the character sheet — the twin is in every panel), stamps the storyboard gate, and renders every scene in order — voice first, then the video — with a live log you can watch. The run button IS the spend approval; a failed scene stamps itself and re-running resumes exactly where it stopped.</p>',
+      '<p>When every scene is rendered, the card becomes one button: <strong>assemble + captions + render in the studio</strong> — the beats land on the timeline, the caption engine and the Remotion export take it from there. Intake → plan → run → polish. The whole pipeline, one screen.</p>',
+      '<p><strong>Where to start:</strong> Producer → scope → approve the plan → run it.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

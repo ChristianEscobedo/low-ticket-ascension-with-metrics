@@ -10,24 +10,32 @@
  * drives generate → assemble → captions → render from here.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Clapperboard, Loader2, PersonStanding, Sparkles, Wand2 } from 'lucide-react';
 import {
+  approveClonePlan,
   blankClonePlan,
   CLONE_COSTS,
+  CLONE_SHEET_MODEL,
   cloneFrameworkFor,
   cloneVideoTypeFor,
   makeBeatId,
+  normalizeClonePlan,
   normalizeProductionPlan,
   PRODUCER_STYLES,
   producerStyleFor,
+  sceneSheetPrompt,
   twinRoster,
   type CloneBeat,
+  type ClonePlan,
   type ProductionPlan,
   type TwinRosterEntry,
 } from '@/lib/mothermode/reel/clone';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
-import { aiGenerateCloneScript, aiProductionPlan } from '@/components/mothermode/content/aiClient';
+import {
+  aiEditImage,
+  aiGenerateCloneScript,
+  aiProductionPlan,
+} from '@/components/mothermode/content/aiClient';
 
 const API = '/api/admin/mothermode-reel';
 const INPUT =
@@ -35,7 +43,6 @@ const INPUT =
 const LABEL = 'block text-[10px] font-semibold uppercase tracking-wider text-bone/40';
 
 export default function ProducerPage() {
-  const router = useRouter();
   const [projects, setProjects] = useState<ReelProject[] | null>(null);
   const [twinId, setTwinId] = useState('');
   const [styleId, setStyleId] = useState(PRODUCER_STYLES[0].id);
@@ -43,6 +50,14 @@ export default function ProducerPage() {
   const [plan, setPlan] = useState<ProductionPlan | null>(null);
   const [busy, setBusy] = useState<'plan' | 'approve' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // PHASE 2 — the auto-run: after approval, the producer DRIVES the pipeline
+  // (sheets → the gate → generate-all) with live progress, then hands off to
+  // the studio for assemble + captions + render.
+  const [runReel, setRunReel] = useState<ReelProject | null>(null);
+  const [runBusy, setRunBusy] = useState(false);
+  const [runLog, setRunLog] = useState<string[]>([]);
+  const [runDone, setRunDone] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -153,11 +168,108 @@ export default function ProducerPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Could not create the reel');
-      const id = (json.project as ReelProject).id;
-      router.push(`/admin/reel-studio?reel=${encodeURIComponent(id)}`);
+      setRunReel(json.project as ReelProject); // the auto-run card takes over
+      setRunLog([`Reel created — ${mapped.length} scenes on the manifest.`]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Approve failed');
       setBusy(null);
+    }
+  }
+
+  /** Save a clonePlan patch back onto the run reel; returns the fresh project. */
+  async function saveRunPlan(next: ClonePlan): Promise<ReelProject | null> {
+    if (!runReel) return null;
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'save', project: { ...runReel, clonePlan: next } }),
+    });
+    const json = await res.json();
+    if (!json.success) return null;
+    setRunReel(json.project as ReelProject);
+    return json.project as ReelProject;
+  }
+
+  /** THE AUTO-RUN: sheets → the gate (the spend check, on the button) →
+   *  generate every scene. Stops honest on a failure; resume re-enters. */
+  async function autoRun() {
+    if (!runReel || !plan || !twin || runBusy) return;
+    setRunBusy(true);
+    setError(null);
+    try {
+      let planNow = normalizeClonePlan(runReel.clonePlan ?? null);
+      if (!planNow) throw new Error('The reel lost its plan');
+      const master = twin.clone.sheetUrl ?? twin.clone.refPhotos[0] ?? null;
+
+      // 1 — the scene sheet, seeded with the character sheet (once).
+      if (plan.scenePanels > 0 && !planNow.sceneSheetUrl && master) {
+        setRunLog((l) => [...l, 'Forging the scene sheet…']);
+        const prompt = sceneSheetPrompt(planNow, style.sheetStyle, true);
+        const url = await aiEditImage({
+          prompt,
+          seed: master,
+          references: [master],
+          format: 'reel',
+          model: CLONE_SHEET_MODEL,
+        });
+        const saved = await saveRunPlan({
+          ...planNow,
+          sceneSheetUrl: url,
+          sceneSheetAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? planNow;
+        setRunLog((l) => [...l, 'Scene sheet forged — it rides every b-roll render.']);
+      }
+
+      // 2 — the gate. The run button carried the total; stamp it here.
+      if (!planNow.approvedAt) {
+        const stamped = approveClonePlan(planNow);
+        const saved = await saveRunPlan(stamped);
+        planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? stamped;
+        setRunLog((l) => [...l, 'Storyboard gate stamped.']);
+      }
+
+      // 3 — generate every scene, per leg (voice then video), in order.
+      for (let i = 0; i < planNow.beats.length; i++) {
+        let beat = planNow.beats[i];
+        if (beat.status === 'generated' && beat.videoUrl) continue;
+        for (let leg = 0; leg < 2; leg++) {
+          if (beat.status === 'generated' && beat.videoUrl) break;
+          if (beat.status !== 'failed' && (beat.status === 'voiced' || beat.status === 'generated') && leg === 0) continue;
+          setRunLog((l) => [...l, `Scene ${i + 1}: ${beat.audioUrl ? 'video' : 'voice'}…`]);
+          const res = await fetch('/api/admin/reel-clone-generate', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ projectId: runReel.id, beatId: beat.id }),
+          });
+          const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          const patch = json?.patch as Partial<CloneBeat> | undefined;
+          if (patch) {
+            const next: ClonePlan = {
+              ...planNow,
+              beats: planNow.beats.map((b) => (b.id === beat.id ? { ...b, ...patch } : b)),
+              updatedAt: new Date().toISOString(),
+            };
+            const saved = await saveRunPlan(next);
+            planNow = normalizeClonePlan(saved?.clonePlan ?? null) ?? next;
+            beat = planNow.beats.find((b) => b.id === beat.id) ?? beat;
+          }
+          if (!res.ok || json?.ok !== true) {
+            throw new Error(
+              `Scene ${i + 1}: ${typeof json?.error === 'string' ? json.error : 'generation failed'} — hit run again to resume.`,
+            );
+          }
+        }
+        setRunLog((l) => [...l, `Scene ${i + 1} rendered.`]);
+      }
+
+      setRunDone(true);
+      setRunLog((l) => [...l, 'Every scene rendered. Assemble + captions + render happen in the studio.']);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The run stopped');
+    } finally {
+      setRunBusy(false);
     }
   }
 
@@ -409,6 +521,49 @@ export default function ProducerPage() {
           <p className="text-center text-[9px] text-bone/30">
             Nothing spends here. The storyboard gate in the studio is the spend check — the sheets
             forge there, full price on screen, before any scene renders.
+          </p>
+        </div>
+      )}
+
+      {/* PHASE 2 — the auto-run card: sheets → the gate → generate-all, live */}
+      {runReel && (
+        <div className="mt-4 space-y-3 rounded-2xl border border-brass/40 bg-brass/[0.08] p-4">
+          <div className="flex items-center justify-between">
+            <span className={LABEL}>The run — {runReel.name}</span>
+            {runDone && <span className="text-[9px] font-semibold text-emerald-300">rendered</span>}
+          </div>
+          <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-lg bg-ink/60 p-2">
+            {runLog.map((line, i) => (
+              <p key={i} className="text-[9px] text-bone/55">
+                {line}
+              </p>
+            ))}
+          </div>
+          {!runDone ? (
+            <button
+              onClick={() => void autoRun()}
+              disabled={runBusy}
+              className="w-full rounded-xl bg-brass px-4 py-2.5 text-xs font-bold text-ink hover:bg-brass/90 disabled:opacity-40"
+            >
+              {runBusy ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> running — watch the log…
+                </span>
+              ) : (
+                'run it — forge the sheet, stamp the gate, render every scene'
+              )}
+            </button>
+          ) : (
+            <a
+              href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
+              className="block w-full rounded-xl bg-brass px-4 py-2.5 text-center text-xs font-bold text-ink hover:bg-brass/90"
+            >
+              assemble + captions + render in the studio →
+            </a>
+          )}
+          <p className="text-center text-[9px] text-bone/30">
+            The run button IS the spend approval — the gate stamps when you hit it. A failed scene
+            stamps itself and the run resumes where it stopped.
           </p>
         </div>
       )}

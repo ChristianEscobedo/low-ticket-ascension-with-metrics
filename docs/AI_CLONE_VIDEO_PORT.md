@@ -351,3 +351,7 @@ the studio's Clone tab stopped being a wall of forms.
 - **/admin/producer** — the AI-scoped pipeline front door. PRODUCER_STYLES presets (clone.ts) carry videoType+sheetStyle+captionPreset; generateProductionPlan (openai-content.ts) behind the producerPlan action returns the ProductionPlan (normalizeProductionPlan clamps the grid + drops idea-less scenes). The plan card is editable; approve writes the script (cloneScript) with per-scene tiers pinned, saves a fresh reel manifest, deep-links to the studio storyboard gate.
 - **The panel strip:** ClonePanel lost its foundry + scene-forge — it shows sheets and links to /admin/producer. The twin modal + Sheet Studio keep their forges (the twins-page surfaces).
 - Tests: the PRODUCER describe in clone-generate.test.ts.
+
+## The Producer, phase 2 — the auto-run (2026-08-07, changelog 2.19.0)
+
+- The producer page drives the pipeline post-approval: saveRunPlan (reel save route) keeps the manifest fresh; autoRun = forge the scene sheet seeded with the character sheet (aiEditImage) → approveClonePlan stamp → per-beat /api/admin/reel-clone-generate legs with patches merged client-side, live runLog, stop-on-failure + resume. runDone → the studio handoff link (assemble/captions/render stay in the studio).
