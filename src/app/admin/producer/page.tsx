@@ -73,6 +73,39 @@ export default function ProducerPage() {
   const [sheetPrompts, setSheetPrompts] = useState<string[]>([]);
   const [sheetBusy, setSheetBusy] = useState(false);
 
+  // The DRAFT: everything pre-approve persists to local storage (a refresh
+  // never loses the scoped plan); post-approve it all rides the reel's
+  // manifest in Supabase (beats, sheets, the gate — the run card resumes).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('producer-draft');
+      if (!raw) return;
+      const d = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof d.twinId === 'string') setTwinId(d.twinId);
+      if (typeof d.styleId === 'string') setStyleId(d.styleId);
+      if (typeof d.brief === 'string') setBrief(d.brief);
+      if (typeof d.ctxPick === 'string') setCtxPick(d.ctxPick);
+      if (typeof d.artifactPick === 'string') setArtifactPick(d.artifactPick);
+      const p = normalizeProductionPlan(d.plan ?? null);
+      if (p) setPlan(p);
+      if (Array.isArray(d.sheetPrompts)) setSheetPrompts(d.sheetPrompts.filter((s) => typeof s === 'string'));
+      if (Array.isArray(d.sheets)) setSheets(d.sheets.filter((s) => typeof s === 'string'));
+    } catch {
+      /* a stale draft never blocks the page */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'producer-draft',
+        JSON.stringify({ twinId, styleId, brief, ctxPick, artifactPick, plan, sheetPrompts, sheets }),
+      );
+    } catch {
+      /* storage full/blocked — the draft is a convenience */
+    }
+  }, [twinId, styleId, brief, ctxPick, artifactPick, plan, sheetPrompts, sheets]);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -296,7 +329,12 @@ export default function ProducerPage() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Could not create the reel');
       setRunReel(json.project as ReelProject); // the auto-run card takes over
-      setRunLog([`Reel created — ${mapped.length} scenes on the manifest.`]);
+      setRunLog([`Reel created — ${mapped.length} scenes on the manifest (saved — it survives a refresh).`]);
+      setBusy(null);
+      setTimeout(
+        () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
+        250,
+      ); // land on the run card
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Approve failed');
       setBusy(null);
@@ -730,6 +768,11 @@ export default function ProducerPage() {
             </p>
           </div>
 
+          {error && (
+            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+              {error}
+            </p>
+          )}
           <button
             onClick={() => void approve()}
             disabled={busy !== null}
@@ -737,17 +780,17 @@ export default function ProducerPage() {
           >
             {busy === 'approve' ? (
               <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> writing the script + opening the studio…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> writing the script onto the manifest…
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5" /> approve the plan — write the script, open the studio
+                <Sparkles className="h-3.5 w-3.5" /> approve the plan — write the script onto the manifest
               </span>
             )}
           </button>
           <p className="text-center text-[9px] text-bone/30">
-            Nothing spends here. The storyboard gate in the studio is the spend check — the sheets
-            forge there, full price on screen, before any scene renders.
+            The plan saves as you go (the draft survives a refresh). Approving writes the script
+            onto the reel — the run card appears right below with the total on the button.
           </p>
         </div>
       )}
