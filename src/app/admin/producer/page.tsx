@@ -17,6 +17,7 @@ import {
   CLONE_COSTS,
   CLONE_SHEET_MODEL,
   cloneFrameworkFor,
+  cloneSheetForBeat,
   cloneVideoTypeFor,
   makeBeatId,
   normalizeClonePlan,
@@ -32,6 +33,11 @@ import {
   type TwinRosterEntry,
 } from '@/lib/mothermode/reel/clone';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
+import {
+  cloneAvatarPrompt,
+  cloneBrollPrompt,
+  cloneRefImagesFor,
+} from '@/lib/mothermode/reel/cloneGenerate';
 import {
   aiEditImage,
   aiGenerateCloneScript,
@@ -828,6 +834,91 @@ export default function ProducerPage() {
                   edit any line in the studio storyboard →
                 </a>
               </div>
+            );
+          })()}
+
+          {/* THE RENDER PROMPTS — the exact Seedance/avatar prompt per scene,
+              the @references IN ORDER, the settings. Edit = the override rides
+              the manifest (finalPrompt); generation sends YOURS. */}
+          {(() => {
+            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+            if (!p || p.beats.length === 0) return null;
+            return (
+              <details className="rounded-lg bg-ink/60 p-2" open={!runDone}>
+                <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-wider text-bone/40">
+                  the render prompts + @references, per scene — edit before you run
+                </summary>
+                <div className="mt-1.5 space-y-2">
+                  {p.beats.map((b, i) => {
+                    const refs = cloneRefImagesFor(b, p.clone);
+                    const worldSheet = cloneSheetForBeat(p, b.index);
+                    const ordered = worldSheet && !refs.includes(worldSheet) ? [...refs, worldSheet] : refs;
+                    const derived =
+                      b.kind === 'broll'
+                        ? (b.finalPrompt ?? cloneBrollPrompt(b, p.clone))
+                        : (b.finalPrompt ?? cloneAvatarPrompt(b, p.clone));
+                    return (
+                      <div key={b.id} className="space-y-1 rounded-md border border-bone/10 p-1.5">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[9px] font-bold text-brass/80">#{i + 1}</span>
+                          <span className="text-[8px] text-bone/40">
+                            {b.kind === 'broll'
+                              ? `Seedance ${(b.seedanceTier ?? p.seedanceTier) === 'seedance-2.5' ? '2.5 hero' : '2.0'}`
+                              : 'avatar'}{' '}
+                            · {b.durationSec}s · 9:16
+                          </span>
+                          {ordered.map((url, k) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={k}
+                              src={url}
+                              alt={`@${k + 1}`}
+                              title={`@image${k + 1}${worldSheet && k === ordered.length - 1 && url === worldSheet ? ' — the world scene sheet' : k === 0 ? ' — the character sheet' : ''}`}
+                              className="h-7 w-7 rounded border border-brass/30 object-cover"
+                            />
+                          ))}
+                          {b.finalPrompt && (
+                            <span className="rounded bg-brass/15 px-1 py-0.5 text-[7px] font-semibold text-brass">
+                              edited
+                            </span>
+                          )}
+                        </div>
+                        <textarea
+                          key={`${b.id}:${b.finalPrompt ?? ''}`}
+                          defaultValue={derived}
+                          rows={3}
+                          onBlur={async (e) => {
+                            const v = e.target.value.trim();
+                            const baseline =
+                              b.kind === 'broll'
+                                ? cloneBrollPrompt(b, p.clone)
+                                : cloneAvatarPrompt(b, p.clone);
+                            const next = v && v !== baseline ? v : undefined;
+                            if ((next ?? undefined) === (b.finalPrompt ?? undefined)) return;
+                            await saveRunPlan({
+                              ...p,
+                              beats: p.beats.map((x) =>
+                                x.id === b.id
+                                  ? next
+                                    ? { ...x, finalPrompt: next }
+                                    : (() => {
+                                        const c = { ...x };
+                                        delete c.finalPrompt;
+                                        return c;
+                                      })()
+                                  : x,
+                              ),
+                              updatedAt: new Date().toISOString(),
+                            });
+                          }}
+                          className="w-full rounded-md border border-bone/10 bg-ink px-2 py-1.5 font-mono text-[9px] leading-relaxed text-bone/60 outline-none"
+                          title="The exact prompt this scene renders with — your edit wins"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
             );
           })()}
 

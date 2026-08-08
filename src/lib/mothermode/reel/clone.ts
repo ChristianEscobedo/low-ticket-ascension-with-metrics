@@ -392,6 +392,11 @@ export interface CloneBeat {
   refs: string[];
   /** Optional b-roll visual prompt (kind=broll). */
   brollPrompt?: string;
+  /**
+   * The FINAL render prompt, hand-edited on the run card (the last human
+   * checkpoint). When set, generation sends THIS — not the derived one.
+   */
+  finalPrompt?: string;
   /** Which Seedance tier renders this beat's b-roll (2.0 default, 2.5 hero). */
   seedanceTier?: SeedanceTier;
   status: CloneBeatStatus;
@@ -754,6 +759,7 @@ export function normalizeCloneBeat(raw: unknown, index: number): CloneBeat | nul
     durationSec: Math.max(1, Math.min(15, durationSec)),
     refs,
     ...(asString(o.brollPrompt).trim() ? { brollPrompt: asString(o.brollPrompt).slice(0, 500) } : {}),
+    ...(asString(o.finalPrompt).trim() ? { finalPrompt: asString(o.finalPrompt).slice(0, 2000) } : {}),
     ...(SEEDANCE_TIERS.includes(o.seedanceTier as SeedanceTier)
       ? { seedanceTier: o.seedanceTier as SeedanceTier }
       : {}),

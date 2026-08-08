@@ -230,7 +230,8 @@ export async function POST(request: NextRequest) {
     }
     const tier = beat.seedanceTier ?? plan.seedanceTier;
     const rendered = await renderSeedanceClip({
-      prompt: cloneBrollPrompt(beat, plan.clone),
+      // A hand-edited final prompt (the run card's last checkpoint) wins.
+      prompt: beat.finalPrompt?.trim() || cloneBrollPrompt(beat, plan.clone),
       imageUrl: startFrame,
       aspectRatio: CLONE_ASPECT_RATIO,
       durationSec: beat.durationSec,
