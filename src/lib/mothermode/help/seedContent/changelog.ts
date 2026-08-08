@@ -622,6 +622,16 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.20.1',
+    releasedOn: '2026-08-07',
+    entryType: 'fixed',
+    title: 'Seedance renders: the duplicate-image fix',
+    body: cl([
+      '<p><strong>Fixed:</strong> b-roll scenes carrying reference images failed at muapi with "Duplicate parameter: image". The omni-reference model aliases the start frame and the reference list to the same parameter — the client now sends ONE images array (start frame first, then the refs, order preserved for the @image1/@image2 addressing). The key is env-overridable (MUAPI_SEEDANCE_IMAGE_FIELD) if muapi revises the schema.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

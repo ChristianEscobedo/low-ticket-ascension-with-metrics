@@ -112,6 +112,18 @@ function refField(): string {
   return process.env.MUAPI_SEEDANCE_REF_FIELD?.trim() || 'reference_images';
 }
 
+/**
+ * The single images-array key the omni-reference models want. MUAPI aliases
+ * both `image_url` and `reference_images` to the model's `image` param, so
+ * sending BOTH is a 422 ("Duplicate parameter: 'image'"). When references
+ * exist we merge everything into ONE array under this key — start frame
+ * first, then the refs, de-duplicated, order preserved (the prompt's
+ * @image1/@image2 addressing reads this order). Env-overridable.
+ */
+function imageField(): string {
+  return process.env.MUAPI_SEEDANCE_IMAGE_FIELD?.trim() || 'image';
+}
+
 /** Keep only well-formed public http(s) URLs, de-duplicated, order preserved. */
 function cleanReferenceImages(urls?: string[]): string[] {
   if (!Array.isArray(urls)) return [];
@@ -257,20 +269,23 @@ export async function submitSeedanceRender(
 
   const slug = input.model?.trim() || model();
   const references = cleanReferenceImages(input.referenceImages);
+  // THE DUPLICATE-'image' FIX: with references, the start frame + refs go in
+  // ONE array (start frame first — @image1), never image_url + a second list.
+  const merged = references.length
+    ? Array.from(new Set([input.imageUrl, ...references]))
+    : [];
   try {
     const res = await fetch(`${baseUrl()}/api/v1/${encodeURIComponent(slug)}`, {
       method: 'POST',
       headers: authHeaders(key),
       body: JSON.stringify({
         prompt: input.prompt,
-        image_url: input.imageUrl,
         aspect_ratio: input.aspectRatio || '9:16',
         duration: input.durationSec ?? 5,
         ...(typeof input.seed === 'number' ? { seed: Math.round(input.seed) } : {}),
-        // Only attach the reference array when the caller supplied usable URLs,
-        // so non-omni models never see an unexpected (possibly 422-triggering)
-        // field. The key is env-configurable via MUAPI_SEEDANCE_REF_FIELD.
-        ...(references.length ? { [refField()]: references } : {}),
+        ...(merged.length
+          ? { [imageField()]: merged }
+          : { image_url: input.imageUrl }),
       }),
     });
 

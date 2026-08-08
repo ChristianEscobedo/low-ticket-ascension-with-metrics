@@ -362,3 +362,5 @@ the studio's Clone tab stopped being a wall of forms.
 
 - **The sheet review** on the plan card: the character sheet big + multi scene sheets (sceneSheetUrls[] + sheetPanels on the manifest; sheet k covers scenes[k*panelsPer..], forged sequentially with the previous sheet as lookback reference). The generate route resolves beat k to ITS sheet (floor(index/sheetPanels)).
 - **Grounding by selection:** offer/lead-magnet dropdown (the cloneScript context path) + a research-artifact dropdown (defensive GET /api/admin/mothermode-research; the artifact summary rides the plan grounding + the script notes).
+
+- **2.20.1 (live fix):** muapi omni aliases image_url + reference_images to one image param — with refs we now send ONE array [startFrame, ...refs] under MUAPI_SEEDANCE_IMAGE_FIELD (default image).
