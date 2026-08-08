@@ -1106,12 +1106,87 @@ export default function ProducerPage() {
                     {b.kind === 'broll' ? (b.brollPrompt ?? 'visual beat') : b.line}
                   </p>
                 ))}
-                <a
-                  href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
-                  className="block pt-0.5 text-[9px] font-semibold text-brass hover:underline"
-                >
-                  edit any line in the studio storyboard →
-                </a>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <a
+                    href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
+                    className="text-[9px] font-semibold text-brass hover:underline"
+                  >
+                    edit any line in the studio storyboard →
+                  </a>
+                  {plan && (
+                    <button
+                      onClick={() => {
+                        // Re-write the script onto the same reel: new beats
+                        // replace the lines; rendered outputs stay honest
+                        // (statuses reset — a re-write is a fresh plan pass).
+                        void (async () => {
+                          if (runBusy) return;
+                          setRunBusy(true);
+                          setError(null);
+                          try {
+                            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+                            if (!p) throw new Error('no plan on the reel');
+                            const type = cloneVideoTypeFor(p.videoType);
+                            const fw = cloneFrameworkFor(p.framework);
+                            const { beats } = await aiGenerateCloneScript({
+                              topic: plan.topic,
+                              context: {
+                                offerSlug: ctxPick.startsWith('offer:') ? ctxPick.slice(6) : undefined,
+                                optinSlug: ctxPick.startsWith('lead:') ? ctxPick.slice(5) : undefined,
+                                notes: groundingNotes || undefined,
+                              },
+                              typeLabel: type.label,
+                              frameworkLabel: fw.label,
+                              frameworkBeats: fw.beats,
+                              beatSec: plan.beatSec,
+                              beatCount: plan.beatCount,
+                              persona: p.clone.name,
+                              lookBible: '',
+                              guides: plan.notes || undefined,
+                            });
+                            const master = p.clone.sheetUrl ?? p.clone.refPhotos[0];
+                            await saveRunPlan({
+                              ...p,
+                              approvedAt: null, // the gate re-opens — new words
+                              beats: beats.map((b, i) => ({
+                                id: makeBeatId(),
+                                index: i,
+                                kind: p.beats[i]?.kind ?? b.kind,
+                                line: b.line,
+                                voice: {
+                                  pace: b.pace,
+                                  energy: b.energy,
+                                  ...(b.emphasis.length ? { emphasis: b.emphasis } : {}),
+                                  ...(b.pauseAfterWord > 0 ? { pauseAfterWord: b.pauseAfterWord } : {}),
+                                },
+                                shot: b.shot,
+                                durationSec: b.durationSec,
+                                refs: master ? [master] : [],
+                                ...((b.brollPrompt ?? '').trim() || plan.scenes[i]?.idea
+                                  ? { brollPrompt: (b.brollPrompt ?? '').trim() || plan.scenes[i]!.idea }
+                                  : {}),
+                                ...(plan.scenes[i]?.seedanceTier
+                                  ? { seedanceTier: plan.scenes[i].seedanceTier }
+                                  : {}),
+                                status: 'planned' as const,
+                              })),
+                              updatedAt: new Date().toISOString(),
+                            });
+                            setRunLog((l) => [...l, `Script re-written — ${beats.length} beats, the gate re-opened.`]);
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Re-write failed');
+                          } finally {
+                            setRunBusy(false);
+                          }
+                        })();
+                      }}
+                      disabled={runBusy}
+                      className="text-[9px] font-semibold text-brass hover:underline disabled:opacity-40"
+                    >
+                      re-write the script ↻
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
@@ -1160,6 +1235,17 @@ export default function ProducerPage() {
                             <span className="rounded bg-brass/15 px-1 py-0.5 text-[7px] font-semibold text-brass">
                               edited
                             </span>
+                          )}
+                          {b.audioUrl && (
+                            <a
+                              href={b.audioUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60"
+                              title="The voice take for this scene (the twin's exact voice)"
+                            >
+                              voice ↗
+                            </a>
                           )}
                           <span className="flex-1" />
                           {b.status === 'generated' && b.videoUrl ? (

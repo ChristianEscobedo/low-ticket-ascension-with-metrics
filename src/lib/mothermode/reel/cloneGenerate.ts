@@ -166,6 +166,9 @@ export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone): string {
   const slots = cloneBeatRefSlots(beat, clone);
   return [
     (beat.brollPrompt ?? '').trim(),
+    // The spoken line rides the visual prompt so the footage agrees with
+    // what's being SAID over it (the voice layers at assembly).
+    beat.line.trim() ? `The voiceover over this shot says: "${beat.line.trim()}" — the visual proves or illustrates it.` : '',
     '@image1 is the character — the same person appears in the footage with the same face, hair, and wardrobe.',
     slots.variant
       ? '@image2 is the variant reference (wardrobe change, location, or product-in-hand) — match it for this shot.'
