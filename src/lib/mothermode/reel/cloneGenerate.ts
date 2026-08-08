@@ -161,7 +161,7 @@ export function cloneAvatarPrompt(beat: CloneBeat, clone: ReelClone): string {
  * puts THE SAME character inside the footage (@image1 = the sheet, @image2
  * = the optional variant) + the look bible verbatim.
  */
-export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone): string {
+export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone, product?: string): string {
   const bible = lookBibleString(clone.lookBible);
   const slots = cloneBeatRefSlots(beat, clone);
   return [
@@ -170,6 +170,9 @@ export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone): string {
     // what's being SAID over it (the voice layers at assembly).
     beat.line.trim() ? `The voiceover over this shot says: "${beat.line.trim()}" — the visual proves or illustrates it.` : '',
     '@image1 is the character — the same person appears in the footage with the same face, hair, and wardrobe.',
+    product?.trim()
+      ? 'The product from the reference images (the app screen / the box) appears in the shot exactly as it looks there — hands holding it, screen readable.'
+      : '',
     slots.variant
       ? '@image2 is the variant reference (wardrobe change, location, or product-in-hand) — match it for this shot.'
       : '',

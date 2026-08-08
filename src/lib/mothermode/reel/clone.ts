@@ -456,6 +456,12 @@ export interface ClonePlan {
   sheetScenes?: number[][];
   /** What the script was grounded in (an offer / lead magnet / notes). */
   contextLabel?: string;
+  /**
+   * THE PRODUCT — an image of the thing being sold (the app screenshot, the
+   * box, the dashboard). It rides b-roll refs and the scene-sheet prompts,
+   * so the product shows up INSIDE the footage, not just talked about.
+   */
+  productImageUrl?: string;
   /** The caption preset the Producer's style picked — the assemble note names it. */
   captionPreset?: string;
   createdAt: string | null;
@@ -835,6 +841,9 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
     ...(asString(o.captionPreset).trim()
       ? { captionPreset: asString(o.captionPreset).trim().slice(0, 60) }
       : {}),
+    ...(isHttpUrl(o.productImageUrl)
+      ? { productImageUrl: asString(o.productImageUrl).trim() }
+      : {}),
     createdAt: asString(o.createdAt) || null,
     updatedAt: asString(o.updatedAt) || null,
   };
@@ -864,6 +873,9 @@ export function sceneSheetPrompt(
   return [
     'A single SCENE SHEET for one video — a multi-panel storyboard board where each panel is ONE beat of the script below, the SAME character in every panel:',
     `${plan.clone.name}.`,
+    plan.productImageUrl
+      ? 'THE PRODUCT: the product image rides this forge as a reference — it appears in the panels that show the thing being sold (the app screen, the box), exactly as it looks in the reference.'
+      : '',
     seeded
       ? 'The attached reference image IS the character — the exact same person (face, hair, wardrobe) appears in every panel.'
       : '',

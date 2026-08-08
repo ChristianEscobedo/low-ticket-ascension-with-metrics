@@ -171,10 +171,17 @@ export async function POST(request: NextRequest) {
   // the world, decided once at the storyboard, never re-invented per render.
   // Beat k quotes ITS sheet — by world (sheetScenes) or the slice fallback.
   const sceneForBeat = cloneSheetForBeat(plan, beat.index);
-  const refsWithScene =
-    sceneForBeat && !slots.includes(sceneForBeat)
-      ? [...slots, sceneForBeat].slice(0, 4)
+  // THE PRODUCT rides too — after the sheet, before the world sheet —
+  // so the thing being sold shows up INSIDE the footage.
+  const withProduct =
+    beat.kind === 'broll' && plan.productImageUrl && !slots.includes(plan.productImageUrl)
+      ? [...slots, plan.productImageUrl]
       : slots;
+  const refsWithScene = (
+    sceneForBeat && !withProduct.includes(sceneForBeat)
+      ? [...withProduct, sceneForBeat]
+      : withProduct
+  ).slice(0, 4);
   if (!primary) {
     return NextResponse.json(
       { ok: false, error: 'No @reference 1 — forge the character sheet first.' },
@@ -231,7 +238,8 @@ export async function POST(request: NextRequest) {
     const tier = beat.seedanceTier ?? plan.seedanceTier;
     const rendered = await renderSeedanceClip({
       // A hand-edited final prompt (the run card's last checkpoint) wins.
-      prompt: beat.finalPrompt?.trim() || cloneBrollPrompt(beat, plan.clone),
+      prompt:
+        beat.finalPrompt?.trim() || cloneBrollPrompt(beat, plan.clone, plan.productImageUrl),
       imageUrl: startFrame,
       aspectRatio: CLONE_ASPECT_RATIO,
       durationSec: beat.durationSec,

@@ -790,6 +790,18 @@ export async function aiCloneAutofill(description: string): Promise<AiCloneAutof
   };
 }
 
+/** The 80% AI fill: the brief becomes the four pre-writing truth lines. */
+export async function aiCloneEighty(args: {
+  brief: string;
+  grounding?: string;
+}): Promise<string> {
+  const json = await postAi({ action: 'cloneEighty', ...args });
+  if (typeof json.text !== 'string' || !json.text.trim()) {
+    throw new Error('The fill came back empty — try again');
+  }
+  return json.text;
+}
+
 /** The run card's hook generator: written hooks across the registry families. */
 export async function aiCloneHooks(args: {
   topic: string;

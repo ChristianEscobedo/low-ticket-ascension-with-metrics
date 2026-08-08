@@ -668,6 +668,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.27.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The product rides the footage, the 80% fills itself, and the intake fixes',
+    body: cl([
+      '<p><strong>The product sheet.</strong> The Producer intake gains <strong>the product</strong> — upload or paste an image of the thing being sold (the app screen, the box, the dashboard). It lands on the manifest and rides everywhere the character does: the scene-sheet prompts stage it in the panels, every b-roll render carries it as a reference, and the b-roll prompt names it — the product shows up INSIDE the footage, not just talked about. It shows on the run card\'s cast row next to the character and the world sheets.</p>',
+      '<p><strong>The 80% fills itself.</strong> "Fill the 80% with AI" drafts the four pre-writing truth lines from your brief + the picked grounding — edit them after. And the intake shows the twin\'s face next to the picker, not just the name.</p>',
+      '<p><strong>Fixed:</strong> the prompt-bank and research dropdowns populate now (the pickers read the right fields), and the steer row no longer overflows on narrow screens.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

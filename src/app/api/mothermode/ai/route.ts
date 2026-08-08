@@ -11,6 +11,7 @@ import {
   amplifyImagePrompts,
   generateVideoScript,
   generateCloneAutofill,
+  generateCloneEighty,
   generateCloneHooks,
   generateCloneScript,
   generateProductionPlan,
@@ -706,6 +707,25 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json({ ok: true, autofill: result.data });
+  }
+
+  // -- cloneEighty (the 80% AI fill: the brief becomes the four truth lines) --
+  if (action === 'cloneEighty') {
+    const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
+    if (!brief) {
+      return NextResponse.json({ ok: false, error: 'A brief is required' }, { status: 400 });
+    }
+    const grounding =
+      typeof body.grounding === 'string' ? body.grounding.trim().slice(0, 800) : undefined;
+    const result = await generateCloneEighty({
+      brief: brief.slice(0, 600),
+      grounding,
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
+    }
+    return NextResponse.json({ ok: true, text: result.data.text, model: result.data.model });
   }
 
   // -- cloneHooks (the run card's hook generator: one per registry family) --

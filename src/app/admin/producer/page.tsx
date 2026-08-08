@@ -101,6 +101,11 @@ export default function ProducerPage() {
   const [hooks, setHooks] = useState<string[]>([]);
   const [hookVisuals, setHookVisuals] = useState<Record<string, string>>({});
   const [hooksBusy, setHooksBusy] = useState(false);
+  const [eightyBusy, setEightyBusy] = useState(false);
+  // THE PRODUCT — an image of the thing being sold (upload or paste); it
+  // rides the scene sheets + the b-roll refs and the prompts.
+  const [productUrl, setProductUrl] = useState('');
+  const [productBusy, setProductBusy] = useState(false);
   // The SESSION LIBRARY — named producer sessions (intake + plan + sheet
   // prompts + forged sheets) that survive between visits.
   const [sessions, setSessions] = useState<
@@ -242,14 +247,16 @@ export default function ProducerPage() {
             .slice(0, 30)
             .map((a, i) => {
               const o = (a ?? {}) as Record<string, unknown>;
-              const summary = String(o.summary ?? o.recap ?? o.answer ?? '').slice(0, 800);
+              const summary = String(
+                o.summary ?? o.recap ?? o.answer ?? o.intake ?? o.query ?? o.title ?? '',
+              ).slice(0, 800);
               return {
                 id: String(o.id ?? i),
                 label: String(o.title ?? o.name ?? o.query ?? 'research').slice(0, 80),
                 summary,
               };
             })
-            .filter((a) => a.summary),
+            .filter((a) => a.label),
         );
       } catch {
         /* research is optional grounding — empty is fine */
@@ -281,7 +288,10 @@ export default function ProducerPage() {
         const list = (json.recipes ?? json.prompts ?? []) as Record<string, unknown>[];
         setBankRecipes(
           list
-            .map((r) => ({ id: String(r.id ?? ''), name: String(r.name ?? r.title ?? '') }))
+            .map((r) => ({
+              id: String(r.id ?? ''),
+              name: String(r.label ?? r.name ?? r.title ?? ''),
+            }))
             .filter((r) => r.id && r.name)
             .slice(0, 60),
         );
@@ -309,6 +319,43 @@ export default function ProducerPage() {
       setError(err instanceof Error ? err.message : 'Hook generation failed');
     } finally {
       setHooksBusy(false);
+    }
+  }
+
+  /** The 80% AI fill — the brief (+ grounding) drafts the four lines. */
+  async function fillEighty() {
+    if (!brief.trim() || eightyBusy) return;
+    setEightyBusy(true);
+    setError(null);
+    try {
+      const { aiCloneEighty } = await import('@/components/mothermode/content/aiClient');
+      const text = await aiCloneEighty({ brief: brief.trim(), grounding: groundingNotes || undefined });
+      setEighty(text);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The fill failed');
+    } finally {
+      setEightyBusy(false);
+    }
+  }
+
+  /** The product image — upload (hosted) or paste. */
+  async function uploadProduct(file: File) {
+    if (productBusy) return;
+    setProductBusy(true);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(new Error('read failed'));
+        fr.readAsDataURL(file);
+      });
+      const { aiHostImage } = await import('@/components/mothermode/content/aiClient');
+      setProductUrl(await aiHostImage(dataUrl));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setProductBusy(false);
     }
   }
 
@@ -500,6 +547,8 @@ export default function ProducerPage() {
               framework: plan.framework,
               beats: mapped,
               captionPreset: plan.captionPreset,
+              // The product rides the manifest — b-roll refs + the sheets.
+              ...(productUrl.startsWith('http') ? { productImageUrl: productUrl } : {}),
               // The reviewed sheets ride the manifest — beat k quotes ITS sheet.
               ...(sheets.length
                 ? {
@@ -752,15 +801,26 @@ export default function ProducerPage() {
               <PersonStanding className="h-3.5 w-3.5" /> No twins yet — build one on AI Twins first.
             </p>
           ) : (
-            <select value={twinId} onChange={(e) => setTwinId(e.target.value)} className={`${INPUT} mt-1`}>
-              <option value="">Pick the twin…</option>
-              {roster.map((e) => (
-                <option key={e.reelId} value={e.reelId}>
-                  {e.clone.name}
-                  {e.ready ? '' : ' (incomplete)'}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1 flex items-center gap-2">
+              <select value={twinId} onChange={(e) => setTwinId(e.target.value)} className={INPUT}>
+                <option value="">Pick the twin…</option>
+                {roster.map((e) => (
+                  <option key={e.reelId} value={e.reelId}>
+                    {e.clone.name}
+                    {e.ready ? '' : ' (incomplete)'}
+                  </option>
+                ))}
+              </select>
+              {twin && (twin.clone.sheetUrl ?? twin.clone.refPhotos[0]) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={(twin.clone.sheetUrl ?? twin.clone.refPhotos[0]) as string}
+                  alt={twin.clone.name}
+                  className="h-12 w-12 shrink-0 rounded-lg border border-brass/30 object-cover"
+                  title={`${twin.clone.name} — ${twin.ready ? 'ready' : 'incomplete'}`}
+                />
+              )}
+            </div>
           )}
         </div>
         <div>
@@ -844,8 +904,17 @@ export default function ProducerPage() {
               }
               className={INPUT}
             />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <select value={awareness} onChange={(e) => setAwareness(e.target.value as HookAwareness | '')} className={INPUT} title="Audience awareness — gates which hook families are legal">
+            <button
+              onClick={() => void fillEighty()}
+              disabled={!brief.trim() || eightyBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brass/40 px-2.5 py-1.5 text-[9px] font-semibold text-brass hover:bg-brass/10 disabled:opacity-40"
+              title="Draft the four lines from the brief + the picked grounding"
+            >
+              {eightyBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+              fill the 80% with AI
+            </button>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <select value={awareness} onChange={(e) => setAwareness(e.target.value as HookAwareness | '')} className={`${INPUT} min-w-0`} title="Audience awareness — gates which hook families are legal">
                 <option value="">awareness: auto</option>
                 <option value="cold">cold — never heard of you</option>
                 <option value="warm">warm — knows the problem</option>
@@ -877,6 +946,38 @@ export default function ProducerPage() {
             </div>
           </div>
         </details>
+        {/* THE PRODUCT — optional; it rides the scene sheets + b-roll refs. */}
+        <div>
+          <span className={LABEL}>The product (optional — it appears in the footage)</span>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="paste the product image URL…"
+              className={INPUT}
+            />
+            <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-brass/40 px-2.5 py-2 text-[9px] font-semibold text-brass hover:bg-brass/10">
+              {productBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : 'upload'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadProduct(f);
+                }}
+              />
+            </label>
+            {productUrl.startsWith('http') && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={productUrl}
+                alt="the product"
+                className="h-12 w-12 shrink-0 rounded-lg border border-brass/30 object-cover"
+              />
+            )}
+          </div>
+        </div>
         <button
           onClick={() => void scope()}
           disabled={!brief.trim() || !twinId || busy !== null}
@@ -1180,7 +1281,8 @@ export default function ProducerPage() {
             const p = normalizeClonePlan(runReel.clonePlan ?? null);
             const charSheet = p?.clone.sheetUrl ?? p?.clone.refPhotos[0];
             const worlds = p?.sceneSheetUrls ?? [];
-            if (!charSheet && worlds.length === 0) return null;
+            const product = p?.productImageUrl;
+            if (!charSheet && worlds.length === 0 && !product) return null;
             return (
               <div className="flex flex-wrap items-start gap-2 rounded-lg bg-ink/60 p-2">
                 {charSheet && (
@@ -1193,6 +1295,19 @@ export default function ProducerPage() {
                     />
                     <figcaption className="text-[7px] uppercase tracking-wider text-bone/35">
                       @1 the character
+                    </figcaption>
+                  </figure>
+                )}
+                {product && (
+                  <figure className="space-y-0.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={product}
+                      alt="the product"
+                      className="h-24 rounded-lg border border-brass/20 object-cover"
+                    />
+                    <figcaption className="text-[7px] uppercase tracking-wider text-bone/35">
+                      the product
                     </figcaption>
                   </figure>
                 )}

@@ -3084,6 +3084,47 @@ export async function generateProductionPlan(input: {
 // ---------------------------------------------------------------------------
 
 /**
+ * The 80% AI fill: the brief (+ any grounding) becomes the four pre-writing
+ * truth lines — the 1am story, what failed, why it really failed, the
+ * mechanism — drafted for the intake box, editable after.
+ */
+export async function generateCloneEighty(input: {
+  brief: string;
+  grounding?: string;
+  model?: string;
+}): Promise<AiResult<{ text: string; model: string }>> {
+  const brief = (input.brief ?? '').trim();
+  if (!brief) return { ok: false, status: 400, error: 'A brief is required' };
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are a direct-response strategist doing the pre-writing work. Given a video brief, you write the four positioning lines that steer the script. Specific to THIS brief — never generic.',
+    'Return ONLY a JSON object.',
+  ].join(' ');
+  const user = [
+    `The brief: ${brief}.`,
+    input.grounding?.trim()
+      ? `The offer facts the lines must stay true to:\n${input.grounding.trim().slice(0, 800)}`
+      : '',
+    'Return {"text": "..."} where text is exactly four short lines, one per line, no labels:',
+    'line 1 — who this is for: the story they tell themselves at 1am (the felt frustration, specific).',
+    'line 2 — what they already tried that failed.',
+    'line 3 — why it REALLY failed (the hidden cause — the new cause).',
+    'line 4 — the mechanism: why THIS finally works.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model, provider);
+  if (!raw.ok) return raw;
+  const parsed = parseJsonObject(raw.data);
+  const text = toText(parsed?.text) ?? '';
+  if (!text.trim()) return { ok: false, status: 502, error: 'No fill was returned' };
+  return { ok: true, data: { text: text.slice(0, 900), model } };
+}
+
+/**
  * The run card's hook generator: N written hooks for scene 1, each executing
  * a DIFFERENT registry family's template, grounded in the topic (+ the 80%).
  */
