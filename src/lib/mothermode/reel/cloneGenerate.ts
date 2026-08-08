@@ -159,35 +159,76 @@ export function cloneAvatarPrompt(beat: CloneBeat, clone: ReelClone): string {
     .join(' ');
 }
 
+/** What rides a b-roll render, so the prompt can tag the refs BY ROLE. */
+export interface CloneBrollRefs {
+  /** The product image url (assigned the next @image slot). */
+  product?: string;
+  /** True when the beat's world scene sheet trails the refs. */
+  worldSheet?: boolean;
+}
+
+const T = (sec: number) => {
+  const s = Math.max(0, Math.round(sec));
+  return `00:${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+
 /**
- * The b-roll prompt: the beat's visual + the @image addressing so Seedance
- * puts THE SAME character inside the footage (@image1 = the sheet, @image2
- * = the optional variant) + the look bible verbatim.
+ * THE PRODUCTION BRIEF — the b-roll render prompt as a production document:
+ * the sheets carry the responsibilities (identity / environment / object),
+ * the priority table resolves conflicts, and the SCENE/BEAT/CUT block stays
+ * lean (action, script, delivery, framing) — wardrobe and room never repeat,
+ * which is exactly how contradictions and prompt bloat stay out.
+ *
+ * The @image tags match the route's ref ORDER: @image1 the character sheet,
+ * @image2 the variant, then the product, then the world sheet.
  */
-export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone, product?: string): string {
+export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone, refs?: CloneBrollRefs | string): string {
+  // Back-compat: the third arg used to be the product url directly.
+  const r: CloneBrollRefs = typeof refs === 'string' ? { product: refs } : (refs ?? {});
   const bible = lookBibleString(clone.lookBible);
   const slots = cloneBeatRefSlots(beat, clone);
-  return [
-    (beat.brollPrompt ?? '').trim(),
-    // The spoken line rides the visual prompt so the footage agrees with
-    // what's being SAID over it (the voice layers at assembly).
-    beat.line.trim() ? `The voiceover over this shot says: "${beat.line.trim()}" — the visual proves or illustrates it.` : '',
+  // Assign the @image numbers exactly as the route packs the array.
+  let n = slots.variant ? 2 : 1;
+  const productAt = r.product?.trim() ? ++n : 0;
+  const worldAt = r.worldSheet ? ++n : 0;
+  const win =
     beat.startSec != null && beat.endSec != null
-      ? `TIMELINE: this shot covers ${Math.round(beat.startSec)}–${Math.round(beat.endSec)}s of the video (beat ${beat.index + 1} of the script).`
-      : '',
-    '@image1 is the character — the same person appears in the footage with the same face, hair, and wardrobe.',
-    product?.trim()
-      ? 'The product from the reference images (the app screen / the box) appears in the shot exactly as it looks there — hands holding it, screen readable.'
-      : '',
+      ? `${T(beat.startSec)}–${T(beat.endSec)}`
+      : `${T(beat.index * beat.durationSec)}–${T((beat.index + 1) * beat.durationSec)}`;
+  return [
+    '[REFERENCE SYSTEM]',
+    'IMPORTANT: the supplied Character Sheet, World Sheet, and Product image carry different responsibilities — do not treat reference images as independent creative instructions. The SHEETS are the source of truth for continuity.',
+    '',
+    '[CHARACTER SHEETS]',
+    '@image1 — THE CHARACTER. Source of truth for identity, face, hair, body, approximate age, wardrobe, accessories, distinguishing features. The character stays recognizable as the same person across every scene, beat, and cut. If the sheet shows multiple views, poses, or expressions, they are all the SAME person — never different people.',
     slots.variant
-      ? '@image2 is the variant reference (wardrobe change, location, or product-in-hand) — match it for this shot.'
+      ? '@image2 — THE VARIANT. A wardrobe / location / prop variant for THIS beat only — match it here, then revert.'
       : '',
-    beat.continuesFrom ? CLONE_CONTINUITY_NOTE : '',
-    bible ? `${bible}.` : '',
-    'Cinematic, photorealistic, natural motion, no text, no watermark, no logos.',
+    r.product?.trim()
+      ? `[PRODUCT / PROP SHEETS]\n@image${productAt} — THE PRODUCT. Source of truth for shape, proportions, materials, colors, packaging, labels. The product appears exactly as it looks there — held, used, or screen-readable when the beat calls for it — and never drifts.`
+      : '',
+    r.worldSheet
+      ? `[SCENE SHEETS]\n@image${worldAt} — THE WORLD. Source of truth for location, layout, furniture and background objects, lighting, time of day, atmosphere, spatial relationships. Multiple views on the sheet are the SAME environment; the character moves through it, the location never resets.`
+      : '',
+    '',
+    '[SOURCE OF TRUTH PRIORITY]',
+    'CHARACTER SHEET → identity + wardrobe. SCENE SHEET → environment + lighting + layout. PRODUCT SHEET → object appearance. SCRIPT → the exact words spoken. BEAT → action + performance + timing. CUT → framing + camera movement. If two references conflict, the one responsible for that category wins.',
+    '',
+    `SCENE — ${win}`,
+    '━━━━━━━━━━━━━━━━━━━━',
+    `BEAT ${beat.index + 1} — ${win}`,
+    `ACTION: ${(beat.brollPrompt ?? 'visual beat').trim()}`,
+    beat.line.trim() ? `SCRIPT (the voiceover over this shot): "${beat.line.trim()}" — the visual proves or illustrates it.` : '',
+    beat.voice
+      ? `DELIVERY: ${beat.voice.energy} energy, ${beat.voice.pace} pace${beat.voice.emphasis?.length ? `, stress "${beat.voice.emphasis[0]}"` : ''}${beat.voice.pauseAfterWord ? `, breathe after word ${beat.voice.pauseAfterWord}` : ''}.`
+      : '',
+    `CUT: ${beat.shot} shot · 9:16 · ${beat.durationSec}s. Cinematic camera, natural motion.`,
+    beat.continuesFrom ? `CONTINUITY IN: ${CLONE_CONTINUITY_NOTE}` : 'CONTINUITY OUT: the character ends the beat in the same wardrobe and environment, ready to continue.',
+    bible ? `LOOK: ${bible}.` : '',
+    'Photorealistic, sharp focus, no text, no watermark, no logos.',
   ]
-    .filter(Boolean)
-    .join(' ');
+    .filter((l) => l !== '')
+    .join('\n');
 }
 
 /**

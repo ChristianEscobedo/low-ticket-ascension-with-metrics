@@ -1642,7 +1642,11 @@ export default function ProducerPage() {
                     const ordered = worldSheet && !refs.includes(worldSheet) ? [...refs, worldSheet] : refs;
                     const derived =
                       b.kind === 'broll'
-                        ? (b.finalPrompt ?? cloneBrollPrompt(b, p.clone))
+                        ? (b.finalPrompt ??
+                          cloneBrollPrompt(b, p.clone, {
+                            product: p.productImageUrl,
+                            worldSheet: !!worldSheet,
+                          }))
                         : (b.finalPrompt ?? cloneAvatarPrompt(b, p.clone));
                     return (
                       <div key={b.id} className="space-y-1 rounded-md border border-bone/10 p-1.5">

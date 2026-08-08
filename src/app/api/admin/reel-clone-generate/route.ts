@@ -250,7 +250,11 @@ export async function POST(request: NextRequest) {
     const rendered = await renderSeedanceClip({
       // A hand-edited final prompt (the run card's last checkpoint) wins.
       prompt:
-        beat.finalPrompt?.trim() || cloneBrollPrompt(beat, plan.clone, plan.productImageUrl),
+        beat.finalPrompt?.trim() ||
+        cloneBrollPrompt(beat, plan.clone, {
+          product: plan.productImageUrl,
+          worldSheet: !!sceneForBeat,
+        }),
       imageUrl: startFrame,
       aspectRatio: CLONE_ASPECT_RATIO,
       durationSec: beat.durationSec,

@@ -705,6 +705,17 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.30.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The production brief — render prompts are production documents now',
+    body: cl([
+      '<p>Every b-roll render prompt is a <strong>production brief</strong> now, the way a real set works: a <strong>[REFERENCE SYSTEM]</strong> header assigns each sheet its responsibility — <code>@image1 THE CHARACTER</code> (identity, face, hair, wardrobe — multiple views are the SAME person), <code>@image2 THE VARIANT</code> (this beat only), the <strong>PRODUCT sheet</strong> (shape, labels, packaging — never drifts), the <strong>WORLD sheet</strong> (location, lighting, layout — the environment never resets) — with the @image numbers assigned in the exact order the refs ride the render call.</p>',
+      '<p>Under it, the <strong>[SOURCE OF TRUTH PRIORITY]</strong> table resolves every conflict by category (identity → the character sheet; environment → the scene sheet; words → the script; action → the beat; framing → the cut), and then the beat itself runs lean: <strong>SCENE → BEAT → ACTION → SCRIPT → DELIVERY → CUT → CONTINUITY</strong>, with the timeline window (00:00–00:10) and the voice direction inline. Wardrobe and room descriptions never repeat per beat — no contradictions, no prompt bloat. The Producer\'s on-screen prompt shows the identical brief the route sends.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

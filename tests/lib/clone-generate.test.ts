@@ -153,12 +153,14 @@ describe('the prompts (deterministic, bible verbatim)', () => {
     expect(cloneAvatarPrompt(makeBeat(), CLONE)).toContain('medium energy, natural pace');
   });
 
-  it('the b-roll prompt leads with the visual and addresses @image1 always, @image2 with a variant', () => {
+  it('the b-roll prompt is the production brief: the reference system, the priority table, the beat block', () => {
     const beat = makeBeat({ kind: 'broll', line: '', brollPrompt: 'She walks the gym floor' });
     const prompt = cloneBrollPrompt(beat, CLONE);
-    expect(prompt.startsWith('She walks the gym floor')).toBe(true);
-    expect(prompt).toContain('@image1 is the character');
+    expect(prompt.startsWith('[REFERENCE SYSTEM]')).toBe(true);
+    expect(prompt).toContain('@image1 — THE CHARACTER');
     expect(prompt).not.toContain('@image2');
+    expect(prompt).toContain('[SOURCE OF TRUTH PRIORITY]');
+    expect(prompt).toContain('ACTION: She walks the gym floor');
     expect(prompt).toContain('Lens: 50mm');
 
     const withVariant = cloneBrollPrompt(
@@ -170,7 +172,14 @@ describe('the prompts (deterministic, bible verbatim)', () => {
       }),
       CLONE,
     );
-    expect(withVariant).toContain('@image2 is the variant reference');
+    expect(withVariant).toContain('@image2 — THE VARIANT');
+
+    // The product + the world sheet get tagged by ROLE, in ref order.
+    const full = cloneBrollPrompt(beat, CLONE, { product: 'https://cdn.example.com/prod.png', worldSheet: true });
+    expect(full).toContain('[PRODUCT / PROP SHEETS]');
+    expect(full).toContain('@image2 — THE PRODUCT');
+    expect(full).toContain('[SCENE SHEETS]');
+    expect(full).toContain('@image3 — THE WORLD');
   });
 
   it('ref images are dense and in slot order', () => {
