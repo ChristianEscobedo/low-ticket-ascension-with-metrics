@@ -15,6 +15,7 @@ const VALID_PROVIDERS: IntegrationProvider[] = [
   'openai',
   'anthropic',
   'assemblyai',
+  'elevenlabs',
   'email',
   'monid',
   'rapidapi',
@@ -74,6 +75,7 @@ const CONFIG_KEYS: Record<IntegrationProvider, readonly string[]> = {
   openai: ['api_key', 'image_model', 'text_model', 'text_provider'],
   anthropic: ['api_key', 'text_model'],
   assemblyai: ['api_key'],
+  elevenlabs: ['api_key'],
   email: [
     'provider',
     'resend_api_key',

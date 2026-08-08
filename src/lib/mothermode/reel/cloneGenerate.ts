@@ -147,6 +147,9 @@ export function cloneAvatarPrompt(beat: CloneBeat, clone: ReelClone): string {
   const pace = beat.voice?.pace ?? 'natural';
   return [
     `The person in the reference image, ${cloneShotFraming(beat.shot)}, speaking directly to camera.`,
+    beat.startSec != null && beat.endSec != null
+      ? `TIMELINE: this shot covers ${Math.round(beat.startSec)}–${Math.round(beat.endSec)}s of the video (beat ${beat.index + 1} of the script) — the read fills exactly that window.`
+      : '',
     `Delivery: ${energy} energy, ${pace} pace.`,
     beat.continuesFrom ? CLONE_CONTINUITY_NOTE : '',
     bible ? `${bible}.` : '',
@@ -169,6 +172,9 @@ export function cloneBrollPrompt(beat: CloneBeat, clone: ReelClone, product?: st
     // The spoken line rides the visual prompt so the footage agrees with
     // what's being SAID over it (the voice layers at assembly).
     beat.line.trim() ? `The voiceover over this shot says: "${beat.line.trim()}" — the visual proves or illustrates it.` : '',
+    beat.startSec != null && beat.endSec != null
+      ? `TIMELINE: this shot covers ${Math.round(beat.startSec)}–${Math.round(beat.endSec)}s of the video (beat ${beat.index + 1} of the script).`
+      : '',
     '@image1 is the character — the same person appears in the footage with the same face, hair, and wardrobe.',
     product?.trim()
       ? 'The product from the reference images (the app screen / the box) appears in the shot exactly as it looks there — hands holding it, screen readable.'

@@ -23,6 +23,7 @@ import {
 } from '@/utils/integrations/elevenlabs';
 import { isSeedanceConfigured, renderSeedanceClip } from '@/utils/integrations/muapi-seedance';
 import { isMuapiAvatarConfigured, renderMuapiAvatar } from '@/utils/integrations/muapi';
+import { getElevenLabsKey } from '@/utils/integrations/runtime-config';
 import { extractFrameBuffer } from '@/utils/integrations/ffmpeg-worker';
 import {
   uploadAudioBuffer,
@@ -115,9 +116,19 @@ export async function POST(request: NextRequest) {
 
   // -- voice (ElevenLabs, per-beat programming) --------------------------------
   if (step === 'voice') {
+    // DB-first: a key saved in /admin/integrations wins over (or stands in
+    // for) the env var — the elevenlabs lib reads process.env, so set it.
+    if (!isElevenLabsConfigured()) {
+      const key = await getElevenLabsKey();
+      if (key) process.env.ELEVENLABS_API_KEY = key;
+    }
     if (!isElevenLabsConfigured()) {
       return NextResponse.json(
-        { ok: false, error: 'ELEVENLABS_API_KEY is not configured.' },
+        {
+          ok: false,
+          error:
+            'No ElevenLabs key — add it on /admin/integrations (provider: elevenlabs, field: api_key) or set ELEVENLABS_API_KEY.',
+        },
         { status: 503 },
       );
     }

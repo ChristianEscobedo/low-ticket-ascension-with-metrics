@@ -23,7 +23,7 @@ let cache: { at: number; data: ConfigMap } | null = null;
  * never gate whether their key is read — a saved-but-unchecked row silently
  * "not persisting" is exactly the bug this rule answers.
  */
-const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify', 'assemblyai']);
+const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify', 'assemblyai', 'elevenlabs']);
 
 async function loadAll(): Promise<ConfigMap> {
   const now = Date.now();
@@ -186,6 +186,11 @@ export async function getApifyToken(): Promise<string | null> {
   return (
     (await resolve('apify', 'api_token', process.env.APIFY_API_TOKEN)) ?? null
   );
+}
+
+/** ElevenLabs key — the clone/twin voice engine. DB-first, env-fallback. */
+export async function getElevenLabsKey(): Promise<string | null> {
+  return (await resolve('elevenlabs', 'api_key', process.env.ELEVENLABS_API_KEY)) ?? null;
 }
 
 /** Apify reviews actor id (swappable in /admin/integrations if the default 404s). */

@@ -860,6 +860,8 @@ export function sceneSheetPrompt(
   styleId?: string,
   /** True when the character sheet rides the call as the seed/reference. */
   seeded?: boolean,
+  /** Burn each panel's timestamp + the spoken line onto the sheet itself. */
+  burnScript?: boolean,
 ): string {
   const style = cloneSheetStyleFor(styleId);
   const bible = lookBibleString(plan.clone.lookBible);
@@ -884,7 +886,9 @@ export function sceneSheetPrompt(
     ...panels,
     bible ? `${bible}.` : '',
     'CHARACTER + WORLD CONSISTENCY (STRICT): identical facial structure, hairstyle, and wardrobe logic in every panel; the world evolves naturally panel to panel like one continuous shoot — never stock poses, never a reset.',
-    'Photorealistic, sharp focus, no text, no watermark, no logos.',
+    burnScript
+      ? 'BURN THE SCRIPT (on): each panel carries a small clean caption strip at its bottom — the panel\'s timestamp window (e.g. "0–10s") and the spoken line (or the b-roll note) in a legible condensed sans, bone-white on a dark chip. Never cover the subject\'s face.'
+      : 'Photorealistic, sharp focus, no text, no watermark, no logos.',
   ]
     .filter(Boolean)
     .join(' ');

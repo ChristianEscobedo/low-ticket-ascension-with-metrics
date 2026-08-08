@@ -11,7 +11,8 @@ export type IntegrationProvider =
   | 'monid'
   | 'rapidapi'
   | 'apify'
-  | 'assemblyai';
+  | 'assemblyai'
+  | 'elevenlabs';
 
 export const PAGE_TYPES = ['fe', 'oto1', 'oto2', 'oto3', 'oto4'] as const;
 export type PageType = (typeof PAGE_TYPES)[number];

@@ -692,6 +692,19 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.29.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'Sheet edits, burned-in scripts, the model select — and the voice key fallback',
+    body: cl([
+      '<p><strong>Edit a sheet by note.</strong> Under every forged world sheet: an edit box — "add a water bottle on the desk", "remove the plant" — and the sheet re-forges seeded with ITSELF, keeping the character, the world, and the layout intact. Add or remove things without re-forging from scratch.</p>',
+      '<p><strong>The timestamps ride.</strong> Every render prompt now carries its timeline window (TIMELINE: this shot covers 0–10s, beat 1 of the script), and a new toggle on the sheet review burns the timestamp + the line into each panel of the sheet image itself.</p>',
+      '<p><strong>The model select.</strong> Every b-roll scene card picks its own render model: <strong>seedance 2.0 omni vip</strong> (default) or <strong>2.5 hero</strong> — saved per scene, priced accordingly.</p>',
+      '<p><strong>Fixed:</strong> "ELEVENLABS_API_KEY is not configured" — the voice leg now falls back to the key saved in /admin/integrations (provider: elevenlabs, field: api_key), so the voice pass works without the env var.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

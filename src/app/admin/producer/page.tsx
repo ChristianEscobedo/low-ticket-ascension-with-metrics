@@ -90,6 +90,10 @@ export default function ProducerPage() {
   // one), its prompt is editable here and the forge SAVES ONTO THE TWIN.
   const [charPrompt, setCharPrompt] = useState('');
   const [charBusy, setCharBusy] = useState(false);
+  // Burn the timestamped script into the sheet image + per-sheet edit notes.
+  const [burnScript, setBurnScript] = useState(false);
+  const [sheetEdits, setSheetEdits] = useState<string[]>([]);
+  const [sheetEditBusy, setSheetEditBusy] = useState(-1);
   // THE 80% + the steer — optional intake that sharpens the writer.
   const [eighty, setEighty] = useState('');
   const [awareness, setAwareness] = useState<HookAwareness | ''>('');
@@ -521,7 +525,26 @@ export default function ProducerPage() {
         };
       }),
     };
-    return sceneSheetPrompt(pseudo, styleId, true);
+    return sceneSheetPrompt(pseudo, styleId, true, burnScript);
+  }
+
+  /** Re-forge ONE sheet with an edit note — the current sheet is the seed. */
+  async function editSheet(k: number) {
+    const note = (sheetEdits[k] ?? '').trim();
+    const current = sheets[k];
+    if (!note || !current || sheetEditBusy >= 0) return;
+    setSheetEditBusy(k);
+    setError(null);
+    try {
+      const prompt = `${note} — apply this change to the attached sheet; keep everything else (the character, the world, the layout, the style) exactly as it is.`;
+      const url = await aiEditImage({ prompt, seed: current, references: [], format: 'reel', model: CLONE_SHEET_MODEL });
+      setSheets((prev) => prev.map((s, j) => (j === k ? url : s)));
+      setSheetEdits((prev) => prev.map((s, j) => (j === k ? '' : s)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The edit failed');
+    } finally {
+      setSheetEditBusy(-1);
+    }
   }
 
   /**
@@ -1314,15 +1337,49 @@ export default function ProducerPage() {
                     title="The exact prompt this sheet forges with — edit it before forging"
                   />
                   {sheets[k] && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={sheets[k]}
-                      alt={`scene sheet ${k + 1}`}
-                      className="w-full rounded-lg border border-brass/30"
-                    />
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={sheets[k]}
+                        alt={`scene sheet ${k + 1}`}
+                        className="w-full rounded-lg border border-brass/30"
+                      />
+                      {/* EDIT THIS SHEET — a note re-forges it, seeded with itself */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={sheetEdits[k] ?? ''}
+                          onChange={(e) =>
+                            setSheetEdits((prev) => {
+                              const next = [...prev];
+                              while (next.length <= k) next.push('');
+                              next[k] = e.target.value;
+                              return next;
+                            })
+                          }
+                          placeholder="edit this sheet — add/remove a prop, change a wall…"
+                          className="min-w-0 flex-1 rounded-md border border-bone/10 bg-ink px-2 py-1.5 text-[9px] text-bone/70 outline-none placeholder:text-bone/25"
+                        />
+                        <button
+                          onClick={() => void editSheet(k)}
+                          disabled={!(sheetEdits[k] ?? '').trim() || sheetEditBusy >= 0}
+                          className="shrink-0 rounded-md bg-brass px-2 py-1.5 text-[8px] font-bold text-ink disabled:opacity-40"
+                          title="Re-forge THIS sheet with your edit (the current sheet is the seed)"
+                        >
+                          {sheetEditBusy === k ? <Loader2 className="h-3 w-3 animate-spin" /> : 'apply edit'}
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
+            <label className="flex items-center gap-1.5 text-[9px] text-bone/50">
+              <input
+                type="checkbox"
+                checked={burnScript}
+                onChange={(e) => setBurnScript(e.target.checked)}
+              />
+              burn the script into the sheet — each panel wears its timestamp + line (re-scope or re-forge to apply)
+            </label>
             {plan.scenePanels > 0 && (twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
               <button
                 onClick={() => void forgeSheets()}
@@ -1636,6 +1693,30 @@ export default function ProducerPage() {
                             </a>
                           )}
                           <span className="flex-1" />
+                          {b.kind === 'broll' && (
+                            <select
+                              value={b.seedanceTier ?? p.seedanceTier}
+                              onChange={async (e) => {
+                                const tier = e.target.value as 'seedance-2.0' | 'seedance-2.5';
+                                await saveRunPlan({
+                                  ...p,
+                                  beats: p.beats.map((x) =>
+                                    x.id === b.id
+                                      ? tier === 'seedance-2.5'
+                                        ? { ...x, seedanceTier: tier }
+                                        : (() => { const c = { ...x }; delete c.seedanceTier; return c; })()
+                                      : x,
+                                  ),
+                                  updatedAt: new Date().toISOString(),
+                                });
+                              }}
+                              className="rounded border border-bone/15 bg-ink px-1 py-0.5 text-[8px] text-bone/60"
+                              title="The model this b-roll scene renders on — 2.0 omni vip is the default, 2.5 the hero"
+                            >
+                              <option value="seedance-2.0">seedance 2.0 omni vip</option>
+                              <option value="seedance-2.5">seedance 2.5 hero</option>
+                            </select>
+                          )}
                           {b.status === 'generated' && b.videoUrl ? (
                             <a
                               href={b.videoUrl}
