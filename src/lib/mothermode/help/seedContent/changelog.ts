@@ -610,6 +610,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.20.0',
+    releasedOn: '2026-08-07',
+    entryType: 'added',
+    title: 'Producer: the sheet review, multi-sheet worlds, and research grounding',
+    body: cl([
+      '<p>You SEE the sheets before a dollar moves now. The plan card gains <strong>the sheet review</strong>: the twin\'s character sheet, big, and the scene sheets forged right there — one sheet per slice of scenes (pick 3/4/6 panels per sheet; a 6-scene VSL forges 2 sheets), each forged with the previous sheet riding as the lookback reference, so the world is ONE continuous shoot from first panel to last. Re-forge until it\'s right — they land on the manifest and every b-roll scene renders quoting ITS sheet.</p>',
+      '<p>And the Producer grounds by selection: an <strong>offer or lead magnet</strong> dropdown, and a <strong>research artifact</strong> dropdown (your lab\'s findings ride the plan AND the script — every claim traces to them). Intake → plan → review the sheets → approve → run.</p>',
+      '<p><strong>Where to start:</strong> Producer → pick the grounding under the brief → scope → the sheet review on the plan card.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

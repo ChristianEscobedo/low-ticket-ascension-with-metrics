@@ -355,3 +355,10 @@ the studio's Clone tab stopped being a wall of forms.
 ## The Producer, phase 2 — the auto-run (2026-08-07, changelog 2.19.0)
 
 - The producer page drives the pipeline post-approval: saveRunPlan (reel save route) keeps the manifest fresh; autoRun = forge the scene sheet seeded with the character sheet (aiEditImage) → approveClonePlan stamp → per-beat /api/admin/reel-clone-generate legs with patches merged client-side, live runLog, stop-on-failure + resume. runDone → the studio handoff link (assemble/captions/render stay in the studio).
+
+- captionPreset on the ClonePlan manifest (the Producer's style writes it; the Captions tab applies it at assemble). The run card gains the variant A/B reset button.
+
+## Producer review round (2026-08-07, changelog 2.20.0)
+
+- **The sheet review** on the plan card: the character sheet big + multi scene sheets (sceneSheetUrls[] + sheetPanels on the manifest; sheet k covers scenes[k*panelsPer..], forged sequentially with the previous sheet as lookback reference). The generate route resolves beat k to ITS sheet (floor(index/sheetPanels)).
+- **Grounding by selection:** offer/lead-magnet dropdown (the cloneScript context path) + a research-artifact dropdown (defensive GET /api/admin/mothermode-research; the artifact summary rides the plan grounding + the script notes).

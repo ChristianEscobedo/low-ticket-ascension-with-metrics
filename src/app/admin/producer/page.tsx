@@ -36,6 +36,7 @@ import {
   aiGenerateCloneScript,
   aiProductionPlan,
 } from '@/components/mothermode/content/aiClient';
+import { usePieceLinks } from '@/components/mothermode/content/pieceLinks';
 
 const API = '/api/admin/mothermode-reel';
 const INPUT =
@@ -58,6 +59,46 @@ export default function ProducerPage() {
   const [runBusy, setRunBusy] = useState(false);
   const [runLog, setRunLog] = useState<string[]>([]);
   const [runDone, setRunDone] = useState(false);
+
+  // GROUNDING — an offer / lead magnet / a research artifact, by selection.
+  const { funnels, optinFunnels } = usePieceLinks('');
+  const [ctxPick, setCtxPick] = useState(''); // 'offer:<slug>' | 'lead:<slug>' | ''
+  const [artifactPick, setArtifactPick] = useState('');
+  const [artifacts, setArtifacts] = useState<{ id: string; label: string; summary: string }[]>([]);
+  // The sheet review — the character sheet + the scene sheets, seen BEFORE
+  // approval. sheets[k] covers scenes[k*panelsPer …], forged with lookback.
+  const [panelsPer, setPanelsPer] = useState(4);
+  const [sheets, setSheets] = useState<string[]>([]);
+  const [sheetBusy, setSheetBusy] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/mothermode-research', { cache: 'no-store' });
+        const json = await res.json();
+        const list = (json.artifacts ?? json.sessions ?? json.runs ?? []) as unknown[];
+        setArtifacts(
+          list
+            .slice(0, 30)
+            .map((a, i) => {
+              const o = (a ?? {}) as Record<string, unknown>;
+              const summary = String(o.summary ?? o.recap ?? o.answer ?? '').slice(0, 800);
+              return {
+                id: String(o.id ?? i),
+                label: String(o.title ?? o.name ?? o.query ?? 'research').slice(0, 80),
+                summary,
+              };
+            })
+            .filter((a) => a.summary),
+        );
+      } catch {
+        /* research is optional grounding — empty is fine */
+      }
+    })();
+  }, []);
+
+  const artifact = artifacts.find((a) => a.id === artifactPick);
+  const groundingNotes = [artifact?.summary].filter(Boolean).join('\n\n');
 
   const load = useCallback(async () => {
     try {
@@ -91,7 +132,9 @@ export default function ProducerPage() {
         persona: twin?.clone.name ?? 'the founder',
         hasSheet: !!(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]),
         hasVoice: !!twin?.clone.voice.voiceId,
+        grounding: groundingNotes || undefined,
       });
+      setSheets([]); // a fresh scope = fresh sheets to review
       const p = normalizeProductionPlan(raw);
       if (!p) throw new Error('The plan came back empty — tighten the brief and try again');
       setPlan(p);
@@ -104,6 +147,56 @@ export default function ProducerPage() {
 
   function patchPlan(partial: Partial<ProductionPlan>) {
     setPlan((p) => (p ? { ...p, ...partial } : p));
+  }
+
+  /**
+   * THE SHEET REVIEW: forge the scene sheets BEFORE approval — sheet k covers
+   * scenes[k*panelsPer …], seeded with the character sheet, with the previous
+   * sheet riding as the lookback reference so the world stays one shoot.
+   */
+  async function forgeSheets() {
+    if (!plan || !twin || sheetBusy) return;
+    const master = twin.clone.sheetUrl ?? twin.clone.refPhotos[0];
+    if (!master || plan.scenePanels <= 0) return;
+    setSheetBusy(true);
+    setError(null);
+    try {
+      const count = Math.ceil(plan.scenePanels / panelsPer);
+      const out: string[] = [];
+      for (let k = 0; k < count; k++) {
+        const slice = plan.scenes.slice(k * panelsPer, (k + 1) * panelsPer);
+        const pseudo: ClonePlan = {
+          ...blankClonePlan(twin.clone),
+          videoType: plan.videoType,
+          framework: plan.framework,
+          beats: slice.map((s, i) => ({
+            id: `sheet-${k}-${i}`,
+            index: i,
+            kind: s.kind,
+            line: s.kind === 'avatar' ? s.idea : '',
+            shot: 'medium' as const,
+            durationSec: plan.beatSec,
+            refs: [],
+            ...(s.kind === 'broll' ? { brollPrompt: s.idea } : {}),
+            status: 'planned' as const,
+          })),
+        };
+        const prompt = sceneSheetPrompt(pseudo, style.sheetStyle, true);
+        const url = await aiEditImage({
+          prompt,
+          seed: master,
+          references: [master, ...(out.length ? [out[out.length - 1]] : [])],
+          format: 'reel',
+          model: CLONE_SHEET_MODEL,
+        });
+        out.push(url);
+        setSheets([...out]); // progressive — each sheet shows as it lands
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sheet forge failed');
+    } finally {
+      setSheetBusy(false);
+    }
   }
 
   /**
@@ -120,6 +213,11 @@ export default function ProducerPage() {
       const fw = cloneFrameworkFor(plan.framework);
       const { beats } = await aiGenerateCloneScript({
         topic: plan.topic,
+        context: {
+          offerSlug: ctxPick.startsWith('offer:') ? ctxPick.slice(6) : undefined,
+          optinSlug: ctxPick.startsWith('lead:') ? ctxPick.slice(5) : undefined,
+          notes: groundingNotes || undefined,
+        },
         typeLabel: type.label,
         frameworkLabel: fw.label,
         frameworkBeats: fw.beats,
@@ -162,6 +260,16 @@ export default function ProducerPage() {
               videoType: plan.videoType,
               framework: plan.framework,
               beats: mapped,
+              captionPreset: plan.captionPreset,
+              // The reviewed sheets ride the manifest — beat k quotes ITS sheet.
+              ...(sheets.length
+                ? {
+                    sceneSheetUrl: sheets[0],
+                    sceneSheetAt: new Date().toISOString(),
+                    sceneSheetUrls: sheets,
+                    sheetPanels: panelsPer,
+                  }
+                : {}),
             },
           },
         }),
@@ -347,6 +455,43 @@ export default function ProducerPage() {
             className={`${INPUT} mt-1`}
           />
         </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div>
+            <span className={LABEL}>Ground it in (optional)</span>
+            <select
+              value={ctxPick}
+              onChange={(e) => setCtxPick(e.target.value)}
+              className={`${INPUT} mt-1`}
+            >
+              <option value="">no offer / lead magnet</option>
+              {funnels.map((f) => (
+                <option key={f.id} value={`offer:${f.slug}`}>
+                  Offer — {f.name}
+                </option>
+              ))}
+              {optinFunnels.map((f) => (
+                <option key={f.id} value={`lead:${f.slug}`}>
+                  Lead magnet — {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <span className={LABEL}>…or a research artifact</span>
+            <select
+              value={artifactPick}
+              onChange={(e) => setArtifactPick(e.target.value)}
+              className={`${INPUT} mt-1`}
+            >
+              <option value="">no research</option>
+              {artifacts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <button
           onClick={() => void scope()}
           disabled={!brief.trim() || !twinId || busy !== null}
@@ -503,6 +648,79 @@ export default function ProducerPage() {
             placeholder="Producer direction for the script writer (optional)"
           />
 
+          {/* THE SHEET REVIEW — see the character sheet + every scene sheet
+              BEFORE approving. Sheets carry scene slices in order, lookback-
+              forged, and ride the manifest (beat k quotes ITS sheet). */}
+          <div className="space-y-2 rounded-xl border border-bone/10 bg-ink/40 p-2.5">
+            <div className="flex items-center justify-between">
+              <span className={LABEL}>Review the sheets</span>
+              <label className="flex items-center gap-1 text-[10px] text-bone/55">
+                panels per sheet
+                <select
+                  value={panelsPer}
+                  onChange={(e) => {
+                    setPanelsPer(Number(e.target.value));
+                    setSheets([]);
+                  }}
+                  className="rounded border border-bone/15 bg-ink px-1.5 py-0.5 text-bone/80"
+                >
+                  {[3, 4, 6].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
+              <div>
+                <p className="mb-1 text-[9px] uppercase tracking-wider text-bone/35">
+                  the character — {twin?.clone.name}
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={(twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) as string}
+                  alt="character sheet"
+                  className="w-full rounded-lg border border-brass/25"
+                />
+              </div>
+            )}
+            {plan.scenePanels > 0 && (twin?.clone.sheetUrl ?? twin?.clone.refPhotos[0]) && (
+              <button
+                onClick={() => void forgeSheets()}
+                disabled={sheetBusy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-[10px] font-semibold text-ink hover:bg-brass/90 disabled:opacity-40"
+              >
+                {sheetBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {sheets.length
+                  ? 're-forge the scene sheets'
+                  : `forge the scene sheets (${Math.ceil(plan.scenePanels / panelsPer)} × ~$${CLONE_COSTS.characterSheetImage.toFixed(2)})`}
+              </button>
+            )}
+            {sheets.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {sheets.map((url, i) => (
+                  <figure key={url} className="space-y-0.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`scene sheet ${i + 1}`}
+                      className="w-full rounded-lg border border-brass/30"
+                    />
+                    <figcaption className="text-[8px] text-bone/35">
+                      sheet {i + 1} — scenes {i * panelsPer + 1}–
+                      {Math.min((i + 1) * panelsPer, plan.scenePanels)}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+            <p className="text-[9px] text-bone/30">
+              Sheets forge in order — each carries the previous as its lookback, so the world stays
+              one continuous shoot. Beat k renders with ITS sheet.
+            </p>
+          </div>
+
           <button
             onClick={() => void approve()}
             disabled={busy !== null}
@@ -554,12 +772,27 @@ export default function ProducerPage() {
               )}
             </button>
           ) : (
-            <a
-              href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
-              className="block w-full rounded-xl bg-brass px-4 py-2.5 text-center text-xs font-bold text-ink hover:bg-brass/90"
-            >
-              assemble + captions + render in the studio →
-            </a>
+            <>
+              <a
+                href={`/admin/reel-studio?reel=${encodeURIComponent(runReel.id)}`}
+                className="block w-full rounded-xl bg-brass px-4 py-2.5 text-center text-xs font-bold text-ink hover:bg-brass/90"
+              >
+                assemble + captions + render in the studio →
+              </a>
+              <button
+                onClick={() => {
+                  // A/B: same plan, a second reel — tweak the brief or the hook,
+                  // scope again, and run the variant next to the first.
+                  setRunReel(null);
+                  setRunDone(false);
+                  setRunLog([]);
+                  setPlan(null);
+                }}
+                className="w-full rounded-xl border border-brass/40 px-4 py-2 text-[10px] font-semibold text-brass hover:bg-brass/10"
+              >
+                run a variant — same cast, new angle (A/B the two)
+              </button>
+            </>
           )}
           <p className="text-center text-[9px] text-bone/30">
             The run button IS the spend approval — the gate stamps when you hit it. A failed scene

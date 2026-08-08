@@ -434,8 +434,18 @@ export interface ClonePlan {
   sceneSheetUrl?: string;
   /** When the scene sheet was forged — older than updatedAt = stale. */
   sceneSheetAt?: string | null;
+  /**
+   * ALL the scene sheets, in order — longer videos forge several (each
+   * covers a slice of the scenes, forged with the previous sheet riding as
+   * the lookback reference). Beat k renders with sheet floor(k/sheetPanels).
+   */
+  sceneSheetUrls?: string[];
+  /** How many scene panels each sheet covers (the slice size). */
+  sheetPanels?: number;
   /** What the script was grounded in (an offer / lead magnet / notes). */
   contextLabel?: string;
+  /** The caption preset the Producer's style picked — the assemble note names it. */
+  captionPreset?: string;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -781,9 +791,22 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
       ? (o.seedanceTier as SeedanceTier)
       : 'seedance-2.0',
     ...(isHttpUrl(o.sceneSheetUrl) ? { sceneSheetUrl: asString(o.sceneSheetUrl).trim() } : {}),
+    ...(Array.isArray(o.sceneSheetUrls)
+      ? {
+          sceneSheetUrls: (o.sceneSheetUrls as unknown[])
+            .filter((u): u is string => isHttpUrl(u))
+            .slice(0, 8),
+        }
+      : {}),
+    ...(Number.isFinite(asNumber(o.sheetPanels, NaN))
+      ? { sheetPanels: Math.max(1, Math.min(12, Math.round(asNumber(o.sheetPanels)))) }
+      : {}),
     ...(asString(o.sceneSheetAt) ? { sceneSheetAt: asString(o.sceneSheetAt) } : {}),
     ...(asString(o.contextLabel).trim()
       ? { contextLabel: asString(o.contextLabel).trim().slice(0, 120) }
+      : {}),
+    ...(asString(o.captionPreset).trim()
+      ? { captionPreset: asString(o.captionPreset).trim().slice(0, 60) }
       : {}),
     createdAt: asString(o.createdAt) || null,
     updatedAt: asString(o.updatedAt) || null,

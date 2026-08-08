@@ -168,9 +168,16 @@ export async function POST(request: NextRequest) {
   const primary = slots[0];
   // The scene sheet rides every b-roll render as the trailing omni-reference —
   // the world, decided once at the storyboard, never re-invented per render.
+  // Multi-sheet plans: beat k quotes ITS sheet (the slice that covers it).
+  const perBeat = Math.max(1, plan.sheetPanels ?? plan.beats.length);
+  const sceneForBeat =
+    plan.sceneSheetUrls && plan.sceneSheetUrls.length > 0
+      ? (plan.sceneSheetUrls[Math.floor(beat.index / perBeat)] ??
+        plan.sceneSheetUrls[plan.sceneSheetUrls.length - 1])
+      : plan.sceneSheetUrl;
   const refsWithScene =
-    plan.sceneSheetUrl && !slots.includes(plan.sceneSheetUrl)
-      ? [...slots, plan.sceneSheetUrl].slice(0, 4)
+    sceneForBeat && !slots.includes(sceneForBeat)
+      ? [...slots, sceneForBeat].slice(0, 4)
       : slots;
   if (!primary) {
     return NextResponse.json(

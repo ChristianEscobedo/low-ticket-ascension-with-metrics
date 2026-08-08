@@ -185,3 +185,10 @@ sheet as @reference automatically. One component, both surfaces.
   full-body cell for walking shots.
 - VSL beats beyond ~20: consider scene-grouping the manifest so long chains
   stay editable (the timeline handles it; the manifest is what grows).
+
+
+---
+
+## STATUS 2026-08-07 (evening) — ALL QUEUED STEPS DONE
+
+Steps 1-6 shipped + the whole follow-on arc: the AI Twins roster, the Sheet Studio, grounded scripts (offer/lead-magnet/notes), beat timestamps, the seeded scene sheet, record->clone + video->voice, scratch VO, and THE PRODUCER (/admin/producer): intake -> AI Production Plan -> approve writes the manifest -> the auto-run (scene sheet -> gate -> generate-all, live log) -> the studio handoff. captionPreset rides the manifest (assemble applies it in the Captions tab). Variant A/B button on the run card. Remaining: one REAL-money run to validate muapi pricing + the avatar model id, then the Content Hub posting handoff.
