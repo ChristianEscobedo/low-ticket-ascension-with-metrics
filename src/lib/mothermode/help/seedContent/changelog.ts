@@ -656,6 +656,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.26.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The 80% intake, the hook families, and the run-card hook generator',
+    body: cl([
+      '<p>The Producer asks the questions that matter before the words are written. A new optional <strong>80% + steer</strong> block on intake: the pre-writing truth (who it\'s for at 1am · what failed · why it really failed · the mechanism), the audience <strong>awareness</strong> (cold/warm/hot — it gates which hook families are legal), the <strong>hook family</strong> scene 1 executes, where the CTA sends the viewer (comment a word / pinned link / profile / DM — subtle, picked by you), and a <strong>prompt-bank framework</strong> to steer the whole script.</p>',
+      '<p>Under it: the <strong>hook registry</strong> — ten proven families distilled from the CopyPrompter library (the backwards format, the hot take, sounds-crazy, curiosity loops, disqualify, the mechanism reveal, proof stacks, the mistake), each carrying its template, an example, and the <strong>visual hook</strong> — the pattern-interrupt shot that plays under the line. The run card gains <strong>generate hooks</strong>: five written hooks across the legal families, each with its visual direction, one click swaps scene 1\'s line (the gate honestly re-opens).</p>',
+      '<p><strong>Where to start:</strong> Producer → open the 80% block under the brief → fill one line → approve; on the run card, generate hooks.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

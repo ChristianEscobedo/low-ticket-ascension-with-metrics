@@ -2802,6 +2802,20 @@ export interface CloneScriptInput {
   persona: string;
   lookBible: string;
   guides?: string;
+  /**
+   * THE 80% — the pre-writing truth block from the Producer's intake: the
+   * 1am story, what failed before, why it really failed, the mechanism.
+   */
+  eightyPercent?: string;
+  /** The hook family the scene-1 line MUST execute (template + example). */
+  hookTemplate?: string;
+  hookExample?: string;
+  /** The visual hook direction for scene 1 (the pattern interrupt). */
+  hookVisual?: string;
+  /** The CTA destination line (comment / pinned / profile / DM). */
+  ctaLine?: string;
+  /** An optional prompt-bank framework craft block steering the script. */
+  frameworkCraft?: string;
   model?: string;
 }
 
@@ -2945,6 +2959,18 @@ export async function generateCloneScript(
     'THE CTA, specifically: name the exact next step in plain words ("the link under this video opens the 2-minute version") — never filler like "go peek", "no pressure", "check it out", "link in bio". One step, spoken like a friend, with the reason it is worth 2 minutes.',
     `Exactly ${beatCount} beats — never fewer. A short script fails the video; write every beat.`,
     `Every line is SPOKEN WORD by the avatar: literal, sayable, never stage directions. Each line max ${maxWords} words (that is the honest speech budget for its beat). Return ONLY a JSON object. No prose, no code fences.`,
+    input.hookTemplate
+      ? `THE HOOK FAMILY (strict): scene 1's line executes THIS template, made specific to the topic: ${input.hookTemplate}${input.hookExample ? ` A worked example of the shape: "${input.hookExample}" — never copy it, execute the SHAPE.` : ''}${input.hookVisual ? ` And the b-roll/shot direction for scene 1 must stage this visual hook: ${input.hookVisual}` : ''}`
+      : '',
+    input.ctaLine
+      ? `THE CTA (strict): the final beat ${input.ctaLine} — subtle, spoken like a friend, never a hard sell.`
+      : '',
+    input.frameworkCraft
+      ? `STEER THE WHOLE SCRIPT through this proven framework (its craft, not its surface):\n${input.frameworkCraft}`
+      : '',
+    input.eightyPercent?.trim()
+      ? `THE 80% (the pre-writing truth — every line mirrors this; the deeper core, not the surface):\n${input.eightyPercent.trim().slice(0, 900)}`
+      : '',
   ].join(' ');
   const user = [
     `Write a ${beatCount}-beat ${input.typeLabel} script about: ${topic}.`,
@@ -3051,4 +3077,49 @@ export async function generateProductionPlan(input: {
     return { ok: false, status: 502, error: 'No plan was returned' };
   }
   return { ok: true, data: { plan: parsed as Record<string, unknown>, model } };
+}
+
+// ---------------------------------------------------------------------------
+// THE HOOKS GENERATOR — written hooks across the registry families
+// ---------------------------------------------------------------------------
+
+/**
+ * The run card's hook generator: N written hooks for scene 1, each executing
+ * a DIFFERENT registry family's template, grounded in the topic (+ the 80%).
+ */
+export async function generateCloneHooks(input: {
+  topic: string;
+  count?: number;
+  /** The registry rows to execute, resolved by the route: 'label — template'. */
+  families: string[];
+  eightyPercent?: string;
+  model?: string;
+}): Promise<AiResult<{ hooks: string[]; model: string }>> {
+  const topic = (input.topic ?? '').trim();
+  if (!topic) return { ok: false, status: 400, error: 'A topic is required' };
+  const count = Math.max(1, Math.min(8, Math.round(input.count || 5)));
+  const { provider, model } = await resolveTextModel(input.model);
+  const system = [
+    'You are a direct-response hook writer for short-form video. One spoken line per hook, each EXECUTING the named template shape — made specific to the topic, never copying the example.',
+    'Written for the ear. No filler openers. Return ONLY a JSON object.',
+  ].join(' ');
+  const user = [
+    `Write ${count} distinct hooks for a video about: ${topic}.`,
+    'One hook per template family below (cycle if more are needed):',
+    input.families.join('\n'),
+    input.eightyPercent?.trim()
+      ? `The deeper truth every hook mirrors:\n${input.eightyPercent.trim().slice(0, 600)}`
+      : '',
+    'Respond with this exact JSON shape: { "items": [string] }.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const raw =
+    provider === 'anthropic'
+      ? await anthropicJson(system, user, model)
+      : await openAiJson(system, user, model, provider);
+  if (!raw.ok) return raw;
+  const hooks = parseAmplifyItems(raw.data).slice(0, count);
+  if (!hooks.length) return { ok: false, status: 502, error: 'No hooks were returned' };
+  return { ok: true, data: { hooks, model } };
 }

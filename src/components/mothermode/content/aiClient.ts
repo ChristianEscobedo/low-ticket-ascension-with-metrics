@@ -790,8 +790,27 @@ export async function aiCloneAutofill(description: string): Promise<AiCloneAutof
   };
 }
 
+/** The run card's hook generator: written hooks across the registry families. */
+export async function aiCloneHooks(args: {
+  topic: string;
+  count?: number;
+  awareness?: string;
+  eightyPercent?: string;
+}): Promise<{ hooks: string[]; visuals: Record<string, string> }> {
+  const json = await postAi({ action: 'cloneHooks', ...args });
+  return {
+    hooks: Array.isArray(json.hooks) ? (json.hooks as string[]) : [],
+    visuals: (json.visuals as Record<string, string>) ?? {},
+  };
+}
+
 export async function aiGenerateCloneScript(args: {
-topic: string;
+  topic: string;
+  /** The 80% block, the hook family id, the CTA target id, a bank framework id. */
+  eightyPercent?: string;
+  hookFamily?: string;
+  ctaTarget?: string;
+  framework?: string;
   typeLabel: string;
   frameworkLabel: string;
   frameworkBeats: string[];

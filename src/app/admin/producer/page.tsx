@@ -40,11 +40,17 @@ import {
   cloneRefImagesFor,
 } from '@/lib/mothermode/reel/cloneGenerate';
 import {
+  aiCloneHooks,
   aiEditImage,
   aiGenerateCloneScript,
   aiGenerateImage,
   aiProductionPlan,
 } from '@/components/mothermode/content/aiClient';
+import {
+  CTA_TARGETS,
+  HOOK_FAMILIES,
+  type HookAwareness,
+} from '@/lib/mothermode/reel/hookFamilies';
 import { usePieceLinks } from '@/components/mothermode/content/pieceLinks';
 
 const API = '/api/admin/mothermode-reel';
@@ -84,6 +90,17 @@ export default function ProducerPage() {
   // one), its prompt is editable here and the forge SAVES ONTO THE TWIN.
   const [charPrompt, setCharPrompt] = useState('');
   const [charBusy, setCharBusy] = useState(false);
+  // THE 80% + the steer — optional intake that sharpens the writer.
+  const [eighty, setEighty] = useState('');
+  const [awareness, setAwareness] = useState<HookAwareness | ''>('');
+  const [ctaTarget, setCtaTarget] = useState('comment');
+  const [hookFamily, setHookFamily] = useState('');
+  const [bankPick, setBankPick] = useState('');
+  const [bankRecipes, setBankRecipes] = useState<{ id: string; name: string }[]>([]);
+  // The hooks generator on the run card.
+  const [hooks, setHooks] = useState<string[]>([]);
+  const [hookVisuals, setHookVisuals] = useState<Record<string, string>>({});
+  const [hooksBusy, setHooksBusy] = useState(false);
   // The SESSION LIBRARY — named producer sessions (intake + plan + sheet
   // prompts + forged sheets) that survive between visits.
   const [sessions, setSessions] = useState<
@@ -255,6 +272,60 @@ export default function ProducerPage() {
   useEffect(() => {
     void load();
   }, [load]);
+  // The prompt-bank frameworks, for the script steer picker.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/mothermode-prompts', { cache: 'no-store' });
+        const json = await res.json();
+        const list = (json.recipes ?? json.prompts ?? []) as Record<string, unknown>[];
+        setBankRecipes(
+          list
+            .map((r) => ({ id: String(r.id ?? ''), name: String(r.name ?? r.title ?? '') }))
+            .filter((r) => r.id && r.name)
+            .slice(0, 60),
+        );
+      } catch {
+        /* the picker just stays at 'none' */
+      }
+    })();
+  }, []);
+
+  /** The hooks generator — written hooks across the legal families. */
+  async function genHooks() {
+    if (!plan || hooksBusy) return;
+    setHooksBusy(true);
+    setError(null);
+    try {
+      const out = await aiCloneHooks({
+        topic: plan.topic,
+        count: 5,
+        awareness: awareness || undefined,
+        eightyPercent: eighty.trim() || undefined,
+      });
+      setHooks(out.hooks);
+      setHookVisuals(out.visuals);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Hook generation failed');
+    } finally {
+      setHooksBusy(false);
+    }
+  }
+
+  /** Swap a generated hook in as scene 1's line (the gate honestly re-opens). */
+  async function useHook(line: string) {
+    if (!runReel) return;
+    const p = normalizeClonePlan(runReel.clonePlan ?? null);
+    if (!p || !p.beats.length) return;
+    await saveRunPlan({
+      ...p,
+      approvedAt: null,
+      beats: p.beats.map((b, i) => (i === 0 ? { ...b, line, status: 'planned' as const } : b)),
+      updatedAt: new Date().toISOString(),
+    });
+    setHooks([]);
+    setRunLog((l) => [...l, 'Scene 1 line swapped — the gate re-opened.']);
+  }
 
   const roster = twinRoster(projects ?? []);
   const twin: TwinRosterEntry | undefined = roster.find((e) => e.reelId === twinId);
@@ -386,6 +457,10 @@ export default function ProducerPage() {
         persona: twin.clone.name,
         lookBible: '',
         guides: plan.notes || undefined,
+        eightyPercent: eighty.trim() || undefined,
+        hookFamily: hookFamily || undefined,
+        ctaTarget,
+        framework: bankPick || undefined,
       });
       const master = twin.clone.sheetUrl ?? twin.clone.refPhotos[0];
       const mapped: CloneBeat[] = beats.map((b, i) => ({
@@ -752,6 +827,56 @@ export default function ProducerPage() {
             </select>
           </div>
         </div>
+        {/* THE 80% — optional, one box; it sharpens every line. Plus the
+            steer: awareness (gates the legal hook families), the hook family,
+            the CTA destination, and a prompt-bank framework for the script. */}
+        <details className="rounded-xl border border-bone/10 bg-ink/40 p-2.5">
+          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-bone/45">
+            the 80% + the steer (optional — the writer mirrors this)
+          </summary>
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={eighty}
+              onChange={(e) => setEighty(e.target.value)}
+              rows={3}
+              placeholder={
+                'The pre-writing truth — one line each:\nWho this is for (the story they tell themselves at 1am) · what they already tried that failed · why it REALLY failed (the new cause) · the mechanism — why this finally works'
+              }
+              className={INPUT}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <select value={awareness} onChange={(e) => setAwareness(e.target.value as HookAwareness | '')} className={INPUT} title="Audience awareness — gates which hook families are legal">
+                <option value="">awareness: auto</option>
+                <option value="cold">cold — never heard of you</option>
+                <option value="warm">warm — knows the problem</option>
+                <option value="hot">hot — nearly buying</option>
+              </select>
+              <select value={hookFamily} onChange={(e) => setHookFamily(e.target.value)} className={INPUT} title="The hook family scene 1 executes">
+                <option value="">hook family: writer picks</option>
+                {HOOK_FAMILIES.filter((f) => !awareness || f.awareness.includes(awareness)).map((f) => (
+                  <option key={f.id} value={f.id} title={f.template}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <select value={ctaTarget} onChange={(e) => setCtaTarget(e.target.value)} className={INPUT} title="Where the last line sends the viewer">
+                {CTA_TARGETS.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    CTA: {t.label}
+                  </option>
+                ))}
+              </select>
+              <select value={bankPick} onChange={(e) => setBankPick(e.target.value)} className={INPUT} title="Steer the whole script through a prompt-bank framework">
+                <option value="">prompt bank: none</option>
+                {bankRecipes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </details>
         <button
           onClick={() => void scope()}
           disabled={!brief.trim() || !twinId || busy !== null}
@@ -1115,6 +1240,15 @@ export default function ProducerPage() {
                   </a>
                   {plan && (
                     <button
+                      onClick={() => void genHooks()}
+                      disabled={hooksBusy}
+                      className="text-[9px] font-semibold text-brass hover:underline disabled:opacity-40"
+                    >
+                      {hooksBusy ? 'writing hooks…' : 'generate hooks ↯'}
+                    </button>
+                  )}
+                  {plan && (
+                    <button
                       onClick={() => {
                         // Re-write the script onto the same reel: new beats
                         // replace the lines; rendered outputs stay honest
@@ -1138,12 +1272,16 @@ export default function ProducerPage() {
                               typeLabel: type.label,
                               frameworkLabel: fw.label,
                               frameworkBeats: fw.beats,
-                              beatSec: plan.beatSec,
-                              beatCount: plan.beatCount,
-                              persona: p.clone.name,
-                              lookBible: '',
-                              guides: plan.notes || undefined,
-                            });
+        beatSec: plan.beatSec,
+        beatCount: plan.beatCount,
+        persona: p.clone.name,
+        lookBible: '',
+        guides: plan.notes || undefined,
+        eightyPercent: eighty.trim() || undefined,
+        hookFamily: hookFamily || undefined,
+        ctaTarget,
+        framework: bankPick || undefined,
+      });
                             const master = p.clone.sheetUrl ?? p.clone.refPhotos[0];
                             await saveRunPlan({
                               ...p,
@@ -1187,6 +1325,29 @@ export default function ProducerPage() {
                     </button>
                   )}
                 </div>
+                {/* THE HOOK SHELF — one click swaps scene 1's line; the
+                    family's visual hook direction rides along. */}
+                {hooks.length > 0 && (
+                  <div className="space-y-1 rounded-md border border-brass/25 p-1.5">
+                    {hooks.map((h, k) => (
+                      <div key={k} className="flex items-start gap-1.5">
+                        <button
+                          onClick={() => void useHook(h)}
+                          className="rounded bg-brass px-1.5 py-0.5 text-[8px] font-bold text-ink hover:bg-brass/90"
+                          title="Make this scene 1's line (the gate re-opens)"
+                        >
+                          use
+                        </button>
+                        <p className="text-[9px] leading-snug text-bone/70">{h}</p>
+                      </div>
+                    ))}
+                    {Object.values(hookVisuals)[0] && (
+                      <p className="pt-0.5 text-[8px] italic text-bone/35">
+                        the visual hook under it: {Object.values(hookVisuals)[0]}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}

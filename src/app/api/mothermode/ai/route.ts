@@ -11,6 +11,7 @@ import {
   amplifyImagePrompts,
   generateVideoScript,
   generateCloneAutofill,
+  generateCloneHooks,
   generateCloneScript,
   generateProductionPlan,
   generateStoryboardPlan,
@@ -31,6 +32,13 @@ import {
 } from '@/utils/integrations/openai-compliance';
 import { generateYouTubeKit } from '@/utils/integrations/openai-youtube';
 import { scoreLocalCompliance } from '@/lib/mothermode/content/platformCompliance';
+import {
+  ctaTargetFor,
+  hookFamiliesFor,
+  hookFamilyFor,
+} from '@/lib/mothermode/reel/hookFamilies';
+import { recipeCraftBlock } from '@/lib/mothermode/content/promptBank';
+import { resolveRecipeById } from '@/lib/mothermode/content/promptBankStore';
 import { getFunnelBySlug as getSalesFunnelBySlug } from '@/lib/mothermode/sales/store';
 import { getFunnelBySlug as getOptinFunnelBySlug } from '@/lib/mothermode/optin/store';
 
@@ -700,6 +708,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, autofill: result.data });
   }
 
+  // -- cloneHooks (the run card's hook generator: one per registry family) --
+  if (action === 'cloneHooks') {
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const topic = str(body.topic);
+    if (!topic) return NextResponse.json({ ok: false, error: 'topic is required' }, { status: 400 });
+    const awareness = str(body.awareness);
+    const pool = hookFamiliesFor(
+      awareness === 'cold' || awareness === 'warm' || awareness === 'hot' ? awareness : undefined,
+    );
+    const result = await generateCloneHooks({
+      topic: topic.slice(0, 600),
+      count: Math.max(1, Math.min(8, Math.round(Number(body.count) || 5))),
+      families: pool.map((f) => `${f.label} — ${f.template}`),
+      eightyPercent: str(body.eightyPercent)?.slice(0, 600),
+      model: modelId(body.model),
+    });
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
+    }
+    return NextResponse.json({
+      ok: true,
+      hooks: result.data.hooks,
+      model: result.data.model,
+      visuals: Object.fromEntries(pool.map((f) => [f.label, f.visual])),
+    });
+  }
+
   // -- cloneScript (AI Clone step 2: per-beat lines with voice programming) ----
   if (action === 'cloneScript') {
     const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -751,6 +786,21 @@ export async function POST(request: NextRequest) {
       persona: (str(body.persona) ?? 'the founder').slice(0, 400),
       lookBible: (str(body.lookBible) ?? '').slice(0, 500),
       guides: str(body.guides)?.slice(0, 800),
+      // THE 80% + the hook family + the CTA destination + the bank steer.
+      eightyPercent: str(body.eightyPercent)?.slice(0, 900),
+      ...(() => {
+        const id = str(body.hookFamily);
+        if (!id) return {};
+        const fam = hookFamilyFor(id);
+        return { hookTemplate: fam.template, hookExample: fam.example, hookVisual: fam.visual };
+      })(),
+      ...(str(body.ctaTarget) ? { ctaLine: ctaTargetFor(str(body.ctaTarget)).line } : {}),
+      ...(await (async () => {
+        const id = str(body.framework);
+        if (!id) return {};
+        const recipe = await resolveRecipeById(id);
+        return recipe ? { frameworkCraft: recipeCraftBlock(recipe) } : {};
+      })()),
       model: modelId(body.model),
     });
     if (!result.ok) {
