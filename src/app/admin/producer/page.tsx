@@ -37,6 +37,7 @@ import type { ReelProject } from '@/lib/mothermode/reel/types';
 import {
   cloneAvatarPrompt,
   cloneBrollPrompt,
+  cloneExtendBeat,
   cloneRefImagesFor,
 } from '@/lib/mothermode/reel/cloneGenerate';
 import {
@@ -461,6 +462,103 @@ export default function ProducerPage() {
       setError(err instanceof Error ? err.message : 'The voice pass stopped');
     } finally {
       setRunBusy(false);
+    }
+  }
+
+  /**
+   * ADD A SCENE, all the way through: the beat appends to the manifest (the
+   * look-back rides when the last scene is rendered), its index joins the
+   * picked sheet's scene list (or a NEW world sheet forges for it), the gate
+   * honestly re-opens, and "render this scene" renders just the new one.
+   */
+  const [addKind, setAddKind] = useState<'avatar' | 'broll'>('avatar');
+  const [addText, setAddText] = useState('');
+  const [addSheet, setAddSheet] = useState(0); // sheet index, or -1 = a new world
+  const [addBusy, setAddBusy] = useState(false);
+  async function addSceneToRun() {
+    if (!runReel || addBusy || !addText.trim()) return;
+    setAddBusy(true);
+    setError(null);
+    try {
+      let p = normalizeClonePlan(runReel.clonePlan ?? null);
+      if (!p) throw new Error('The reel lost its plan');
+      const plan0 = p; // a const — closures keep the narrowing
+      const beat = cloneExtendBeat(plan0, {
+        kind: addKind,
+        ...(addKind === 'avatar' ? { line: addText.trim() } : { brollPrompt: addText.trim() }),
+      });
+      const sheets = plan0.sceneSheetUrls ?? (plan0.sceneSheetUrl ? [plan0.sceneSheetUrl] : []);
+      let sceneSheetUrls = sheets;
+      let sheetScenes = plan0.sheetScenes ?? sheets.map((_, k) => plan0.beats.map((b) => b.index).filter((i) => cloneSheetForBeat(plan0, i) === sheets[k]));
+      if (addSheet === -1) {
+        // A NEW world — forge its sheet (character + the last sheet lookback).
+        const master = p.clone.sheetUrl ?? p.clone.refPhotos[0];
+        if (!master) throw new Error('The twin needs a character sheet first');
+        setRunLog((l) => [...l, 'Forging the new world sheet…']);
+        const url = await aiEditImage({
+          prompt: `A single SCENE SHEET panel for a NEW environment in the same production: ${addText.trim()}. The SAME character (the attached reference) inside it. Cinematic, photorealistic, no text, no watermark.`,
+          seed: master,
+          references: [master, ...(sheets.length ? [sheets[sheets.length - 1]] : [])],
+          format: 'reel',
+          model: CLONE_SHEET_MODEL,
+        });
+        sceneSheetUrls = [...sheets, url];
+        sheetScenes = [...sheetScenes, [beat.index]];
+        setRunLog((l) => [...l, 'New world sheet forged — the scene quotes it.']);
+      } else if (sheets.length && sheetScenes[addSheet]) {
+        sheetScenes = sheetScenes.map((g, k) => (k === addSheet ? [...g, beat.index] : g));
+      }
+      const saved = await saveRunPlan({
+        ...p,
+        beats: [...p.beats, beat],
+        ...(sceneSheetUrls.length ? { sceneSheetUrls, sceneSheetUrl: sceneSheetUrls[0] } : {}),
+        sheetScenes,
+        approvedAt: null, // the storyboard changed — the gate re-opens
+        updatedAt: new Date().toISOString(),
+      });
+      p = normalizeClonePlan(saved?.clonePlan ?? null) ?? p;
+      setAddText('');
+      setRunLog((l) => [...l, `Scene ${beat.index + 1} added — the gate re-opened; render it when ready.`]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add the scene');
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  /** ADD A WORLD SHEET — a new environment, no scene yet; scenes join it. */
+  const [worldPrompt, setWorldPrompt] = useState('');
+  const [worldBusy, setWorldBusy] = useState(false);
+  async function addWorldSheet() {
+    if (!runReel || worldBusy || !worldPrompt.trim()) return;
+    setWorldBusy(true);
+    setError(null);
+    try {
+      const p = normalizeClonePlan(runReel.clonePlan ?? null);
+      if (!p) throw new Error('The reel lost its plan');
+      const master = p.clone.sheetUrl ?? p.clone.refPhotos[0];
+      if (!master) throw new Error('The twin needs a character sheet first');
+      const sheets = p.sceneSheetUrls ?? (p.sceneSheetUrl ? [p.sceneSheetUrl] : []);
+      const url = await aiEditImage({
+        prompt: `A single SCENE SHEET for a NEW environment in the same production: ${worldPrompt.trim()}. The SAME character (the attached reference) inside it. Cinematic, photorealistic, no text, no watermark.`,
+        seed: master,
+        references: [master, ...(sheets.length ? [sheets[sheets.length - 1]] : [])],
+        format: 'reel',
+        model: CLONE_SHEET_MODEL,
+      });
+      await saveRunPlan({
+        ...p,
+        sceneSheetUrls: [...sheets, url],
+        sceneSheetUrl: p.sceneSheetUrl ?? url,
+        sheetScenes: [...(p.sheetScenes ?? sheets.map((_, k) => p.beats.map((b) => b.index).filter((i) => cloneSheetForBeat(p, i) === sheets[k]))), [] as number[]],
+        updatedAt: new Date().toISOString(),
+      });
+      setWorldPrompt('');
+      setRunLog((l) => [...l, `World sheet ${sheets.length + 1} forged — scenes can join it from the add-a-scene box.`]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The world forge failed');
+    } finally {
+      setWorldBusy(false);
     }
   }
 
@@ -1803,6 +1901,74 @@ export default function ProducerPage() {
                     )}
                   </div>
                 )}
+              </div>
+            );
+          })()}
+
+          {/* ADD A SCENE + ADD A WORLD SHEET — the production grows from the
+              run card: a scene appends (its world picks the sheet it quotes,
+              or a NEW world sheet forges for it), the gate honestly re-opens. */}
+          {(() => {
+            const p = normalizeClonePlan(runReel.clonePlan ?? null);
+            if (!p) return null;
+            const worlds = p.sceneSheetUrls ?? (p.sceneSheetUrl ? [p.sceneSheetUrl] : []);
+            return (
+              <div className="space-y-1.5 rounded-lg bg-ink/60 p-2">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-bone/40">
+                  extend the production
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setAddKind(addKind === 'avatar' ? 'broll' : 'avatar')}
+                    className="shrink-0 rounded bg-bone/10 px-1.5 py-1.5 text-[8px] font-semibold text-bone/60"
+                    title="Flip talking head ↔ b-roll"
+                  >
+                    {addKind === 'broll' ? 'b-roll' : 'talking head'}
+                  </button>
+                  <input
+                    value={addText}
+                    onChange={(e) => setAddText(e.target.value)}
+                    placeholder={addKind === 'broll' ? 'the visual — "she walks out of the gym into the rain"…' : 'the line they say…'}
+                    className="min-w-0 flex-1 rounded-md border border-bone/10 bg-ink px-2 py-1.5 text-[9px] text-bone/70 outline-none placeholder:text-bone/25"
+                  />
+                  {worlds.length > 0 && (
+                    <select
+                      value={addSheet}
+                      onChange={(e) => setAddSheet(Number(e.target.value))}
+                      className="shrink-0 rounded border border-bone/15 bg-ink px-1 py-1.5 text-[8px] text-bone/60"
+                      title="Which world sheet this scene quotes"
+                    >
+                      {worlds.map((_, k) => (
+                        <option key={k} value={k}>world sheet {k + 1}</option>
+                      ))}
+                      <option value={-1}>+ a new world (forges its sheet)</option>
+                    </select>
+                  )}
+                  <button
+                    onClick={() => void addSceneToRun()}
+                    disabled={!addText.trim() || addBusy}
+                    className="shrink-0 rounded-md bg-brass px-2.5 py-1.5 text-[8px] font-bold text-ink disabled:opacity-40"
+                    title="Append the scene to the manifest (the gate re-opens) — render it from the prompts list"
+                  >
+                    {addBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : '+ add scene'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={worldPrompt}
+                    onChange={(e) => setWorldPrompt(e.target.value)}
+                    placeholder='a new environment — "the car at night, dashboard glow"…'
+                    className="min-w-0 flex-1 rounded-md border border-bone/10 bg-ink px-2 py-1.5 text-[9px] text-bone/70 outline-none placeholder:text-bone/25"
+                  />
+                  <button
+                    onClick={() => void addWorldSheet()}
+                    disabled={!worldPrompt.trim() || worldBusy}
+                    className="shrink-0 rounded-md border border-brass/40 px-2.5 py-1.5 text-[8px] font-bold text-brass disabled:opacity-40"
+                    title="Forge a NEW world sheet (the character + the last sheet ride as refs) — scenes join it from the add-a-scene box"
+                  >
+                    {worldBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : '+ world sheet'}
+                  </button>
+                </div>
               </div>
             );
           })()}
