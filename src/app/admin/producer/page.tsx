@@ -17,6 +17,7 @@ import {
   characterSheetPrompt,
   CLONE_COSTS,
   CLONE_SHEET_MODEL,
+  cloneBeatCharacter,
   cloneFrameworkFor,
   cloneSheetForBeat,
   cloneVideoTypeFor,
@@ -1917,6 +1918,43 @@ export default function ProducerPage() {
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-bone/40">
                   extend the production
                 </p>
+                {/* THE CAST — add a character (another twin from the roster);
+                    scenes pick who's in them below. */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[8px] text-bone/35">cast:</span>
+                  <span className="rounded bg-brass/15 px-1.5 py-0.5 text-[8px] font-semibold text-brass">
+                    {p.clone.name} (lead)
+                  </span>
+                  {(p.characters ?? []).map((c) => (
+                    <span key={c.id} className="rounded bg-bone/10 px-1.5 py-0.5 text-[8px] font-semibold text-bone/60">
+                      {c.name}
+                    </span>
+                  ))}
+                  <select
+                    value=""
+                    onChange={async (e) => {
+                      const entry = roster.find((r) => r.clone.id === e.target.value);
+                      if (!entry || entry.clone.id === p.clone.id || (p.characters ?? []).some((c) => c.id === entry.clone.id)) return;
+                      await saveRunPlan({
+                        ...p,
+                        characters: [...(p.characters ?? []), entry.clone],
+                        updatedAt: new Date().toISOString(),
+                      });
+                      setRunLog((l) => [...l, `${entry.clone.name} joined the cast — assign scenes below.`]);
+                    }}
+                    className="rounded border border-bone/15 bg-ink px-1 py-0.5 text-[8px] text-bone/60"
+                    title="Add another twin to this production's cast"
+                  >
+                    <option value="">+ add a character…</option>
+                    {roster
+                      .filter((r) => r.clone.id !== p.clone.id && !(p.characters ?? []).some((c) => c.id === r.clone.id))
+                      .map((r) => (
+                        <option key={r.clone.id} value={r.clone.id}>
+                          {r.clone.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setAddKind(addKind === 'avatar' ? 'broll' : 'avatar')}
@@ -2001,6 +2039,38 @@ export default function ProducerPage() {
                       <div key={b.id} className="space-y-1 rounded-md border border-bone/10 p-1.5">
                         <div className="flex flex-wrap items-center gap-1">
                           <span className="text-[9px] font-bold text-brass/80">#{i + 1}</span>
+                          {(p.characters ?? []).length > 0 && (
+                            <select
+                              value={b.characterId ?? ''}
+                              onChange={async (e) => {
+                                const id = e.target.value;
+                                await saveRunPlan({
+                                  ...p,
+                                  approvedAt: null,
+                                  beats: p.beats.map((x) =>
+                                    x.id === b.id
+                                      ? id
+                                        ? { ...x, characterId: id }
+                                        : (() => { const c = { ...x }; delete c.characterId; return c; })()
+                                      : x,
+                                  ),
+                                  updatedAt: new Date().toISOString(),
+                                });
+                              }}
+                              className="rounded border border-bone/15 bg-ink px-1 py-0.5 text-[8px] text-bone/60"
+                              title="Who is in this scene"
+                            >
+                              <option value="">{p.clone.name}</option>
+                              {(p.characters ?? []).map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          )}
+                          {b.characterId && (
+                            <span className="text-[7px] text-brass/70">
+                              {cloneBeatCharacter(p, b).name}
+                            </span>
+                          )}
                           <span className="text-[8px] text-bone/40">
                             {b.kind === 'broll'
                               ? `Seedance ${(b.seedanceTier ?? p.seedanceTier) === 'seedance-2.5' ? '2.5 hero' : '2.0'}`

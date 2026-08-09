@@ -3,6 +3,8 @@ import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import { getReelProject } from '@/lib/mothermode/reel/store';
 import {
   beatLineForTts,
+  cloneBeatCharacter,
+  cloneBeatVoiceSample,
   cloneSheetForBeat,
   normalizeClonePlan,
   resolveBeatVoiceParams,
@@ -116,14 +118,15 @@ export async function POST(request: NextRequest) {
 
   // -- voice (ElevenLabs, per-beat programming) --------------------------------
   if (step === 'voice') {
-    // THE VOICE SAMPLE wins: when the manifest carries one, no TTS at all —
-    // the sample IS the audio reference the render matches. The beat stamps
-    // voiced with the sample as its audioUrl (the script line rides the
-    // render prompt; the sample is the voice the model speaks in).
-    if (plan.voiceSampleUrl) {
+    // THE VOICE SAMPLE wins: the beat's character's own sample, else the
+    // plan's — no TTS at all. The beat stamps voiced with the sample as its
+    // audioUrl (the script line rides the render prompt; the sample is the
+    // voice the model speaks in).
+    const sample = cloneBeatVoiceSample(plan, beat);
+    if (sample) {
       return NextResponse.json({
         ok: true,
-        patch: { status: 'voiced' as const, audioUrl: plan.voiceSampleUrl },
+        patch: { status: 'voiced' as const, audioUrl: sample },
       });
     }
     // DB-first: a key saved in /admin/integrations wins over (or stands in
@@ -143,9 +146,10 @@ export async function POST(request: NextRequest) {
       );
     }
     try {
-      const params = resolveBeatVoiceParams(plan.clone.voice, beat.voice);
+      const who = cloneBeatCharacter(plan, beat); // WHO speaks — the beat's character
+      const params = resolveBeatVoiceParams(who.voice, beat.voice);
       const speech = await generateSpeechWithTimestamps(beatLineForTts(beat.line, beat.voice), {
-        voiceId: plan.clone.voice.voiceId,
+        voiceId: who.voice.voiceId,
         stability: params.stability,
         similarityBoost: params.similarityBoost,
         style: params.style,
@@ -186,7 +190,9 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
   }
-  const slots = cloneRefImagesFor(beat, plan.clone);
+  // WHO is in this beat — the refs + the prompt resolve to THAT character.
+  const who = cloneBeatCharacter(plan, beat);
+  const slots = cloneRefImagesFor(beat, who);
   const primary = slots[0];
   // The scene sheet rides every b-roll render as the trailing omni-reference —
   // the world, decided once at the storyboard, never re-invented per render.
@@ -215,7 +221,7 @@ export async function POST(request: NextRequest) {
       const rendered = await renderMuapiAvatar({
         imageUrl: primary,
         audioUrl: beat.audioUrl ?? '',
-        prompt: cloneAvatarPrompt(beat, plan.clone),
+        prompt: cloneAvatarPrompt(beat, who),
         durationSec: beat.durationSec,
         model: process.env.MUAPI_AVATAR_MODEL?.trim() || CLONE_AVATAR_MODEL,
       });
@@ -261,7 +267,7 @@ export async function POST(request: NextRequest) {
       // A hand-edited final prompt (the run card's last checkpoint) wins.
       prompt:
         beat.finalPrompt?.trim() ||
-        cloneBrollPrompt(beat, plan.clone, {
+        cloneBrollPrompt(beat, who, {
           product: plan.productImageUrl,
           worldSheet: !!sceneForBeat,
         }),

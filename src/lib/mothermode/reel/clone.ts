@@ -61,6 +61,8 @@ export interface ReelClone {
   sheetUrl?: string;
   lookBible: CloneLookBible;
   voice: CloneVoice;
+  /** This character's own voice sample (overrides the plan-level one). */
+  voiceSampleUrl?: string;
   createdAt: string | null;
 }
 
@@ -399,6 +401,11 @@ export interface CloneBeat {
   finalPrompt?: string;
   /** Which Seedance tier renders this beat's b-roll (2.0 default, 2.5 hero). */
   seedanceTier?: SeedanceTier;
+  /**
+   * WHO is in this beat — a clone id from the plan's cast (the primary twin
+   * or one of plan.characters). Absent = the primary twin.
+   */
+  characterId?: string;
   status: CloneBeatStatus;
   /** Generation outputs (filled by the generate step). */
   audioUrl?: string;
@@ -471,8 +478,32 @@ export interface ClonePlan {
   voiceSampleUrl?: string;
   /** The caption preset the Producer's style picked — the assemble note names it. */
   captionPreset?: string;
+  /**
+   * THE CAST — additional characters in this production (each a full
+   * ReelClone: its own sheet + voice + optional voice sample). A beat's
+   * characterId picks who is in it; absent = the primary twin.
+   */
+  characters?: ReelClone[];
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+/**
+ * Resolve WHO a beat features: the characters[] entry matching its
+ * characterId, else the primary twin. Every prompt + ref + voice leg
+ * resolves through here.
+ */
+export function cloneBeatCharacter(plan: ClonePlan, beat: CloneBeat): ReelClone {
+  if (beat.characterId) {
+    const found = (plan.characters ?? []).find((c) => c.id === beat.characterId);
+    if (found) return found;
+  }
+  return plan.clone;
+}
+
+/** The voice sample for a beat: its character's own sample, else the plan's. */
+export function cloneBeatVoiceSample(plan: ClonePlan, beat: CloneBeat): string | undefined {
+  return cloneBeatCharacter(plan, beat).voiceSampleUrl ?? plan.voiceSampleUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -715,6 +746,9 @@ export function normalizeClone(raw: unknown): ReelClone | null {
     name,
     refPhotos,
     ...(isHttpUrl(o.sheetUrl) ? { sheetUrl: asString(o.sheetUrl).trim() } : {}),
+    ...(isHttpUrl(o.voiceSampleUrl)
+      ? { voiceSampleUrl: asString(o.voiceSampleUrl).trim() }
+      : {}),
     lookBible: normalizeLookBible(o.lookBible),
     voice: normalizeVoice(o.voice),
     createdAt: asString(o.createdAt) || null,
@@ -776,6 +810,9 @@ export function normalizeCloneBeat(raw: unknown, index: number): CloneBeat | nul
     ...(asString(o.finalPrompt).trim() ? { finalPrompt: asString(o.finalPrompt).slice(0, 2000) } : {}),
     ...(SEEDANCE_TIERS.includes(o.seedanceTier as SeedanceTier)
       ? { seedanceTier: o.seedanceTier as SeedanceTier }
+      : {}),
+    ...(asString(o.characterId).trim()
+      ? { characterId: asString(o.characterId).trim().slice(0, 60) }
       : {}),
     status,
     ...(isHttpUrl(o.audioUrl) ? { audioUrl: asString(o.audioUrl).trim() } : {}),
@@ -853,6 +890,14 @@ export function normalizeClonePlan(raw: unknown): ClonePlan | null {
       : {}),
     ...(isHttpUrl(o.voiceSampleUrl)
       ? { voiceSampleUrl: asString(o.voiceSampleUrl).trim() }
+      : {}),
+    ...(Array.isArray(o.characters)
+      ? {
+          characters: (o.characters as unknown[])
+            .map((c) => normalizeClone(c))
+            .filter((c): c is ReelClone => !!c)
+            .slice(0, 6),
+        }
       : {}),
     createdAt: asString(o.createdAt) || null,
     updatedAt: asString(o.updatedAt) || null,
