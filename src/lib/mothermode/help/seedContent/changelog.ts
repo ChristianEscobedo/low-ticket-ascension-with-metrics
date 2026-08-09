@@ -726,6 +726,38 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.31.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The steer guides everything, the product rides the forge, sheets edit + regen',
+    body: cl([
+      '<p>The 80% + awareness + hook family + CTA + the prompt-bank framework now steer the <strong>production PLAN</strong> itself (a steer block rides the planner call — scenes and sheet groupings form around it), and the picked hook family\'s visual pattern-interrupt lands on scene 1\'s sheet panel. The <strong>product image rides the sheet forge</strong> — every forge call sends it in the reference array, so the panels stage the real thing.</p>',
+      '<p>Every forged sheet shows the <strong>refs riding the forge</strong> (the character + the product + the previous sheet\'s lookback, thumbnailed) and carries two edit paths: <strong>apply edit</strong> (re-forge seeded with itself — "add a water bottle") and <strong>regen + note</strong> (re-forge from scratch, your adjustment winning). Burn-the-script defaults ON with a real toggle.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.32.0',
+    releasedOn: '2026-08-08',
+    entryType: 'added',
+    title: 'The voice sample — no ElevenLabs needed, ever',
+    body: cl([
+      '<p>The voice leg runs on a <strong>voice sample</strong> now: paste a URL or upload audio (or a video of them talking — the audio rides) on the Producer intake OR straight on the run card any time. It saves onto the manifest (<code>voiceSampleUrl</code>) and every spoken beat stamps voiced with the sample as the audio reference — the render matches that voice, and <strong>no ElevenLabs call ever happens</strong> when a sample is set. The "No ElevenLabs key" error is gone for any reel carrying a sample.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.33.0',
+    releasedOn: '2026-08-09',
+    entryType: 'added',
+    title: 'Extend the production + multi-character casts',
+    body: cl([
+      '<p>The production grows from the run card. <strong>+ add scene</strong> — talking head or b-roll, pick which world sheet it quotes, or "+ a new world" forges a sheet for it on the spot (character + lookback riding); the beat appends, the gate honestly re-opens, and "render this scene" renders just the new one. <strong>+ world sheet</strong> forges a new environment with no scene yet — scenes join it from the add-a-scene box.</p>',
+      '<p>And the <strong>cast</strong>: add a character pulls another twin from the roster onto the production (<code>characters[]</code> on the manifest), and every scene card picks who\'s in it. The generate route resolves WHO per beat — the refs (that character\'s sheet), the prompt, and the voice (the character\'s own sample wins, else the plan\'s) all follow the assignment.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 
