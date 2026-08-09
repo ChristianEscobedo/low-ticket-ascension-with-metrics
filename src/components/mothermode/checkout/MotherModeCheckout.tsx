@@ -30,7 +30,13 @@ interface MotherModeCheckoutProps {
   timerLabel?: string;
   /** Header brand text. Editable in funnel builder via checkout.brandLabel. */
   brandLabel?: string;
+  /** Funnel identity — stamps attribution metadata + enables server-side
+   *  price resolution from the step's product assignment. */
+  funnelSlug?: string;
+  /** Stripe price id for the front-end offer (checkout.stripePriceId). */
+  stripePriceId?: string;
 }
+
 
 
 
@@ -47,7 +53,10 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
   backLabel,
   timerLabel = 'Founding price held for:',
   brandLabel = 'MOTHERMODE',
+  funnelSlug,
+  stripePriceId,
 }) => {
+
 
 
   const { stripePromise } = useStripeConfig();
@@ -109,12 +118,17 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
           currency: 'usd',
           customer_data: customerData,
           product_id: offer.productId,
+          // Funnel identity: the server resolves the authoritative amount from
+          // the step's price/assignment and stamps attribution metadata.
+          ...(stripePriceId ? { price_id: stripePriceId } : {}),
+          ...(funnelSlug ? { funnel_slug: funnelSlug, step: 'checkout' } : {}),
           metadata: {
             type: 'mothermode',
             page_type: 'fe',
             product_name: offer.name,
             offer_slug: offer.slug,
             order_bumps: activeBumps.map((b) => b.id).join(','),
+            ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
             ...(affiliateRef ? { ref: affiliateRef } : {}),
           },
         }),

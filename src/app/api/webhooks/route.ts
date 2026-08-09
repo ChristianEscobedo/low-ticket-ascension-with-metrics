@@ -9,10 +9,11 @@ import {
   deletePriceRecord,
   recordFunnelPurchase
 } from '@/utils/supabase/admin';
-import { dispatchPurchase } from '@/utils/integrations/dispatch';
+import { dispatchPurchase, dispatchLifecycleEvent } from '@/utils/integrations/dispatch';
 import { sendPurchaseReceipt } from '@/utils/email/receipt';
 import { enrollOnPurchase } from '@/utils/email/sequences/engine';
 import { grantCoursesForPurchase } from '@/utils/courses/grant';
+import { markFunnelPurchaseRefunded } from '@/utils/supabase/commerce';
 
 const relevantEvents = new Set([
   'product.created',
@@ -25,7 +26,8 @@ const relevantEvents = new Set([
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
-  'payment_intent.succeeded'
+  'payment_intent.succeeded',
+  'charge.refunded'
 ]);
 
 // In-memory event-id dedupe to short-circuit redundant work inside a warm
@@ -82,6 +84,67 @@ export async function POST(req: Request) {
             subscription.customer as string,
             event.type === 'customer.subscription.created'
           );
+          // Keep the main app's entitlements in sync. Created → provision,
+          // deleted → revoke. Updates ride the next created/deleted event.
+          if (event.type !== 'customer.subscription.updated') {
+            const subMeta = subscription.metadata as Record<string, string>;
+            await dispatchLifecycleEvent({
+              id: `${event.id}`,
+              event:
+                event.type === 'customer.subscription.created'
+                  ? 'subscription.created'
+                  : 'subscription.canceled',
+              subscriptionId: subscription.id,
+              purchase: {
+                stripe_event_id: event.id,
+                product_id: subMeta?.product_id ?? null,
+                page_type: subMeta?.page_type ?? null,
+                amount_cents: 0,
+                currency: subscription.currency ?? 'usd',
+                customer_email: null,
+                customer_name: null,
+                metadata: subMeta ?? null
+              }
+            });
+          }
+          break;
+        case 'charge.refunded':
+          // Covers refunds issued in the Stripe dashboard directly (admin
+          // refunds from /admin/purchases already marked + dispatched).
+          const charge = event.data.object as Stripe.Charge;
+          const chargePiId =
+            typeof charge.payment_intent === 'string'
+              ? charge.payment_intent
+              : (charge.payment_intent?.id ?? null);
+          const latestRefund = charge.refunds?.data?.[0];
+          const refundedRow = await markFunnelPurchaseRefunded({
+            paymentIntentId: chargePiId,
+            refundId: latestRefund?.id ?? `evt_${event.id}`,
+            amountCents: charge.amount_refunded ?? null
+          });
+          await dispatchLifecycleEvent({
+            id: event.id,
+            event: 'refund',
+            purchase: refundedRow
+              ? {
+                  stripe_event_id: event.id,
+                  payment_intent_id: chargePiId,
+                  product_id: (refundedRow.product_id as string) ?? null,
+                  page_type: (refundedRow.page_type as string) ?? null,
+                  amount_cents:
+                    charge.amount_refunded ?? (refundedRow.amount_cents as number) ?? 0,
+                  currency: (refundedRow.currency as string) ?? charge.currency ?? 'usd',
+                  customer_email: (refundedRow.customer_email as string) ?? null,
+                  customer_name: (refundedRow.customer_name as string) ?? null,
+                  metadata: (refundedRow.metadata as Record<string, unknown>) ?? null
+                }
+              : null,
+            refund: {
+              refund_id: latestRefund?.id ?? null,
+              amount_cents: charge.amount_refunded ?? null,
+              refunded_at: new Date().toISOString()
+            }
+          });
           break;
         case 'checkout.session.completed':
           const checkoutSession = event.data.object as Stripe.Checkout.Session;
@@ -108,7 +171,13 @@ export async function POST(req: Request) {
                 checkoutSession.customer_email ??
                 null,
               customer_name: checkoutSession.customer_details?.name ?? null,
-              metadata: checkoutSession.metadata as Record<string, unknown> | null
+              metadata: {
+                ...(checkoutSession.metadata as Record<string, unknown> | null),
+                subscription_id:
+                  typeof checkoutSession.subscription === 'string'
+                    ? checkoutSession.subscription
+                    : (checkoutSession.subscription?.id ?? null)
+              }
             };
             await recordFunnelPurchase(subPurchase);
             await dispatchPurchase(subPurchase);

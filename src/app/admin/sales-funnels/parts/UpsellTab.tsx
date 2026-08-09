@@ -2,7 +2,8 @@
 
 import type { UpsellContent } from '@/lib/mothermode/sales/types';
 
-import { Area, Collapse, Field, inputClass, selectClass, labelClass, linesToList, listToLines } from './ui';
+import { Area, Collapse, Field, PagePreviewBar, inputClass, selectClass, labelClass, linesToList, listToLines } from './ui';
+import ProductPicker from './ProductPicker';
 
 /**
  * One upsell step. Moved out of SalesFunnelEditor (was lines 1384-1544).
@@ -18,16 +19,26 @@ export default function UpsellTab({
   setField,
   onRegenerate,
   regenBusy,
+  preview,
+  funnelSlug,
+  stepKey,
 }: {
   label: string;
   upsell: UpsellContent;
   setField: <K extends keyof UpsellContent>(key: K, value: UpsellContent[K]) => void;
   onRegenerate?: () => void;
   regenBusy?: boolean;
+  /** Per-tab preview: public path + funnel publish status. */
+  preview?: { path: string; status: string };
+  /** Funnel slug — enables the catalog product picker. */
+  funnelSlug?: string;
+  /** This step's key, e.g. 'upsell2'. */
+  stepKey?: 'upsell1' | 'upsell2' | 'upsell3' | 'upsell4';
 }) {
   return (
     <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
       <div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">{label}</div>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       {onRegenerate && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brass/25 bg-brass/[0.05] px-3 py-2">
           <p className="text-[11px] text-bone/60">Rewrite this upsell from the Build tab offer stack.</p>
@@ -105,6 +116,28 @@ export default function UpsellTab({
       </Collapse>
 
       <Collapse title="Pricing & CTAs">
+        {funnelSlug && stepKey && (
+          <ProductPicker
+            funnelSlug={funnelSlug}
+            step={stepKey}
+            currentProductId={upsell.productId || undefined}
+            onPick={(p) => {
+              setField('productId', p.productId);
+              setField('productName', p.productName);
+              if (p.priceCents > 0) setField('priceCents', p.priceCents);
+              if (p.stripePriceId) setField('stripePriceId', p.stripePriceId);
+              setField('paymentType', p.paymentType);
+              setField('billingType', p.paymentType);
+              if (p.interval) setField('interval', p.interval);
+              if (p.priceCents > 0) {
+                setField(
+                  'priceLabel',
+                  `$${(p.priceCents / 100).toFixed(p.priceCents % 100 === 0 ? 0 : 2)}${p.interval === 'monthly' ? '/mo' : p.interval === 'yearly' ? '/yr' : ''}`,
+                );
+              }
+            }}
+          />
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Price label" value={upsell.priceLabel} onChange={(v) => setField('priceLabel', v)} placeholder="$97" />
           <Field label="Original price" value={upsell.originalPriceLabel} onChange={(v) => setField('originalPriceLabel', v)} placeholder="$147" />

@@ -76,6 +76,10 @@ export interface AscensionOffer {
   /** Metadata type tag passed to Stripe (page_type set per OTO). */
   metadataType: string;
   pageType: string;
+  /** Stripe price id when the step is backed by a synced Stripe price. The
+   *  server resolves the authoritative amount from it. */
+  stripePriceId?: string;
+
 
   /** Urgency banner copy + minutes on the countdown. */
   timerLabel: string;

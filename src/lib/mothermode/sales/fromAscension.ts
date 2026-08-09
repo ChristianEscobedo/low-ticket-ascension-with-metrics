@@ -119,6 +119,7 @@ export function upsellContentToAscension(
     originalPriceLabel: c.originalPriceLabel || '',
     metadataType: c.metadataType || 'mothermode_upsell',
     pageType: c.pageType || opts?.pageTypeFallback || 'oto',
+    stripePriceId: c.stripePriceId || undefined,
     timerLabel: c.timerLabel || 'This offer is held while this page is open',
     timerMinutes: c.timerMinutes || 15,
     media:

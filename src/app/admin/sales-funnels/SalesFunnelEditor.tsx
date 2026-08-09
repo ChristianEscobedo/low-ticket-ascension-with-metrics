@@ -501,20 +501,28 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function setAccessField<K extends keyof AccessContent>(key: K, value: AccessContent[K]) { setAccess((prev) => ({ ...prev, [key]: value })); }
   function setFooterField<K extends keyof SalesFooterContent>(key: K, value: SalesFooterContent[K]) { setFooter((prev) => ({ ...prev, [key]: value })); }
 
-  async function onSave() {
+  async function onSave(statusOverride?: SalesFunnelStatus) {
+    const effectiveStatus = statusOverride ?? status;
     setBusy('save'); setError(null); setNotice(null);
     try {
-      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer }) });
+      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Save failed (HTTP ' + res.status + ')');
       const item = data.item as SalesFunnelRecord;
       setFunnels((prev) => { const rest = prev.filter((f) => f.id !== item.id); return [item, ...rest]; });
-      setSelectedId(item.id); setSlug(item.slug); setEmailKitId(item.emailKitId ?? ''); setEmailKitsMap(mapFromBindings(item.emailKits, item.emailKitId));
+      setSelectedId(item.id); setSlug(item.slug); setStatus(item.status); setEmailKitId(item.emailKitId ?? ''); setEmailKitsMap(mapFromBindings(item.emailKits, item.emailKitId));
       setViewCount(item.viewCount); setConversionCount(item.conversionCount);
       setCheckoutCount(item.checkoutCount); setPurchaseCount(item.purchaseCount);
       setRevenueCents(item.revenueCents);
-      setNotice(status === 'published' ? 'Saved and published.' : 'Saved as draft.');
+      setNotice(effectiveStatus === 'published' ? 'Saved and published. It is live.' : effectiveStatus === 'draft' ? 'Moved to draft. Admins can still preview it.' : 'Saved.');
     } catch (err) { setError(err instanceof Error ? err.message : 'Save failed'); } finally { setBusy(null); }
+  }
+
+  /** One-click publish / unpublish. Saves the current content with the new status. */
+  function onPublishToggle() {
+    const next: SalesFunnelStatus = status === 'published' ? 'draft' : 'published';
+    setStatus(next);
+    void onSave(next);
   }
 
   async function onDuplicate() {
@@ -1027,7 +1035,17 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <ul className="grid gap-1 sm:grid-cols-2">{checklist.map((c) => <li key={c.label} className={'text-xs ' + (c.ok ? 'text-emerald-400/90' : 'text-bone/40')}><span className="mr-1">{c.ok ? "[x]" : "[ ]"}</span>{c.label}</li>)}</ul>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            <button type="button" onClick={onSave} disabled={busy !== null || !slug.trim()} className={btnPrimary}>{busy === 'save' ? 'Saving' : status === 'published' ? 'Save & publish' : 'Save draft'}</button>
+            <button type="button" onClick={() => onSave()} disabled={busy !== null || !slug.trim()} className={btnPrimary}>{busy === 'save' ? 'Saving…' : status === 'published' ? 'Save & publish' : 'Save draft'}</button>
+            {selectedId && (
+              <button
+                type="button"
+                onClick={onPublishToggle}
+                disabled={busy !== null || !slug.trim()}
+                className={status === 'published' ? btnGhost : btnPrimary}
+              >
+                {status === 'published' ? 'Move to draft' : 'Publish now'}
+              </button>
+            )}
             {selectedId && <button type="button" onClick={onDelete} disabled={busy !== null} className={btnDanger}>{busy === 'delete' ? 'Deleting' : 'Delete'}</button>}
           </div>
           {error && <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div>}
@@ -1093,7 +1111,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
           />
         )}
         {tab === 'architecture' && <ArchitectureTab intake={intake} />}
-        {tab === 'optin' && <OptinTab optin={optin} setField={setOptinField} onRegenerate={() => onGeneratePage('optin')} busy={busy === 'generatePage'} disabled={busy !== null} />}
+        {tab === 'optin' && <OptinTab optin={optin} setField={setOptinField} onRegenerate={() => onGeneratePage('optin')} busy={busy === 'generatePage'} disabled={busy !== null} preview={{ path: publicUrl, status }} />}
         {tab === 'sales' && (
           <SalesTab
             sales={sales}
@@ -1103,14 +1121,14 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             disabled={busy !== null}
           />
         )}
-        {tab === 'vsl' && <VslTab vsl={vsl} setField={setVslField} onRegenerate={() => onGeneratePage('vsl')} busy={busy === 'generatePage'} disabled={busy !== null} />}
-        {tab === 'checkout' && <CheckoutTab checkout={checkout} setField={setCheckoutField} onRegenerate={() => onGeneratePage('checkout')} busy={busy === 'generatePage'} disabled={busy !== null} />}
-        {tab === 'upsell1' && <UpsellTab label="Upsell 1" upsell={upsell1} setField={setUpsell1Field} onRegenerate={() => onGeneratePage('upsell1')} regenBusy={busy === 'generatePage'} />}
-        {tab === 'upsell2' && <UpsellTab label="Upsell 2" upsell={upsell2} setField={setUpsell2Field} onRegenerate={() => onGeneratePage('upsell2')} regenBusy={busy === 'generatePage'} />}
-        {tab === 'upsell3' && <UpsellTab label="Upsell 3" upsell={upsell3} setField={setUpsell3Field} onRegenerate={() => onGeneratePage('upsell3')} regenBusy={busy === 'generatePage'} />}
-        {tab === 'upsell4' && <UpsellTab label="Upsell 4" upsell={upsell4} setField={setUpsell4Field} onRegenerate={() => onGeneratePage('upsell4')} regenBusy={busy === 'generatePage'} />}
-        {tab === 'success' && <SuccessTab success={successBlock} setField={setSuccessField} onRegenerate={() => onGeneratePage('success')} busy={busy === 'generatePage'} disabled={busy !== null} />}
-        {tab === 'access' && <AccessTab access={access} setField={setAccessField} onRegenerate={() => onGeneratePage('access')} busy={busy === 'generatePage'} disabled={busy !== null} />}
+        {tab === 'vsl' && <VslTab vsl={vsl} setField={setVslField} onRegenerate={() => onGeneratePage('vsl')} busy={busy === 'generatePage'} disabled={busy !== null} preview={{ path: publicUrl + '/vsl', status }} />}
+        {tab === 'checkout' && <CheckoutTab checkout={checkout} setField={setCheckoutField} onRegenerate={() => onGeneratePage('checkout')} busy={busy === 'generatePage'} disabled={busy !== null} preview={{ path: publicUrl + '/checkout', status }} funnelSlug={slug || undefined} />}
+        {tab === 'upsell1' && <UpsellTab label="Upsell 1" upsell={upsell1} setField={setUpsell1Field} onRegenerate={() => onGeneratePage('upsell1')} regenBusy={busy === 'generatePage'} preview={{ path: publicUrl + '/upsell', status }} funnelSlug={slug || undefined} stepKey="upsell1" />}
+        {tab === 'upsell2' && <UpsellTab label="Upsell 2" upsell={upsell2} setField={setUpsell2Field} onRegenerate={() => onGeneratePage('upsell2')} regenBusy={busy === 'generatePage'} preview={{ path: publicUrl + '/upsell-2', status }} funnelSlug={slug || undefined} stepKey="upsell2" />}
+        {tab === 'upsell3' && <UpsellTab label="Upsell 3" upsell={upsell3} setField={setUpsell3Field} onRegenerate={() => onGeneratePage('upsell3')} regenBusy={busy === 'generatePage'} preview={{ path: publicUrl + '/upsell-3', status }} funnelSlug={slug || undefined} stepKey="upsell3" />}
+        {tab === 'upsell4' && <UpsellTab label="Upsell 4" upsell={upsell4} setField={setUpsell4Field} onRegenerate={() => onGeneratePage('upsell4')} regenBusy={busy === 'generatePage'} preview={{ path: publicUrl + '/upsell-4', status }} funnelSlug={slug || undefined} stepKey="upsell4" />}
+        {tab === 'success' && <SuccessTab success={successBlock} setField={setSuccessField} onRegenerate={() => onGeneratePage('success')} busy={busy === 'generatePage'} disabled={busy !== null} preview={{ path: publicUrl + '/success', status }} />}
+        {tab === 'access' && <AccessTab access={access} setField={setAccessField} onRegenerate={() => onGeneratePage('access')} busy={busy === 'generatePage'} disabled={busy !== null} preview={{ path: publicUrl + '/access', status }} />}
         {tab === 'emails' && (
           <EmailsTab
             emailKits={emailKits}

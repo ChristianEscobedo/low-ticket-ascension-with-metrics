@@ -4,6 +4,7 @@ export type IntegrationProvider =
   | 'generic_webhook'
   | 'ghl'
   | 'mass'
+  | 'main_app'
   | 'stripe'
   | 'openai'
   | 'anthropic'
@@ -14,6 +15,7 @@ export type IntegrationProvider =
   | 'assemblyai'
   | 'elevenlabs';
 
+
 export const PAGE_TYPES = ['fe', 'oto1', 'oto2', 'oto3', 'oto4'] as const;
 export type PageType = (typeof PAGE_TYPES)[number];
 
@@ -21,6 +23,21 @@ export interface GenericWebhookConfig {
   url?: string;
   secret?: string;
 }
+
+/**
+ * Main app (mothermode) — the first-class delivery destination. Receives
+ * signed lifecycle events (purchase, refund, comp granted/revoked,
+ * subscription created/canceled) with line items + delivery instructions so
+ * products built in the main app's product builder are provisioned and its
+ * licensing feature issues keys. See docs/MAIN_APP_WEBHOOK_INTEGRATION.md.
+ */
+export interface MainAppConfig {
+  url?: string;
+  secret?: string;
+  /** Display label only, e.g. 'mothermode-production'. */
+  app_name?: string;
+}
+
 
 export interface GhlConfig {
   api_key?: string;

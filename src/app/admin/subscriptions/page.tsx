@@ -1,5 +1,11 @@
 import Link from 'next/link';
-import { getSubscriptionsList } from '@/utils/supabase/admin';
+import { getSubscriptionsList, getProductsWithPrices } from '@/utils/supabase/admin';
+import { listCompedEntitlements } from '@/utils/supabase/commerce';
+import {
+  CompSubscriptionForm,
+  RevokeCompButton,
+  SubscriptionRowActions,
+} from './SubscriptionActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +33,13 @@ export default async function SubscriptionsPage({
   searchParams: { page?: string };
 }) {
   const page = Math.max(1, parseInt(searchParams.page ?? '1', 10) || 1);
-  const { rows, total } = await getSubscriptionsList(page, PAGE_SIZE);
+  const [{ rows, total }, products, comps] = await Promise.all([
+    getSubscriptionsList(page, PAGE_SIZE),
+    getProductsWithPrices().catch(() => []),
+    listCompedEntitlements({ limit: 100 }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const productOptions = (products as any[]).map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <div>
@@ -40,6 +51,41 @@ export default async function SubscriptionsPage({
         {total} total · page {page} of {totalPages}
       </p>
 
+      {/* Comp access — grant without charging */}
+      <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-5 mt-6">
+        <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold mb-1">
+          Comp access
+        </div>
+        <p className="text-xs text-bone/50 mb-4">
+          Grant a customer subscription-level access without charging them.
+          Comped rows appear below and on the customer record, and the main app
+          is notified over the delivery webhook.
+        </p>
+        <CompSubscriptionForm products={productOptions} />
+        {comps.length > 0 && (
+          <ul className="mt-4 space-y-1.5">
+            {comps.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-bone/10 bg-bone/[0.02] px-3 py-2 text-sm"
+              >
+                <span className="text-bone/80">{c.customer_email}</span>
+                <span className="text-bone/45 text-xs">
+                  {c.product_name ?? c.product_id ?? 'any product'} ·{' '}
+                  {new Date(c.created_at).toLocaleDateString()}
+                  {c.note ? ` · ${c.note}` : ''}
+                </span>
+                {c.status === 'active' ? (
+                  <RevokeCompButton compId={c.id} />
+                ) : (
+                  <span className="text-xs text-bone/35">revoked</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur mt-6">
         <table className="w-full text-sm">
           <thead className="bg-bone/[0.03] text-brass/80 uppercase tracking-wider text-xs">
@@ -50,12 +96,13 @@ export default async function SubscriptionsPage({
               <th className="text-right px-4 py-3 font-semibold">MRR</th>
               <th className="text-left px-4 py-3 font-semibold">Renews</th>
               <th className="text-left px-4 py-3 font-semibold">Stripe</th>
+              <th className="text-left px-4 py-3 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-bone/40">
+                <td colSpan={7} className="px-4 py-6 text-center text-bone/40">
                   No subscriptions yet.
                 </td>
               </tr>
@@ -106,6 +153,9 @@ export default async function SubscriptionsPage({
                     >
                       open ↗
                     </a>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <SubscriptionRowActions subscriptionId={s.id} status={s.status} />
                   </td>
                 </tr>
               );

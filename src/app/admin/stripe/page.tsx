@@ -2,6 +2,8 @@ import IntegrationCard from '../integrations/IntegrationCard';
 import { getIntegration } from '@/utils/integrations/store';
 import { getLastWebhookEventAt } from '@/utils/supabase/admin';
 import { maskConfig } from '@/utils/integrations/mask';
+import { listFunnelsForAdmin } from '@/lib/mothermode/sales/store';
+import { listAllAssignments } from '@/lib/mothermode/sales/productAssignments';
 import {
   getStripeSecretKey,
   getStripeWebhookSecret,
@@ -47,6 +49,43 @@ export default async function StripeAdminPage() {
       : dbHas(dbKey)
         ? 'from database'
         : 'from environment';
+
+  // ── Funnel checkout readiness ──────────────────────────────────────────
+  // Every published funnel, every enabled money step: can it actually charge?
+  // A step is chargeable when it has a product assignment (Products tab), a
+  // Stripe price id on the step content, or a legacy cents amount.
+  const [funnels, assignments] = await Promise.all([
+    listFunnelsForAdmin().catch(() => []),
+    listAllAssignments().catch(() => []),
+  ]);
+  const readiness = funnels
+    .filter((f) => f.status === 'published')
+    .map((f) => {
+      const steps: { key: string; label: string; chargeable: boolean; via: string }[] = [];
+      const push = (
+        key: string,
+        label: string,
+        content: { priceCents?: number; stripePriceId?: string; productId?: string },
+      ) => {
+        const assigned = assignments.some(
+          (a) => a.funnelSlug === f.slug && a.step === key && a.role === 'main',
+        );
+        const via = assigned
+          ? 'assignment'
+          : content.stripePriceId
+            ? 'price id'
+            : (content.priceCents ?? 0) > 0
+              ? 'amount'
+              : '';
+        steps.push({ key, label, chargeable: Boolean(via), via: via || 'nothing set' });
+      };
+      push('checkout', 'Checkout', f.checkout);
+      if (f.upsell1?.enabled) push('upsell1', 'Upsell 1', f.upsell1);
+      if (f.upsell2?.enabled) push('upsell2', 'Upsell 2', f.upsell2);
+      if (f.upsell3?.enabled) push('upsell3', 'Upsell 3', f.upsell3);
+      if (f.upsell4?.enabled) push('upsell4', 'Upsell 4', f.upsell4);
+      return { slug: f.slug, name: f.name || f.slug, steps };
+    });
 
   const status: Array<{
     key: string;
@@ -178,6 +217,48 @@ export default async function StripeAdminPage() {
           </div>
         </div>
       </div>
+
+      {readiness.length > 0 && (
+        <div className="rounded-2xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 backdrop-blur p-6 mt-6">
+          <div className="text-xs uppercase tracking-wider text-brass/70 font-semibold mb-1">
+            Funnel checkout readiness
+          </div>
+          <p className="text-xs text-bone/50 mb-4">
+            Published funnels and whether each enabled money step can charge.
+            Fix gaps in Products → Assign to funnel page, or on the step's
+            Pricing fields in the funnel builder.
+          </p>
+          <div className="space-y-3">
+            {readiness.map((f) => (
+              <div key={f.slug} className="rounded-lg border border-bone/10 bg-bone/[0.02] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-bone/85">{f.name}</span>
+                  {f.steps.every((s) => s.chargeable) ? (
+                    <span className="text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-brass/15 text-brass border border-brass/30">
+                      ready
+                    </span>
+                  ) : (
+                    <span className="text-[10px] rounded px-2 py-0.5 font-semibold uppercase tracking-wider bg-red-500/10 text-red-300 border border-red-500/30">
+                      needs setup
+                    </span>
+                  )}
+                </div>
+                <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                  {f.steps.map((s) => (
+                    <li key={s.key} className="flex items-center gap-1.5 text-xs">
+                      <span className={s.chargeable ? 'text-brass' : 'text-red-300'}>
+                        {s.chargeable ? '✓' : '!'}
+                      </span>
+                      <span className="text-bone/70">{s.label}</span>
+                      <span className="text-bone/35">({s.via})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-8">
         <h2 className="font-display text-xl font-semibold tracking-tight">Runtime keys</h2>

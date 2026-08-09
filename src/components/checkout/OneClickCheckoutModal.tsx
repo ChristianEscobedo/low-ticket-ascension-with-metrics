@@ -83,7 +83,13 @@ interface OneClickCheckoutModalProps {
   subscriptionInterval?: 'monthly' | 'yearly';
   /** Color theme for the modal. Default: 'amber' */
   colorTheme?: ColorTheme;
+  /** Funnel identity — lets the server resolve the amount from the step's
+   *  product assignment and stamps attribution metadata on the charge. */
+  funnelSlug?: string;
+  /** Funnel step key, e.g. 'upsell1'. */
+  funnelStep?: string;
 }
+
 
 interface CustomerData {
   firstName: string;
@@ -199,7 +205,10 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
   stripePriceId,
   subscriptionInterval = 'monthly',
   colorTheme = 'amber',
+  funnelSlug,
+  funnelStep,
 }) => {
+
   const theme = COLOR_THEMES[colorTheme];
   const { stripePromise } = useStripeConfig();
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
@@ -287,6 +296,8 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
             lastName: customerData.lastName,
             productId: productId || 'prod_generic',
             returnPath: window.location.pathname,
+            ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
+            ...(funnelStep ? { step: funnelStep } : {}),
             metadata: {
               product_id: productId || 'prod_generic',
               customer_email: customerData.email,
@@ -312,6 +323,9 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
             customer_data: customerData,
             product_id: productId || 'prod_fusion_system',
             one_click: true,
+            ...(stripePriceId ? { price_id: stripePriceId } : {}),
+            ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
+            ...(funnelStep ? { step: funnelStep } : {}),
             metadata: {
               type: 'funnel_upsell',
               product_id: productId || 'prod_fusion_system',

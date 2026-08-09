@@ -174,6 +174,61 @@ export function Collapse({
 }
 
 /**
+ * Per-tab preview bar: the public URL for this page, an open-in-new-tab link,
+ * a copy button, and the funnel's publish state. Drafts render for admins, so
+ * the preview works before the funnel is published.
+ */
+export function PagePreviewBar({
+  path,
+  status,
+}: {
+  /** Public path, e.g. `/funnel/my-funnel/checkout`. Empty hides the bar. */
+  path: string;
+  status: 'draft' | 'published' | 'archived' | string;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!path) return null;
+  const statusTone =
+    status === 'published'
+      ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+      : status === 'archived'
+        ? 'border-bone/15 bg-bone/[0.04] text-bone/40'
+        : 'border-brass/30 bg-brass/[0.08] text-brass';
+  return (
+    <div className="mb-1 flex flex-wrap items-center gap-2 rounded-xl border border-bone/10 bg-ink/40 px-3 py-2">
+      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusTone}`}>
+        {status}
+      </span>
+      <code className="min-w-0 flex-1 truncate text-[11px] text-bone/50">{path}</code>
+      <button
+        type="button"
+        onClick={() => {
+          const absolute =
+            typeof window !== 'undefined' ? window.location.origin + path : path;
+          void navigator.clipboard?.writeText(absolute).catch(() => null);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+        className="rounded-lg border border-bone/15 px-2.5 py-1 text-[11px] text-bone/60 hover:text-bone hover:bg-bone/[0.05]"
+      >
+        {copied ? 'Copied' : 'Copy link'}
+      </button>
+      <a
+        href={path}
+        target="_blank"
+        rel="noreferrer"
+        className="rounded-lg border border-brass/30 bg-brass/[0.14] px-2.5 py-1 text-[11px] font-semibold text-brass hover:bg-brass/20"
+      >
+        Open preview ↗
+      </a>
+      {status !== 'published' && (
+        <span className="text-[10px] text-bone/35">admins see drafts</span>
+      )}
+    </div>
+  );
+}
+
+/**
  * "Regenerate this page" bar shown at the top of every page tab.
  *
  * `busy` drives the button *text* (this page is regenerating right now).

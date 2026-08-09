@@ -179,6 +179,8 @@ export default function CheckoutPage({ funnel, isAdmin = false }: Props) {
           backLabel={backLabel}
           timerLabel={c.timerLabel || 'Founding price held for:'}
           brandLabel={c.brandLabel || 'MOTHERMODE'}
+          funnelSlug={funnel.slug}
+          stripePriceId={c.stripePriceId || undefined}
         />
         <OptinFooter footer={edit.draft.footer as any} edit={edit as any} />
 

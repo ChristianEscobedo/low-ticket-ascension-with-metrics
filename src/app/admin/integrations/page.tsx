@@ -9,6 +9,7 @@ import { maskConfig } from '@/utils/integrations/mask';
 import type {
   GenericWebhookConfig,
   GhlConfig,
+  MainAppConfig,
   MassConfig,
   OpenAiConfig,
   AnthropicConfig,
@@ -26,6 +27,7 @@ export default async function IntegrationsPage() {
     webhook,
     ghl,
     mass,
+    mainApp,
     openai,
     anthropic,
     email,
@@ -38,6 +40,7 @@ export default async function IntegrationsPage() {
     getIntegration<GenericWebhookConfig>('generic_webhook'),
     getIntegration<GhlConfig>('ghl'),
     getIntegration<MassConfig>('mass'),
+    getIntegration<MainAppConfig>('main_app'),
     getIntegration<OpenAiConfig>('openai'),
     getIntegration<AnthropicConfig>('anthropic'),
     getIntegration<EmailConfig>('email'),
@@ -54,6 +57,7 @@ export default async function IntegrationsPage() {
   const webhookMask = maskConfig(asCfg(webhook?.config), ['secret']);
   const ghlMask = maskConfig(asCfg(ghl?.config), ['api_key']);
   const massMask = maskConfig(asCfg(mass?.config), ['api_key']);
+  const mainAppMask = maskConfig(asCfg(mainApp?.config), ['secret']);
   const openaiMask = maskConfig(asCfg(openai?.config), ['api_key']);
   const anthropicMask = maskConfig(asCfg(anthropic?.config), ['api_key']);
   const emailMask = maskConfig(asCfg(email?.config), [
@@ -163,6 +167,36 @@ export default async function IntegrationsPage() {
           initialConfig={massMask.safeConfig}
           secretStatus={massMask.secretStatus}
           hideTestButton
+        />
+
+        <IntegrationCard
+          provider="main_app"
+          title="Main app (mothermode) delivery"
+          description="The delivery channel for purchases fulfilled in the main app. POSTs signed lifecycle events (purchase, refund, comp granted/revoked, subscription canceled) with line items, delivery instructions, and license requests. Signature goes in the `x-mothermode-signature` header. Receiver spec: docs/MAIN_APP_WEBHOOK_INTEGRATION.md."
+          badge={{ label: 'Live', tone: 'live' }}
+          fields={[
+            {
+              key: 'url',
+              label: 'Main app webhook URL',
+              placeholder: 'https://app.mothermode.com/api/webhooks/funnel'
+            },
+            {
+              key: 'secret',
+              label: 'Signing secret',
+              type: 'password',
+              placeholder: 'shared secret for HMAC-SHA256',
+              helper: 'Same value the main app verifies signatures with.'
+            },
+            {
+              key: 'app_name',
+              label: 'App label (optional)',
+              placeholder: 'mothermode-production'
+            }
+          ]}
+          initialEnabled={mainApp?.enabled ?? false}
+          initialEvents={mainApp?.events ?? []}
+          initialConfig={mainAppMask.safeConfig}
+          secretStatus={mainAppMask.secretStatus}
         />
       </div>
 

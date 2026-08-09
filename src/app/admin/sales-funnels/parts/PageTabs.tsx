@@ -12,6 +12,7 @@ import {
   Area,
   Field,
   NumberField,
+  PagePreviewBar,
   RegenerateBar,
   inputClass, selectClass,
   labelClass,
@@ -19,6 +20,7 @@ import {
   listToLines,
   panelClass,
 } from './ui';
+import ProductPicker from './ProductPicker';
 
 /**
  * The short page tabs: Optin, VSL, Checkout, Success, Access.
@@ -38,11 +40,14 @@ interface Common {
   busy?: boolean;
   /** Any job is running — blocks a second overlapping POST. */
   disabled?: boolean;
+  /** Per-tab preview: public path + funnel publish status. */
+  preview?: { path: string; status: string };
 }
 
-export function OptinTab({ optin, setField, onRegenerate, busy, disabled }: Common & { optin: SalesOptinContent; setField: Setter<SalesOptinContent> }) {
+export function OptinTab({ optin, setField, onRegenerate, busy, disabled, preview }: Common & { optin: SalesOptinContent; setField: Setter<SalesOptinContent> }) {
   return (
     <section className={panelClass + ' space-y-4'}>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       <RegenerateBar onRegenerate={onRegenerate} busy={busy} disabled={disabled} />
       <Field label="Eyebrow" value={optin.eyebrow} onChange={(v) => setField('eyebrow', v)} />
       <Field label="Badge" value={optin.badgeText} onChange={(v) => setField('badgeText', v)} />
@@ -75,9 +80,10 @@ export function OptinTab({ optin, setField, onRegenerate, busy, disabled }: Comm
   );
 }
 
-export function VslTab({ vsl, setField, onRegenerate, busy, disabled }: Common & { vsl: VslPageContent; setField: Setter<VslPageContent> }) {
+export function VslTab({ vsl, setField, onRegenerate, busy, disabled, preview }: Common & { vsl: VslPageContent; setField: Setter<VslPageContent> }) {
   return (
     <section className={panelClass + ' space-y-4'}>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       <RegenerateBar onRegenerate={onRegenerate} busy={busy} disabled={disabled} />
       <Field label="Eyebrow" value={vsl.eyebrow} onChange={(v) => setField('eyebrow', v)} />
       <Field label="Headline" value={vsl.headline} onChange={(v) => setField('headline', v)} />
@@ -99,10 +105,26 @@ export function VslTab({ vsl, setField, onRegenerate, busy, disabled }: Common &
   );
 }
 
-export function CheckoutTab({ checkout, setField, onRegenerate, busy, disabled }: Common & { checkout: CheckoutContent; setField: Setter<CheckoutContent> }) {
+export function CheckoutTab({ checkout, setField, onRegenerate, busy, disabled, preview, funnelSlug }: Common & { checkout: CheckoutContent; setField: Setter<CheckoutContent>; funnelSlug?: string }) {
   return (
     <section className={panelClass + ' space-y-4'}>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       <RegenerateBar onRegenerate={onRegenerate} busy={busy} disabled={disabled} />
+      {funnelSlug && (
+        <ProductPicker
+          funnelSlug={funnelSlug}
+          step="checkout"
+          currentProductId={checkout.productId || undefined}
+          onPick={(p) => {
+            setField('productId', p.productId);
+            setField('productName', p.productName);
+            if (p.priceCents > 0) setField('priceCents', p.priceCents);
+            if (p.stripePriceId) setField('stripePriceId', p.stripePriceId);
+            setField('paymentType', p.paymentType);
+            if (p.priceCents > 0) setField('priceLabel', `$${(p.priceCents / 100).toFixed(p.priceCents % 100 === 0 ? 0 : 2)}`);
+          }}
+        />
+      )}
       <Field label="Eyebrow" value={checkout.eyebrow} onChange={(v) => setField('eyebrow', v)} />
       <Field label="Headline" value={checkout.headline} onChange={(v) => setField('headline', v)} />
       <Area label="Subheadline" value={checkout.subheadline} onChange={(v) => setField('subheadline', v)} />
@@ -135,9 +157,10 @@ export function CheckoutTab({ checkout, setField, onRegenerate, busy, disabled }
   );
 }
 
-export function SuccessTab({ success, setField, onRegenerate, busy, disabled }: Common & { success: SuccessContent; setField: Setter<SuccessContent> }) {
+export function SuccessTab({ success, setField, onRegenerate, busy, disabled, preview }: Common & { success: SuccessContent; setField: Setter<SuccessContent> }) {
   return (
     <section className={panelClass + ' space-y-4'}>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       <RegenerateBar onRegenerate={onRegenerate} busy={busy} disabled={disabled} />
       <Field label="Headline" value={success.headline} onChange={(v) => setField('headline', v)} />
       <Area label="Subheadline" value={success.subheadline} onChange={(v) => setField('subheadline', v)} />
@@ -169,9 +192,10 @@ export function SuccessTab({ success, setField, onRegenerate, busy, disabled }: 
   );
 }
 
-export function AccessTab({ access, setField, onRegenerate, busy, disabled }: Common & { access: AccessContent; setField: Setter<AccessContent> }) {
+export function AccessTab({ access, setField, onRegenerate, busy, disabled, preview }: Common & { access: AccessContent; setField: Setter<AccessContent> }) {
   return (
     <section className={panelClass + ' space-y-4'}>
+      {preview && <PagePreviewBar path={preview.path} status={preview.status} />}
       <RegenerateBar onRegenerate={onRegenerate} busy={busy} disabled={disabled} />
       <Field label="Headline" value={access.headline} onChange={(v) => setField('headline', v)} />
       <Area label="Subheadline" value={access.subheadline} onChange={(v) => setField('subheadline', v)} />

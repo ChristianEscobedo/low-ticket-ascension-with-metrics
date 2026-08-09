@@ -35,7 +35,13 @@ interface MotherModeUpsellPageProps {
    * their seat and email them through the window.
    */
   extendSequenceId?: string;
+  /** Funnel identity — stamps attribution metadata on the charge and lets the
+   *  server resolve the amount from the step's product assignment. */
+  funnelSlug?: string;
+  /** Funnel step key, e.g. 'upsell1'. */
+  funnelStep?: string;
 }
+
 
 type ExtendState = 'idle' | 'prompt' | 'submitting' | 'done' | 'error';
 
@@ -51,7 +57,10 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
   declineRedirect,
   finalizeFrontEnd = false,
   extendSequenceId,
+  funnelSlug,
+  funnelStep,
 }) => {
+
   const [timeLeft, setTimeLeft] = useState({
     minutes: offer.timerMinutes,
     seconds: 0,
@@ -536,10 +545,15 @@ export const MotherModeUpsellPage: React.FC<MotherModeUpsellPageProps> = ({
         billingType={offer.billingType}
         subscriptionInterval={offer.interval}
         productId={offer.productId}
+        stripePriceId={offer.stripePriceId}
+        funnelSlug={funnelSlug}
+        funnelStep={funnelStep}
         paymentMetadata={{
           type: offer.metadataType,
           page_type: offer.pageType,
           parent_product: 'mothermode',
+          ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
+          ...(funnelStep ? { step: funnelStep } : {}),
         }}
         features={offer.features.map((f) => ({
           name: `${f.title} (${f.value})`,

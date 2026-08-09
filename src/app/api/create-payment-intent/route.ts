@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeClient } from '@/utils/stripe/config';
 import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
+import {
+  pageTypeForStep,
+  resolveStepCharge,
+} from '@/lib/mothermode/sales/pricing';
+import type { AssignmentStep } from '@/lib/mothermode/sales/productAssignments';
 
 // Inline PaymentIntents for the funnel's one-time charges (FE $27, OTO3, OTO4
 // deposit). When called with one_click: true we try to charge the customer's
 // saved card from the prior FE purchase so the upsell collapses to a single
 // click. Boilerplate ships hosted Checkout only; this route is the inline-
 // payment gap called out in funnel-transfer.md section 12.3.
+//
+// Amounts resolve server-side: when the caller passes a price_id (or a
+// funnel_slug + step with a product assignment) the synced `prices` table is
+// the source of truth and the posted amount is ignored.
 
 interface Body {
   amount: number;
@@ -14,8 +23,14 @@ interface Body {
   customer_data: { firstName: string; lastName: string; email: string };
   product_id: string;
   one_click?: boolean;
+  /** Stripe price id for this step — amount is resolved from it when set. */
+  price_id?: string;
+  /** Funnel identity for attribution + assignment-based price resolution. */
+  funnel_slug?: string;
+  step?: string;
   metadata?: Record<string, string>;
 }
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,16 +44,41 @@ export async function POST(request: NextRequest) {
     const stripe = await getStripeClient();
 
     const body = (await request.json()) as Body;
-    const { amount, currency, customer_data, product_id, one_click, metadata = {} } = body;
+    const {
+      customer_data,
+      product_id,
+      one_click,
+      price_id,
+      funnel_slug,
+      step,
+      metadata = {},
+    } = body;
 
-    if (!amount || !currency || !customer_data?.email) {
+    if (!customer_data?.email) {
       return NextResponse.json(
-        { error: 'Missing required fields: amount, currency, customer_data.email' },
+        { error: 'Missing required field: customer_data.email' },
         { status: 400 }
       );
     }
+
+    // The server decides the amount. Explicit price_id first, then the
+    // (funnel_slug, step) product assignment, then the posted amount as the
+    // legacy fallback.
+    const charge = await resolveStepCharge({
+      priceId: price_id || null,
+      funnelSlug: funnel_slug || null,
+      step: (step || null) as AssignmentStep | null,
+      productId: product_id || null,
+      fallbackAmountCents: body.amount,
+    });
+    const amount = charge.amountCents;
+    const currency = charge.currency || body.currency || 'usd';
+
     if (typeof amount !== 'number' || amount < 50 || amount > 99999999) {
-      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Could not resolve a valid charge amount for this step' },
+        { status: 400 }
+      );
     }
 
     // Retrieve or create the Stripe customer by email.
@@ -56,11 +96,18 @@ export async function POST(request: NextRequest) {
           })
         ).id;
 
-    const piMetadata = {
-      product_id,
+    const piMetadata: Record<string, string> = {
+      product_id: charge.productId || product_id || '',
       customer_email: customer_data.email,
       customer_name: `${customer_data.firstName} ${customer_data.lastName}`.trim(),
       one_click: one_click ? 'true' : 'false',
+      // Funnel attribution: page_type drives /admin/funnel-stats + integration
+      // filters; funnel_slug ties the charge back to the exact funnel.
+      page_type: metadata.page_type || pageTypeForStep(step),
+      ...(funnel_slug ? { funnel_slug } : {}),
+      ...(step ? { step } : {}),
+      ...(charge.priceId ? { price_id: charge.priceId } : {}),
+      charge_source: charge.source,
       ...metadata,
     };
 

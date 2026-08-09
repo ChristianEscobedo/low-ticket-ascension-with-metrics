@@ -3,6 +3,9 @@ import SyncButton from './SyncButton';
 import CreateProductForm from './CreateProductForm';
 import StageEditor from './StageEditor';
 import CourseAccessSelector from '@/components/admin/CourseAccessSelector';
+import ProductAssignmentEditor from './ProductAssignmentEditor';
+import { listAllAssignments } from '@/lib/mothermode/sales/productAssignments';
+import { listFunnelsForAdmin } from '@/lib/mothermode/sales/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +13,12 @@ const fmt = (cents: number) =>
   (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export default async function ProductsPage() {
-  const products = (await getProductsWithPrices()) as any[];
+  const [products, allAssignments, funnels] = await Promise.all([
+    getProductsWithPrices() as Promise<any[]>,
+    listAllAssignments().catch(() => []),
+    listFunnelsForAdmin().catch(() => []),
+  ]);
+  const funnelOptions = funnels.map((f) => ({ slug: f.slug, name: f.name }));
 
   return (
     <div>
@@ -72,6 +80,17 @@ export default async function ProductsPage() {
                   />
                   <CourseAccessSelector productId={p.id} compact />
                 </div>
+                <ProductAssignmentEditor
+                  productId={p.id}
+                  prices={(p.prices ?? []).map((pr: any) => ({
+                    id: pr.id,
+                    unit_amount: pr.unit_amount ?? null,
+                    interval: pr.interval ?? null,
+                    active: pr.active !== false,
+                  }))}
+                  funnels={funnelOptions}
+                  assignments={allAssignments.filter((a) => a.productId === p.id)}
+                />
               </div>
               <a
                 href={`https://dashboard.stripe.com/products/${p.id}`}

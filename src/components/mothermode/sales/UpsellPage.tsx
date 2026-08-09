@@ -105,6 +105,8 @@ export default function UpsellPage({
         acceptRedirect={acceptRedirect}
         declineRedirect={declineRedirect}
         finalizeFrontEnd={upsellKey === 'upsell1'}
+        funnelSlug={funnel.slug}
+        funnelStep={upsellKey}
       />
       <OptinFooter footer={edit.draft.footer as any} edit={edit as any} />
 

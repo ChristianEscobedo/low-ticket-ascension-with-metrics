@@ -99,9 +99,27 @@ Then **redeploy** Vercel.
 | `render-worker/remotion-project/` | The composition (same as the preview) |
 | `render-worker/remotion-project/constants.ts` | Self-contained constants (DEFAULT_FPS, RENDER_SIZES, RenderPlan) |
 | `render-worker/src/lib/mothermode/reel/captions.ts` | Caption functions (copied from the main app) |
+| `render-worker/src/lib/mothermode/reel/captionFonts.ts` | Caption font registry (copied from the main app — the caption layer imports it) |
 | `render-worker/src/lib/mothermode/reel/types.ts` | Caption types (copied from the main app) |
 | `src/app/api/admin/reel-render/route.ts` | The Next.js route that POSTs to the worker |
 | `src/app/(fullscreen)/admin/reel-studio/RemotionPreview.tsx` | The preview component (`@remotion/player` + `ReelComposition`) |
+
+### Vendored reel libs — keep the set complete
+
+The worker vendors a subset of `src/lib/mothermode/reel/` into
+`render-worker/src/lib/mothermode/reel/`. Anything the vendored files import
+must be vendored too — the worker has no access to the app's `src/` tree.
+`scripts/sync-vendored-captions.cjs` only syncs `captions.ts`; it does NOT
+catch new sibling modules.
+
+This bit once already: a Railway deploy failed with
+`Type error: Cannot find module '../captionFonts'` because
+`render/captionLayer.tsx` (vendored) imports `captionFonts` (not vendored).
+Fix was copying `src/lib/mothermode/reel/captionFonts.ts` into the worker.
+
+**When you add/rename a module under `src/lib/mothermode/reel/`:** grep the
+worker copy for its import (`findstr /S "captionFonts" render-worker\src`)
+and vendor the file if anything references it, then redeploy the worker.
 
 ## Health check
 

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getPurchasesList } from '@/utils/supabase/admin';
 import DownloadCsvButton from '../funnel-stats/DownloadCsvButton';
+import RefundButton from './RefundButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,12 +87,13 @@ export default async function PurchasesPage({
               <th className="text-left px-4 py-3 font-semibold">Page</th>
               <th className="text-left px-4 py-3 font-semibold">Customer</th>
               <th className="text-right px-4 py-3 font-semibold">Amount</th>
+              <th className="text-right px-4 py-3 font-semibold">Refund</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-bone/40">
+                <td colSpan={6} className="px-4 py-6 text-center text-bone/40">
                   No purchases match these filters.
                 </td>
               </tr>
@@ -109,6 +111,16 @@ export default async function PurchasesPage({
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums">
                   {fmt(r.amount_cents ?? 0)}
+                  {(r as any).status === 'refunded' && (
+                    <span className="ml-2 text-xs text-red-300/80">refunded</span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <RefundButton
+                    purchaseId={r.id}
+                    amountCents={r.amount_cents ?? 0}
+                    status={(r as any).status ?? 'succeeded'}
+                  />
                 </td>
               </tr>
             ))}
