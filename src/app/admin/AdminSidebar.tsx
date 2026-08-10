@@ -8,6 +8,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/assets', label: 'Asset Hub' },
   { href: '/admin/media-library', label: 'Media Library' },
+  { href: '/admin/hook-bank', label: 'Hook Bank' },
   { href: '/admin/content', label: 'Content Hub' },
   { href: '/admin/reel-studio', label: 'Clipping Studio' },
   { href: '/admin/ai-twins', label: 'AI Twins' },
