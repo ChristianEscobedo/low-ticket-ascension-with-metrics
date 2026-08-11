@@ -222,6 +222,166 @@ app.get('/render/:jobId', (req, res) => {
   });
 });
 
+/**
+ * Hook Bank fetch-and-clip. Paste a social link (TikTok/IG/YT/…), the worker
+ * downloads it with yt-dlp, probes the duration with ffprobe, cuts a sprite
+ * with ffmpeg, uploads both to Supabase, and hands back the public URLs. Runs
+ * as a background job exactly like /render — a viral clip can be minutes of
+ * 1080p, and no HTTP request survives that.
+ *
+ * WHY THE WORKER AND NOT VERCEL: social platforms IP-block serverless ranges
+ * fast, and yt-dlp + ffmpeg don't exist in a Next function. The persistent
+ * container already has both and a stable IP.
+ *
+ * POST /fetch-clip { url }     → { jobId } (202)
+ * GET  /fetch-clip/:jobId      → { status, url, spriteUrl, durationSec, title }
+ */
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const run = promisify(execFile);
+
+app.post('/fetch-clip', (req, res) => {
+  const url = typeof (req.body || {}).url === 'string' ? req.body.url.trim() : '';
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ success: false, error: 'A public http(s) url is required.' });
+  }
+  pruneJobs();
+  const jobId = newJobId();
+  jobs.set(jobId, {
+    status: 'rendering', // reuse the render lifecycle: rendering → done | failed
+    stage: 'queued',
+    url: null,
+    spriteUrl: null,
+    durationSec: null,
+    title: null,
+    error: null,
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  res.status(202).json({ success: true, jobId, status: 'rendering' });
+  runFetchClip(jobId, url).catch((err) => {
+    const job = jobs.get(jobId);
+    if (job) Object.assign(job, { status: 'failed', error: err.message, updatedAt: Date.now() });
+  });
+});
+
+app.get('/fetch-clip/:jobId', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) {
+    return res
+      .status(404)
+      .json({ success: false, error: 'Unknown job id — the worker restarted. Fetch again.' });
+  }
+  res.json({
+    success: true,
+    status: job.status,
+    stage: job.stage,
+    url: job.url,
+    spriteUrl: job.spriteUrl,
+    durationSec: job.durationSec,
+    title: job.title,
+    error: job.error,
+    elapsedSec: Math.round((Date.now() - job.startedAt) / 1000),
+  });
+});
+
+/** Download → probe → sprite → upload → job URLs. */
+async function runFetchClip(jobId, pageUrl) {
+  const job = jobs.get(jobId);
+  const touch = (patch) => Object.assign(job, patch, { updatedAt: Date.now() });
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-fetch-'));
+  const videoPath = path.join(tmpDir, 'clip.mp4');
+  const spritePath = path.join(tmpDir, 'sprite.jpg');
+
+  try {
+    touch({ stage: 'downloading' });
+    // Title first (best-effort — a private/blocked post still downloads, just unnamed).
+    try {
+      const t = await run('yt-dlp', ['--no-playlist', '--skip-download', '--print', 'title', pageUrl], {
+        timeout: 30_000,
+      });
+      const title = String(t.stdout || '').trim().split('\n')[0].slice(0, 150);
+      if (title) touch({ title });
+    } catch {
+      /* unnamed is fine */
+    }
+
+    await run(
+      'yt-dlp',
+      [
+        '--no-playlist',
+        '--merge-output-format', 'mp4',
+        '-f', 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b[height<=1080]/best',
+        '-o', videoPath,
+        pageUrl,
+      ],
+      { timeout: 300_000 },
+    );
+    if (!fs.existsSync(videoPath)) throw new Error('yt-dlp produced no file (the post may be private or region-locked).');
+
+    touch({ stage: 'probing' });
+    let durationSec = null;
+    try {
+      const p = await run('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        videoPath,
+      ], { timeout: 20_000 });
+      const d = parseFloat(String(p.stdout).trim());
+      if (Number.isFinite(d) && d > 0) durationSec = Math.round(d * 10) / 10;
+    } catch {
+      /* duration stays null — the bank defaults to 1.5s on mount */
+    }
+
+    touch({ stage: 'spriting' });
+    try {
+      await run('ffmpeg', [
+        '-y', '-ss', '0.4', '-i', videoPath,
+        '-vframes', '1', '-q:v', '3', spritePath,
+      ], { timeout: 20_000 });
+    } catch {
+      /* no sprite is fine — the card falls back to the <video> poster */
+    }
+
+    touch({ stage: 'uploading' });
+    const stamp = Date.now();
+    const videoName = `hook-${stamp}.mp4`;
+    const videoBuffer = fs.readFileSync(videoPath);
+    const { error: vErr } = await supabase().storage
+      .from(BUCKET)
+      .upload(videoName, videoBuffer, { contentType: 'video/mp4', upsert: true });
+    if (vErr) throw new Error(`Upload failed: ${vErr.message}`);
+    const { data: vUrl } = supabase().storage.from(BUCKET).getPublicUrl(videoName);
+
+    let spriteUrl = null;
+    if (fs.existsSync(spritePath)) {
+      const spriteName = `hook-${stamp}-sprite.jpg`;
+      const spriteBuffer = fs.readFileSync(spritePath);
+      const { error: sErr } = await supabase().storage
+        .from(BUCKET)
+        .upload(spriteName, spriteBuffer, { contentType: 'image/jpeg', upsert: true });
+      if (!sErr) {
+        spriteUrl = supabase().storage.from(BUCKET).getPublicUrl(spriteName).data.publicUrl;
+      }
+    }
+
+    console.log(`[worker] fetch-clip done → ${vUrl.publicUrl}`);
+    touch({
+      status: 'done',
+      stage: 'done',
+      url: vUrl.publicUrl,
+      spriteUrl,
+      durationSec,
+    });
+  } catch (err) {
+    console.error('[worker] fetch-clip failed:', err.message);
+    touch({ status: 'failed', stage: 'failed', error: err.message });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 /** The background render: bundle → probe → render → upload → job URL. */
 async function runRender(jobId, plan, reelId) {
   const job = jobs.get(jobId);

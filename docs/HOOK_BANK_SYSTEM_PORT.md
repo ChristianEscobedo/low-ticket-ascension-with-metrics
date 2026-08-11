@@ -1,7 +1,8 @@
 # Hook Bank — System Port
 
-Status: **phase 1 built** (bank + beat-0 mount + vault mirror). Fetch-and-clip
-and AI-sheet generation are the planned next phases.
+Status: **phase 1 + 2 built** (bank + beat-0 mount + vault mirror, plus
+fetch-and-clip on the render worker). AI-sheet generation is the planned next
+phase.
 
 Tests: `npx vitest run tests/lib/hook-bank.test.ts` (10 passing).
 
@@ -20,10 +21,14 @@ Admin: `/admin/hook-bank` (sidebar: **Hook Bank**).
 
 1. **Upload** (BUILT) — drag a clip in, tag the reaction it triggers and the
    rights, it lands in the bank and in the studio's vault rail.
-2. **Fetch & clip** (PLANNED) — paste a TikTok/IG/YT link; the Railway worker
-   (yt-dlp + ffmpeg, already deployed) downloads it and the existing
-   sceneCuts/silence/hookScore propose the punch cut. Runs on the worker, NOT
-   Vercel — social platforms IP-block serverless.
+2. **Fetch & clip** (BUILT) — the Add sheet's "Fetch & clip" tab takes a
+   TikTok/IG/YT link. The render worker's new `POST /fetch-clip` (yt-dlp
+   download → ffprobe duration → ffmpeg sprite → Supabase upload) runs it as a
+   background job; `/api/admin/hook-fetch` proxies start+poll exactly like
+   reel-render. The fetched clip's URL, title, duration, and sprite prefill the
+   form; saving ingests with `source='fetched'` and rights forced off `owned`
+   until a human confirms. Runs on the worker, NOT Vercel — social platforms
+   IP-block serverless, and yt-dlp/ffmpeg only exist in the container.
 3. **AI-generated reaction** (PLANNED) — a hook sheet = the twin's character
    sheet + a reaction preset (mind-blown, "wait—what", pointing at screen),
    rendered through the existing clone/Seedance pipeline into an on-brand
@@ -51,9 +56,12 @@ supabase/migrations/20261203000000_hook_bank.sql
 src/lib/mothermode/reel/hookBank.ts     # types, mappers, store, beat-0 mount,
                                         # leaderboard, paid-safe filter, vault mirror
 src/app/api/admin/hook-bank/route.ts    # GET list + POST ingest/patch/delete
-src/app/admin/hook-bank/page.tsx        # grid, upload sheet, reaction/rights/search
-                                        # filters, paid-safe toggle, preview
+src/app/api/admin/hook-fetch/route.ts   # fetch-and-clip proxy (start + poll)
+src/app/admin/hook-bank/page.tsx        # grid, upload + fetch sheets, filters, preview
 src/app/admin/AdminSidebar.tsx          # nav entry
+
+render-worker/server.js                 # + POST/GET /fetch-clip (yt-dlp download job)
+render-worker/Dockerfile                # + yt-dlp (static binary) + curl
 
 tests/lib/hook-bank.test.ts             # 10 tests: mount, mappers, leaderboard
 ```
@@ -88,6 +96,8 @@ Two ways, both already live:
 - **Rights discipline**: `paidSafeHooks` is the guard for paid placements.
   Fetched clips default to `unknown`; keep the paid-safe filter on in the
   studio mount path for anything going into an ad.
-- **Fetch & clip runs on the Railway worker.** Reuse the render-worker's
-  yt-dlp/ffmpeg and the clipping-vault cutdown (`/api/admin/reel-cutdown`).
-  Do not attempt the download on Vercel.
+- **Fetch & clip runs on the Railway worker.** `POST /fetch-clip` reuses the
+  same in-memory job registry as `/render` (202 + poll `GET /fetch-clip/:id`).
+  The Dockerfile now installs the static yt-dlp binary + curl — redeploy the
+  worker (Railway → Redeploy) before the endpoint answers. Do not attempt the
+  download on Vercel.

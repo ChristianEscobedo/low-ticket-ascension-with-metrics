@@ -317,6 +317,62 @@ function AddHookSheet({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  // Fetch-and-clip: paste a social link, the worker downloads + sprites it.
+  const [mode, setMode] = useState<'upload' | 'fetch'>('upload');
+  const [fetchUrl, setFetchUrl] = useState('');
+  const [fetching, setFetching] = useState(false);
+  const [fetchStage, setFetchStage] = useState('');
+  const [fetchedDuration, setFetchedDuration] = useState<number | null>(null);
+  const [fetchedSprite, setFetchedSprite] = useState<string | null>(null);
+
+  const fetchAndFill = async () => {
+    const link = fetchUrl.trim();
+    if (!/^https?:\/\//i.test(link)) {
+      setErr('Paste a public http(s) link (TikTok, IG, YouTube, …).');
+      return;
+    }
+    setFetching(true);
+    setErr(null);
+    setFetchStage('starting');
+    try {
+      const start = await fetch('/api/admin/hook-fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: link }),
+      });
+      const startData = await start.json();
+      if (!startData.success || !startData.jobId) {
+        throw new Error(startData.error || 'Could not start the fetch.');
+      }
+      // Poll until the worker finishes the download.
+      const jobId = startData.jobId as string;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const poll = await fetch('/api/admin/hook-fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId }),
+        });
+        const p = await poll.json();
+        if (p.stage) setFetchStage(p.stage);
+        if (p.done) {
+          if (p.errorMessage) throw new Error(p.errorMessage);
+          if (!p.url) throw new Error('The fetch finished without a clip URL.');
+          setUrl(p.url);
+          setFetchedSprite(p.spriteUrl || null);
+          setFetchedDuration(typeof p.durationSec === 'number' ? p.durationSec : null);
+          if (!name && p.title) setName(p.title);
+          setFetchStage('done');
+          break;
+        }
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Fetch failed');
+      setFetchStage('');
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const uploadFile = async (file: File) => {
     setUploading(true);
@@ -356,9 +412,12 @@ function AddHookSheet({
           action: 'ingest',
           name: name.trim(),
           url: url.trim(),
-          source: 'uploaded',
+          source: mode === 'fetch' ? 'fetched' : 'uploaded',
           reaction,
-          rights,
+          // Fetched clips can't claim ownership until a human confirms them.
+          rights: mode === 'fetch' && rights === 'owned' ? 'unknown' : rights,
+          durationSec: fetchedDuration,
+          spriteUrl: fetchedSprite,
           tags: tags
             .split(',')
             .map((t) => t.trim())
@@ -380,10 +439,61 @@ function AddHookSheet({
       <div className="w-full max-w-md rounded-2xl border border-brass/20 bg-mode-deep p-6 shadow-2xl">
         <h2 className="font-display text-xl font-semibold tracking-tight">Add a hook</h2>
         <p className="mt-1 text-xs text-bone/50">
-          A 0.5-3s clip that opens the reel. Upload a file or paste a URL.
+          A 0.5-3s clip that opens the reel. Upload a file, or fetch one off a
+          social link and the worker clips it for you.
         </p>
 
+        {/* Upload vs Fetch-and-clip */}
+        <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-bone/10 bg-bone/[0.03] p-1">
+          {(['upload', 'fetch'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={clsx(
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                mode === m ? 'bg-brass/15 text-brass' : 'text-bone/50 hover:text-bone/80',
+              )}
+            >
+              {m === 'upload' ? 'Upload / URL' : 'Fetch & clip'}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-5 space-y-4">
+          {mode === 'fetch' && (
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                Social link
+              </label>
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  value={fetchUrl}
+                  onChange={(e) => setFetchUrl(e.target.value)}
+                  placeholder="https://www.tiktok.com/… or youtube.com/shorts/…"
+                  className="flex-1 rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+                />
+                <button
+                  onClick={() => void fetchAndFill()}
+                  disabled={fetching}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brass px-3 py-2 text-xs font-semibold text-ink hover:bg-brass/90 transition-colors disabled:opacity-50"
+                >
+                  {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {fetching ? 'Fetching…' : 'Fetch'}
+                </button>
+              </div>
+              {fetching && fetchStage && (
+                <p className="mt-1.5 text-[11px] text-bone/40 capitalize">
+                  {fetchStage === 'done' ? 'Done — review below.' : `${fetchStage}…`}
+                </p>
+              )}
+              {fetchStage === 'done' && url && (
+                <div className="mt-2 rounded-lg overflow-hidden border border-brass/25 bg-ink aspect-video">
+                  <video src={url} controls muted loop className="h-full w-full object-contain" />
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
               Clip

@@ -5,14 +5,22 @@
 FROM node:22-bookworm
 
 
-# Chromium + ffmpeg for Remotion's headless render + encoding
+# Chromium + ffmpeg for Remotion's headless render + encoding.
+# curl + yt-dlp for the hook-bank fetch-and-clip endpoint (download a social
+# clip, probe it, sprite it). yt-dlp ships as a single static binary — no
+# python needed.
 RUN apt-get update && apt-get install -y \
   chromium \
   ffmpeg \
+  curl \
+  ca-certificates \
   fonts-noto \
   fonts-noto-cjk \
   fonts-noto-color-emoji \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+       -o /usr/local/bin/yt-dlp \
+  && chmod +x /usr/local/bin/yt-dlp
 
 # Remotion needs to know where Chromium is
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
