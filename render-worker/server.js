@@ -442,6 +442,13 @@ async function runRender(jobId, plan, reelId) {
       // source, a cold CDN. 2 minutes per frame lets a slow-but-valid asset
       // finish instead of killing a multi-minute render.
       timeoutInMilliseconds: 120_000,
+      // The memory cap: how many frames render in PARALLEL. The default is
+      // ~cores/2, and parallel 1080x1920 frames + per-clip ffmpeg extraction is
+      // exactly what pushes a small Railway container over its RAM limit and
+      // gets the compositor SIGKILLed (OOM). 2 keeps two frames in flight —
+      // roughly half the default peak memory — at a modest speed cost. Drop to
+      // 1 if a heavy reel still OOMs.
+      concurrency: 2,
       onProgress: ({ progress }) => {
         // Report every frame batch to the job (cheap, in-memory) but keep the
         // log at every ~10% so the deploy logs stay readable.
