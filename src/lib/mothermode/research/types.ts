@@ -216,6 +216,7 @@ export const RESEARCH_ARTIFACT_TYPES = [
   'email-outline',
   'notes',
   'reel-cue-plan',
+  'reel-brief',
 ] as const;
 export type ResearchArtifactType = (typeof RESEARCH_ARTIFACT_TYPES)[number];
 
@@ -228,6 +229,7 @@ export const ARTIFACT_TYPE_LABELS: Record<ResearchArtifactType, string> = {
   'email-outline': 'Email outline',
   notes: 'Notes',
   'reel-cue-plan': 'Reel cue plan',
+  'reel-brief': 'Reel brief',
 };
 
 export const RESEARCH_ARTIFACT_STATUSES = ['draft', 'final', 'handed-off'] as const;
@@ -241,7 +243,9 @@ export interface HandedOffRef {
     | 'email-kit'
     | 'sales-funnel'
     | 'system'
-    | 'reel-cues';
+    | 'reel-cues'
+    | 'reel-brief'
+    | 'gated-delivery';
   /** Kit id / funnel id, or '' for a multi-row handoff (planner cards, system). */
   id: string;
   /** Human label: kit name, funnel name, or "12 planner cards". */
@@ -340,7 +344,9 @@ export function normalizeHandedOffTo(value: unknown): HandedOffRef | null {
     kind !== 'email-kit' &&
     kind !== 'sales-funnel' &&
     kind !== 'system' &&
-    kind !== 'reel-cues'
+    kind !== 'reel-cues' &&
+    kind !== 'reel-brief' &&
+    kind !== 'gated-delivery'
   ) {
     return null;
   }
@@ -624,6 +630,51 @@ export function normalizeReelCuePlan(value: unknown): ReelCuePlan {
   return { projectId: str(rec.projectId).trim(), beats };
 }
 
+/**
+ * Reel brief -> the reel's day card + studio canvas: the script (hook, beats,
+ * CTA to the magnet), the hook variants, and the filming recommendations. The
+ * 'reel-brief' handoff turns it into a named reel project plus a planner card.
+ */
+export interface ReelBrief {
+  /** The reel's working title (the magnet + the angle). */
+  title: string;
+  /** The spoken hook (the first 1-2s line). */
+  hook: string;
+  /** The beats, in order: the spoken/visual beats of the script. */
+  beats: string[];
+  /** The closing call-to-action (to the magnet / opt-in). */
+  cta: string;
+  /** Hook variants to test (from the Hook Bank presets / research language). */
+  hooks: string[];
+  /** Filming recommendations: shot list, framing, the pattern-interrupt note. */
+  filming: string[];
+  /** The magnet / offer this reel points at (label only). */
+  magnetTitle: string;
+  /** The link the reel's CTA points at (the magnet page or the opt-in page). */
+  linkUrl: string;
+}
+
+export function normalizeReelBrief(value: unknown): ReelBrief {
+  const rec = (value && typeof value === 'object' ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((s): s is string => typeof s === 'string' && !!s.trim()).map((s) => s.trim())
+      : [];
+  return {
+    title: str(rec.title).trim(),
+    hook: str(rec.hook).trim(),
+    beats: strList(rec.beats),
+    cta: str(rec.cta).trim(),
+    hooks: strList(rec.hooks),
+    filming: strList(rec.filming),
+    magnetTitle: str(rec.magnetTitle).trim(),
+    linkUrl: str(rec.linkUrl).trim(),
+  };
+}
+
 /** Which handoff targets an artifact type supports, in button order. */
 export function handoffTargetsFor(
   type: ResearchArtifactType,
@@ -641,6 +692,8 @@ export function handoffTargetsFor(
       return ['sales-funnel', 'system'];
     case 'reel-cue-plan':
       return ['reel-cues'];
+    case 'reel-brief':
+      return ['reel-brief'];
     default:
       return [];
   }

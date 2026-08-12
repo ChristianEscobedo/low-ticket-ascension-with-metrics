@@ -27,6 +27,7 @@ import {
   normalizeLeadMagnetConcept,
   normalizeEmailOutline,
   normalizeOfferBrief,
+  normalizeReelBrief,
   normalizeReelCuePlan,
   type HandedOffRef,
   type ResearchArtifact,
@@ -966,6 +967,156 @@ async function handoffToReelCues(
 }
 
 // ---------------------------------------------------------------------------
+// Lead Magnet Reel Day targets (the reel-brief + gated-delivery handoffs)
+// ---------------------------------------------------------------------------
+
+/**
+ * 'reel-brief': turn an approved reel brief into the day's reel canvas + the
+ * planner card the owner films from. Creates a NAMED reel project (empty
+ * clips — the studio opens it as the canvas) and a planner card carrying the
+ * full script, the hook variants, and the filming recommendations.
+ */
+async function handoffToReelBrief(
+  artifact: ResearchArtifact,
+  session: ResearchSession,
+  updatedBy: string | null,
+): Promise<HandoffResult> {
+  const brief = normalizeReelBrief(artifact.structured);
+  const title = brief.title || brief.magnetTitle || artifact.title;
+  if (!title) {
+    return { ok: false, error: 'The reel brief needs a title.', status: 400 };
+  }
+  const suffix = suffixOf(artifact.id);
+  // The studio canvas: a named, empty project the owner opens and builds into.
+  const reel = await upsertReelProject({
+    name: `Reel: ${title}`.slice(0, 150),
+    clips: [],
+    audio: null,
+    updatedBy,
+  });
+  if (!reel) return { ok: false, error: 'The reel project save failed.', status: 500 };
+
+  // The day card: the script + hooks + filming recs the owner films from.
+  const notes = [
+    brief.hook ? `HOOK: ${brief.hook}` : '',
+    brief.beats.length ? `SCRIPT:\n${brief.beats.map((b, i) => `${i + 1}. ${b}`).join('\n')}` : '',
+    brief.cta ? `CTA: ${brief.cta}${brief.linkUrl ? ` (${brief.linkUrl})` : ''}` : '',
+    brief.hooks.length ? `HOOK VARIANTS:\n${brief.hooks.map((h) => `- ${h}`).join('\n')}` : '',
+    brief.filming.length ? `FILMING:\n${brief.filming.map((f) => `- ${f}`).join('\n')}` : '',
+    artifact.markdown ? `\nBRIEF:\n${artifact.markdown.slice(0, 1500)}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  await upsertContentPlan({
+    pieceId: `research_reel_${suffix}`,
+    offerSlug: session.offerSlug || undefined,
+    platform: 'instagram',
+    format: 'reel',
+    kind: 'organic',
+    title: `Reel: ${title.slice(0, 60)}`,
+    notes,
+    publishState: '',
+    updatedBy,
+  });
+
+  return finish(artifact, {
+    kind: 'reel-brief',
+    id: reel.id,
+    label: `${reel.name || title} + planner card`,
+    count: 2,
+    at: new Date().toISOString(),
+  });
+}
+
+/**
+ * 'gated-delivery' (the gated path): gate the magnet behind an opt-in page and
+ * deliver it by email. Builds the opt-in funnel page (linked to the offer)
+ * plus the delivery email kit (generated, carrying the magnet link). Fires on
+ * APPROVAL of the gate step; canceling it is the free path — the magnet's
+ * public link is the CTA and nothing gated is built.
+ */
+async function handoffToGatedDelivery(
+  artifact: ResearchArtifact,
+  session: ResearchSession,
+  updatedBy: string | null,
+): Promise<HandoffResult> {
+  const brief = normalizeReelBrief(artifact.structured);
+  const magnetTitle = brief.magnetTitle || brief.title || artifact.title;
+  if (!magnetTitle) {
+    return { ok: false, error: 'The brief needs a magnet title to gate.', status: 400 };
+  }
+  const linkUrl = brief.linkUrl;
+  const suffix = suffixOf(artifact.id);
+
+  // 1. The opt-in page (lead capture), linked to the offer.
+  const optinSlug = `${slugify(magnetTitle, 'magnet')}-optin-${suffix}`;
+  const optin = await upsertOptinFunnel({
+    id: await existingRowId(getOptinFunnelBySlug, optinSlug),
+    slug: optinSlug,
+    name: `${magnetTitle} opt-in`,
+    status: 'draft',
+    offerSlug: session.offerSlug || null,
+    leadGenSlug: null,
+    optin: blankOptinPage(),
+    oto: blankOptinOto(),
+    thankyou: blankOptinThankYou(),
+    footer: blankOptinFooter(),
+    updatedBy,
+  });
+
+  // 2. The delivery email (built), carrying the magnet link.
+  const emailSlug = `${slugify(magnetTitle, 'magnet')}-delivery-${suffix}`;
+  const emailIntake = {
+    ...blankEmailIntake(),
+    audience: session.intake.audience,
+    goal: `Deliver ${magnetTitle}${linkUrl ? ` at ${linkUrl}` : ''} and point to the next step.`,
+    offerSlug: session.offerSlug,
+    notes: artifact.markdown ? `BRIEF:\n${artifact.markdown.slice(0, 2000)}` : '',
+  };
+  const emailKit = await upsertEmailKit({
+    id: await existingRowId(getEmailKitBySlug, emailSlug),
+    slug: emailSlug,
+    name: `${magnetTitle} delivery`,
+    campaignType: 'leadmag-to-lowticket',
+    framework: 'quick-win',
+    status: 'draft',
+    intake: emailIntake,
+    contextRefs: researchContextRefs(session),
+    sequence: blankSequence(),
+    updatedBy,
+  });
+  const packs = await resolveContextRefs(researchContextRefs(session));
+  const seq = await aiGenerateSequence(
+    emailKit.intake,
+    emailKit.campaignType,
+    emailKit.framework,
+    packs,
+  );
+  if (seq.ok) {
+    await upsertEmailKit({
+      id: emailKit.id,
+      slug: emailKit.slug,
+      name: emailKit.name,
+      campaignType: emailKit.campaignType,
+      framework: emailKit.framework,
+      status: emailKit.status,
+      intake: emailKit.intake,
+      contextRefs: emailKit.contextRefs,
+      sequence: seq.data,
+      updatedBy,
+    });
+  }
+
+  return finish(artifact, {
+    kind: 'gated-delivery',
+    id: optin.id,
+    label: `${optin.name || magnetTitle} opt-in + delivery email${seq.ok ? '' : ' (draft)'}`,
+    count: 2,
+    at: new Date().toISOString(),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -1012,6 +1163,10 @@ export async function runHandoff(opts: {
       return runSystemBuild(artifact, opts.session, updatedBy);
     case 'reel-cues':
       return handoffToReelCues(artifact, opts.session, updatedBy, generate);
+    case 'reel-brief':
+      return handoffToReelBrief(artifact, opts.session, updatedBy);
+    case 'gated-delivery':
+      return handoffToGatedDelivery(artifact, opts.session, updatedBy);
     default:
       return { ok: false, error: 'unknown handoff target', status: 400 };
   }

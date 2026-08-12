@@ -52,6 +52,8 @@ const TARGET_META: Record<
   'sales-funnel': { label: 'Create Funnel Draft', buildLabel: 'Build Funnel', sentLabel: 'Funnel Drafted', busyLabel: 'Building the funnel pages', icon: ShoppingBag, href: '/admin/sales-funnels' },
   system: { label: 'Build Full System', sentLabel: 'System Built', busyLabel: 'Building the full system (lead magnet, opt-in, nurture kit, funnel draft, planner cards)', icon: Boxes, href: '/admin' },
   'reel-cues': { label: 'Attach Cues (library only)', buildLabel: 'Attach Cues (match + generate)', sentLabel: 'Cues Attached', busyLabel: 'Matching the library and generating the missing fly-ins', icon: Clapperboard, href: '/admin/reel-studio' },
+  'reel-brief': { label: 'Create Reel + Card', sentLabel: 'Reel + Card Created', busyLabel: 'Creating the reel project and the planner card', icon: Clapperboard, href: '/admin/reel-studio' },
+  'gated-delivery': { label: 'Gate + Deliver by Email', sentLabel: 'Gated + Delivery Built', busyLabel: 'Building the opt-in page and the delivery email', icon: Mail, href: '/admin/funnels' },
 };
 
 /** Where the handed-off banner LINKS: the built thing when we know its id. */

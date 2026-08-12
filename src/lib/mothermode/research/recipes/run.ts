@@ -61,7 +61,9 @@ export interface RecipeDeps {
       | 'email-kit'
       | 'sales-funnel'
       | 'system'
-      | 'reel-cues';
+      | 'reel-cues'
+      | 'reel-brief'
+      | 'gated-delivery';
     session: ResearchSession;
     generate: boolean;
   }) => Promise<string | void>;

@@ -31,7 +31,9 @@ export interface RecipeStepHandoff {
     | 'email-kit'
     | 'sales-funnel'
     | 'system'
-    | 'reel-cues';
+    | 'reel-cues'
+    | 'reel-brief'
+    | 'gated-delivery';
   /** Build (true) runs the target's own pipeline; Draft (false) pre-fills.
    *  Ignored by 'system' — the fan-out always builds its buildable parts.
    *  For 'reel-cues': Build = match the library first, then generate what's
@@ -164,7 +166,9 @@ export function normalizeRecipeSteps(value: unknown): RecipeStep[] {
         target === 'email-kit' ||
         target === 'sales-funnel' ||
         target === 'system' ||
-        target === 'reel-cues'
+        target === 'reel-cues' ||
+        target === 'reel-brief' ||
+        target === 'gated-delivery'
       ) {
         step.handoff = { target, generate: hr.generate === true };
       }
@@ -261,6 +265,8 @@ const HANDOFF_TARGETS: readonly string[] = [
   'sales-funnel',
   'system',
   'reel-cues',
+  'reel-brief',
+  'gated-delivery',
 ];
 
 /**

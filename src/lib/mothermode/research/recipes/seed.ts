@@ -666,4 +666,40 @@ export const RECIPE_SEEDS: RecipeSeed[] = [
       },
     ],
   },
+  {
+    slug: 'lead-magnet-reel-day',
+    name: 'Lead Magnet Reel Day',
+    description:
+      'The daily lead-magnet reel: decide the magnet, build + publish it as HTML, write the reel script with hooks + filming recs, then choose — gate it behind an opt-in page (delivers by email) or give it away free. Strategist (gate) → build magnet → reel brief (gate) → gated delivery (gate: approve = opt-in + email, cancel = free link).',
+    budgetEstCents: 180,
+    steps: [
+      {
+        expert: 'leadmagnet',
+        instruction:
+          'Decide today\'s lead magnet from the brief: the FIRST slice of the offer\'s promise, consumable in one sitting, that the reel will give away. Save a lead-magnet artifact with the exact documented structure (title, format, promise, audience, outline, cta). Approving this builds + publishes the magnet as a styled HTML page. Brief goal: {input}',
+        inputFrom: 'brief',
+        outputArtifact: 'lead-magnet',
+        gate: 'approve',
+        handoff: { target: 'leadgen-kit', generate: true },
+      },
+      {
+        expert: 'strategist',
+        instruction:
+          'Write the reel that gives this magnet away today. The spoken hook (the first 1-2s pattern interrupt), 3-6 script beats, the closing CTA pointing at the magnet, 3-5 hook variants, and the filming recommendations (shot list, framing, the chaos-then-calm interrupt). Save a reel-brief artifact with the documented structure (title, hook, beats, cta, hooks, filming, magnetTitle, linkUrl). Approving creates the reel project + the planner card. The magnet:\n\n{input}',
+        inputFrom: 'previous',
+        outputArtifact: 'reel-brief',
+        gate: 'approve',
+        handoff: { target: 'reel-brief', generate: true },
+      },
+      {
+        expert: 'strategist',
+        instruction:
+          'Decide the delivery. GATE IT: the magnet sits behind an opt-in page and the delivery email sends it (approve to build both). GIVE IT AWAY FREE: cancel this step — the magnet\'s public link stays the reel\'s CTA and nothing gated is built. Either way, re-emit the reel-brief artifact (same documented structure) with linkUrl set to the opt-in page when gating, or the magnet\'s public link when free. The brief:\n\n{input}',
+        inputFrom: 'previous',
+        outputArtifact: 'reel-brief',
+        gate: 'approve',
+        handoff: { target: 'gated-delivery', generate: true },
+      },
+    ],
+  },
 ];
