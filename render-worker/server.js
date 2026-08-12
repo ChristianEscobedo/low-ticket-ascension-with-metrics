@@ -434,6 +434,14 @@ async function runRender(jobId, plan, reelId) {
       codec: 'h264',
       outputLocation: outPath,
       inputProps: { plan },
+      // The delayRender timeout: how long a single frame may wait on its media
+      // (an OffthreadVideo ffmpeg extraction, an image, the caption webfonts)
+      // before Remotion fails the render. 30s default dies at "render the
+      // React component at frame N failed: timeout 30000ms exceeded" the
+      // moment one clip is slow to pull or decode — a fetched hook clip, a big
+      // source, a cold CDN. 2 minutes per frame lets a slow-but-valid asset
+      // finish instead of killing a multi-minute render.
+      timeoutInMilliseconds: 120_000,
       onProgress: ({ progress }) => {
         // Report every frame batch to the job (cheap, in-memory) but keep the
         // log at every ~10% so the deploy logs stay readable.
