@@ -1,7 +1,11 @@
 # Hook Bank — Phase 3 Task: the AI reaction sheet
 
-Status: **PLANNED** (phases 1 + 2 shipped — see `HOOK_BANK_SYSTEM_PORT.md`).
-This is the build spec for the next session.
+Status: **BUILT** (all three phases shipped — see `HOOK_BANK_SYSTEM_PORT.md`).
+This was the build spec; the implementation is in. Files: `hookReactions.ts`
+(the 8-preset registry, one per reaction), `/api/admin/hook-generate` (Seedance
+render → rehost → ingest `source='generated'` + `rights='owned'` + vault
+mirror), and the Add sheet's **AI generate** tab (character-sheet picker from
+the media library's `character-sheet` assets + preset picker + steer note).
 
 ## The idea
 

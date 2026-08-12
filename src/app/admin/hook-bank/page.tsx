@@ -4,10 +4,10 @@
  * /admin/hook-bank — the visual hook library.
  *
  * A tagged, scored bank of 0.5-3s opening clips (character reactions, meme
- * intros, pattern interrupts) that mount as beat 0 on the reel timeline.
- * Upload a clip, tag the reaction it triggers, mark the rights, and it shows
- * up in the reel studio's hook rail. The score column becomes the leaderboard
- * once hooks carry real hold metrics.
+ * intros, pattern interrupts) that mount as beat 0 on the reel timeline. Three
+ * ways in: upload a clip, fetch-and-clip off a social link (the worker cuts
+ * it), or AI-generate a reaction off a twin's character sheet. The score
+ * column becomes the leaderboard once hooks carry real hold metrics.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
@@ -18,6 +18,7 @@ import {
   Search,
   ShieldCheck,
   ShieldAlert,
+  Sparkles,
   Trash2,
   Upload,
   Zap,
@@ -31,6 +32,8 @@ import {
   type HookReaction,
   type HookRights,
 } from '@/lib/mothermode/reel/hookBank';
+import { HOOK_REACTION_PRESETS } from '@/lib/mothermode/reel/hookReactions';
+import type { MediaAsset } from '@/lib/mothermode/reel/mediaLibrary';
 
 const API = '/api/admin/hook-bank';
 
@@ -128,7 +131,6 @@ export default function HookBankPage() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="mt-6 flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-bone/30" />
@@ -162,7 +164,6 @@ export default function HookBankPage() {
         </button>
       </div>
 
-      {/* Grid */}
       {loading ? (
         <div className="mt-16 flex items-center justify-center gap-2 text-bone/40 text-sm">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading the bank…
@@ -247,11 +248,7 @@ function HookCard({
         <div className="relative aspect-[9/16] bg-ink/60">
           {hook.spriteUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={hook.spriteUrl}
-              alt={hook.name}
-              className="h-full w-full object-cover"
-            />
+            <img src={hook.spriteUrl} alt={hook.name} className="h-full w-full object-cover" />
           ) : (
             <video
               src={hook.url}
@@ -301,6 +298,8 @@ function HookCard({
   );
 }
 
+type AddMode = 'upload' | 'fetch' | 'generate';
+
 function AddHookSheet({
   onClose,
   onAdded,
@@ -317,13 +316,61 @@ function AddHookSheet({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  // Fetch-and-clip: paste a social link, the worker downloads + sprites it.
-  const [mode, setMode] = useState<'upload' | 'fetch'>('upload');
+  const [mode, setMode] = useState<AddMode>('upload');
   const [fetchUrl, setFetchUrl] = useState('');
   const [fetching, setFetching] = useState(false);
   const [fetchStage, setFetchStage] = useState('');
   const [fetchedDuration, setFetchedDuration] = useState<number | null>(null);
   const [fetchedSprite, setFetchedSprite] = useState<string | null>(null);
+  const [sheets, setSheets] = useState<MediaAsset[] | null>(null);
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [presetId, setPresetId] = useState<string>(HOOK_REACTION_PRESETS[0].id);
+  const [note, setNote] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'generate' || sheets !== null) return;
+    let on = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/media-library?kind=image&tag=character-sheet');
+        const data = await res.json();
+        if (on) setSheets(data.success ? data.assets ?? [] : []);
+      } catch {
+        if (on) setSheets([]);
+      }
+    })();
+    return () => {
+      on = false;
+    };
+  }, [mode, sheets]);
+
+  const generate = async () => {
+    if (!/^https?:\/\//i.test(sheetUrl.trim())) {
+      setErr('Pick a character sheet (or paste its image URL).');
+      return;
+    }
+    setGenerating(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/admin/hook-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sheetUrl: sheetUrl.trim(),
+          preset: presetId,
+          note: note.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.hook) onAdded(data.hook);
+      else setErr(data.error || 'Generation failed');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const fetchAndFill = async () => {
     const link = fetchUrl.trim();
@@ -344,7 +391,6 @@ function AddHookSheet({
       if (!startData.success || !startData.jobId) {
         throw new Error(startData.error || 'Could not start the fetch.');
       }
-      // Poll until the worker finishes the download.
       const jobId = startData.jobId as string;
       for (;;) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -378,8 +424,6 @@ function AddHookSheet({
     setUploading(true);
     setErr(null);
     try {
-      // Reuse the reel upload-url flow: get a signed URL, PUT the file, then
-      // the public URL becomes the hook's url.
       const res = await fetch('/api/admin/reel-upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -414,7 +458,6 @@ function AddHookSheet({
           url: url.trim(),
           source: mode === 'fetch' ? 'fetched' : 'uploaded',
           reaction,
-          // Fetched clips can't claim ownership until a human confirms them.
           rights: mode === 'fetch' && rights === 'owned' ? 'unknown' : rights,
           durationSec: fetchedDuration,
           spriteUrl: fetchedSprite,
@@ -434,18 +477,19 @@ function AddHookSheet({
     }
   };
 
+  const busy = saving || uploading || fetching || generating;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl border border-brass/20 bg-mode-deep p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-brass/20 bg-mode-deep p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="font-display text-xl font-semibold tracking-tight">Add a hook</h2>
         <p className="mt-1 text-xs text-bone/50">
-          A 0.5-3s clip that opens the reel. Upload a file, or fetch one off a
-          social link and the worker clips it for you.
+          Upload a clip, fetch one off a social link, or generate a reaction off a
+          twin's character sheet.
         </p>
 
-        {/* Upload vs Fetch-and-clip */}
-        <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-bone/10 bg-bone/[0.03] p-1">
-          {(['upload', 'fetch'] as const).map((m) => (
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-lg border border-bone/10 bg-bone/[0.03] p-1">
+          {(['upload', 'fetch', 'generate'] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -454,12 +498,24 @@ function AddHookSheet({
                 mode === m ? 'bg-brass/15 text-brass' : 'text-bone/50 hover:text-bone/80',
               )}
             >
-              {m === 'upload' ? 'Upload / URL' : 'Fetch & clip'}
+              {m === 'upload' ? 'Upload' : m === 'fetch' ? 'Fetch & clip' : 'AI generate'}
             </button>
           ))}
         </div>
 
         <div className="mt-5 space-y-4">
+          {mode === 'generate' && (
+            <GenerateHookBlock
+              sheets={sheets}
+              sheetUrl={sheetUrl}
+              setSheetUrl={setSheetUrl}
+              presetId={presetId}
+              setPresetId={setPresetId}
+              note={note}
+              setNote={setNote}
+            />
+          )}
+
           {mode === 'fetch' && (
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
@@ -494,100 +550,104 @@ function AddHookSheet({
             </div>
           )}
 
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
-              Clip
-            </label>
-            <div className="mt-1.5 flex gap-2">
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://…/hook.mp4"
-                className="flex-1 rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
-              />
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-bone/15 bg-bone/[0.04] px-3 py-2 text-xs font-medium text-bone/70 hover:border-brass/40 hover:text-bone transition-colors disabled:opacity-50"
-              >
-                {uploading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Upload className="h-3.5 w-3.5" />
-                )}
-                Upload
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void uploadFile(f);
-                }}
-              />
-            </div>
-          </div>
+          {mode !== 'generate' && (
+            <>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                  Clip
+                </label>
+                <div className="mt-1.5 flex gap-2">
+                  <input
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://…/hook.mp4"
+                    className="flex-1 rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+                  />
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-bone/15 bg-bone/[0.04] px-3 py-2 text-xs font-medium text-bone/70 hover:border-brass/40 hover:text-bone transition-colors disabled:opacity-50"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    Upload
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadFile(f);
+                    }}
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
-              Name
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Laundry avalanche"
-              className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
-            />
-          </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                  Name
+                </label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Laundry avalanche"
+                  className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
-                Reaction
-              </label>
-              <select
-                value={reaction}
-                onChange={(e) => setReaction(e.target.value as HookReaction)}
-                className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/40"
-              >
-                {HOOK_REACTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {REACTION_LABEL[r]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
-                Rights
-              </label>
-              <select
-                value={rights}
-                onChange={(e) => setRights(e.target.value as HookRights)}
-                className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/40"
-              >
-                {HOOK_RIGHTS.map((r) => (
-                  <option key={r} value={r}>
-                    {RIGHTS_LABEL[r]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                    Reaction
+                  </label>
+                  <select
+                    value={reaction}
+                    onChange={(e) => setReaction(e.target.value as HookReaction)}
+                    className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/40"
+                  >
+                    {HOOK_REACTIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {REACTION_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                    Rights
+                  </label>
+                  <select
+                    value={rights}
+                    onChange={(e) => setRights(e.target.value as HookRights)}
+                    className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone focus:outline-none focus:border-brass/40"
+                  >
+                    {HOOK_RIGHTS.map((r) => (
+                      <option key={r} value={r}>
+                        {RIGHTS_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
-              Tags <span className="text-bone/30 normal-case">(comma separated)</span>
-            </label>
-            <input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="kids, kitchen, morning"
-              className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
-            />
-          </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+                  Tags <span className="text-bone/30 normal-case">(comma separated)</span>
+                </label>
+                <input
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="kids, kitchen, morning"
+                  className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+                />
+              </div>
+            </>
+          )}
 
           {err && (
             <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-300">
@@ -602,16 +662,133 @@ function AddHookSheet({
             >
               Cancel
             </button>
-            <button
-              onClick={() => void save()}
-              disabled={saving || uploading}
-              className="inline-flex items-center gap-2 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-ink hover:bg-brass/90 transition-colors disabled:opacity-50"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Add to bank
-            </button>
+            {mode === 'generate' ? (
+              <button
+                onClick={() => void generate()}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-ink hover:bg-brass/90 transition-colors disabled:opacity-50"
+              >
+                {generating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {generating ? 'Generating…' : 'Generate reaction'}
+              </button>
+            ) : (
+              <button
+                onClick={() => void save()}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-lg bg-brass px-4 py-2 text-sm font-semibold text-ink hover:bg-brass/90 transition-colors disabled:opacity-50"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Add to bank
+              </button>
+            )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The AI-generate tab: pick a twin's sheet + a reaction preset, steer, go. */
+function GenerateHookBlock({
+  sheets,
+  sheetUrl,
+  setSheetUrl,
+  presetId,
+  setPresetId,
+  note,
+  setNote,
+}: {
+  sheets: MediaAsset[] | null;
+  sheetUrl: string;
+  setSheetUrl: (v: string) => void;
+  presetId: string;
+  setPresetId: (v: string) => void;
+  note: string;
+  setNote: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+          Character sheet
+        </label>
+        {sheets === null ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-bone/40">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading the cast…
+          </p>
+        ) : sheets.length > 0 ? (
+          <div className="mt-1.5 grid grid-cols-3 gap-2">
+            {sheets.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSheetUrl(s.url)}
+                className={clsx(
+                  'rounded-lg overflow-hidden border transition-colors aspect-square bg-ink',
+                  sheetUrl === s.url
+                    ? 'border-brass ring-1 ring-brass/50'
+                    : 'border-bone/10 hover:border-brass/40',
+                )}
+                title={s.name}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={s.url} alt={s.name} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[11px] text-bone/40">
+            No character sheets in the media library yet — forge one in AI Twins, or
+            paste a sheet image URL below.
+          </p>
+        )}
+        <input
+          value={sheetUrl}
+          onChange={(e) => setSheetUrl(e.target.value)}
+          placeholder="…or paste the sheet image URL"
+          className="mt-2 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+          Reaction
+        </label>
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          {HOOK_REACTION_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setPresetId(p.id)}
+              className={clsx(
+                'rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                presetId === p.id
+                  ? 'border-brass/40 bg-brass/15 text-brass'
+                  : 'border-bone/10 bg-bone/[0.03] text-bone/60 hover:text-bone/90',
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-semibold uppercase tracking-wider text-brass/70">
+          Steer note <span className="text-bone/30 normal-case">(optional)</span>
+        </label>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="in the kitchen, mid-morning, coffee in hand"
+          className="mt-1.5 w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-sm text-bone placeholder:text-bone/30 focus:outline-none focus:border-brass/40"
+        />
+        <p className="mt-1 text-[10px] text-bone/35">
+          Generated clips are owned (your twin) and land in the bank + the studio's
+          reaction rail.
+        </p>
       </div>
     </div>
   );
@@ -658,7 +835,10 @@ function PreviewSheet({ hook, onClose }: { hook: HookClip; onClose: () => void }
             {hook.tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {hook.tags.map((t) => (
-                  <span key={t} className="rounded bg-bone/[0.05] px-1.5 py-0.5 text-[10px] text-bone/50">
+                  <span
+                    key={t}
+                    className="rounded bg-bone/[0.05] px-1.5 py-0.5 text-[10px] text-bone/50"
+                  >
                     {t}
                   </span>
                 ))}

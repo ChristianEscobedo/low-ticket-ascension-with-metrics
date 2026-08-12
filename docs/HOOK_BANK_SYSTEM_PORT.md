@@ -1,8 +1,9 @@
 # Hook Bank — System Port
 
-Status: **phase 1 + 2 built** (bank + beat-0 mount + vault mirror, plus
-fetch-and-clip on the render worker). AI-sheet generation is the planned next
-phase.
+Status: **all three phases built** — the bank + beat-0 mount + vault mirror,
+fetch-and-clip on the render worker, and the AI reaction sheet (phase 3:
+`hookReactions.ts` + `/api/admin/hook-generate` + the Add sheet's AI-generate
+tab).
 
 Tests: `npx vitest run tests/lib/hook-bank.test.ts` (10 passing).
 
@@ -29,11 +30,12 @@ Admin: `/admin/hook-bank` (sidebar: **Hook Bank**).
    form; saving ingests with `source='fetched'` and rights forced off `owned`
    until a human confirms. Runs on the worker, NOT Vercel — social platforms
    IP-block serverless, and yt-dlp/ffmpeg only exist in the container.
-3. **AI-generated reaction** (PLANNED) — a hook sheet = the twin's character
-   sheet + a reaction preset (mind-blown, "wait—what", pointing at screen),
-   rendered through the existing clone/Seedance pipeline into an on-brand
-   1-2s reaction clip of the SAME character as the content. `sheet_ref`
-   already carries the provenance.
+3. **AI-generated reaction** (BUILT) — the Add sheet's "AI generate" tab:
+   pick a twin's character sheet (from the media library's `character-sheet`
+   assets) + a reaction preset (`hookReactions.ts`, one per reaction), and
+   `/api/admin/hook-generate` renders a silent 1-2s reaction clip through
+   Seedance (no storyboard gate), rehosts it, and ingests with
+   `source='generated'` + `sheet_ref` + `rights='owned'`.
 
 ## Data model
 
