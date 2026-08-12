@@ -445,10 +445,11 @@ async function runRender(jobId, plan, reelId) {
       // The memory cap: how many frames render in PARALLEL. The default is
       // ~cores/2, and parallel 1080x1920 frames + per-clip ffmpeg extraction is
       // exactly what pushes a small Railway container over its RAM limit and
-      // gets the compositor SIGKILLed (OOM). 2 keeps two frames in flight —
-      // roughly half the default peak memory — at a modest speed cost. Drop to
-      // 1 if a heavy reel still OOMs.
-      concurrency: 2,
+      // gets the compositor SIGKILLed (OOM). 1 renders one frame at a time —
+      // the lowest peak memory, at a real speed cost. If a heavy reel STILL
+      // OOMs at 1, the container is out of RAM, not out of parallelism: bump
+      // the Railway service's memory.
+      concurrency: 1,
       onProgress: ({ progress }) => {
         // Report every frame batch to the job (cheap, in-memory) but keep the
         // log at every ~10% so the deploy logs stay readable.
