@@ -269,7 +269,7 @@ export interface EditorPack {
   /** Base preset id from CAPTION_STYLE_DEFS */
   presetId: string;
   /** Optional style overrides merged on apply */
-  overrides?: CaptionStyleOverrides;
+  overrides?: CaptionOverrides;
 }
 
 export const EDITOR_PACKS: EditorPack[] = [
