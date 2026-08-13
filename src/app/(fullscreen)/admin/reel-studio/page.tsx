@@ -106,7 +106,7 @@ import { SubtitlePanel } from './SubtitlePanel';
 import ThumbnailLabSheet from './ThumbnailLabSheet';
 import RenderPanel from './RenderPanel';
 import RenderButton from './RenderButton';
-import { useRenderJob, type RenderJob } from './useRenderJob';
+import { useRenderJob, type RenderJob } from './useRenderJob, { keepWorkerWarm }';
 
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import { RichTextField } from '@/components/mothermode/content/RichTextField';
@@ -345,6 +345,11 @@ function clientThumb(url: string, t: number): Promise<string> {
 const Thumb = memo(function Thumb({ url, t, className }: { url: string; t: number; className?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    // Keep Railway worker warm while studio is open (avoids multi-minute cold starts).
+    return keepWorkerWarm(process.env.NEXT_PUBLIC_RENDER_WORKER_URL);
+  }, []);
+
   useEffect(() => {
     let alive = true;
     // Try the server first (edge-cached); fall back to the client on any error.

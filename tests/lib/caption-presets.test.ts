@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  wordSyncedGhostOpacity,
+  wordMotionPhase,
+} from '../../src/lib/mothermode/reel/render/captionLayer';
+
+import {
   CAPTION_ANIMS,
   CAPTION_STYLE_DEFS,
   assFor,
@@ -36,18 +41,26 @@ describe('R17 caption preset gallery (structured model)', () => {
       const css = captionCssFor(d);
       expect(typeof css.line.fontFamily).toBe('string');
       expect(css.line.fontFamily).toContain(d.font);
-      expect(css.word.color).toBe(d.wordColor);
       if (d.gradient) {
-        // gradient presets fill the active word via background-clip:text (transparent fill)
+        // gradient presets fill via background-clip:text (transparent fill).
+        // scope 'all' paints idle words too; 'active' only the spoken word.
         expect(String(css.active.backgroundImage ?? '')).toContain('linear-gradient');
         expect(String(css.active.WebkitTextFillColor ?? '')).toBe('transparent');
+        if (d.gradientScope === 'all') {
+          expect(css.word.color).toBe('transparent');
+          expect(String(css.word.backgroundImage ?? '')).toContain('linear-gradient');
+        } else {
+          expect(css.word.color).toBe(d.wordColor);
+        }
       } else {
+        expect(css.word.color).toBe(d.wordColor);
         expect(css.active.color).toBe(d.activeColor);
       }
       expect(css.upper).toBe(d.upper);
       expect(css.wordsPerLine).toBe(d.wordsPerLine);
     }
   });
+
 
   it('box-highlight presets draw a highlight box behind the active word', () => {
     const kelly = captionDefFor('kelly2');
@@ -232,4 +245,183 @@ describe('R24 modern caption tier (anims, highlights, spacing, power words)', ()
     expect(isPowerWord('money', [])).toBe(false);
     expect(isPowerWord('!!!', list)).toBe(false);
   });
+
+  it('gradient presets never emit WebkitTextStroke (the black halo bug)', () => {
+    const grads = CAPTION_STYLE_DEFS.filter((d) => d.gradient);
+    expect(grads.length).toBeGreaterThanOrEqual(3);
+    for (const d of grads) {
+      const css = captionCssFor(d);
+      // Active word is always gradient-filled when gradient is set.
+      expect((css.active as Record<string, unknown>).WebkitTextStroke).toBeUndefined();
+      expect(String(css.active.backgroundImage ?? '')).toContain('linear-gradient');
+      expect(String((css.active as Record<string, unknown>).WebkitTextFillColor ?? '')).toBe(
+        'transparent',
+      );
+      // scope:'all' paints idle words too — still no stroke.
+      if (d.gradientScope === 'all') {
+        expect((css.word as Record<string, unknown>).WebkitTextStroke).toBeUndefined();
+        expect(String(css.word.backgroundImage ?? '')).toContain('linear-gradient');
+      }
+    }
+  });
+
+  it('gradientFill override paints whole text and drops stroke', () => {
+    const base = captionDefFor('hormozi1');
+    expect(base.stroke?.width).toBeGreaterThan(0);
+    const merged = resolveCaptionStyle(base, {
+      gradientFill: {
+        colors: ['#F472B6', '#A78BFA', '#22D3EE'],
+        scope: 'all',
+        angle: 110,
+        shift: true,
+      },
+    });
+    expect(merged.gradient).toEqual(['#F472B6', '#A78BFA', '#22D3EE']);
+    expect(merged.gradientScope).toBe('all');
+    expect(merged.gradientAngle).toBe(110);
+    expect(merged.gradientShift).toBe(true);
+    expect(merged.stroke).toBeUndefined();
+    const css = captionCssFor(merged);
+    expect((css.word as Record<string, unknown>).WebkitTextStroke).toBeUndefined();
+    expect((css.active as Record<string, unknown>).WebkitTextStroke).toBeUndefined();
+    expect(String(css.word.backgroundImage ?? '')).toContain('linear-gradient(110deg');
+    expect(String(css.active.backgroundImage ?? '')).toContain('linear-gradient(110deg');
+  });
+
+  it('ghost fade overrides force blockFx + timing (full on → hold → full off)', () => {
+    const base = captionDefFor('hormozi1');
+    expect(base.blockFx ?? []).not.toContain('ghostFade');
+    const on = resolveCaptionStyle(base, {
+      ghostFade: true,
+      ghostFadeInSec: 0.4,
+      ghostFadeOutSec: 0.5,
+    });
+    expect(on.blockFx).toContain('ghostFade');
+    expect(on.ghost?.fadeInSec).toBe(0.4);
+    expect(on.ghost?.fadeOutSec).toBe(0.5);
+
+    const ghost = captionDefFor('ghost');
+    expect(ghost.blockFx).toContain('ghostFade');
+    const off = resolveCaptionStyle(ghost, { ghostFade: false });
+    expect(off.blockFx ?? []).not.toContain('ghostFade');
+    // Timing clamps into 0.05–1.2
+    const clamped = resolveCaptionStyle(base, {
+      ghostFade: true,
+      ghostFadeInSec: 9,
+      ghostFadeOutSec: 0.01,
+    });
+    expect(clamped.ghost?.fadeInSec).toBe(1.2);
+    expect(clamped.ghost?.fadeOutSec).toBe(0.05);
+  });
+
+  
+  
+  it('float + wiggle can both be on with amplitude settings', () => {
+    const base = captionDefFor('hormozi1');
+    const both = resolveCaptionStyle(base, {
+      floatOn: true,
+      wiggleOn: true,
+      floatAmpEm: 0.2,
+      wiggleDeg: 2.5,
+    });
+    expect(both.blockFx).toContain('float');
+    expect(both.blockFx).toContain('wiggle');
+    expect(both.motion?.floatAmpEm).toBe(0.2);
+    expect(both.motion?.wiggleDeg).toBe(2.5);
+    const off = resolveCaptionStyle(both, { floatOn: false });
+    expect(off.blockFx ?? []).not.toContain('float');
+    expect(off.blockFx).toContain('wiggle');
+  });
+
+  it('ghost ease + drift merge for movie-style fade', () => {
+    const base = captionDefFor('ghost');
+    const m = resolveCaptionStyle(base, {
+      ghostEase: 'smooth',
+      ghostDriftEm: 0.2,
+    });
+    expect(m.ghost?.ease).toBe('smooth');
+    expect(m.ghost?.driftEm).toBe(0.2);
+  });
+
+it('ghost stagger word/letter merges + clamps delay', () => {
+    const base = captionDefFor('hormozi1');
+    const word = resolveCaptionStyle(base, {
+      ghostFade: true,
+      ghostStagger: 'word',
+      ghostStaggerSec: 0.08,
+    });
+    expect(word.blockFx).toContain('ghostFade');
+    expect(word.ghost?.stagger).toBe('word');
+    expect(word.ghost?.staggerSec).toBe(0.08);
+    const letter = resolveCaptionStyle(base, {
+      ghostFade: true,
+      ghostStagger: 'letter',
+      ghostStaggerSec: 9,
+    });
+    expect(letter.ghost?.stagger).toBe('letter');
+    expect(letter.ghost?.staggerSec).toBe(0.25);
+  });
+
+  it('gradient CSS uses dual-layer shadow var not textShadow/filter (no silhouette)', () => {
+    const flow = captionCssFor(captionDefFor('gradient-flow'));
+    expect(String(flow.word.backgroundImage ?? '')).toContain('linear-gradient');
+    expect(flow.word.color).toBe('transparent');
+    expect(flow.word.textShadow).toBeUndefined();
+    expect(flow.word.filter).toBeUndefined();
+    expect(
+      String((flow.word as Record<string, unknown>)['--caption-grad-shadow'] ?? ''),
+    ).toMatch(/px/);
+  });
+
+it('gradient-flow / iridescent ship whole-text living gradients', () => {
+    const flow = captionDefFor('gradient-flow');
+    expect(flow.gradientScope).toBe('all');
+    expect(flow.gradientShift).toBe(true);
+    expect(flow.gradient?.length).toBeGreaterThanOrEqual(2);
+    const iri = captionDefFor('iridescent');
+    expect(iri.gradientScope).toBe('all');
+    expect(iri.blockFx).toContain('ghostFade');
+    expect(iri.ghost?.fadeInSec).toBeGreaterThan(0);
+  });
+
+  it('word-synced ghost fades on spoken window (0 → 1 → 0)', () => {
+    // word 10..40, in=5 out=5
+    expect(wordSyncedGhostOpacity(10, 10, 40, 5, 5, 'linear')).toBeCloseTo(0, 1);
+    expect(wordSyncedGhostOpacity(15, 10, 40, 5, 5, 'linear')).toBeCloseTo(1, 1);
+    expect(wordSyncedGhostOpacity(25, 10, 40, 5, 5, 'linear')).toBeCloseTo(1, 1);
+    expect(wordSyncedGhostOpacity(40, 10, 40, 5, 5, 'linear')).toBeCloseTo(0, 1);
+    expect(wordSyncedGhostOpacity(5, 10, 40, 5, 5, 'linear')).toBe(0);
+  });
+
+  it('word motion phase is 0 at word start', () => {
+    expect(wordMotionPhase(30, 30, 30, 1)).toBeCloseTo(0, 5);
+    expect(wordMotionPhase(45, 30, 30, 1)).toBeGreaterThan(0);
+  });
+
+  it('ghostSyncToWords + motionSyncToWords merge on resolve', () => {
+    const base = captionDefFor('iridescent');
+    const merged = resolveCaptionStyle(base, {
+      ghostSyncToWords: true,
+      motionSyncToWords: true,
+      floatOn: true,
+    });
+    expect(merged.ghost?.syncToWords).toBe(true);
+    expect(merged.motion?.syncToWords).toBe(true);
+    expect(merged.blockFx).toContain('float');
+  });
+
+  it('gradient dual-layer marks shadow via CSS var (not filter on glyph)', () => {
+    const flow = captionCssFor(captionDefFor('gradient-flow'));
+    expect(String(flow.word.backgroundImage ?? '')).toContain('linear-gradient');
+    expect(flow.word.color).toBe('transparent');
+    expect(flow.word.textShadow).toBeUndefined();
+    // filter on the clipped glyph is the silhouette bug — must be absent
+    expect(flow.word.filter).toBeUndefined();
+    expect(
+      String((flow.word as Record<string, unknown>)['--caption-grad-shadow'] ?? ''),
+    ).toBeTruthy();
+  });
+
 });
+
+

@@ -72,8 +72,15 @@ export const CAPTION_HOLD_SEC = 0.6;
 /** The active word's entrance duration. */
 export const CAPTION_ENTER_SEC = 0.18;
 
-/** Ghost-fade duration for a page of rows (in and out). */
-export const GHOST_FADE_SEC = 0.15;
+/**
+ * Default ghost page-fade durations (seconds).
+ * Fade fully ON, HOLD at full opacity, then fade fully OFF.
+ * Per-preset / override values live on `def.ghost`.
+ */
+export const GHOST_FADE_IN_SEC = 0.22;
+export const GHOST_FADE_OUT_SEC = 0.28;
+/** @deprecated use GHOST_FADE_IN_SEC / GHOST_FADE_OUT_SEC */
+export const GHOST_FADE_SEC = GHOST_FADE_IN_SEC;
 
 /** One float bob period, seconds. */
 export const FLOAT_PERIOD_SEC = 1.8;
@@ -185,6 +192,127 @@ export function activeWordIndex(
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 /**
+ * Ghost unit opacity for one staggered item (word or letter).
+ * unitIndex 0 is first; higher indices lag by staggerFrames on the way IN
+ * and on the way OUT (first in, first out — a smooth cascade both ways).
+ * Returns 0..1: fade in → hold → fade out.
+ */
+/** Smoothstep 0→1 (movie-caption ease-in-out). */
+export function ghostSmooth(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * Ghost unit opacity for one staggered item (word or letter) or the whole block
+ * (unitIndex 0, staggerFrames 0).
+ * ease 'smooth' = ease-in-out reveal/dissolve (viral movie-caption feel).
+ * Returns 0..1.
+ */
+export function ghostUnitOpacity(
+  frame: number,
+  pageStartFrame: number,
+  pageEndFrame: number,
+  unitIndex: number,
+  inF: number,
+  outF: number,
+  staggerFrames: number,
+  ease: 'linear' | 'smooth' = 'smooth',
+): number {
+  const delay = Math.max(0, unitIndex) * Math.max(0, staggerFrames);
+  const localIn = frame - pageStartFrame - delay;
+  const localOut = pageEndFrame - frame - delay;
+  let inOp = Math.min(1, Math.max(0, localIn / Math.max(1, inF)));
+  let outOp = Math.min(1, Math.max(0, localOut / Math.max(1, outF)));
+  if (ease === 'smooth') {
+    inOp = ghostSmooth(inOp);
+    outOp = ghostSmooth(outOp);
+  }
+  return Math.min(inOp, outOp);
+}
+
+/**
+ * Vertical drift factor for movie-style fade: +1 at start of fade-in, 0 at hold,
+ * -1 at end of fade-out. Multiply by driftEm for translateY.
+ */
+export function ghostDriftFactor(
+  frame: number,
+  pageStartFrame: number,
+  pageEndFrame: number,
+  unitIndex: number,
+  inF: number,
+  outF: number,
+  staggerFrames: number,
+): number {
+  const delay = Math.max(0, unitIndex) * Math.max(0, staggerFrames);
+  const localIn = frame - pageStartFrame - delay;
+  const localOut = pageEndFrame - frame - delay;
+  if (localIn < inF) {
+    // rising onto the frame: start below (positive Y) → 0
+    const t = Math.min(1, Math.max(0, localIn / Math.max(1, inF)));
+    return 1 - ghostSmooth(t);
+  }
+  if (localOut < outF) {
+    // sinking off: 0 → positive Y
+    const t = Math.min(1, Math.max(0, 1 - localOut / Math.max(1, outF)));
+    return ghostSmooth(t);
+  }
+  return 0;
+}
+
+/**
+ * Ghost opacity keyed to ONE word's spoken window (fromFrame → toFrame).
+ * Fade fully ON as the word starts, hold while spoken, fade fully OFF at end.
+ * Matches karaoke timing so reveal tracks the speaker.
+ */
+export function wordSyncedGhostOpacity(
+  frame: number,
+  fromFrame: number,
+  toFrame: number,
+  inF: number,
+  outF: number,
+  ease: 'linear' | 'smooth' = 'smooth',
+): number {
+  const dur = Math.max(1, toFrame - fromFrame);
+  let inFrames = Math.max(1, inF);
+  let outFrames = Math.max(1, outF);
+  const minHold = 1;
+  if (inFrames + outFrames + minHold > dur) {
+    const budget = Math.max(2, dur - minHold);
+    const total = inFrames + outFrames;
+    inFrames = Math.max(1, Math.round((budget * inFrames) / total));
+    outFrames = Math.max(1, budget - inFrames);
+  }
+  const localIn = frame - fromFrame;
+  const localOut = toFrame - frame;
+  let inOp = Math.min(1, Math.max(0, localIn / inFrames));
+  let outOp = Math.min(1, Math.max(0, localOut / outFrames));
+  if (ease === 'smooth') {
+    // smoothstep
+    const s = (t: number) => t * t * (3 - 2 * t);
+    inOp = s(inOp);
+    outOp = s(outOp);
+  }
+  if (frame < fromFrame) return 0;
+  if (frame > toFrame) return 0;
+  return Math.min(inOp, outOp);
+}
+
+/** Word-local float/wiggle phase: starts at the word's fromFrame. */
+export function wordMotionPhase(
+  frame: number,
+  fromFrame: number,
+  fps: number,
+  periodSec: number,
+): number {
+  const t = Math.max(0, frame - fromFrame) / Math.max(1, fps);
+  const p = Math.max(0.25, periodSec);
+  return (t / p) * Math.PI * 2;
+}
+
+
+
+/**
  * The active word's entrance as plain style values for a given progress `e`
  * (0 = just spoken, 1 = settled).
  *
@@ -228,7 +356,35 @@ export function entranceStyle(anim: string, e: number): React.CSSProperties {
       };
     case 'riseUp':
       return { transform: `translateY(${(1 - p) * 0.35}em)`, opacity: p };
-    case 'elastic': {
+        case 'slam': {
+      const sc = 1.55 - 0.55 * p;
+      const y = (1 - p) * -0.55;
+      return { opacity: p, transform: `translateY(${y.toFixed(3)}em) scale(${sc.toFixed(3)})` };
+    }
+    case 'typewriter':
+      return { opacity: p > 0.05 ? 1 : 0 };
+    case 'blurPop': {
+      const blur = ((1 - p) * 8).toFixed(1);
+      const sc = 0.85 + 0.15 * p;
+      return { opacity: p, filter: `blur(${blur}px)`, transform: `scale(${sc.toFixed(3)})` };
+    }
+    case 'neonPulse': {
+      const pulse = 0.6 + 0.4 * Math.sin(p * Math.PI);
+      return {
+        opacity: Math.max(p, pulse),
+        transform: `scale(${(0.96 + 0.08 * p).toFixed(3)})`,
+        textShadow: `0 0 ${(4 + p * 10).toFixed(1)}px currentColor`,
+      };
+    }
+    case 'zoomSnap': {
+      const sc = 0.4 + 0.6 * p;
+      return { opacity: p, transform: `scale(${sc.toFixed(3)})` };
+    }
+    case 'dropIn': {
+      const y = (1 - p) * -1.1;
+      return { opacity: p, transform: `translateY(${y.toFixed(3)}em)` };
+    }
+case 'elastic': {
       // Squash-and-stretch: 0→45% stretch in, 45→70% overshoot, 70→100% settle.
       let sx = 1;
       let sy = 1;
@@ -298,6 +454,37 @@ export function entranceStyle(anim: string, e: number): React.CSSProperties {
 }
 
 /** Ease-out cubic on the active word's entrance progress. */
+/** Cinematic letterbox bar height as fraction of frame (0.08–0.14). */
+export function letterboxInset(frame: number, pageStart: number, fps: number): number {
+  const local = frame - pageStart;
+  const inF = Math.max(2, Math.round(fps * 0.35));
+  if (local < 0) return 0;
+  if (local < inF) {
+    const t = local / inF;
+    // smoothstep
+    const s = t * t * (3 - 2 * t);
+    return 0.1 * s;
+  }
+  return 0.1;
+}
+
+/** If text is a plain integer/decimal, lerp 0→value by progress. */
+export function tickUpDisplay(text: string, progress: number): string {
+  const raw = text.replace(/[,\s]/g, '');
+  if (!/^-?\d+(\.\d+)?%?$/.test(raw.replace('%', ''))) return text;
+  const hasPct = text.includes('%');
+  const n = parseFloat(raw.replace('%', ''));
+  if (!Number.isFinite(n)) return text;
+  const cur = n * Math.min(1, Math.max(0, progress));
+  const decimals = raw.includes('.') ? (raw.split('.')[1] || '').replace('%', '').length : 0;
+  const body = decimals > 0 ? cur.toFixed(decimals) : String(Math.round(cur));
+  // preserve simple thousand commas for ints
+  if (!decimals && Math.abs(n) >= 1000) {
+    return body.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (hasPct ? '%' : '');
+  }
+  return body + (hasPct ? '%' : '');
+}
+
 export function entranceProgress(
   frame: number,
   wordFromFrame: number,
@@ -416,6 +603,18 @@ function applyWordMarkExtras(
       (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
       (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
       style.color = 'transparent';
+      style.display = 'inline-block';
+      if (style.textShadow) {
+        (style as Record<string, unknown>)['--caption-grad-shadow'] = style.textShadow;
+        delete style.textShadow;
+      } else {
+        (style as Record<string, unknown>)['--caption-grad-shadow'] =
+          '0 2px 8px rgba(0,0,0,0.55)';
+      }
+      delete style.filter;
+      // Stroke outside a clipped fill reads as a hard black halo — drop it.
+      delete (style as Record<string, unknown>).WebkitTextStroke;
+      delete (style as Record<string, unknown>).paintOrder;
       break;
     }
     case 'shine': {
@@ -430,9 +629,17 @@ function applyWordMarkExtras(
       style.backgroundClip = 'text';
       (style as Record<string, unknown>).WebkitBackgroundClip = 'text';
       (style as Record<string, unknown>).WebkitTextFillColor = 'transparent';
+      delete (style as Record<string, unknown>).WebkitTextStroke;
+      delete (style as Record<string, unknown>).paintOrder;
       break;
     }
-    case 'pulse': {
+          if (!(style as Record<string, unknown>)['--caption-grad-shadow']) {
+        (style as Record<string, unknown>)['--caption-grad-shadow'] =
+          '0 2px 8px rgba(0,0,0,0.5)';
+      }
+      delete style.filter;
+      delete style.textShadow;
+case 'pulse': {
       const s = 1 + 0.1 * amount * (0.5 + 0.5 * Math.sin(tSec * Math.PI * 3 * density));
       style.transform = `${(style.transform as string) ?? ''} scale(${s.toFixed(3)})`.trim();
       break;
@@ -472,6 +679,162 @@ function wordSpanGrow(frame: number, fromFrame: number, fps: number): number {
  * and sits, and all four have to be identical in preview and export or the block
  * lands somewhere else in the MP4.
  */
+
+/**
+ * Gradient glyphs: paint a solid shadow layer UNDER a clipped gradient fill.
+ * Single-node background-clip:text + filter/text-shadow still silhouettes in
+ * Chromium/Remotion — dual layer is the only reliable fix.
+ */
+function renderGradientWord(
+  text: string,
+  style: React.CSSProperties,
+  emoji: string,
+  tail: string,
+): React.ReactNode {
+  const shadow = String(
+    (style as Record<string, unknown>)['--caption-grad-shadow'] ?? '',
+  );
+  const hasGrad = !!(style as Record<string, unknown>)['backgroundImage'];
+  if (!hasGrad || !shadow) {
+    return (
+      <>
+        {text}
+        {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
+                {(def as { handDrawn?: string }).handDrawn === 'underline' && isActive ? (
+                  <svg
+                    className="hand-drawn-accent"
+                    aria-hidden
+                    viewBox="0 0 100 12"
+                    preserveAspectRatio="none"
+                    style={{
+                      position: 'absolute',
+                      left: '-4%',
+                      right: '-4%',
+                      bottom: '-0.18em',
+                      width: '108%',
+                      height: '0.28em',
+                      overflow: 'visible',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <path
+                      d="M2,8 Q25,2 50,7 T98,6"
+                      fill="none"
+                      stroke={(css.active.color as string) || '#F8E16C'}
+                      strokeWidth="3.2"
+                      strokeLinecap="round"
+                      pathLength={1}
+                      strokeDasharray={1}
+                      strokeDashoffset={1 - wordSpanGrow(frame, w.fromFrame, plan.fps)}
+                    />
+                  </svg>
+                ) : null}
+                {(def as { handDrawn?: string }).handDrawn === 'circle' && isActive ? (
+                  <svg
+                    className="hand-drawn-accent"
+                    aria-hidden
+                    viewBox="0 0 100 60"
+                    preserveAspectRatio="none"
+                    style={{
+                      position: 'absolute',
+                      left: '-12%',
+                      top: '-35%',
+                      width: '124%',
+                      height: '170%',
+                      overflow: 'visible',
+                      pointerEvents: 'none',
+                      zIndex: 2,
+                    }}
+                  >
+                    <ellipse
+                      cx="50"
+                      cy="30"
+                      rx="46"
+                      ry="24"
+                      fill="none"
+                      stroke={(css.active.color as string) || '#F8E16C'}
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      pathLength={1}
+                      strokeDasharray={1}
+                      strokeDashoffset={1 - wordSpanGrow(frame, w.fromFrame, plan.fps)}
+                      transform="rotate(-6 50 30)"
+                    />
+                  </svg>
+                ) : null}
+
+        {tail}
+      </>
+    );
+  }
+  // Strip clip props from the outer (shadow) shell; keep transform/opacity.
+  const shell: React.CSSProperties = {
+    display: 'inline-block',
+    position: 'relative',
+    transform: style.transform,
+    opacity: style.opacity,
+    // no filter on shell — shadow is real text-shadow on solid under-layer
+  };
+  const under: React.CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    color: '#000',
+    textShadow: shadow,
+    WebkitTextFillColor: '#000',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    // Match weight/size via inherit
+    font: 'inherit',
+    letterSpacing: 'inherit',
+    whiteSpace: 'pre-wrap',
+  };
+  const fill: React.CSSProperties = {
+    ...style,
+    position: 'relative',
+    transform: undefined,
+    opacity: undefined,
+    // ensure no filter/textShadow on fill
+    filter: undefined,
+    textShadow: undefined,
+  };
+  delete (fill as Record<string, unknown>)['--caption-grad-shadow'];
+  return (
+    <span style={shell}>
+      <span aria-hidden style={under}>
+        {text}
+      </span>
+      <span style={fill}>{text}</span>
+      {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
+      {tail}
+    </span>
+  );
+}
+
 export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number }> = ({
   plan,
   frame,
@@ -497,33 +860,161 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   // ---- BLOCK ambience, both frame-derived ----------------------------------
   const blockFx = def.blockFx ?? [];
   const blockStyle: React.CSSProperties = {};
-  if (blockFx.includes('float')) {
-    // A gentle bob — the period is the frame clock, so it loops identically in
-    // the MP4. It composes with the centred anchor via transform chaining.
-    const bob = Math.sin((frame / plan.fps) * ((2 * Math.PI) / FLOAT_PERIOD_SEC)) * 0.12;
-    blockStyle.transform = `translateX(-50%) translateY(${bob.toFixed(3)}em)`;
-  }
-  if (blockFx.includes('wiggle')) {
-    // A soft rotational sway with a slight drift — same frame-clock rule. The
-    // feel override never carries float AND wiggle, so this composes cleanly.
+  {
+    // Float + wiggle compose: both can be on. Settings from def.motion.
+    const mot = (def as CaptionStyleDef).motion;
     const tSec = frame / plan.fps;
-    const sway = Math.sin(tSec * ((2 * Math.PI) / 0.9)) * 1.4; // deg
-    const drift = Math.sin(tSec * ((2 * Math.PI) / 1.8)) * 0.08; // em
-    blockStyle.transform = `translateX(-50%) rotate(${sway.toFixed(2)}deg) translateY(${drift.toFixed(3)}em)`;
+    let ty = 0;
+    let rot = 0;
+    // Full-block float/wiggle. When motion.syncToWords, phase is locked to the
+    // caption PAGE start (spoken window) so the bob/sway feels cued to speech —
+    // still one solid block, never per-word.
+    {
+      const syncMotion = !!(def as CaptionStyleDef).motion?.syncToWords;
+      const pageFromM = rows[0]?.from ?? 0;
+      const pageStartM = words[pageFromM]?.fromFrame ?? activeWord.fromFrame;
+      const tMotion = syncMotion
+        ? Math.max(0, (frame - pageStartM) / plan.fps)
+        : tSec;
+      if (blockFx.includes('float')) {
+        const period = mot?.floatPeriodSec ?? FLOAT_PERIOD_SEC;
+        const amp = mot?.floatAmpEm ?? 0.12;
+        ty += Math.sin(tMotion * ((2 * Math.PI) / period)) * amp;
+      }
+      if (blockFx.includes('wiggle')) {
+        const wPer = mot?.wigglePeriodSec ?? 0.9;
+        const deg = mot?.wiggleDeg ?? 1.4;
+        rot += Math.sin(tMotion * ((2 * Math.PI) / wPer)) * deg;
+        ty += Math.sin(tMotion * ((2 * Math.PI) / (wPer * 2))) * 0.06;
+      }
+    }
+    const parts = ['translateX(-50%)'];
+    if (rot !== 0) parts.push(`rotate(${rot.toFixed(2)}deg)`);
+    if (ty !== 0) parts.push(`translateY(${ty.toFixed(3)}em)`);
+    if (parts.length > 1) blockStyle.transform = parts.join(' ');
+    // Camera punch-in: brief scale overshoot when the page starts speaking.
+    
+    // Waveform bounce: bob amplitude from optional plan.audioPeaks, else gentle sine.
+    if (blockFx.includes('waveBounce')) {
+      const peaks = (plan as { audioPeaks?: number[] }).audioPeaks;
+      let amp = 0.06;
+      if (peaks && peaks.length > 0) {
+        const tSec = frame / Math.max(1, plan.fps);
+        // peaks cover full composition duration roughly
+        const totalSec = Math.max(1, (plan as { durationFrames?: number }).durationFrames
+          ? ((plan as { durationFrames: number }).durationFrames / plan.fps)
+          : peaks.length / 30);
+        const u = Math.min(0.999, Math.max(0, tSec / totalSec));
+        const pi = Math.floor(u * peaks.length);
+        amp = 0.04 + (peaks[pi] ?? 0) * 0.14;
+      } else {
+        amp = 0.05 + 0.03 * Math.abs(Math.sin(frame * 0.21));
+      }
+      const y = Math.sin(frame * 0.35) * amp;
+      const prev = (blockStyle.transform as string) || 'translateX(-50%)';
+      blockStyle.transform = `${prev} translateY(${y.toFixed(3)}em)`.trim();
+    }
+if (blockFx.includes('punchIn')) {
+      const pageFromP = rows[0]?.from ?? 0;
+      const pageStartP = words[pageFromP]?.fromFrame ?? activeWord.fromFrame;
+      const local = frame - pageStartP;
+      const punchFrames = Math.max(3, Math.round(plan.fps * 0.22));
+      if (local >= 0 && local < punchFrames) {
+        const t = local / punchFrames;
+        // 1.0 → 1.08 → 1.0
+        const sc = t < 0.45 ? 1 + t * (0.08 / 0.45) : 1.08 - ((t - 0.45) / 0.55) * 0.08;
+        const prev = (blockStyle.transform as string) || 'translateX(-50%)';
+        blockStyle.transform = `${prev} scale(${sc.toFixed(3)})`.trim();
+      }
+    }
+    // Spring exit: overshoot scale down as page ends (pairs with ghost or alone).
+    if (blockFx.includes('springExit')) {
+      const pageFromE = rows[0]?.from ?? 0;
+      const pageSizeE = Math.max(1, layout.wordsPerRow * layout.rows);
+      const nextStart = words[pageFromE + pageSizeE]?.fromFrame;
+      const pageEndE = nextStart ?? words[words.length - 1].toFrame + holdFrames;
+      const outFrames = Math.max(3, Math.round(plan.fps * 0.28));
+      const remain = pageEndE - frame;
+      if (remain >= 0 && remain < outFrames) {
+        const t = 1 - remain / outFrames; // 0 at start of exit → 1 at end
+        const sc = 1 + Math.sin(t * Math.PI) * 0.12 * (1 - t) - t * 0.15;
+        const prev = (blockStyle.transform as string) || 'translateX(-50%)';
+        blockStyle.transform = `${prev} scale(${Math.max(0.7, sc).toFixed(3)})`.trim();
+        const op = typeof blockStyle.opacity === 'number' ? blockStyle.opacity : 1;
+        blockStyle.opacity = op * (1 - t * 0.85);
+      }
+    }
+
   }
   if (blockFx.includes('ghostFade')) {
-    // Each PAGE of rows fades in on arrival and out before the flip. The page
-    // boundaries come from the same word window captionRows uses, so the fade
-    // is glued to the words — nothing keyed on a row index to drift.
+    // FULL BLOCK ghost: entire caption page fades completely ON → HOLD → completely OFF.
+    // Timing is glued to the spoken word window for this page (not per-word karaoke).
     const pageFrom = rows[0]?.from ?? 0;
     const pageSize = Math.max(1, layout.wordsPerRow * layout.rows);
     const pageStartFrame = words[pageFrom]?.fromFrame ?? activeWord.fromFrame;
     const nextPageStart = words[pageFrom + pageSize]?.fromFrame;
     const pageEndFrame = nextPageStart ?? words[words.length - 1].toFrame + holdFrames;
-    const fadeFrames = Math.max(2, Math.round(plan.fps * GHOST_FADE_SEC));
-    const fadeIn = clamp01((frame - pageStartFrame) / fadeFrames);
-    const fadeOut = clamp01((pageEndFrame - frame) / fadeFrames);
-    blockStyle.opacity = Math.min(fadeIn, fadeOut);
+    const pageDur = Math.max(1, pageEndFrame - pageStartFrame);
+    const ghost = (def as CaptionStyleDef).ghost;
+    // Generous defaults so the eye reads a real full-on / full-off (not a blink).
+    let inF = Math.max(
+      3,
+      Math.round(plan.fps * (ghost?.fadeInSec ?? Math.max(GHOST_FADE_IN_SEC, 0.28))),
+    );
+    let outF = Math.max(
+      3,
+      Math.round(plan.fps * (ghost?.fadeOutSec ?? Math.max(GHOST_FADE_OUT_SEC, 0.32))),
+    );
+    // Keep a real hold beat so opacity actually sits at 1.
+    const minHold = Math.max(2, Math.round(plan.fps * 0.12));
+    if (inF + outF + minHold > pageDur) {
+      const budget = Math.max(4, pageDur - minHold);
+      const total = inF + outF;
+      inF = Math.max(3, Math.round((budget * inF) / total));
+      outF = Math.max(3, budget - inF);
+    }
+    const ease = (ghost?.ease ?? 'smooth') as 'linear' | 'smooth';
+    const driftEm = ghost?.driftEm ?? (ease === 'smooth' ? 0.12 : 0);
+    // Always full-block envelope (unitIndex 0, no stagger).
+    const opacity = ghostUnitOpacity(
+      frame,
+      pageStartFrame,
+      pageEndFrame,
+      0,
+      inF,
+      outF,
+      0,
+      ease,
+    );
+    blockStyle.opacity = opacity;
+    if (driftEm > 0) {
+      const df = ghostDriftFactor(
+        frame,
+        pageStartFrame,
+        pageEndFrame,
+        0,
+        inF,
+        outF,
+        0,
+      );
+      const dy = (df * driftEm).toFixed(3);
+      const prev = (blockStyle.transform as string) || 'translateX(-50%)';
+      blockStyle.transform = `${prev} translateY(${dy}em)`.trim();
+    }
+    // Stash page bounds for motion phase-lock (float/wiggle sync to speech page).
+    (blockStyle as Record<string, unknown>).__ghost = {
+      pageStartFrame,
+      pageEndFrame,
+      inF,
+      outF,
+      staggerMode: 'block' as const,
+      staggerFrames: 0,
+      pageFrom,
+      ease,
+      driftEm,
+      syncToWords: false,
+    };
+    (blockStyle as Record<string, unknown>).__pageStartFrame = pageStartFrame;
   }
 
   return (
@@ -561,15 +1052,32 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
               display: 'inline-block',
               position: 'relative',
             };
+            
             if (mark?.color) {
               base.color = mark.color;
               // A marked color replaces any gradient fill (gradient wins color
               // by design; the mark is more specific than the preset).
               delete (base as Record<string, unknown>)['backgroundImage'];
               delete (base as Record<string, unknown>)['WebkitTextFillColor'];
+              delete (base as Record<string, unknown>)['backgroundClip'];
+              delete (base as Record<string, unknown>)['WebkitBackgroundClip'];
+            } else if (
+              def.gradientShift &&
+              (base as Record<string, unknown>)['backgroundImage']
+            ) {
+              // Living gradient: slow frame-driven drift (no CSS animation clock).
+              const tSec = frame / plan.fps;
+              const x = ((tSec * 22) % 100).toFixed(1);
+              const y = ((tSec * 13) % 100).toFixed(1);
+              (base as Record<string, unknown>)['backgroundPosition'] = `${x}% ${y}%`;
+              if (!(base as Record<string, unknown>)['backgroundSize']) {
+                (base as Record<string, unknown>)['backgroundSize'] = '200% 200%';
+              }
             }
 
+            // Ghost stagger: word-level fade (letter handled below when rendering).
             const text = def.upper ? w.text.toUpperCase() : w.text;
+
             const wordAnim = mark?.anim ?? defAnim;
             const wordEnterT = isActive
               ? entranceProgress(frame, w.fromFrame, plan.fps)
@@ -611,7 +1119,19 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                     staggerFrames={Math.round(plan.fps * staggerSec)}
                     fps={plan.fps}
                   />
-                  {emoji}
+                  {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
                   {tail}
                 </span>
               );
@@ -635,14 +1155,56 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                   >
                     {text}
                   </span>
-                  {emoji}
+                  {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
                   {tail}
                 </span>
               );
             }
 
+            // Dual-layer gradient/shine (no silhouette).
+            // Chromium/Remotion often paints background-clip:text as a solid
+            // silhouette when filter/text-shadow sit on the same node. Split:
+            // shadow layer (solid color + text-shadow) under a clipped fill.
+            {
+              const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
+              if (isGradFill) {
+                return (
+                  <span key={`${idx}-${w.text}`} style={{ display: 'inline-block', position: 'relative' }}>
+                    {renderGradientWord(text, style, emoji, tail)}
+                  </span>
+                );
+              }
+            }
+
             return (
               <span key={`${idx}-${w.text}`} style={style}>
+                {def.highlightMode === 'boxGrow' && isActive ? (
+                  <span
+                    aria-hidden
+                    className="boxGrowBg"
+                    style={{
+                      position: 'absolute',
+                      inset: '-0.08em -0.18em',
+                      background: def.activeBg ?? 'rgba(255,255,255,0.2)',
+                      borderRadius: '0.2em',
+                      zIndex: -1,
+                      transformOrigin: 'left center',
+                      transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                    }}
+                  />
+                ) : null}
                 {mark?.fx === 'marker' ? (
                   <span
                     aria-hidden
@@ -659,6 +1221,20 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                   />
                 ) : null}
                 {text}
+                {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
+                {tail}
                 {mark?.fx === 'underline' ? (
                   <span
                     aria-hidden
@@ -692,7 +1268,19 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
                     }}
                   />
                 ) : null}
-                {emoji}
+                {emoji ? (
+                  <span
+                    className="emoji-burst"
+                    style={{
+                      display: 'inline-block',
+                      transform: isActive && power
+                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
+                        : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </span>
+                ) : null}
                 {tail}
               </span>
             );

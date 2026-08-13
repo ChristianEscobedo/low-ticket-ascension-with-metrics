@@ -33,7 +33,7 @@ export type Aspect = 'vertical' | 'square' | 'landscape';
 
 /** Output resolution. '1080' is the canvas size (full res, needs a beefy
  *  worker); '720' downsamples on the worker and fits a small container. */
-export type RenderQuality = '720' | '1080';
+export type RenderQuality = 'draft' | '720' | '1080';
 
 export const ASPECTS: { value: Aspect; label: string; hint: string }[] = [
   { value: 'vertical', label: '9:16', hint: 'Reels · TikTok · Shorts' },
@@ -280,4 +280,17 @@ export function useRenderJob({
     canStart: available !== false && !busy,
     start,
   };
+}
+
+
+/** Ping the render worker so Railway doesn't cold-sleep mid-session. */
+export function keepWorkerWarm(workerBaseUrl: string | null | undefined) {
+  if (!workerBaseUrl || typeof window === 'undefined') return () => {};
+  const base = workerBaseUrl.replace(/\/$/, '');
+  const tick = () => {
+    fetch(base + '/warm', { method: 'GET', mode: 'cors' }).catch(() => {});
+  };
+  tick();
+  const id = window.setInterval(tick, 4 * 60 * 1000);
+  return () => window.clearInterval(id);
 }

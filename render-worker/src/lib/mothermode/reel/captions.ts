@@ -55,7 +55,18 @@ export type CaptionAnim =
   | 'springPop'
   | 'neonFlicker'
   | 'glowPulse'
-  | 'cascade';
+  | 'cascade'
+  | 'slam'
+  | 'typewriter'
+  | 'blurPop'
+  | 'neonPulse'
+  | 'zoomSnap'
+  | 'dropIn'
+  | 'tilt3d'
+  | 'outlineFill'
+  | 'dualTone'
+  | 'motionTrail'
+  | 'tickUp';
 
 /**
  * BLOCK-level ambience — the whole caption block, not one word.
@@ -66,7 +77,7 @@ export type CaptionAnim =
  * window, the bob from the frame clock) — never stored state, so they can't
  * drift from the words the way a keyframe on a row index would.
  */
-export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle';
+export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle' | 'punchIn' | 'letterbox' | 'springExit';
 
 /** The CSS keyframe for a word-enter animation (injected once into the page). */
 export function captionAnimKeyframes(anim: CaptionAnim): string {
@@ -107,6 +118,29 @@ export function captionAnimKeyframes(anim: CaptionAnim): string {
       // The true letter-stagger is computed per frame in the layer; the CSS
       // swatch approximates it as a soft rise for the platform mocks.
       return `@keyframes cap-cascade{0%{transform:translateY(0.3em);opacity:0;filter:blur(3px)}100%{transform:translateY(0);opacity:1;filter:blur(0)}}`;
+    case 'slam':
+      return `@keyframes cap-slam{0%{transform:translateY(-0.55em) scale(1.55);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}`;
+    case 'typewriter':
+      return `@keyframes cap-typewriter{0%{opacity:0}100%{opacity:1}}`;
+    case 'blurPop':
+      return `@keyframes cap-blurpop{0%{filter:blur(8px);transform:scale(0.85);opacity:0}100%{filter:blur(0);transform:scale(1);opacity:1}}`;
+    case 'neonPulse':
+      return `@keyframes cap-neonpulse{0%{opacity:.6;transform:scale(0.96)}100%{opacity:1;transform:scale(1)}}`;
+    case 'zoomSnap':
+      return `@keyframes cap-zoomsnap{0%{transform:scale(0.4);opacity:0}100%{transform:scale(1);opacity:1}}`;
+    case 'dropIn':
+      return `@keyframes cap-dropin{0%{transform:translateY(-1.1em);opacity:0}100%{transform:translateY(0);opacity:1}}`;
+    case 'tilt3d':
+      return `@keyframes cap-tilt3d{0%{transform:perspective(500px) rotateY(55deg) scale(0.85);opacity:0}100%{transform:perspective(500px) rotateY(0) scale(1);opacity:1}}`;
+    case 'outlineFill':
+      return `@keyframes cap-outlinefill{0%{-webkit-text-stroke:2px currentColor;color:transparent;opacity:.5}100%{-webkit-text-stroke:0;color:currentColor;opacity:1}}`;
+    case 'dualTone':
+      return `@keyframes cap-dualtone{0%{opacity:.6}100%{opacity:1}}`;
+    case 'motionTrail':
+      return `@keyframes cap-motiontrail{0%{transform:translateX(-0.2em);opacity:.3;filter:blur(2px)}100%{transform:none;opacity:1;filter:blur(0)}}`;
+    case 'tickUp':
+      return `@keyframes cap-tickup{0%{transform:translateY(0.4em);opacity:0}100%{transform:translateY(0);opacity:1}}`;
+
     default:
       return '';
   }
@@ -149,6 +183,29 @@ export function captionAnimCss(anim: CaptionAnim): string {
       return 'cap-glowpulse 220ms ease-out';
     case 'cascade':
       return 'cap-cascade 220ms ease-out';
+    case 'slam':
+      return 'cap-slam 200ms cubic-bezier(0.2,0.9,0.3,1.3)';
+    case 'typewriter':
+      return 'cap-typewriter 160ms ease';
+    case 'blurPop':
+      return 'cap-blurpop 220ms ease-out';
+    case 'neonPulse':
+      return 'cap-neonpulse 220ms ease-out';
+    case 'zoomSnap':
+      return 'cap-zoomsnap 180ms cubic-bezier(0.2,0.9,0.3,1.2)';
+    case 'dropIn':
+      return 'cap-dropin 200ms cubic-bezier(0.2,0.9,0.3,1.2)';
+    case 'tilt3d':
+      return 'cap-tilt3d 220ms cubic-bezier(0.2,0.9,0.3,1.2)';
+    case 'outlineFill':
+      return 'cap-outlinefill 220ms ease-out';
+    case 'dualTone':
+      return 'cap-dualtone 200ms ease';
+    case 'motionTrail':
+      return 'cap-motiontrail 200ms ease-out';
+    case 'tickUp':
+      return 'cap-tickup 180ms cubic-bezier(0.2,0.9,0.3,1.2)';
+
     default:
       return '';
   }
@@ -173,7 +230,107 @@ export const CAPTION_ANIMS: CaptionAnim[] = [
   'neonFlicker',
   'glowPulse',
   'cascade',
+  'slam',
+  'typewriter',
+  'blurPop',
+  'neonPulse',
+  'zoomSnap',
+  'dropIn',
+  'tilt3d',
+  'outlineFill',
+  'dualTone',
+  'motionTrail',
+  'tickUp'
 ];
+
+/** Highlight modes the customizer can pick. */
+export const HIGHLIGHT_MODES: HighlightMode[] = [
+  'color',
+  'box',
+  'boxGrow',
+  'scale',
+  'glow',
+  'underline',
+  'sweep',
+  'gradient',
+];
+
+
+/**
+ * One-click editor packs — stacked look recipes (preset id + optional overrides).
+ * Applied from the gallery "Packs" row.
+ */
+export type EditorPackId = 'mrbeast' | 'faceless' | 'luxury' | 'podcast';
+
+export interface EditorPack {
+  id: EditorPackId;
+  label: string;
+  blurb: string;
+  /** Base preset id from CAPTION_STYLE_DEFS */
+  presetId: string;
+  /** Optional style overrides merged on apply */
+  overrides?: CaptionStyleOverrides;
+}
+
+export const EDITOR_PACKS: EditorPack[] = [
+  {
+    id: 'mrbeast',
+    label: 'MrBeast',
+    blurb: 'Huge yellow pop, slam words, punch-in',
+    presetId: 'beast',
+    overrides: {
+      anim: 'slam',
+      blockMotion: 'still',
+      ghostFade: false,
+      floatOn: false,
+      punchIn: true,
+    },
+  },
+  {
+    id: 'faceless',
+    label: 'Faceless',
+    blurb: 'Clean gradient flow + ghost fade',
+    presetId: 'gradient-flow',
+    overrides: {
+      anim: 'fade',
+      ghostFade: true,
+      ghostFadeInSec: 0.3,
+      ghostFadeOutSec: 0.4,
+      blockMotion: 'float',
+      floatOn: true,
+    },
+  },
+  {
+    id: 'luxury',
+    label: 'Luxury',
+    blurb: 'Soft rise, letterbox feel, gold glow',
+    presetId: 'soft-card',
+    overrides: {
+      anim: 'riseUp',
+      ghostFade: true,
+      ghostFadeInSec: 0.35,
+      ghostFadeOutSec: 0.45,
+      blockMotion: 'float',
+      floatOn: true,
+    },
+  },
+  {
+    id: 'podcast',
+    label: 'Podcast',
+    blurb: 'Type-on + underline, readable',
+    presetId: 'minimal',
+    overrides: {
+      anim: 'typeOn',
+      ghostFade: false,
+      blockMotion: 'still',
+    },
+  },
+];
+
+export function editorPackFor(id: string): EditorPack | undefined {
+  return EDITOR_PACKS.find((p) => p.id === id);
+}
+
 
 export interface CaptionStyleDef {
   /** Stable id — stored on project.captionStyle (e.g. 'kelly2'). */
@@ -206,10 +363,55 @@ export interface CaptionStyleDef {
   emoji?: boolean;
   /** Word-ENTER animation when the spoken word lights up (default 'pop'). */
   anim?: CaptionAnim;
-  /** Gradient text fill on the ACTIVE word (ultra-modern: needs background-clip). */
-  gradient?: [string, string];
+  /**
+   * Gradient text fill (background-clip:text). By default only the ACTIVE word
+   * gets it; set gradientScope:'all' to paint every word. Stroke is suppressed
+   * on gradient-filled glyphs — outlines fight the clip and look like a black
+   * halo around every modern gradient preset.
+   */
+  gradient?: [string, string] | [string, string, string];
+  /** Where the gradient applies. Default 'active'. */
+  gradientScope?: 'active' | 'all';
+  /** Gradient angle in degrees (CSS linear-gradient). Default 135. */
+  gradientAngle?: number;
+  /**
+   * Slow background-position drift on gradient fills (frame-driven in the
+   * layer). The "living" neon/iridescent look.
+   */
+  gradientShift?: boolean;
+  /**
+   * Ghost page-fade timing + stagger. Only used when blockFx includes ghostFade.
+   * Defaults: fadeIn 0.22, fadeOut 0.28 — with a full-opacity HOLD between them.
+   * stagger: 'block' = whole page (default) · 'word' = words cascade in/out ·
+   * 'letter' = letters cascade in/out. staggerSec is the delay between units.
+   */
+  ghost?: {
+    fadeInSec?: number;
+    fadeOutSec?: number;
+    /** How the page reveals / dissolves. Default 'block'. */
+    stagger?: 'block' | 'word' | 'letter';
+    /** Delay between staggered units in seconds (0.02–0.25). Default 0.05 word / 0.03 letter. */
+    staggerSec?: number;
+  
+    ease?: 'linear' | 'smooth';
+    driftEm?: number;  /** Fade each word on its own spoken window (from→to), not the page. */
+    syncToWords?: boolean;
+  };
+
+  /** Ambient motion amplitude/speed (float + wiggle compose). */
+  motion?: {
+    floatAmpEm?: number;
+    floatPeriodSec?: number;
+    wiggleDeg?: number;
+    wigglePeriodSec?: number;
+  
+    /** When true, float/wiggle phase is keyed to each word's start (not global clock). */
+    syncToWords?: boolean;
+  };
+
   /** Big-word emphasis: the active word renders ~1.6× (the "big word" beat). */
   big?: boolean;
+
   /** Letter spacing in em (negative tightens, positive tracks out). Default ~0.01–0.03. */
   letterSpacingEm?: number;
   /** Space BETWEEN words in em (the airy, spaced-out caption look). Default 0. */
@@ -228,6 +430,9 @@ export interface CaptionStyleDef {
    * the layer from the word window — see CaptionBlockFx.
    */
   blockFx?: CaptionBlockFx[];
+  /** Hand-drawn accent on the active word. */
+  handDrawn?: 'underline' | 'circle';
+
 }
 
 /**
@@ -424,10 +629,13 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     id: 'gradient-pop', label: 'Gradient', tags: ['new', 'trend'],
     font: 'Archivo Black', weight: 900, upper: true,
     wordColor: 'rgba(255,255,255,0.85)', activeColor: '#FFFFFF', highlightMode: 'color',
+    // No stroke — outlines fight background-clip:text and read as a black halo.
     gradient: ['#F472B6', '#A78BFA'],
-    shadow: '0 3px 10px rgba(0,0,0,0.9)',
+    gradientScope: 'active',
+    shadow: '0 2px 14px rgba(0,0,0,0.55)',
     wordsPerLine: 3, anim: 'pop',
   },
+
   {
     id: 'bigword', label: 'Big Word', tags: ['trend'],
     font: 'Anton', weight: 900, upper: true,
@@ -469,9 +677,11 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     font: 'Poppins', weight: 800, upper: false,
     wordColor: '#FFFFFF', activeColor: '#F8E16C', highlightMode: 'scale',
     gradient: ['#FBBF24', '#F472B6'],
-    shadow: '0 3px 8px rgba(0,0,0,0.9)',
+    gradientScope: 'active',
+    shadow: '0 2px 12px rgba(0,0,0,0.55)',
     wordsPerLine: 1, emoji: true, anim: 'spin',
   },
+
   // --- MODERN batch 2 (bounce / blur / rise / elastic / glitch / type / shake) ---
   {
     id: 'opus', label: 'Opus', tags: ['new', 'trend'],
@@ -536,10 +746,36 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     id: 'gradient-flow', label: 'Gradient Flow', tags: ['new', 'premium'],
     font: 'Archivo Black', weight: 900, upper: false,
     wordColor: 'rgba(255,255,255,0.7)', activeColor: '#FFFFFF', highlightMode: 'gradient',
-    gradient: ['#22D3EE', '#A78BFA'],
-    shadow: '0 3px 10px rgba(0,0,0,0.9)',
+    gradient: ['#22D3EE', '#A78BFA', '#F472B6'],
+    gradientScope: 'all',
+    gradientAngle: 110,
+    gradientShift: true,
+    shadow: '0 2px 14px rgba(0,0,0,0.5)',
     wordsPerLine: 3, anim: 'riseUp', letterSpacingEm: 0.015,
   },
+  {
+    id: 'iridescent', label: 'Iridescent', tags: ['new', 'premium'],
+    font: 'Poppins', weight: 800, upper: false,
+    wordColor: '#FFFFFF', activeColor: '#FFFFFF', highlightMode: 'color',
+    gradient: ['#22D3EE', '#A78BFA', '#F472B6'],
+    gradientScope: 'all',
+    gradientAngle: 90,
+    gradientShift: true,
+    shadow: '0 0 16px rgba(167,139,250,0.35), 0 2px 10px rgba(0,0,0,0.45)',
+    wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'],
+    ghost: { fadeInSec: 0.28, fadeOutSec: 0.35 },
+  },
+  {
+    id: 'sunset-wash', label: 'Sunset Wash', tags: ['new', 'trend'],
+    font: 'Anton', weight: 900, upper: true,
+    wordColor: '#FFF7ED', activeColor: '#FFFFFF', highlightMode: 'scale',
+    gradient: ['#FB923C', '#F472B6', '#A78BFA'],
+    gradientScope: 'all',
+    gradientAngle: 160,
+    shadow: '0 2px 12px rgba(0,0,0,0.5)',
+    wordsPerLine: 2, anim: 'pop',
+  },
+
   {
     id: 'type-swift', label: 'Type Swift', tags: ['new'],
     font: 'Courier Prime', weight: 700, upper: false,
@@ -554,7 +790,9 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     wordColor: 'rgba(255,255,255,0.9)', activeColor: '#FFFFFF', highlightMode: 'color',
     shadow: '0 2px 10px rgba(0,0,0,0.85)',
     wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'],
+    ghost: { fadeInSec: 0.3, fadeOutSec: 0.4 },
   },
+
   {
     id: 'floater', label: 'Floater', tags: ['new'],
     font: 'Poppins', weight: 700, upper: false,
@@ -592,7 +830,9 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     wordColor: 'rgba(255,255,255,0.88)', activeColor: '#FFFFFF', highlightMode: 'color',
     shadow: '0 2px 12px rgba(0,0,0,0.75), 0 0 18px rgba(255,255,255,0.18)',
     wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'], letterSpacingEm: 0.02, wordSpacingEm: 0.1,
+    ghost: { fadeInSec: 0.35, fadeOutSec: 0.45 },
   },
+
   {
     id: 'neon-pop', label: 'Neon Pop', tags: ['new', 'trend'],
     font: 'Anton', weight: 900, upper: true,
@@ -699,6 +939,18 @@ export function fontStackFor(def: CaptionStyleDef): string {
   return `"${def.font}", ${generic}`;
 }
 
+/** Build a CSS linear-gradient string from a def's gradient stops + angle. */
+export function gradientCssFor(
+  stops: NonNullable<CaptionStyleDef['gradient']>,
+  angleDeg = 135,
+): string {
+  const a = Number.isFinite(angleDeg) ? angleDeg : 135;
+  if (stops.length >= 3) {
+    return `linear-gradient(${a}deg, ${stops[0]}, ${stops[1]}, ${stops[2]})`;
+  }
+  return `linear-gradient(${a}deg, ${stops[0]}, ${stops[1]})`;
+}
+
 /** Shared word-level CSS (stroke + shadow + color) for one render state. */
 function wordCss(
   def: CaptionStyleDef,
@@ -709,34 +961,59 @@ function wordCss(
     color,
     fontStyle: def.italic ? 'italic' : undefined,
   };
-  // ULTRA-MODERN: gradient text fill on the ACTIVE word (background-clip:text).
-  if (active && def.gradient) {
-    (css as Record<string, unknown>)['backgroundImage'] =
-      `linear-gradient(135deg, ${def.gradient[0]}, ${def.gradient[1]})`;
+  // Gradient fill: active-only by default, or every word when scope is 'all'.
+  // NEVER combine with WebkitTextStroke — the stroke paints outside the clip
+  // and reads as a hard black outline around every modern gradient preset.
+  //
+  // Also NEVER use text-shadow on a background-clip:text glyph: the fill is
+  // transparent so only the shadow silhouette shows (the "black outline blob"
+  // the gallery was rendering). Use filter:drop-shadow instead — it respects
+  // the clipped alpha and keeps the gradient visible.
+  const scope = def.gradientScope ?? 'active';
+  const paintGradient = !!def.gradient && (active || scope === 'all');
+  if (paintGradient && def.gradient) {
+    (css as Record<string, unknown>)['backgroundImage'] = gradientCssFor(
+      def.gradient,
+      def.gradientAngle ?? 135,
+    );
     (css as Record<string, unknown>)['WebkitBackgroundClip'] = 'text';
     (css as Record<string, unknown>)['backgroundClip'] = 'text';
     (css as Record<string, unknown>)['WebkitTextFillColor'] = 'transparent';
     css['color'] = 'transparent';
-  }
-  if (def.stroke && def.stroke.width > 0) {
+    // background-clip:text needs a real box; inline spans clip unreliably.
+    css['display'] = 'inline-block';
+    // Larger background so gradientShift can drift without seams.
+    if (def.gradientShift) {
+      (css as Record<string, unknown>)['backgroundSize'] = '200% 200%';
+      (css as Record<string, unknown>)['backgroundRepeat'] = 'no-repeat';
+    }
+    // Depth via filter (not text-shadow) so the gradient stays visible.
+    if (def.shadow) {
+      (css as Record<string, unknown>)['--caption-grad-shadow'] = def.shadow;
+    }
+  } else if (def.stroke && def.stroke.width > 0) {
     // paint-order stroke: the outline sits behind the fill (the Hormozi look).
+    // Only when we are NOT gradient-filling this glyph.
     (css as Record<string, unknown>)['WebkitTextStroke'] =
       `${def.stroke.width}px ${def.stroke.color}`;
     (css as Record<string, unknown>)['paintOrder'] = 'stroke fill';
+    if (def.shadow) css['textShadow'] = def.shadow;
+  } else if (def.shadow) {
+    css['textShadow'] = def.shadow;
   }
-  if (def.shadow) css['textShadow'] = def.shadow;
+
   if (active) {
     // Big-word emphasis (~1.6× the active word).
     const bigScale = def.big ? 1.55 : 1.18;
     if (def.highlightMode === 'scale' || def.big) {
       css['transform'] = `scale(${bigScale})`;
       css['display'] = 'inline-block';
-    } else if (def.highlightMode === 'box' && def.activeBg) {
+    } else if (def.highlightMode === 'box' && def.activeBg && !paintGradient) {
       css['backgroundColor'] = def.activeBg;
       css['padding'] = '0 0.18em';
       css['borderRadius'] = '0.18em';
       css['display'] = 'inline-block';
-    } else if (def.highlightMode === 'boxGrow') {
+    } else if (def.highlightMode === 'boxGrow' && !paintGradient) {
       // The highlight box GROWS in behind the word (the modern soft-pop look).
       css['backgroundColor'] = def.activeBg ?? 'rgba(255,255,255,0.16)';
       css['padding'] = '0 0.22em';
@@ -746,8 +1023,14 @@ function wordCss(
       css['boxShadow'] = `0 0 0 0.06em ${def.activeBg ?? 'rgba(255,255,255,0.16)'}`;
     } else if (def.highlightMode === 'glow') {
       // Animated bloom in the accent color (neon without a hard box).
-      css['textShadow'] =
-        `0 0 0.35em ${def.activeColor}, 0 0 0.9em ${def.activeColor}66, ${def.shadow ?? '0 2px 6px rgba(0,0,0,0.9)'}`;
+      // On gradient glyphs, stack into filter so we don't kill the fill.
+      if (paintGradient) {
+        const glow = `drop-shadow(0 0 0.35em ${def.activeColor}) drop-shadow(0 0 0.9em ${def.activeColor}66)`;
+        css['filter'] = css['filter'] ? `${glow} ${css['filter']}` : glow;
+      } else {
+        css['textShadow'] =
+          `0 0 0.35em ${def.activeColor}, 0 0 0.9em ${def.activeColor}66, ${def.shadow ?? '0 2px 6px rgba(0,0,0,0.9)'}`;
+      }
     } else if (def.highlightMode === 'underline') {
       css['textDecoration'] = 'underline';
       css['textDecorationThickness'] = '0.12em';
@@ -757,6 +1040,36 @@ function wordCss(
   }
   return css;
 }
+
+/**
+ * Convert a CSS text-shadow stack into filter:drop-shadow() layers.
+ * background-clip:text + text-shadow = silhouette only; drop-shadow keeps the
+ * gradient fill and still gives depth under the glyphs.
+ */
+function cssTextShadowToDropFilter(shadow: string): string {
+  // Split on commas that separate shadow layers (not those inside rgba()).
+  const layers: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (let i = 0; i < shadow.length; i += 1) {
+    const ch = shadow[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      if (cur.trim()) layers.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) layers.push(cur.trim());
+  if (!layers.length) return 'drop-shadow(0 2px 6px rgba(0,0,0,0.55))';
+  return layers
+    .slice(0, 4)
+    .map((layer) => `drop-shadow(${layer})`)
+    .join(' ');
+}
+
 
 /** The resolved style for a def, as CSS property objects (canvas-ready). */
 export function captionCssFor(def: CaptionStyleDef): CaptionCss {
@@ -843,6 +1156,26 @@ export interface CaptionOverrides {
    * blockFx. Page-level effects (ghostFade) are a different axis and survive.
    */
   blockMotion?: 'still' | 'float' | 'wiggle';
+  /** Toggle float bob independently (can combine with wiggle). */
+  floatOn?: boolean;
+  /** Toggle wiggle sway independently (can combine with float). */
+  wiggleOn?: boolean;
+  /** Float bob amplitude in em (0.02–0.4). Default 0.12. */
+  floatAmpEm?: number;
+  /** Float bob period in seconds (0.6–4). Default 1.8. */
+  floatPeriodSec?: number;
+  /** Wiggle rotation amplitude in degrees (0.3–6). Default 1.4. */
+  wiggleDeg?: number;
+  /** Wiggle period in seconds (0.4–3). Default 0.9. */
+  wigglePeriodSec?: number;
+  /** Ghost fade ease curve. */
+  ghostEase?: 'linear' | 'smooth';
+  /** Ghost vertical drift in em during fade (0–0.4). */
+  ghostDriftEm?: number;
+  /** Ghost each word on its spoken window (karaoke-synced reveal). */
+  ghostSyncToWords?: boolean;
+  /** Float/wiggle phase keyed to each word start. */
+  motionSyncToWords?: boolean;
   /**
    * Ghost page fade on/off. true forces ghostFade into blockFx; false strips it.
    * Omit = leave the preset alone. This is the "ghost fade on and off" dial.
@@ -858,7 +1191,31 @@ export interface CaptionOverrides {
    * caption color when omitted. Strength 0–1 (0 = off).
    */
   outerGlow?: { strength: number; color?: string };
+  /**
+   * Full-block / active-word gradient fill. When set, paints with
+   * background-clip:text and suppresses stroke on filled glyphs.
+   * colors: 2–3 stops. scope 'all' = every word; 'active' = spoken only.
+   */
+  gradientFill?: {
+    colors: [string, string] | [string, string, string];
+    scope?: 'active' | 'all';
+    angle?: number;
+    shift?: boolean;
+  };
+  /** Ghost fade-in duration in seconds (0.05–1.2). Requires ghostFade on. */
+  ghostFadeInSec?: number;
+  /** Ghost fade-out duration in seconds (0.05–1.2). Requires ghostFade on. */
+  ghostFadeOutSec?: number;
+  /**
+   * Ghost reveal/dissolve unit. 'block' = whole page, 'word' = one word at a
+   * time, 'letter' = one letter at a time. Requires ghostFade on.
+   */
+  ghostStagger?: 'block' | 'word' | 'letter';
+  /** Delay between staggered ghost units in seconds (0.02–0.25). */
+  ghostStaggerSec?: number;
 }
+
+
 
 
 /** Clamp a number into a range, with a fallback for junk. */
@@ -971,18 +1328,170 @@ export function resolveCaptionStyle(
   if (typeof overrides.wordSpacing === 'number' && Number.isFinite(overrides.wordSpacing)) {
     out.wordSpacingEm = Math.max(0, Math.min(0.6, overrides.wordSpacing));
   }
-  // Block feel: the override owns float/wiggle (never both), page fx survive.
-  if (overrides.blockMotion === 'still' || overrides.blockMotion === 'float' || overrides.blockMotion === 'wiggle') {
-    const rest = (out.blockFx ?? []).filter((fx) => fx !== 'float' && fx !== 'wiggle');
-    out.blockFx = overrides.blockMotion === 'still' ? rest : [...rest, overrides.blockMotion];
+  // Whole-text gradient fill override (paints every word, drops stroke).
+  if (overrides.gradientFill && Array.isArray(overrides.gradientFill.colors)) {
+    const cols = overrides.gradientFill.colors.filter(
+      (c): c is string => typeof c === 'string' && c.length > 0,
+    );
+    if (cols.length >= 2) {
+      out.gradient = cols.length >= 3
+        ? [cols[0], cols[1], cols[2]]
+        : [cols[0], cols[1]];
+      out.gradientScope = overrides.gradientFill.scope === 'active' ? 'active' : 'all';
+      if (typeof overrides.gradientFill.angle === 'number' && Number.isFinite(overrides.gradientFill.angle)) {
+        out.gradientAngle = Math.max(0, Math.min(360, overrides.gradientFill.angle));
+      }
+      if (overrides.gradientFill.shift) {
+        out.gradientShift = true;
+      }
+      // Gradient glyphs can't carry a stroke without the black-halo bug.
+      out.stroke = undefined;
+    }
+  }
+  // Block feel: float + wiggle are independent toggles (can both be on).
+  // Legacy blockMotion still works for old saves.
+  {
+    let fx = [...(out.blockFx ?? [])];
+    const hasFloatToggle = typeof overrides.floatOn === 'boolean';
+    const hasWiggleToggle = typeof overrides.wiggleOn === 'boolean';
+    if (hasFloatToggle || hasWiggleToggle) {
+      if (hasFloatToggle) {
+        fx = fx.filter((x) => x !== 'float');
+        if (overrides.floatOn) fx.push('float');
+      }
+      if (hasWiggleToggle) {
+        fx = fx.filter((x) => x !== 'wiggle');
+        if (overrides.wiggleOn) fx.push('wiggle');
+      }
+      out.blockFx = fx;
+    } else if (
+      overrides.blockMotion === 'still' ||
+      overrides.blockMotion === 'float' ||
+      overrides.blockMotion === 'wiggle'
+    ) {
+      const rest = fx.filter((x) => x !== 'float' && x !== 'wiggle');
+      out.blockFx =
+        overrides.blockMotion === 'still' ? rest : [...rest, overrides.blockMotion];
+    }
+    const m: NonNullable<CaptionStyleDef['motion']> = { ...(out.motion ?? {}) };
+    let touched = false;
+    if (typeof overrides.floatAmpEm === 'number' && Number.isFinite(overrides.floatAmpEm)) {
+      m.floatAmpEm = Math.max(0.02, Math.min(0.4, overrides.floatAmpEm));
+      touched = true;
+    }
+    if (typeof overrides.floatPeriodSec === 'number' && Number.isFinite(overrides.floatPeriodSec)) {
+      m.floatPeriodSec = Math.max(0.6, Math.min(4, overrides.floatPeriodSec));
+      touched = true;
+    }
+    if (typeof overrides.wiggleDeg === 'number' && Number.isFinite(overrides.wiggleDeg)) {
+      m.wiggleDeg = Math.max(0.3, Math.min(6, overrides.wiggleDeg));
+      touched = true;
+    }
+    if (typeof overrides.wigglePeriodSec === 'number' && Number.isFinite(overrides.wigglePeriodSec)) {
+      m.wigglePeriodSec = Math.max(0.4, Math.min(3, overrides.wigglePeriodSec));
+      touched = true;
+    }
+    if (touched) out.motion = m;
   }
   // Ghost fade dial — independent of float/wiggle.
   if (typeof overrides.ghostFade === 'boolean') {
     const rest = (out.blockFx ?? []).filter((fx) => fx !== 'ghostFade');
     out.blockFx = overrides.ghostFade ? [...rest, 'ghostFade'] : rest;
   }
+  // Editor block FX toggles
+  {
+    const toggles: Array<[boolean | undefined, CaptionBlockFx]> = [
+      [overrides.punchIn, 'punchIn'],
+      [overrides.letterbox, 'letterbox'],
+      [overrides.springExit, 'springExit'],
+    ];
+    let fx = [...(out.blockFx ?? [])] as CaptionBlockFx[];
+    for (const [on, name] of toggles) {
+      if (typeof on !== 'boolean') continue;
+      fx = fx.filter((x) => x !== name);
+      if (on) fx.push(name);
+    }
+    out.blockFx = fx;
+  }
+  if (overrides.motionTrail) {
+    out.anim = out.anim && out.anim !== '' ? out.anim : 'motionTrail';
+  }
+  if (overrides.outlineFill) {
+    out.anim = 'outlineFill';
+  }
+  if (overrides.dualTone) {
+    out.anim = 'dualTone';
+  }
+  if (typeof overrides.anim === 'string') {
+    out.anim = overrides.anim as CaptionAnim;
+  }
+  if (typeof overrides.highlightMode === 'string' && overrides.highlightMode) {
+    out.highlightMode = overrides.highlightMode as HighlightMode;
+  }
+  if (typeof overrides.waveBounce === 'boolean') {
+    let fx = [...(out.blockFx ?? [])] as CaptionBlockFx[];
+    fx = fx.filter((x) => x !== 'waveBounce');
+    if (overrides.waveBounce) fx.push('waveBounce' as CaptionBlockFx);
+    out.blockFx = fx;
+  }
+  if (overrides.handDrawn === 'underline' || overrides.handDrawn === 'circle') {
+    (out as CaptionStyleDef & { handDrawn?: string }).handDrawn = overrides.handDrawn;
+  } else if (overrides.handDrawn === false) {
+    delete (out as { handDrawn?: string }).handDrawn;
+  }
+
+
+  // Ghost timing + stagger (fade fully on → hold → fade fully off).
+  {
+    const gi = overrides.ghostFadeInSec;
+    const go = overrides.ghostFadeOutSec;
+    const gs = overrides.ghostStagger;
+    const gss = overrides.ghostStaggerSec;
+    const ge = overrides.ghostEase;
+    const gd = overrides.ghostDriftEm;
+    const hasTiming =
+      (typeof gi === 'number' && Number.isFinite(gi)) ||
+      (typeof go === 'number' && Number.isFinite(go)) ||
+      gs === 'block' ||
+      gs === 'word' ||
+      gs === 'letter' ||
+      (typeof gss === 'number' && Number.isFinite(gss)) ||
+      ge === 'linear' ||
+      ge === 'smooth' ||
+      (typeof gd === 'number' && Number.isFinite(gd));
+    if (hasTiming) {
+      out.ghost = {
+        ...(out.ghost ?? {}),
+        ...(typeof gi === 'number' && Number.isFinite(gi)
+          ? { fadeInSec: Math.max(0.05, Math.min(1.2, gi)) }
+          : {}),
+        ...(typeof go === 'number' && Number.isFinite(go)
+          ? { fadeOutSec: Math.max(0.05, Math.min(1.2, go)) }
+          : {}),
+        ...(gs === 'block' || gs === 'word' || gs === 'letter'
+          ? { stagger: gs }
+          : {}),
+        ...(typeof gss === 'number' && Number.isFinite(gss)
+          ? { staggerSec: Math.max(0.02, Math.min(0.25, gss)) }
+          : {}),
+        ...(ge === 'linear' || ge === 'smooth' ? { ease: ge } : {}),
+        ...(typeof gd === 'number' && Number.isFinite(gd)
+          ? { driftEm: Math.max(0, Math.min(0.4, gd)) }
+          : {}),
+      };
+    }
+    }
+  
+  // Karaoke-sync toggles for ghost + motion.
+  if (typeof overrides.ghostSyncToWords === 'boolean') {
+    out.ghost = { ...(out.ghost ?? {}), syncToWords: overrides.ghostSyncToWords };
+  }
+  if (typeof overrides.motionSyncToWords === 'boolean') {
+    out.motion = { ...(out.motion ?? {}), syncToWords: overrides.motionSyncToWords };
+  }
   // Drop shadow + outer glow compose into a single text-shadow stack so the
   // layer (which already reads def.shadow) picks them up with no extra path.
+
   {
     const parts: string[] = [];
     const glow = overrides.outerGlow;

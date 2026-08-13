@@ -161,6 +161,12 @@ app.get('/__media/:jobId/:file', (req, res) => {
   }, (err) => {
     if (err && !res.headersSent) res.status(500).send('send failed');
   });
+
+/** Keep-alive: hit every few minutes from the app so Railway doesn't sleep. */
+app.get('/warm', (_req, res) => {
+  res.json({ ok: true, ts: Date.now(), jobs: jobs.size });
+});
+
 });
 
 
@@ -512,13 +518,13 @@ async function runRender(jobId, plan, reelId, quality) {
         finalName = `${name}.mp4`;
         const mezPath = path.join(tmpDir, finalName);
         // quality '720' → max 720p tall; otherwise cap at 1080p (never upscale).
-        const maxH = quality === '720' ? 720 : 1080;
+        const maxH = quality === 'draft' ? 540 : quality === '720' ? 720 : 1080;
         const vf = `scale=-2:'min(${maxH},ih)':flags=bicubic`;
         try {
           await run('ffmpeg', [
             '-y', '-i', rawPath,
             '-vf', vf,
-            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            '-c:v', 'libx264', '-preset', quality === 'draft' ? 'ultrafast' : 'veryfast', '-crf', quality === 'draft' ? '28' : '23', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart',
             '-c:a', 'aac', '-b:a', '128k',
             // Drop data/subtitle streams that confuse some extractors.
@@ -661,7 +667,7 @@ async function runRender(jobId, plan, reelId, quality) {
       mediaCacheSizeInBytes: mediaCacheBytes,
       // Output resolution. Composition coords stay at canvas size (1080x1920
       // for 9:16); scale only downsamples the OUTPUT. '720' → 2/3.
-      scale: quality === '720' ? 2 / 3 : 1,
+      scale: quality === 'draft' ? 0.5 : quality === '720' ? 2 / 3 : 1,
       // Docker: /dev/shm is often 64MB and Chrome will OOM-crash into it.
       chromiumOptions: {
         disableWebSecurity: false,

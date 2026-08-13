@@ -146,6 +146,9 @@ export interface RenderPlan {
    * See docs/CAPTION_FONT_MISSING_IN_RENDER_FINDING.md.
    */
   fonts: CaptionFont[];
+  /** Optional 0..1 peak buckets for caption waveBounce (from client waveform). */
+  audioPeaks?: number[];
+
 }
 
 export interface RenderPlanOptions {

@@ -57,20 +57,20 @@ export default function RenderPanel({ job }: { job: RenderJob }) {
           header button renders too. */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-white/50">Quality</span>
-        {(['1080', '720'] as const).map((q) => (
+        {(['draft', '720', '1080'] as const).map((q) => (
           <button
             key={q}
             type="button"
             onClick={() => job.setQuality(q)}
             disabled={job.busy}
-            title={q === '1080' ? 'Full canvas resolution (needs ~2-4GB on the worker)' : 'Downsampled — renders on a small worker'}
+            title={q === 'draft' ? 'Fast draft: half-res + ultrafast encode' : q === '1080' ? 'Full canvas resolution (needs ~2-4GB on the worker)' : 'Downsampled — renders on a small worker'}
             className={`rounded-md px-3 py-1.5 text-xs transition ${
               job.quality === q
                 ? 'bg-white text-black'
                 : 'bg-white/10 text-white/70 hover:bg-white/20'
             } disabled:opacity-50`}
           >
-            {q}p
+            {q === 'draft' ? 'Draft' : q + 'p'}
           </button>
         ))}
       </div>

@@ -20,7 +20,7 @@ import {
   type CaptionOverrides,
   type CaptionStyleDef,
   type CaptionTag,
-} from '@/lib/mothermode/reel/captions';
+, EDITOR_PACKS, editorPackFor, CAPTION_ANIMS, HIGHLIGHT_MODES} from '@/lib/mothermode/reel/captions';
 import type { CaptionPreset } from '@/lib/mothermode/reel/types';
 
 const FILTERS: { id: CaptionTag | 'all'; label: string }[] = [
@@ -29,6 +29,23 @@ const FILTERS: { id: CaptionTag | 'all'; label: string }[] = [
   { id: 'new', label: 'New' },
   { id: 'premium', label: 'Premium' },
 ];
+
+/** Normalize 2–3 color stops into the gradientFill tuple shape. */
+function gradientStopsOf(
+  stops: readonly string[] | undefined | null,
+  fallback: [string, string] | [string, string, string] = [
+    '#22D3EE',
+    '#A78BFA',
+  ],
+): [string, string] | [string, string, string] {
+  const cleaned = (stops ?? []).filter(
+    (c): c is string => typeof c === 'string' && !!c,
+  );
+  if (cleaned.length >= 3) return [cleaned[0], cleaned[1], cleaned[2]];
+  if (cleaned.length >= 2) return [cleaned[0], cleaned[1]];
+  return fallback;
+}
+
 
 /** One gallery tile: the preset's label rendered in its own style on a dark chip. */
 function PresetTile({
@@ -367,7 +384,181 @@ export function CaptionGallery({
                 <div className="text-[9px] font-semibold uppercase tracking-wide text-bone/40">
                   Effects
                 </div>
-                <label className="flex items-center justify-between gap-2">
+                
+                <div className="flex flex-col gap-2 rounded-lg border border-bone/10 bg-bone/[0.03] p-2">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-bone/40">
+                    Motion
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const on =
+                          overrides?.floatOn ??
+                          (activeDef.blockFx ?? []).includes('float');
+                        onCustomize({ floatOn: !on });
+                      }}
+                      className={clsx(
+                        'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                        (overrides?.floatOn ??
+                          (activeDef.blockFx ?? []).includes('float'))
+                          ? 'bg-brass text-ink'
+                          : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                      )}
+                    >
+                      Float{' '}
+                      {(overrides?.floatOn ??
+                        (activeDef.blockFx ?? []).includes('float'))
+                        ? 'On'
+                        : 'Off'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const on =
+                          overrides?.wiggleOn ??
+                          (activeDef.blockFx ?? []).includes('wiggle');
+                        onCustomize({ wiggleOn: !on });
+                      }}
+                      className={clsx(
+                        'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                        (overrides?.wiggleOn ??
+                          (activeDef.blockFx ?? []).includes('wiggle'))
+                          ? 'bg-brass text-ink'
+                          : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                      )}
+                    >
+                      Wiggle{' '}
+                      {(overrides?.wiggleOn ??
+                        (activeDef.blockFx ?? []).includes('wiggle'))
+                        ? 'On'
+                        : 'Off'}
+                    </button>
+                  </div>
+                  {(overrides?.floatOn ??
+                    (activeDef.blockFx ?? []).includes('float')) && (
+                    <>
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Float amp</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.floatAmpEm ??
+                            activeDef.motion?.floatAmpEm ??
+                            0.12
+                          ).toFixed(2)}
+                          em
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={2}
+                        max={40}
+                        step={1}
+                        value={Math.round(
+                          (overrides?.floatAmpEm ??
+                            activeDef.motion?.floatAmpEm ??
+                            0.12) * 100,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            floatAmpEm: Number(e.target.value) / 100,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Float speed</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.floatPeriodSec ??
+                            activeDef.motion?.floatPeriodSec ??
+                            1.8
+                          ).toFixed(1)}
+                          s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={6}
+                        max={40}
+                        step={1}
+                        value={Math.round(
+                          (overrides?.floatPeriodSec ??
+                            activeDef.motion?.floatPeriodSec ??
+                            1.8) * 10,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            floatPeriodSec: Number(e.target.value) / 10,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    </>
+                  )}
+                  {(overrides?.wiggleOn ??
+                    (activeDef.blockFx ?? []).includes('wiggle')) && (
+                    <>
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Wiggle amp</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.wiggleDeg ??
+                            activeDef.motion?.wiggleDeg ??
+                            1.4
+                          ).toFixed(1)}
+                          °
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={3}
+                        max={60}
+                        step={1}
+                        value={Math.round(
+                          (overrides?.wiggleDeg ??
+                            activeDef.motion?.wiggleDeg ??
+                            1.4) * 10,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            wiggleDeg: Number(e.target.value) / 10,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Wiggle speed</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.wigglePeriodSec ??
+                            activeDef.motion?.wigglePeriodSec ??
+                            0.9
+                          ).toFixed(1)}
+                          s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={4}
+                        max={30}
+                        step={1}
+                        value={Math.round(
+                          (overrides?.wigglePeriodSec ??
+                            activeDef.motion?.wigglePeriodSec ??
+                            0.9) * 10,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            wigglePeriodSec: Number(e.target.value) / 10,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    </>
+                  )}
+                </div>
+<label className="flex items-center justify-between gap-2">
                   <span className="text-[10px] text-bone/55">Ghost fade</span>
                   <button
                     type="button"
@@ -384,7 +575,7 @@ export function CaptionGallery({
                         ? 'bg-brass text-ink'
                         : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
                     )}
-                    title="Page fades in on arrival and out before the next page"
+                    title="Page fades fully on, holds, then fades fully off"
                   >
                     {(overrides?.ghostFade ??
                       (activeDef.blockFx ?? []).includes('ghostFade'))
@@ -392,9 +583,557 @@ export function CaptionGallery({
                       : 'Off'}
                   </button>
                 </label>
+                {(overrides?.ghostFade ??
+                  (activeDef.blockFx ?? []).includes('ghostFade')) && (
+                  <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
+                    <div>
+                      <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Fade in</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.ghostFadeInSec ??
+                            activeDef.ghost?.fadeInSec ??
+                            0.22
+                          ).toFixed(2)}
+                          s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={5}
+                        max={120}
+                        step={5}
+                        value={Math.round(
+                          (overrides?.ghostFadeInSec ??
+                            activeDef.ghost?.fadeInSec ??
+                            0.22) * 100,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            ghostFadeInSec: Number(e.target.value) / 100,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Fade out</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.ghostFadeOutSec ??
+                            activeDef.ghost?.fadeOutSec ??
+                            0.28
+                          ).toFixed(2)}
+                          s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={5}
+                        max={120}
+                        step={5}
+                        value={Math.round(
+                          (overrides?.ghostFadeOutSec ??
+                            activeDef.ghost?.fadeOutSec ??
+                            0.28) * 100,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            ghostFadeOutSec: Number(e.target.value) / 100,
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Reveal</span>
+                      </div>
+                      <select
+                        className="rounded border border-bone/15 bg-ink px-2 py-1 text-[10px] text-bone"
+                        value={
+                          overrides?.ghostStagger ??
+                          activeDef.ghost?.stagger ??
+                          'block'
+                        }
+                        onChange={(e) =>
+                          onCustomize({
+                            ghostStagger: e.target.value as
+                              | 'block'
+                              | 'word'
+                              | 'letter',
+                          })
+                        }
+                      >
+                        <option value="block">Whole page</option>
+                        <option value="word">Word by word</option>
+                        <option value="letter">Letter by letter</option>
+                      </select>
+                    </div>
+                    {(overrides?.ghostStagger ??
+                      activeDef.ghost?.stagger ??
+                      'block') !== 'block' && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                          <span>Stagger</span>
+                          <span className="text-brass/80">
+                            {(
+                              overrides?.ghostStaggerSec ??
+                              activeDef.ghost?.staggerSec ??
+                              ((overrides?.ghostStagger ??
+                                activeDef.ghost?.stagger) === 'letter'
+                                ? 0.03
+                                : 0.05)
+                            ).toFixed(2)}
+                            s
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={2}
+                          max={25}
+                          step={1}
+                          value={Math.round(
+                            (overrides?.ghostStaggerSec ??
+                              activeDef.ghost?.staggerSec ??
+                              ((overrides?.ghostStagger ??
+                                activeDef.ghost?.stagger) === 'letter'
+                                ? 0.03
+                                : 0.05)) * 100,
+                          )}
+                          onChange={(e) =>
+                            onCustomize({
+                              ghostStaggerSec: Number(e.target.value) / 100,
+                            })
+                          }
+                          className="accent-brass"
+                        />
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Fade curve</span>
+                      </div>
+                      <select
+                        className="rounded border border-bone/15 bg-ink px-2 py-1 text-[10px] text-bone"
+                        value={
+                          overrides?.ghostEase ??
+                          activeDef.ghost?.ease ??
+                          'smooth'
+                        }
+                        onChange={(e) =>
+                          onCustomize({
+                            ghostEase: e.target.value as 'linear' | 'smooth',
+                          })
+                        }
+                      >
+                        <option value="smooth">Smooth (movie)</option>
+                        <option value="linear">Linear</option>
+                      </select>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Rise / sink</span>
+                        <span className="text-brass/80">
+                          {(
+                            overrides?.ghostDriftEm ??
+                            activeDef.ghost?.driftEm ??
+                            0.14
+                          ).toFixed(2)}
+                          em
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={40}
+                        step={1}
+                        value={Math.round(
+                          (overrides?.ghostDriftEm ??
+                            activeDef.ghost?.driftEm ??
+                            0.14) * 100,
+                        )}
+                        onChange={(e) =>
+                          onCustomize({
+                            ghostDriftEm: Number(e.target.value) / 100,
+                          })
+                        }
+                        className="accent-brass"
+                      />
+                    </div>
+                      </div>
+                    )}
+                    </div>
+                    <p className="text-[8px] leading-relaxed text-bone/25">
+                      Full on → hold → full off. Short pages auto-shrink so a hold
+                      still lands.
+                    </p>
+                  </div>
+                )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {/* Sync reveal/motion to spoken word timings */}
+            
+            {/* One-click editor packs */}
+            <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">
+                Editor packs
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {EDITOR_PACKS.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    title={pack.blurb}
+                    onClick={() => {
+                      onSelect?.(pack.presetId);
+                      if (pack.overrides) onCustomize(pack.overrides);
+                    }}
+                    className="rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/55 hover:bg-bone/10 hover:text-bone"
+                  >
+                    {pack.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[9px] leading-snug text-bone/40">
+                Applies a stacked look (preset + motion). Tweak anything after.
+              </div>
+            </div>
+
+            
+            {/* Entrance animation + highlight */}
+            <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">
+                Entrance anim
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {CAPTION_ANIMS.map((a) => {
+                  const cur = overrides?.anim ?? activeDef.anim ?? 'pop';
+                  const on = cur === a;
+                  return (
+                    <button
+                      key={a || 'none'}
+                      type="button"
+                      onClick={() => onCustomize({ anim: a })}
+                      className={
+                        on
+                          ? 'rounded-full bg-brass px-2 py-0.5 text-[9px] font-bold text-ink'
+                          : 'rounded-full border border-bone/15 px-2 py-0.5 text-[9px] font-bold text-bone/45 hover:bg-bone/10'
+                      }
+                    >
+                      {a || 'none'}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50 pt-1">
+                Highlight
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {HIGHLIGHT_MODES.map((h) => {
+                  const cur = overrides?.highlightMode ?? activeDef.highlightMode;
+                  const on = cur === h;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => onCustomize({ highlightMode: h })}
+                      className={
+                        on
+                          ? 'rounded-full bg-brass px-2 py-0.5 text-[9px] font-bold text-ink'
+                          : 'rounded-full border border-bone/15 px-2 py-0.5 text-[9px] font-bold text-bone/45 hover:bg-bone/10'
+                      }
+                    >
+                      {h}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onCustomize({ waveBounce: !(overrides?.waveBounce ?? false) })}
+                  className={
+                    overrides?.waveBounce
+                      ? 'rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase text-ink'
+                      : 'rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase text-bone/45 hover:bg-bone/10'
+                  }
+                >
+                  Wave bounce
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onCustomize({
+                      handDrawn:
+                        overrides?.handDrawn === 'underline' ? false : 'underline',
+                    })
+                  }
+                  className={
+                    overrides?.handDrawn === 'underline'
+                      ? 'rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase text-ink'
+                      : 'rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase text-bone/45 hover:bg-bone/10'
+                  }
+                >
+                  Draw underline
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onCustomize({
+                      handDrawn: overrides?.handDrawn === 'circle' ? false : 'circle',
+                    })
+                  }
+                  className={
+                    overrides?.handDrawn === 'circle'
+                      ? 'rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase text-ink'
+                      : 'rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase text-bone/45 hover:bg-bone/10'
+                  }
+                >
+                  Draw circle
+                </button>
+              </div>
+            </div>
+
+            {/* Full-block motion phase-lock to spoken caption page */}
+            <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">
+                Motion cue
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onCustomize({
+                    motionSyncToWords: !(overrides?.motionSyncToWords ?? false),
+                  })
+                }
+                className={clsx(
+                  'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                  overrides?.motionSyncToWords
+                    ? 'bg-brass text-ink'
+                    : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                )}
+                title="Float/wiggle phase starts when this caption page is spoken"
+              >
+                {overrides?.motionSyncToWords ? 'Phase ↔ speech' : 'Phase free-run'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onCustomize({ punchIn: !(overrides?.punchIn ?? false) })}
+                className={clsx(
+                  'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                  overrides?.punchIn ? 'bg-brass text-ink' : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                )}
+              >
+                Punch-in
+              </button>
+              <button
+                type="button"
+                onClick={() => onCustomize({ letterbox: !(overrides?.letterbox ?? false) })}
+                className={clsx(
+                  'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                  overrides?.letterbox ? 'bg-brass text-ink' : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                )}
+              >
+                Letterbox
+              </button>
+              <button
+                type="button"
+                onClick={() => onCustomize({ springExit: !(overrides?.springExit ?? false) })}
+                className={clsx(
+                  'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                  overrides?.springExit ? 'bg-brass text-ink' : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                )}
+              >
+                Spring exit
+              </button>
+
+              <div className="text-[9px] leading-snug text-bone/40">
+                Ghost always fades the full caption on, then fully off. Float/wiggle
+                move the whole block — turn Phase ↔ speech on to lock the bob to when
+                the line is spoken.
+              </div>
+            </div>
+                  {(overrides?.gradientFill || activeDef.gradient) && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {gradientStopsOf(
+                          overrides?.gradientFill?.colors ?? activeDef.gradient,
+                        )
+                          .slice(0, 3)
+                          .map((hex, i) => (
+                            <label key={i} className="flex items-center gap-1">
+                              <span className="text-[8px] text-bone/35">
+                                {i === 0 ? 'A' : i === 1 ? 'B' : 'C'}
+                              </span>
+                              <input
+                                type="color"
+                                value={hex.startsWith('#') ? hex.slice(0, 7) : '#ffffff'}
+                                onChange={(e) => {
+                                  const base = [
+                                    ...gradientStopsOf(
+                                      overrides?.gradientFill?.colors ??
+                                        activeDef.gradient,
+                                    ),
+                                  ];
+                                  base[i] = e.target.value;
+                                  onCustomize({
+                                    gradientFill: {
+                                      colors: gradientStopsOf(base),
+                                      scope:
+                                        overrides?.gradientFill?.scope ??
+                                        activeDef.gradientScope ??
+                                        'all',
+                                      angle:
+                                        overrides?.gradientFill?.angle ??
+                                        activeDef.gradientAngle ??
+                                        135,
+                                      shift:
+                                        overrides?.gradientFill?.shift ??
+                                        activeDef.gradientShift ??
+                                        false,
+                                    },
+                                  });
+                                }}
+                                className="h-5 w-7 cursor-pointer rounded border border-bone/15 bg-transparent"
+                              />
+                            </label>
+                          ))}
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[9px] text-bone/40">Scope</span>
+                        <div className="flex gap-1">
+                          {(['active', 'all'] as const).map((scope) => {
+                            const cur =
+                              overrides?.gradientFill?.scope ??
+                              activeDef.gradientScope ??
+                              'active';
+                            return (
+                              <button
+                                key={scope}
+                                type="button"
+                                onClick={() => {
+                                  onCustomize({
+                                    gradientFill: {
+                                      colors: gradientStopsOf(
+                                        overrides?.gradientFill?.colors ??
+                                          activeDef.gradient,
+                                      ),
+                                      scope,
+                                      angle:
+                                        overrides?.gradientFill?.angle ??
+                                        activeDef.gradientAngle ??
+                                        135,
+                                      shift:
+                                        overrides?.gradientFill?.shift ??
+                                        activeDef.gradientShift ??
+                                        false,
+                                    },
+                                  });
+                                }}
+                                className={clsx(
+                                  'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide',
+                                  cur === scope
+                                    ? 'bg-brass text-ink'
+                                    : 'border border-bone/15 text-bone/40 hover:bg-bone/10',
+                                )}
+                              >
+                                {scope === 'all' ? 'Whole text' : 'Active'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                          <span>Angle</span>
+                          <span className="text-brass/80">
+                            {Math.round(
+                              overrides?.gradientFill?.angle ??
+                                activeDef.gradientAngle ??
+                                135,
+                            )}
+                            °
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          step={5}
+                          value={Math.round(
+                            overrides?.gradientFill?.angle ??
+                              activeDef.gradientAngle ??
+                              135,
+                          )}
+                          onChange={(e) => {
+                            onCustomize({
+                              gradientFill: {
+                                colors: gradientStopsOf(
+                                  overrides?.gradientFill?.colors ??
+                                    activeDef.gradient,
+                                ),
+                                scope:
+                                  overrides?.gradientFill?.scope ??
+                                  activeDef.gradientScope ??
+                                  'all',
+                                angle: Number(e.target.value),
+                                shift:
+                                  overrides?.gradientFill?.shift ??
+                                  activeDef.gradientShift ??
+                                  false,
+                              },
+                            });
+                          }}
+                          className="w-full accent-brass"
+                        />
+                      </div>
+                      <label className="flex items-center justify-between gap-2">
+                        <span className="text-[9px] text-bone/40">Living shift</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur =
+                              overrides?.gradientFill?.shift ??
+                              activeDef.gradientShift ??
+                              false;
+                            onCustomize({
+                              gradientFill: {
+                                colors: gradientStopsOf(
+                                  overrides?.gradientFill?.colors ??
+                                    activeDef.gradient,
+                                ),
+                                scope:
+                                  overrides?.gradientFill?.scope ??
+                                  activeDef.gradientScope ??
+                                  'all',
+                                angle:
+                                  overrides?.gradientFill?.angle ??
+                                  activeDef.gradientAngle ??
+                                  135,
+                                shift: !cur,
+                              },
+                            });
+                          }}
+                          className={clsx(
+                            'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide',
+                            (overrides?.gradientFill?.shift ??
+                              activeDef.gradientShift)
+                              ? 'bg-brass text-ink'
+                              : 'border border-bone/15 text-bone/40 hover:bg-bone/10',
+                          )}
+                        >
+                          {(overrides?.gradientFill?.shift ??
+                            activeDef.gradientShift)
+                            ? 'On'
+                            : 'Off'}
+                        </button>
+                      </label>
+
+                    </>
+                  )}
+                </div>
                 <div>
                   <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
                     <span>Drop shadow</span>
+
                     <span className="text-brass/80">
                       {Math.round((overrides?.dropShadow ?? 0) * 100)}%
                     </span>
@@ -473,9 +1212,10 @@ export function CaptionGallery({
                   </div>
                 </div>
                 <p className="text-[8px] leading-relaxed text-bone/25">
-                  Ghost fades each page in/out. Shadow + glow stack on every word
-                  and burn into the MP4 the same way.
+                  Ghost: full fade on → hold → full fade off. Gradient paints the
+                  glyphs (no outline halo). Shadow + glow stack on every word.
                 </p>
+
               </div>
               {/* POWER WORDS — they glow in the active style even when idle */}
               <div>
