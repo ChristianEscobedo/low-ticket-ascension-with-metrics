@@ -362,11 +362,127 @@ export function CaptionGallery({
                   Airy captions: word spacing ~10–20%. Tight + punchy: letter spacing −2%.
                 </p>
               </div>
+              {/* Effects: ghost fade · drop shadow · outer glow */}
+              <div className="space-y-2 rounded-lg border border-bone/10 bg-ink/40 px-2 py-2">
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-bone/40">
+                  Effects
+                </div>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-bone/55">Ghost fade</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const on =
+                        overrides?.ghostFade ??
+                        (activeDef.blockFx ?? []).includes('ghostFade');
+                      onCustomize({ ghostFade: !on });
+                    }}
+                    className={clsx(
+                      'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                      (overrides?.ghostFade ??
+                        (activeDef.blockFx ?? []).includes('ghostFade'))
+                        ? 'bg-brass text-ink'
+                        : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                    )}
+                    title="Page fades in on arrival and out before the next page"
+                  >
+                    {(overrides?.ghostFade ??
+                      (activeDef.blockFx ?? []).includes('ghostFade'))
+                      ? 'On'
+                      : 'Off'}
+                  </button>
+                </label>
+                <div>
+                  <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                    <span>Drop shadow</span>
+                    <span className="text-brass/80">
+                      {Math.round((overrides?.dropShadow ?? 0) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round((overrides?.dropShadow ?? 0) * 100)}
+                    onChange={(e) =>
+                      onCustomize({ dropShadow: Number(e.target.value) / 100 })
+                    }
+                    className="w-full accent-brass"
+                  />
+                </div>
+                <div>
+                  <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                    <span>Outer glow</span>
+                    <span className="text-brass/80">
+                      {Math.round((overrides?.outerGlow?.strength ?? 0) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round((overrides?.outerGlow?.strength ?? 0) * 100)}
+                    onChange={(e) =>
+                      onCustomize({
+                        outerGlow: {
+                          strength: Number(e.target.value) / 100,
+                          color: overrides?.outerGlow?.color,
+                        },
+                      })
+                    }
+                    className="w-full accent-brass"
+                  />
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="text-[9px] text-bone/40">Glow color</span>
+                    <input
+                      type="color"
+                      value={
+                        overrides?.outerGlow?.color ||
+                        activeDef.activeColor ||
+                        '#ffffff'
+                      }
+                      onChange={(e) =>
+                        onCustomize({
+                          outerGlow: {
+                            strength: overrides?.outerGlow?.strength ?? 0.55,
+                            color: e.target.value,
+                          },
+                        })
+                      }
+                      className="h-5 w-7 cursor-pointer rounded border border-bone/15 bg-transparent"
+                      title="Outer glow color (defaults to active caption color)"
+                    />
+                    {overrides?.outerGlow?.color && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onCustomize({
+                            outerGlow: {
+                              strength: overrides?.outerGlow?.strength ?? 0,
+                              color: undefined,
+                            },
+                          })
+                        }
+                        className="text-[9px] text-bone/30 hover:text-bone/60"
+                      >
+                        ↺ default
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[8px] leading-relaxed text-bone/25">
+                  Ghost fades each page in/out. Shadow + glow stack on every word
+                  and burn into the MP4 the same way.
+                </p>
+              </div>
               {/* POWER WORDS — they glow in the active style even when idle */}
               <div>
                 <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-bone/40">
                   Power words <span className="normal-case text-bone/25">(comma separated)</span>
                 </div>
+
                 <input
                   defaultValue={(overrides?.powerWords ?? []).join(', ')}
                   onBlur={(e) =>

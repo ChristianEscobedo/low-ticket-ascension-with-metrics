@@ -32,6 +32,24 @@ import type { MotionKey } from '../motion';
 import { effectiveClipDuration, MIN_CLIP_SECONDS } from '../timeline';
 import type { ReelMediaCueStyle, ReelProject, ReelWord, ReelWordMark } from '../types';
 
+/**
+ * Unwrap a Remotion preview proxy URL back to its raw source. The studio's
+ * preview wraps OffthreadVideo srcs in `/proxy?src=<encoded>` for CORS-free
+ * playback; if that wrapped URL reaches the render plan, the worker (a
+ * DIFFERENT machine) fetches `localhost:3000/proxy?...`, gets a 500, and
+ * Chrome hangs on the frame — the compositor SIGKILL. The render needs the
+ * RAW source. Anything that isn't a proxy URL passes through unchanged.
+ */
+function unwrapProxySrc(src: string): string {
+  if (typeof src !== 'string' || !src.includes('/proxy?')) return src;
+  try {
+    const inner = new URL(src, 'http://x').searchParams.get('src');
+    return inner && /^https?:\/\//i.test(inner) ? inner : src;
+  } catch {
+    return src;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plan shape (must stay JSON-serializable — it travels as Remotion inputProps)
 // ---------------------------------------------------------------------------
@@ -220,7 +238,7 @@ export function shiftMediaCues(
       const to = cursor + toFrames(Math.min(effSec, localEnd + (cue.holdSec ?? MEDIA_CUE_HOLD_SEC)), fps);
       out.push({
         id: cue.id,
-        src: cue.url,
+        src: unwrapProxySrc(cue.url),
         fromFrame: from,
         durationInFrames: Math.max(1, to - from),
         wordText: w.word,
@@ -267,7 +285,7 @@ export function buildRenderPlan(
     clips.push({
       id: clip.id,
       name: clip.name,
-      src: clip.url,
+      src: unwrapProxySrc(clip.url),
       fromFrame: cursor,
       durationInFrames: frames,
       trimStartSec,
@@ -294,7 +312,7 @@ export function buildRenderPlan(
     return {
       id: o.id,
       name: o.name,
-      src: o.url,
+      src: unwrapProxySrc(o.url),
       fromFrame: toFrames(Math.max(0, o.offsetSec), fps),
       durationInFrames: clipFrames(effSec, fps),
       trimStartSec: Math.max(0, o.trimStartSec ?? 0),
@@ -310,7 +328,7 @@ export function buildRenderPlan(
     const known = project.audio.durationSec;
     const span =
       known && known > 0 ? Math.min(clipFrames(known, fps), remaining) : remaining;
-    audio = { src: project.audio.url, fromFrame, durationInFrames: span };
+    audio = { src: unwrapProxySrc(project.audio.url), fromFrame, durationInFrames: span };
   }
 
   // Words must be monotonic for the karaoke walk (chunking assumes order).

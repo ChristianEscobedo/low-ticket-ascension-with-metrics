@@ -585,6 +585,68 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     shadow: '0 3px 8px rgba(0,0,0,0.9)',
     wordsPerLine: 1, anim: 'cascade',
   },
+  // --- MODERN batch 4 (ghost + glow + shadow themes the customizer dials) ---
+  {
+    id: 'ghost-soft', label: 'Ghost Soft', tags: ['new', 'premium'],
+    font: 'Inter', weight: 600, upper: false,
+    wordColor: 'rgba(255,255,255,0.88)', activeColor: '#FFFFFF', highlightMode: 'color',
+    shadow: '0 2px 12px rgba(0,0,0,0.75), 0 0 18px rgba(255,255,255,0.18)',
+    wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'], letterSpacingEm: 0.02, wordSpacingEm: 0.1,
+  },
+  {
+    id: 'neon-pop', label: 'Neon Pop', tags: ['new', 'trend'],
+    font: 'Anton', weight: 900, upper: true,
+    wordColor: '#FFFFFF', activeColor: '#22D3EE', highlightMode: 'glow',
+    stroke: { color: '#000000', width: 2 },
+    shadow: '0 0 8px rgba(34,211,238,0.85), 0 0 22px rgba(34,211,238,0.45), 0 4px 10px rgba(0,0,0,0.9)',
+    wordsPerLine: 2, anim: 'springPop',
+  },
+  {
+    id: 'clean-drop', label: 'Clean Drop', tags: ['new'],
+    font: 'Inter', weight: 700, upper: false,
+    wordColor: 'rgba(255,255,255,0.92)', activeColor: '#FFFFFF', highlightMode: 'color',
+    shadow: '0 3px 10px rgba(0,0,0,0.85), 0 8px 24px rgba(0,0,0,0.45)',
+    wordsPerLine: 3, anim: 'riseUp', letterSpacingEm: 0.01, wordSpacingEm: 0.08,
+  },
+  {
+    id: 'glass-pill', label: 'Glass Pill', tags: ['new', 'premium'],
+    font: 'Poppins', weight: 700, upper: false,
+    wordColor: '#FFFFFF', activeColor: '#F8E16C', highlightMode: 'scale',
+    lineBg: 'rgba(12,12,16,0.55)',
+    shadow: '0 4px 18px rgba(0,0,0,0.55)',
+    wordsPerLine: 3, anim: 'fade', blockFx: ['ghostFade'], wordSpacingEm: 0.1,
+  },
+  {
+    id: 'aura', label: 'Aura', tags: ['new', 'premium'],
+    font: 'Poppins', weight: 800, upper: false,
+    wordColor: 'rgba(255,255,255,0.7)', activeColor: '#A78BFA', highlightMode: 'glow',
+    shadow: '0 0 10px rgba(167,139,250,0.7), 0 0 28px rgba(167,139,250,0.35), 0 3px 10px rgba(0,0,0,0.85)',
+    wordsPerLine: 2, anim: 'glowPulse', blockFx: ['float'],
+  },
+  {
+    id: 'bold-karaoke', label: 'Bold Karaoke', tags: ['new', 'trend'],
+    font: 'Archivo Black', weight: 900, upper: true,
+    wordColor: 'rgba(255,255,255,0.4)', activeColor: '#FFD400', highlightMode: 'color',
+    stroke: { color: '#000000', width: 2.5 },
+    shadow: '0 0 12px rgba(255,212,0,0.35), 0 4px 12px rgba(0,0,0,0.9)',
+    wordsPerLine: 2, anim: 'pop', karaokeFill: true,
+  },
+  {
+    id: 'modern-word', label: 'Modern Word', tags: ['new', 'trend'],
+    font: 'Bebas Neue', weight: 700, upper: true,
+    wordColor: 'rgba(255,255,255,0.45)', activeColor: '#FFFFFF', highlightMode: 'scale',
+    stroke: { color: '#000000', width: 1.5 },
+    shadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 16px rgba(255,255,255,0.12)',
+    wordsPerLine: 1, anim: 'blurIn', big: true, blockFx: ['ghostFade'],
+  },
+  {
+    id: 'ember', label: 'Ember', tags: ['new'],
+    font: 'Anton', weight: 900, upper: true,
+    wordColor: '#FFF7ED', activeColor: '#FB923C', highlightMode: 'glow',
+    stroke: { color: '#7C2D12', width: 1.5 },
+    shadow: '0 0 10px rgba(251,146,60,0.75), 0 0 24px rgba(251,146,60,0.35), 0 4px 10px rgba(0,0,0,0.9)',
+    wordsPerLine: 2, anim: 'elastic',
+  },
 ];
 
 const DEF_BY_ID = new Map(CAPTION_STYLE_DEFS.map((d) => [d.id, d]));
@@ -781,7 +843,23 @@ export interface CaptionOverrides {
    * blockFx. Page-level effects (ghostFade) are a different axis and survive.
    */
   blockMotion?: 'still' | 'float' | 'wiggle';
+  /**
+   * Ghost page fade on/off. true forces ghostFade into blockFx; false strips it.
+   * Omit = leave the preset alone. This is the "ghost fade on and off" dial.
+   */
+  ghostFade?: boolean;
+  /**
+   * Drop shadow strength 0–1. Builds a soft black text-shadow under the words.
+   * 0 = none. Composes with outerGlow (glow layers first, then drop).
+   */
+  dropShadow?: number;
+  /**
+   * Outer glow: soft bloom around every word. Color defaults to the active
+   * caption color when omitted. Strength 0–1 (0 = off).
+   */
+  outerGlow?: { strength: number; color?: string };
 }
+
 
 /** Clamp a number into a range, with a fallback for junk. */
 function clampNum(v: unknown, min: number, max: number, fallback: number): number {
@@ -898,8 +976,38 @@ export function resolveCaptionStyle(
     const rest = (out.blockFx ?? []).filter((fx) => fx !== 'float' && fx !== 'wiggle');
     out.blockFx = overrides.blockMotion === 'still' ? rest : [...rest, overrides.blockMotion];
   }
+  // Ghost fade dial — independent of float/wiggle.
+  if (typeof overrides.ghostFade === 'boolean') {
+    const rest = (out.blockFx ?? []).filter((fx) => fx !== 'ghostFade');
+    out.blockFx = overrides.ghostFade ? [...rest, 'ghostFade'] : rest;
+  }
+  // Drop shadow + outer glow compose into a single text-shadow stack so the
+  // layer (which already reads def.shadow) picks them up with no extra path.
+  {
+    const parts: string[] = [];
+    const glow = overrides.outerGlow;
+    if (glow && typeof glow.strength === 'number' && glow.strength > 0) {
+      const s = Math.max(0, Math.min(1, glow.strength));
+      const c = (typeof glow.color === 'string' && glow.color) || out.activeColor || '#ffffff';
+      const r1 = (6 + s * 10).toFixed(1);
+      const r2 = (14 + s * 22).toFixed(1);
+      parts.push(`0 0 ${r1}px ${c}`, `0 0 ${r2}px ${c}88`);
+    }
+    if (typeof overrides.dropShadow === 'number' && overrides.dropShadow > 0) {
+      const s = Math.max(0, Math.min(1, overrides.dropShadow));
+      const y = (2 + s * 6).toFixed(1);
+      const b = (4 + s * 14).toFixed(1);
+      const a = (0.45 + s * 0.45).toFixed(2);
+      parts.push(`0 ${y}px ${b}px rgba(0,0,0,${a})`);
+    }
+    if (parts.length) {
+      // Keep any preset shadow underneath so themes don't lose their look.
+      out.shadow = out.shadow ? `${parts.join(', ')}, ${out.shadow}` : parts.join(', ');
+    }
+  }
   return out;
 }
+
 
 /** Normalize a word for power-word matching (lowercase, punctuation stripped). */
 export function powerKey(word: string): string {
