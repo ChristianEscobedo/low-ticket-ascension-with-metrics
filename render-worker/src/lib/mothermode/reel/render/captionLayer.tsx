@@ -699,93 +699,17 @@ function renderGradientWord(
     return (
       <>
         {text}
-        {emoji ? (
-                  <span
-                    className="emoji-burst"
-                    style={{
-                      display: 'inline-block',
-                      transform: isActive && power
-                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
-                        : undefined,
-                    }}
-                  >
-                    {emoji}
-                  </span>
-                ) : null}
-                {(def as { handDrawn?: string }).handDrawn === 'underline' && isActive ? (
-                  <svg
-                    className="hand-drawn-accent"
-                    aria-hidden
-                    viewBox="0 0 100 12"
-                    preserveAspectRatio="none"
-                    style={{
-                      position: 'absolute',
-                      left: '-4%',
-                      right: '-4%',
-                      bottom: '-0.18em',
-                      width: '108%',
-                      height: '0.28em',
-                      overflow: 'visible',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <path
-                      d="M2,8 Q25,2 50,7 T98,6"
-                      fill="none"
-                      stroke={(css.active.color as string) || '#F8E16C'}
-                      strokeWidth="3.2"
-                      strokeLinecap="round"
-                      pathLength={1}
-                      strokeDasharray={1}
-                      strokeDashoffset={1 - wordSpanGrow(frame, w.fromFrame, plan.fps)}
-                    />
-                  </svg>
-                ) : null}
-                {(def as { handDrawn?: string }).handDrawn === 'circle' && isActive ? (
-                  <svg
-                    className="hand-drawn-accent"
-                    aria-hidden
-                    viewBox="0 0 100 60"
-                    preserveAspectRatio="none"
-                    style={{
-                      position: 'absolute',
-                      left: '-12%',
-                      top: '-35%',
-                      width: '124%',
-                      height: '170%',
-                      overflow: 'visible',
-                      pointerEvents: 'none',
-                      zIndex: 2,
-                    }}
-                  >
-                    <ellipse
-                      cx="50"
-                      cy="30"
-                      rx="46"
-                      ry="24"
-                      fill="none"
-                      stroke={(css.active.color as string) || '#F8E16C'}
-                      strokeWidth="2.4"
-                      strokeLinecap="round"
-                      pathLength={1}
-                      strokeDasharray={1}
-                      strokeDashoffset={1 - wordSpanGrow(frame, w.fromFrame, plan.fps)}
-                      transform="rotate(-6 50 30)"
-                    />
-                  </svg>
-                ) : null}
-
+        {emoji ? <span className="emoji-burst">{emoji}</span> : null}
         {tail}
       </>
     );
   }
-  // Strip clip props from the outer (shadow) shell; keep transform/opacity.
+  // Dual layer: solid shadow under clipped gradient fill (Chromium-safe).
   const shell: React.CSSProperties = {
     display: 'inline-block',
     position: 'relative',
     transform: style.transform,
     opacity: style.opacity,
-    // no filter on shell — shadow is real text-shadow on solid under-layer
   };
   const under: React.CSSProperties = {
     position: 'absolute',
@@ -796,7 +720,6 @@ function renderGradientWord(
     WebkitTextFillColor: '#000',
     pointerEvents: 'none',
     userSelect: 'none',
-    // Match weight/size via inherit
     font: 'inherit',
     letterSpacing: 'inherit',
     whiteSpace: 'pre-wrap',
@@ -806,7 +729,6 @@ function renderGradientWord(
     position: 'relative',
     transform: undefined,
     opacity: undefined,
-    // ensure no filter/textShadow on fill
     filter: undefined,
     textShadow: undefined,
   };
@@ -817,19 +739,7 @@ function renderGradientWord(
         {text}
       </span>
       <span style={fill}>{text}</span>
-      {emoji ? (
-                  <span
-                    className="emoji-burst"
-                    style={{
-                      display: 'inline-block',
-                      transform: isActive && power
-                        ? `scale(${(1 + Math.sin(Math.min(1, Math.max(0, (frame - w.fromFrame) / Math.max(1, plan.fps * 0.25))) * Math.PI) * 0.45).toFixed(3)})`
-                        : undefined,
-                    }}
-                  >
-                    {emoji}
-                  </span>
-                ) : null}
+      {emoji ? <span className="emoji-burst">{emoji}</span> : null}
       {tail}
     </span>
   );
@@ -901,8 +811,9 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
       if (peaks && peaks.length > 0) {
         const tSec = frame / Math.max(1, plan.fps);
         // peaks cover full composition duration roughly
-        const totalSec = Math.max(1, (plan as { durationFrames?: number }).durationFrames
-          ? ((plan as { durationFrames: number }).durationFrames / plan.fps)
+        const durFrames = (plan as unknown as { durationFrames?: number }).durationFrames;
+        const totalSec = Math.max(1, typeof durFrames === 'number' && durFrames > 0
+          ? durFrames / plan.fps
           : peaks.length / 30);
         const u = Math.min(0.999, Math.max(0, tSec / totalSec));
         const pi = Math.floor(u * peaks.length);

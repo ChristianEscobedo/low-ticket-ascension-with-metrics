@@ -1434,7 +1434,7 @@ export function resolveCaptionStyle(
     out.blockFx = fx;
   }
   if (overrides.motionTrail) {
-    out.anim = out.anim && out.anim !== '' ? out.anim : 'motionTrail';
+    out.anim = out.anim ? out.anim : 'motionTrail';
   }
   if (overrides.outlineFill) {
     out.anim = 'outlineFill';
@@ -1451,7 +1451,7 @@ export function resolveCaptionStyle(
   if (typeof overrides.waveBounce === 'boolean') {
     let fx = [...(out.blockFx ?? [])] as CaptionBlockFx[];
     fx = fx.filter((x) => x !== 'waveBounce');
-    if (overrides.waveBounce) fx.push('waveBounce' as CaptionBlockFx);
+    if (overrides.waveBounce) fx.push('waveBounce');
     out.blockFx = fx;
   }
   if (overrides.handDrawn === 'underline' || overrides.handDrawn === 'circle') {
