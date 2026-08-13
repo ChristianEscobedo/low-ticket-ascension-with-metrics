@@ -36,6 +36,14 @@ const BUCKET = 'reel-renders';
 const jobs = new Map();
 const JOB_TTL_MS = 60 * 60 * 1000; // keep finished jobs an hour so slow pollers still get the URL
 
+/**
+ * Per-job media directories, served from ONE Express route (`/__media/:jobId/*`).
+ * Mounting `express.static` per job would leak middleware on the stack forever;
+ * a Map + single handler stays O(1) jobs and O(1) routes.
+ */
+const mediaDirs = new Map(); // jobId -> absolute dir path
+
+
 function newJobId() {
   return `job_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -126,6 +134,36 @@ const BUILD = {
 };
 
 app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled, build: BUILD }));
+
+/**
+ * Serve localized mezzanines to Remotion's OffthreadVideo extractor.
+ * Chrome (and the extractor) only speak HTTP — never bare OS paths
+ * (https://www.remotion.dev/docs/miscellaneous/absolute-paths). Range
+ * support is required so ffmpeg can seek without re-downloading.
+ */
+app.get('/__media/:jobId/:file', (req, res) => {
+  const dir = mediaDirs.get(req.params.jobId);
+  if (!dir) return res.status(404).send('unknown media job');
+  // Basename only — never let a `..` segment escape the job dir.
+  const file = path.basename(req.params.file || '');
+  if (!file || file === '.' || file === '..') return res.status(400).send('missing file');
+  const full = path.resolve(dir, file);
+  const root = path.resolve(dir);
+  // path.resolve already collapsed `..`; still require the result to live under root.
+  if (full !== root && !full.startsWith(root + path.sep)) return res.status(404).send('not found');
+  if (!fs.existsSync(full) || !fs.statSync(full).isFile()) return res.status(404).send('not found');
+  // Absolute path required by sendFile; Express sets Accept-Ranges automatically.
+  res.sendFile(full, {
+    headers: {
+      // OffthreadVideo re-fetches per frame window; immutable bytes per job.
+      'Cache-Control': 'private, max-age=3600',
+    },
+  }, (err) => {
+    if (err && !res.headersSent) res.status(500).send('send failed');
+  });
+});
+
+
 
 app.post('/render', (req, res) => {
   const { plan, reelId, quality } = req.body || {};
@@ -382,17 +420,153 @@ async function runFetchClip(jobId, pageUrl) {
   }
 }
 
-/** The background render: bundle → probe → render → upload → job URL. */
+/**
+ * Guess a file extension from a URL path or Content-Type. Used so image cues
+ * stay images and audio stays audio — the previous localize always wrote
+ * `.mp4`, which would break `<Img src=…>` media cues.
+ */
+function mediaExt(src, contentType) {
+  try {
+    const p = new URL(src).pathname;
+    const m = p.match(/\.([a-z0-9]{2,5})$/i);
+    if (m) return m[1].toLowerCase();
+  } catch { /* ignore */ }
+  const ct = String(contentType || '').toLowerCase();
+  if (ct.includes('png')) return 'png';
+  if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
+  if (ct.includes('webp')) return 'webp';
+  if (ct.includes('gif')) return 'gif';
+  if (ct.includes('wav')) return 'wav';
+  if (ct.includes('mpeg') && ct.includes('audio')) return 'mp3';
+  if (ct.includes('mp4') || ct.includes('video')) return 'mp4';
+  if (ct.includes('webm')) return 'webm';
+  if (ct.includes('audio')) return 'm4a';
+  return 'bin';
+}
+
+function isVideoExt(ext) {
+  return /^(mp4|webm|mov|m4v|mkv)$/i.test(ext);
+}
+
+function isAudioExt(ext) {
+  return /^(mp3|wav|aac|m4a|ogg|opus)$/i.test(ext);
+}
+
+/** The background render: bundle → localize → probe → render → upload → job URL. */
 async function runRender(jobId, plan, reelId, quality) {
   const job = jobs.get(jobId);
   const touch = (patch) => Object.assign(job, patch, { updatedAt: Date.now() });
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-render-'));
   const outPath = path.join(tmpDir, 'out.mp4');
+  // Serve this job's mezzanines off our own Express. Remotion does NOT accept
+  // bare absolute OS paths in OffthreadVideo/Img/Audio src (see
+  // https://www.remotion.dev/docs/miscellaneous/absolute-paths) — Chrome has
+  // no filesystem access. The previous localize wrote `/tmp/…/m0.mp4` into the
+  // plan; the composition ignored it / fell through, and OffthreadVideo kept
+  // proxying the original Supabase URL → proxy 500 → compositor SIGKILL.
+  // Loopback HTTP on the port we already own is the supported form.
+  mediaDirs.set(jobId, tmpDir);
+  const mediaBaseUrl = `http://127.0.0.1:${PORT}/__media/${jobId}`;
+
 
   try {
     touch({ stage: 'bundling' });
     const serveUrl = await getBundle();
+
+    // Localize FIRST, before selectComposition / renderMedia. Both must see
+    // the same rewritten plan — previously selectComposition got the remote
+    // URLs and only renderMedia got the (broken absolute-path) rewrite.
+    //
+    // Download every remote source onto disk, transcode videos to a faststart
+    // h264 mezzanine (cheap per-frame seeks), and rewrite plan.*.src to a
+    // loopback HTTP URL we serve above. OffthreadVideo's asset proxy will
+    // re-fetch that URL; fetching our own Express is local and reliable,
+    // unlike re-fetching Supabase under the compositor.
+    touch({ stage: 'localizing' });
+    let mediaIdx = 0;
+    const localize = async (holder, key) => {
+      const src = holder && holder[key];
+      if (typeof src !== 'string' || !/^https?:\/\//i.test(src)) return;
+      // Already pointing at this worker's media route — nothing to do.
+      if (src.startsWith(mediaBaseUrl)) return;
+
+      const name = `m${mediaIdx++}`;
+      console.log(`[worker] localize ${name} <- ${src.slice(0, 120)}`);
+      const res = await fetch(src, { signal: AbortSignal.timeout(300_000) });
+      if (!res.ok) {
+        throw new Error(`Could not download a media source (HTTP ${res.status}): ${src.slice(0, 120)}`);
+      }
+      const ct = res.headers.get('content-type') || '';
+      const ext = mediaExt(src, ct);
+      const rawPath = path.join(tmpDir, `${name}-raw.${ext}`);
+      fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()));
+
+      let finalName;
+      if (isVideoExt(ext)) {
+        // Mezzanine: yuv420p h264 + aac + faststart. Per-frame extraction on a
+        // 60s 1080p source is what was hanging the compositor when the proxy
+        // had to re-download + decode a remote progressive MP4.
+        finalName = `${name}.mp4`;
+        const mezPath = path.join(tmpDir, finalName);
+        try {
+          await run('ffmpeg', [
+            '-y', '-i', rawPath,
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart',
+            '-c:a', 'aac', '-b:a', '128k',
+            // Drop data/subtitle streams that confuse some extractors.
+            '-map', '0:v:0', '-map', '0:a:0?',
+            mezPath,
+          ], { timeout: 300_000 });
+        } catch (e) {
+          console.warn('[worker] transcode failed, using raw source:', e && e.message ? e.message : e);
+          fs.copyFileSync(rawPath, mezPath);
+        }
+        try { fs.unlinkSync(rawPath); } catch { /* keep disk tidy; non-fatal */ }
+      } else if (isAudioExt(ext)) {
+        // Re-wrap audio to m4a/aac when we can; otherwise serve the raw bytes.
+        finalName = `${name}.m4a`;
+        const mezPath = path.join(tmpDir, finalName);
+        try {
+          await run('ffmpeg', [
+            '-y', '-i', rawPath,
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            mezPath,
+          ], { timeout: 120_000 });
+          try { fs.unlinkSync(rawPath); } catch { /* non-fatal */ }
+        } catch (e) {
+          console.warn('[worker] audio transcode failed, using raw:', e && e.message ? e.message : e);
+          finalName = `${name}.${ext}`;
+          fs.renameSync(rawPath, path.join(tmpDir, finalName));
+        }
+      } else {
+        // Images and anything else: serve bytes as-is.
+        finalName = `${name}.${ext}`;
+        fs.renameSync(rawPath, path.join(tmpDir, finalName));
+      }
+
+      const localUrl = `${mediaBaseUrl}/${finalName}`;
+      holder[key] = localUrl;
+      console.log(`[worker] localize ${name} -> ${localUrl}`);
+    };
+
+    try {
+      for (const c of plan.clips || []) await localize(c, 'src');
+      for (const o of plan.overlays || []) await localize(o, 'src');
+      if (plan.audio) await localize(plan.audio, 'src');
+      for (const m of plan.mediaCues || []) {
+        await localize(m, 'src');
+        if (m && m.sfx) await localize(m.sfx, 'url');
+      }
+      for (const w of plan.words || []) {
+        if (w && w.mark && w.mark.sfx) await localize(w.mark.sfx, 'url');
+      }
+    } catch (e) {
+      console.error('[worker] localize failed:', e && e.message ? e.message : e);
+      throw e;
+    }
 
     // This id must match the <Composition id="..."> in remotion-project/Root.tsx
     // exactly. It is "Reel" — the COMPONENT is named ReelComposition, which is
@@ -426,61 +600,21 @@ async function runRender(jobId, plan, reelId, quality) {
       inputProps: { plan },
     });
 
-    // Localize every media source to the worker's DISK and hand the plan an
-    // absolute file path. Remotion's OffthreadVideo, given a local path,
-    // extracts frames with ffmpeg directly — no HTTP, no asset proxy, no
-    // localhost:3000. The proxy was 500ing re-fetching a reachable Supabase
-    // video and hanging Chrome (the SIGKILL); a local path removes the proxy
-    // from the render entirely. The transcode to a faststart h264 mezzanine
-    // makes per-frame extraction cheap on a big source.
-    let mediaIdx = 0;
-    const localize = async (holder, key) => {
-      const src = holder && holder[key];
-      if (!/^https?:\/\//i.test(src || '')) return;
-      const name = `m${mediaIdx++}`;
-      const rawPath = path.join(tmpDir, `${name}-raw.mp4`);
-      const outPath = path.join(tmpDir, `${name}.mp4`);
-      console.log(`[worker] localize ${name}.mp4 <- ${src.slice(0, 100)}`);
-      const res = await fetch(src, { signal: AbortSignal.timeout(300_000) });
-      if (!res.ok) {
-        throw new Error(`Could not download a media source (HTTP ${res.status}): ${src.slice(0, 120)}`);
-      }
-      fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()));
-      try {
-        await run('ffmpeg', [
-          '-y', '-i', rawPath,
-          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-          '-movflags', '+faststart',
-          '-c:a', 'aac', '-b:a', '128k',
-          outPath,
-        ], { timeout: 300_000 });
-      } catch (e) {
-        console.warn('[worker] transcode failed, using raw source:', e && e.message ? e.message : e);
-        fs.copyFileSync(rawPath, outPath);
-      }
-      // The absolute local path — OffthreadVideo reads it from disk.
-      holder[key] = outPath;
-    };
-    try {
-      for (const c of plan.clips || []) await localize(c, 'src');
-      for (const o of plan.overlays || []) await localize(o, 'src');
-      if (plan.audio) await localize(plan.audio, 'src');
-      for (const m of plan.mediaCues || []) await localize(m, 'src');
-    } catch (e) {
-      console.error('[worker] localize failed:', e && e.message ? e.message : e);
-      throw e;
-    }
-
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
-    // Log each clip's source. "Timed out evaluating page function" + a
-    // compositor SIGKILL means Chrome hung evaluating a frame — which is a
-    // clip whose source won't load or seek, NOT memory. The source host is the
-    // fact that answers it, so print it instead of guessing.
+    // Log each clip's source AFTER localize. If this still shows a supabase
+    // host, the rewrite didn't take. If it shows 127.0.0.1 and we still
+    // SIGKILL, the failure is extraction of the mezzanine itself — not fetch.
     (plan.clips || []).forEach((c, i) => {
       const src = (c && (c.src || c.url)) || '';
       let host = src;
       try { host = new URL(src).host; } catch { /* keep the raw src */ }
-      console.log(`[worker] clip ${i}: ${c && c.kind ? c.kind : '?'} · ${Math.round((c && c.durationInFrames) || 0)}f · src host: ${host}${typeof src === 'string' && src.startsWith('blob:') ? ' (BLOB URL — cannot be rendered)' : ''}`);
+      const local = typeof src === 'string' && src.startsWith(mediaBaseUrl);
+      console.log(
+        `[worker] clip ${i}: ${c && c.kind ? c.kind : '?'} · ${Math.round((c && c.durationInFrames) || 0)}f · src host: ${host}` +
+          `${local ? ' (localized)' : ''}` +
+          `${typeof src === 'string' && src.startsWith('blob:') ? ' (BLOB URL — cannot be rendered)' : ''}` +
+          `${typeof src === 'string' && /^[A-Za-z]:[\\/]|^\//.test(src) ? ' (ABSOLUTE PATH — Remotion cannot read these; must be http)' : ''}`,
+      );
     });
     touch({ stage: 'rendering' });
     await renderMedia({
@@ -527,9 +661,12 @@ async function runRender(jobId, plan, reelId, quality) {
     console.error('[worker] render failed:', msg);
     touch({ status: 'failed', stage: 'failed', error: msg });
   } finally {
+    mediaDirs.delete(jobId);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
+
+
 
 
 // Pre-bundle on startup so the first render isn't slow
