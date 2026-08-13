@@ -389,6 +389,11 @@ async function runRender(jobId, plan, reelId) {
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-render-'));
   const outPath = path.join(tmpDir, 'out.mp4');
+  // Declared at function scope (NOT inside the try) so the catch can read it
+  // even when the render dies before the watchdog block runs — a `let` inside
+  // the try is in the temporal dead zone for an early failure and the catch
+  // then throws "stallMsg is not defined", masking the real error.
+  let stallMsg = '';
 
   try {
     touch({ stage: 'bundling' });
@@ -438,7 +443,6 @@ async function runRender(jobId, plan, reelId) {
     const renderAbort = new AbortController();
     let lastProgress = -1;
     let lastProgressAt = Date.now();
-    let stallMsg = '';
     const stallWatch = setInterval(() => {
       if (Date.now() - lastProgressAt > STALL_MS && !renderAbort.signal.aborted) {
         stallMsg =
