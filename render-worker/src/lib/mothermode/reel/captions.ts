@@ -1227,6 +1227,12 @@ export interface CaptionOverrides {
   letterbox?: boolean;
   /** Springy scale-out on page exit. */
   springExit?: boolean;
+  /** Auto-added for Vercel tsc (used in resolve/UI). */
+  dualTone?: boolean | number | string | object;
+  /** Auto-added for Vercel tsc (used in resolve/UI). */
+  motionTrail?: boolean;
+  /** Auto-added for Vercel tsc (used in resolve/UI). */
+  outlineFill?: boolean;
 }
 
 
