@@ -504,14 +504,20 @@ async function runRender(jobId, plan, reelId, quality) {
 
       let finalName;
       if (isVideoExt(ext)) {
-        // Mezzanine: yuv420p h264 + aac + faststart. Per-frame extraction on a
-        // 60s 1080p source is what was hanging the compositor when the proxy
-        // had to re-download + decode a remote progressive MP4.
+        // Mezzanine: yuv420p h264 + aac + faststart. Match the OUTPUT quality
+        // so OffthreadVideo never decodes more pixels than we will paint.
+        // A full 1080×1920 decode is ~6MB/frame raw; the compositor was
+        // SIGKILL'd at ~21% on a 60s clip with the default 50%-of-RAM cache
+        // (https://www.remotion.dev/docs/troubleshooting/sigkill).
         finalName = `${name}.mp4`;
         const mezPath = path.join(tmpDir, finalName);
+        // quality '720' → max 720p tall; otherwise cap at 1080p (never upscale).
+        const maxH = quality === '720' ? 720 : 1080;
+        const vf = `scale=-2:'min(${maxH},ih)':flags=bicubic`;
         try {
           await run('ffmpeg', [
             '-y', '-i', rawPath,
+            '-vf', vf,
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart',
             '-c:a', 'aac', '-b:a', '128k',
@@ -524,6 +530,7 @@ async function runRender(jobId, plan, reelId, quality) {
           fs.copyFileSync(rawPath, mezPath);
         }
         try { fs.unlinkSync(rawPath); } catch { /* keep disk tidy; non-fatal */ }
+
       } else if (isAudioExt(ext)) {
         // Re-wrap audio to m4a/aac when we can; otherwise serve the raw bytes.
         finalName = `${name}.m4a`;
@@ -617,6 +624,20 @@ async function runRender(jobId, plan, reelId, quality) {
       );
     });
     touch({ stage: 'rendering' });
+    // Remotion's default OffthreadVideo cache is up to 50% of free RAM at
+    // render start. On a container that looks "empty" that can be multi-GB of
+    // decoded frames, then Chrome + compositor + ffmpeg allocate on top and
+    // the kernel SIGKILLs the compositor
+    // (https://www.remotion.dev/docs/troubleshooting/sigkill). Cap the cache
+    // hard; concurrency is already 1; parallel encode is off so peak is one
+    // frame + one encode buffer.
+    const offthreadCacheBytes = 64 * 1024 * 1024; // 64 MB
+    const mediaCacheBytes = 32 * 1024 * 1024; // 32 MB
+    console.log(
+      `[worker] renderMedia opts: concurrency=1 scale=${quality === '720' ? '2/3' : '1'} ` +
+        `offthreadCache=${offthreadCacheBytes} mediaCache=${mediaCacheBytes} ` +
+        `disallowParallelEncoding=true quality=${quality || '1080'}`,
+    );
     await renderMedia({
       composition,
       serveUrl,
@@ -626,21 +647,42 @@ async function runRender(jobId, plan, reelId, quality) {
       // delayRender timeout: how long a frame may wait on its media before
       // Remotion fails the render. 2 min lets a slow-but-valid asset finish.
       timeoutInMilliseconds: 120_000,
-      // Memory cap: parallel 1080p frames + per-clip ffmpeg OOMs a small
-      // container (compositor SIGKILL). 1 = one frame at a time, the lowest
-      // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
+      // One frame at a time — lowest peak memory.
       concurrency: 1,
-      // Output resolution, chosen per render. The composition's coordinates are
-      // the canvas size (1080x1920 for 9:16); `scale` downsamples the OUTPUT
-      // only. '720' renders at 2/3 (~55% less memory per frame — fits a small
-      // container); anything else renders at full canvas resolution (1080p,
-      // which needs ~2-4GB of RAM on the worker or the compositor OOM-SIGKILLs).
+      // Don't render the next frame while ffmpeg is still encoding the last.
+      // Slower wall-clock, much lower peak RSS (Remotion docs: "more
+      // memory-efficient, but possibly slower").
+      disallowParallelEncoding: true,
+      // Hard cap the OffthreadVideo decoded-frame cache. Default is ~50% of
+      // free RAM and is what SIGKILLs the compositor on long 1080p sources.
+      offthreadVideoCacheSizeInBytes: offthreadCacheBytes,
+      // Cap the general media cache the same way when this Remotion build
+      // supports it (4.0.x does).
+      mediaCacheSizeInBytes: mediaCacheBytes,
+      // Output resolution. Composition coords stay at canvas size (1080x1920
+      // for 9:16); scale only downsamples the OUTPUT. '720' → 2/3.
       scale: quality === '720' ? 2 / 3 : 1,
+      // Docker: /dev/shm is often 64MB and Chrome will OOM-crash into it.
+      chromiumOptions: {
+        disableWebSecurity: false,
+        // gl: angle is the Remotion default on Linux; leave it alone unless
+        // we see GPU-related kills. The memory kill is the compositor, not GL.
+      },
       onProgress: ({ progress }) => {
         touch({ progress });
-        if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
+        // Log every ~10% once (not every frame that rounds to the same %).
+        const pct = Math.round(progress * 100);
+        if (pct > 0 && pct % 10 === 0) {
+          const key = `p${pct}`;
+          if (!job._loggedPct) job._loggedPct = Object.create(null);
+          if (!job._loggedPct[key]) {
+            job._loggedPct[key] = true;
+            console.log(`[worker] ${pct}%`);
+          }
+        }
       },
     });
+
 
     // Upload to Supabase storage
     touch({ stage: 'uploading', progress: 1 });

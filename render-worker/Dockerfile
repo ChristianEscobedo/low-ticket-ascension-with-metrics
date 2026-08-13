@@ -25,6 +25,12 @@ RUN apt-get update && apt-get install -y \
 # Remotion needs to know where Chromium is
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROME_PATH=/usr/bin/chromium
+# Docker's default /dev/shm is 64MB. Chrome + the Remotion compositor will
+# OOM-SIGKILL into it under a 1080p OffthreadVideo load. Prefer /tmp.
+ENV PUPPETEER_DISABLE_DEV_SHM_USAGE=true
+# Keep Node's own heap from competing with the compositor for the box's RAM.
+ENV NODE_OPTIONS=--max-old-space-size=2048
+
 
 WORKDIR /app
 
