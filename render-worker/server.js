@@ -426,6 +426,39 @@ async function runRender(jobId, plan, reelId, quality) {
       inputProps: { plan },
     });
 
+    // Localize every media source: download each clip/overlay/cue/audio to this
+    // job's tmp dir and serve it from THIS Express server, then point the plan
+    // at the local URL. Remotion's own asset proxy (its default port 3000) was
+    // 500ing re-fetching a perfectly reachable Supabase video, and Chrome hung
+    // on the frame — the compositor SIGKILL. Serving the bytes ourselves, on
+    // the port Express already listens on, removes the proxy from the path
+    // entirely: Chrome reads the file from us, no external refetch, no 500.
+    const mediaRoute = `/__m${jobId}`;
+    app.use(mediaRoute, express.static(tmpDir));
+    let mediaIdx = 0;
+    const localize = async (holder, key) => {
+      const src = holder && holder[key];
+      if (!/^https?:\/\//i.test(src || '')) return;
+      const ext = (src.split('?')[0].match(/\.[a-z0-9]{2,5}$/i) || ['.mp4'])[0];
+      const name = `m${mediaIdx++}${ext}`;
+      console.log(`[worker] localize ${name} <- ${src.slice(0, 100)}`);
+      const res = await fetch(src, { signal: AbortSignal.timeout(300_000) });
+      if (!res.ok) {
+        throw new Error(`Could not download a media source (HTTP ${res.status}): ${src.slice(0, 120)}`);
+      }
+      fs.writeFileSync(path.join(tmpDir, name), Buffer.from(await res.arrayBuffer()));
+      holder[key] = `http://127.0.0.1:${PORT}${mediaRoute}/${name}`;
+    };
+    try {
+      for (const c of plan.clips || []) await localize(c, 'src');
+      for (const o of plan.overlays || []) await localize(o, 'src');
+      if (plan.audio) await localize(plan.audio, 'src');
+      for (const m of plan.mediaCues || []) await localize(m, 'src');
+    } catch (e) {
+      console.error('[worker] localize failed:', e && e.message ? e.message : e);
+      throw e;
+    }
+
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
     // Log each clip's source. "Timed out evaluating page function" + a
     // compositor SIGKILL means Chrome hung evaluating a frame — which is a
