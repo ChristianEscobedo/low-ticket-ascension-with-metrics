@@ -389,11 +389,6 @@ async function runRender(jobId, plan, reelId) {
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-render-'));
   const outPath = path.join(tmpDir, 'out.mp4');
-  // Declared at function scope (NOT inside the try) so the catch can read it
-  // even when the render dies before the watchdog block runs — a `let` inside
-  // the try is in the temporal dead zone for an early failure and the catch
-  // then throws "stallMsg is not defined", masking the real error.
-  let stallMsg = '';
 
   try {
     touch({ stage: 'bundling' });
@@ -433,57 +428,24 @@ async function runRender(jobId, plan, reelId) {
 
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
     touch({ stage: 'rendering' });
-
-    // The stall watchdog state. delayRender's timeout catches a hanging React
-    // component, but a clip whose ffmpeg frame extraction hangs never trips it
-    // — the render just sits at one % forever ("[worker] 51%" on repeat). Watch
-    // the onProgress heartbeat and abort when no frame advances for STALL_MS,
-    // so the job fails with the stall point named instead of hanging silently.
-    const STALL_MS = 180_000;
-    // Remotion's cancelSignal is a FUNCTION it calls with the cancel callback —
-    // not an AbortSignal. Capture the callback here; the watchdog calls it.
-    let cancelRender = null;
-    let lastProgress = -1;
-    let lastProgressAt = Date.now();
-    const stallWatch = setInterval(() => {
-      if (Date.now() - lastProgressAt > STALL_MS) {
-        stallMsg =
-          `Render stalled at ~${Math.round(Math.max(0, lastProgress) * 100)}% — no frame finished in ` +
-          `${Math.round(STALL_MS / 1000)}s. The clip at that point in the timeline is hanging the ` +
-          'renderer (a bad, unreachable, or corrupt source). Trim or replace it.';
-        if (cancelRender) cancelRender();
-      }
-    }, 5000);
-
-    try {
-      await renderMedia({
-        composition,
-        serveUrl,
-        codec: 'h264',
-        outputLocation: outPath,
-        inputProps: { plan },
-        // delayRender timeout: how long a frame may wait on its media before
-        // Remotion fails the render. 2 min lets a slow-but-valid asset finish.
-        timeoutInMilliseconds: 120_000,
-        // Memory cap: parallel 1080p frames + per-clip ffmpeg OOMs a small
-        // container (compositor SIGKILL). 1 = one frame at a time, the lowest
-        // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
-        concurrency: 1,
-        cancelSignal: (cancel) => {
-          cancelRender = cancel;
-        },
-        onProgress: ({ progress }) => {
-          if (progress !== lastProgress) {
-            lastProgress = progress;
-            lastProgressAt = Date.now();
-          }
-          touch({ progress });
-          if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
-        },
-      });
-    } finally {
-      clearInterval(stallWatch);
-    }
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: 'h264',
+      outputLocation: outPath,
+      inputProps: { plan },
+      // delayRender timeout: how long a frame may wait on its media before
+      // Remotion fails the render. 2 min lets a slow-but-valid asset finish.
+      timeoutInMilliseconds: 120_000,
+      // Memory cap: parallel 1080p frames + per-clip ffmpeg OOMs a small
+      // container (compositor SIGKILL). 1 = one frame at a time, the lowest
+      // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
+      concurrency: 1,
+      onProgress: ({ progress }) => {
+        touch({ progress });
+        if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
+      },
+    });
 
     // Upload to Supabase storage
     touch({ stage: 'uploading', progress: 1 });
@@ -500,8 +462,7 @@ async function runRender(jobId, plan, reelId) {
     console.log(`[worker] done → ${urlData.publicUrl}`);
     touch({ status: 'done', stage: 'done', progress: 1, url: urlData.publicUrl, renderId: fileName });
   } catch (err) {
-    // The watchdog's stall message beats Remotion's generic abort error.
-    const msg = stallMsg || (err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('[worker] render failed:', msg);
     touch({ status: 'failed', stage: 'failed', error: msg });
   } finally {
