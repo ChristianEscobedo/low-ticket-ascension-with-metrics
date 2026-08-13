@@ -426,50 +426,40 @@ async function runRender(jobId, plan, reelId, quality) {
       inputProps: { plan },
     });
 
-    // Localize every media source: download each clip/overlay/cue/audio to this
-    // job's tmp dir and serve it from THIS Express server, then point the plan
-    // at the local URL. Remotion's own asset proxy (its default port 3000) was
-    // 500ing re-fetching a perfectly reachable Supabase video, and Chrome hung
-    // on the frame — the compositor SIGKILL. Serving the bytes ourselves, on
-    // the port Express already listens on, removes the proxy from the path
-    // entirely: Chrome reads the file from us, no external refetch, no 500.
-    const mediaRoute = `/__m${jobId}`;
-    app.use(mediaRoute, express.static(tmpDir));
+    // Localize every media source to the worker's DISK and hand the plan an
+    // absolute file path. Remotion's OffthreadVideo, given a local path,
+    // extracts frames with ffmpeg directly — no HTTP, no asset proxy, no
+    // localhost:3000. The proxy was 500ing re-fetching a reachable Supabase
+    // video and hanging Chrome (the SIGKILL); a local path removes the proxy
+    // from the render entirely. The transcode to a faststart h264 mezzanine
+    // makes per-frame extraction cheap on a big source.
     let mediaIdx = 0;
     const localize = async (holder, key) => {
       const src = holder && holder[key];
       if (!/^https?:\/\//i.test(src || '')) return;
       const name = `m${mediaIdx++}`;
       const rawPath = path.join(tmpDir, `${name}-raw.mp4`);
-      const outFile = `${name}.mp4`;
-      console.log(`[worker] localize ${outFile} <- ${src.slice(0, 100)}`);
+      const outPath = path.join(tmpDir, `${name}.mp4`);
+      console.log(`[worker] localize ${name}.mp4 <- ${src.slice(0, 100)}`);
       const res = await fetch(src, { signal: AbortSignal.timeout(300_000) });
       if (!res.ok) {
         throw new Error(`Could not download a media source (HTTP ${res.status}): ${src.slice(0, 120)}`);
       }
       fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()));
-      // Normalize the source into a render-friendly mezzanine. "Smaller videos
-      // render, this one SIGKILLs the compositor" is OffthreadVideo choking on
-      // the per-frame extraction of a big / high-bitrate / non-faststart source
-      // — not the fetch. Re-encode to a uniform h264/yuv420p/faststart mp4 at a
-      // capped bitrate, which makes per-frame extraction cheap and reliable on
-      // ANY source. This is the step that makes a 60s 1080p clip render like a
-      // small one.
       try {
         await run('ffmpeg', [
           '-y', '-i', rawPath,
           '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
           '-c:a', 'aac', '-b:a', '128k',
-          path.join(tmpDir, outFile),
+          outPath,
         ], { timeout: 300_000 });
       } catch (e) {
-        // A transcode failure shouldn't kill the render — fall back to the raw
-        // download (a non-video cue image has nothing to transcode anyway).
         console.warn('[worker] transcode failed, using raw source:', e && e.message ? e.message : e);
-        fs.copyFileSync(rawPath, path.join(tmpDir, outFile));
+        fs.copyFileSync(rawPath, outPath);
       }
-      holder[key] = `http://127.0.0.1:${PORT}${mediaRoute}/${outFile}`;
+      // The absolute local path — OffthreadVideo reads it from disk.
+      holder[key] = outPath;
     };
     try {
       for (const c of plan.clips || []) await localize(c, 'src');
