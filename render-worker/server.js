@@ -439,15 +439,37 @@ async function runRender(jobId, plan, reelId, quality) {
     const localize = async (holder, key) => {
       const src = holder && holder[key];
       if (!/^https?:\/\//i.test(src || '')) return;
-      const ext = (src.split('?')[0].match(/\.[a-z0-9]{2,5}$/i) || ['.mp4'])[0];
-      const name = `m${mediaIdx++}${ext}`;
-      console.log(`[worker] localize ${name} <- ${src.slice(0, 100)}`);
+      const name = `m${mediaIdx++}`;
+      const rawPath = path.join(tmpDir, `${name}-raw.mp4`);
+      const outFile = `${name}.mp4`;
+      console.log(`[worker] localize ${outFile} <- ${src.slice(0, 100)}`);
       const res = await fetch(src, { signal: AbortSignal.timeout(300_000) });
       if (!res.ok) {
         throw new Error(`Could not download a media source (HTTP ${res.status}): ${src.slice(0, 120)}`);
       }
-      fs.writeFileSync(path.join(tmpDir, name), Buffer.from(await res.arrayBuffer()));
-      holder[key] = `http://127.0.0.1:${PORT}${mediaRoute}/${name}`;
+      fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()));
+      // Normalize the source into a render-friendly mezzanine. "Smaller videos
+      // render, this one SIGKILLs the compositor" is OffthreadVideo choking on
+      // the per-frame extraction of a big / high-bitrate / non-faststart source
+      // — not the fetch. Re-encode to a uniform h264/yuv420p/faststart mp4 at a
+      // capped bitrate, which makes per-frame extraction cheap and reliable on
+      // ANY source. This is the step that makes a 60s 1080p clip render like a
+      // small one.
+      try {
+        await run('ffmpeg', [
+          '-y', '-i', rawPath,
+          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
+          '-c:a', 'aac', '-b:a', '128k',
+          path.join(tmpDir, outFile),
+        ], { timeout: 300_000 });
+      } catch (e) {
+        // A transcode failure shouldn't kill the render — fall back to the raw
+        // download (a non-video cue image has nothing to transcode anyway).
+        console.warn('[worker] transcode failed, using raw source:', e && e.message ? e.message : e);
+        fs.copyFileSync(rawPath, path.join(tmpDir, outFile));
+      }
+      holder[key] = `http://127.0.0.1:${PORT}${mediaRoute}/${outFile}`;
     };
     try {
       for (const c of plan.clips || []) await localize(c, 'src');
