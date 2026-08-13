@@ -77,7 +77,7 @@ export type CaptionAnim =
  * window, the bob from the frame clock) — never stored state, so they can't
  * drift from the words the way a keyframe on a row index would.
  */
-export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle' | 'punchIn' | 'letterbox' | 'springExit';
+export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle' | 'punchIn' | 'letterbox' | 'springExit' | 'waveBounce';
 
 /** The CSS keyframe for a word-enter animation (injected once into the page). */
 export function captionAnimKeyframes(anim: CaptionAnim): string {
