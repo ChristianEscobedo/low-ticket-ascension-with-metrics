@@ -441,6 +441,12 @@ async function runRender(jobId, plan, reelId) {
       // container (compositor SIGKILL). 1 = one frame at a time, the lowest
       // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
       concurrency: 1,
+      // Resolution cap: render at 2/3 (1080x1920 -> 720x1280). 55% less memory
+      // per frame is the difference between the compositor OOM-SIGKILLing and
+      // the render actually finishing on a small container. The composition's
+      // coordinates stay 1080p; this only downsamples the output. To restore
+      // full 1080p, bump the Railway worker's RAM (~2-4GB) and delete this line.
+      scale: 2 / 3,
       onProgress: ({ progress }) => {
         touch({ progress });
         if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
