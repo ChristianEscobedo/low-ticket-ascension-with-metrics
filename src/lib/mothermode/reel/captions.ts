@@ -1213,6 +1213,20 @@ export interface CaptionOverrides {
   ghostStagger?: 'block' | 'word' | 'letter';
   /** Delay between staggered ghost units in seconds (0.02–0.25). */
   ghostStaggerSec?: number;
+  /** Entrance animation override (pop, slam, tilt3d, ...). */
+  anim?: CaptionAnim | '';
+  /** Highlight mode override (color, box, boxGrow, ...). */
+  highlightMode?: HighlightMode;
+  /** Wave bounce on the caption block. */
+  waveBounce?: boolean;
+  /** Hand-drawn SVG accent on the active word. */
+  handDrawn?: false | 'underline' | 'circle';
+  /** Camera punch-in on page enter. */
+  punchIn?: boolean;
+  /** Cinematic letterbox bars. */
+  letterbox?: boolean;
+  /** Springy scale-out on page exit. */
+  springExit?: boolean;
 }
 
 

@@ -17,10 +17,13 @@ import {
   CAPTION_STYLE_DEFS,
   captionCssFor,
   resolveCaptionStyle,
+  EDITOR_PACKS,
+  CAPTION_ANIMS,
+  HIGHLIGHT_MODES,
   type CaptionOverrides,
   type CaptionStyleDef,
   type CaptionTag,
-, EDITOR_PACKS, editorPackFor, CAPTION_ANIMS, HIGHLIGHT_MODES} from '@/lib/mothermode/reel/captions';
+} from '@/lib/mothermode/reel/captions';
 import type { CaptionPreset } from '@/lib/mothermode/reel/types';
 
 const FILTERS: { id: CaptionTag | 'all'; label: string }[] = [
@@ -783,7 +786,8 @@ export function CaptionGallery({
                     type="button"
                     title={pack.blurb}
                     onClick={() => {
-                      onSelect?.(pack.presetId);
+                      const def = CAPTION_STYLE_DEFS.find((d) => d.id === pack.presetId);
+                      if (def) onPick(def);
                       if (pack.overrides) onCustomize(pack.overrides);
                     }}
                     className="rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/55 hover:bg-bone/10 hover:text-bone"

@@ -106,7 +106,7 @@ import { SubtitlePanel } from './SubtitlePanel';
 import ThumbnailLabSheet from './ThumbnailLabSheet';
 import RenderPanel from './RenderPanel';
 import RenderButton from './RenderButton';
-import { useRenderJob, type RenderJob } from './useRenderJob, { keepWorkerWarm }';
+import { useRenderJob, keepWorkerWarm, type RenderJob } from './useRenderJob';
 
 import type { ContentPiece } from '@/lib/mothermode/content/types';
 import { RichTextField } from '@/components/mothermode/content/RichTextField';
