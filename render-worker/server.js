@@ -428,35 +428,54 @@ async function runRender(jobId, plan, reelId) {
 
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
     touch({ stage: 'rendering' });
-    await renderMedia({
-      composition,
-      serveUrl,
-      codec: 'h264',
-      outputLocation: outPath,
-      inputProps: { plan },
-      // The delayRender timeout: how long a single frame may wait on its media
-      // (an OffthreadVideo ffmpeg extraction, an image, the caption webfonts)
-      // before Remotion fails the render. 30s default dies at "render the
-      // React component at frame N failed: timeout 30000ms exceeded" the
-      // moment one clip is slow to pull or decode — a fetched hook clip, a big
-      // source, a cold CDN. 2 minutes per frame lets a slow-but-valid asset
-      // finish instead of killing a multi-minute render.
-      timeoutInMilliseconds: 120_000,
-      // The memory cap: how many frames render in PARALLEL. The default is
-      // ~cores/2, and parallel 1080x1920 frames + per-clip ffmpeg extraction is
-      // exactly what pushes a small Railway container over its RAM limit and
-      // gets the compositor SIGKILLed (OOM). 1 renders one frame at a time —
-      // the lowest peak memory, at a real speed cost. If a heavy reel STILL
-      // OOMs at 1, the container is out of RAM, not out of parallelism: bump
-      // the Railway service's memory.
-      concurrency: 1,
-      onProgress: ({ progress }) => {
-        // Report every frame batch to the job (cheap, in-memory) but keep the
-        // log at every ~10% so the deploy logs stay readable.
-        touch({ progress });
-        if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
-      },
-    });
+
+    // The stall watchdog state. delayRender's timeout catches a hanging React
+    // component, but a clip whose ffmpeg frame extraction hangs never trips it
+    // — the render just sits at one % forever ("[worker] 51%" on repeat). Watch
+    // the onProgress heartbeat and abort when no frame advances for STALL_MS,
+    // so the job fails with the stall point named instead of hanging silently.
+    const STALL_MS = 180_000;
+    const renderAbort = new AbortController();
+    let lastProgress = -1;
+    let lastProgressAt = Date.now();
+    let stallMsg = '';
+    const stallWatch = setInterval(() => {
+      if (Date.now() - lastProgressAt > STALL_MS && !renderAbort.signal.aborted) {
+        stallMsg =
+          `Render stalled at ~${Math.round(Math.max(0, lastProgress) * 100)}% — no frame finished in ` +
+          `${Math.round(STALL_MS / 1000)}s. The clip at that point in the timeline is hanging the ` +
+          'renderer (a bad, unreachable, or corrupt source). Trim or replace it.';
+        renderAbort.abort();
+      }
+    }, 5000);
+
+    try {
+      await renderMedia({
+        composition,
+        serveUrl,
+        codec: 'h264',
+        outputLocation: outPath,
+        inputProps: { plan },
+        // delayRender timeout: how long a frame may wait on its media before
+        // Remotion fails the render. 2 min lets a slow-but-valid asset finish.
+        timeoutInMilliseconds: 120_000,
+        // Memory cap: parallel 1080p frames + per-clip ffmpeg OOMs a small
+        // container (compositor SIGKILL). 1 = one frame at a time, the lowest
+        // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
+        concurrency: 1,
+        cancelSignal: renderAbort.signal,
+        onProgress: ({ progress }) => {
+          if (progress !== lastProgress) {
+            lastProgress = progress;
+            lastProgressAt = Date.now();
+          }
+          touch({ progress });
+          if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
+        },
+      });
+    } finally {
+      clearInterval(stallWatch);
+    }
 
     // Upload to Supabase storage
     touch({ stage: 'uploading', progress: 1 });
@@ -473,8 +492,10 @@ async function runRender(jobId, plan, reelId) {
     console.log(`[worker] done → ${urlData.publicUrl}`);
     touch({ status: 'done', stage: 'done', progress: 1, url: urlData.publicUrl, renderId: fileName });
   } catch (err) {
-    console.error('[worker] render failed:', err.message);
-    touch({ status: 'failed', stage: 'failed', error: err.message });
+    // The watchdog's stall message beats Remotion's generic abort error.
+    const msg = stallMsg || (err instanceof Error ? err.message : String(err));
+    console.error('[worker] render failed:', msg);
+    touch({ status: 'failed', stage: 'failed', error: msg });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
