@@ -427,6 +427,16 @@ async function runRender(jobId, plan, reelId, quality) {
     });
 
     console.log(`[worker] rendering ${plan.clips.length} clips, ${plan.durationInFrames} frames @ ${plan.fps}fps`);
+    // Log each clip's source. "Timed out evaluating page function" + a
+    // compositor SIGKILL means Chrome hung evaluating a frame — which is a
+    // clip whose source won't load or seek, NOT memory. The source host is the
+    // fact that answers it, so print it instead of guessing.
+    (plan.clips || []).forEach((c, i) => {
+      const src = (c && (c.src || c.url)) || '';
+      let host = src;
+      try { host = new URL(src).host; } catch { /* keep the raw src */ }
+      console.log(`[worker] clip ${i}: ${c && c.kind ? c.kind : '?'} · ${Math.round((c && c.durationInFrames) || 0)}f · src host: ${host}${typeof src === 'string' && src.startsWith('blob:') ? ' (BLOB URL — cannot be rendered)' : ''}`);
+    });
     touch({ stage: 'rendering' });
     await renderMedia({
       composition,
