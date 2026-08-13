@@ -440,16 +440,18 @@ async function runRender(jobId, plan, reelId) {
     // the onProgress heartbeat and abort when no frame advances for STALL_MS,
     // so the job fails with the stall point named instead of hanging silently.
     const STALL_MS = 180_000;
-    const renderAbort = new AbortController();
+    // Remotion's cancelSignal is a FUNCTION it calls with the cancel callback —
+    // not an AbortSignal. Capture the callback here; the watchdog calls it.
+    let cancelRender = null;
     let lastProgress = -1;
     let lastProgressAt = Date.now();
     const stallWatch = setInterval(() => {
-      if (Date.now() - lastProgressAt > STALL_MS && !renderAbort.signal.aborted) {
+      if (Date.now() - lastProgressAt > STALL_MS) {
         stallMsg =
           `Render stalled at ~${Math.round(Math.max(0, lastProgress) * 100)}% — no frame finished in ` +
           `${Math.round(STALL_MS / 1000)}s. The clip at that point in the timeline is hanging the ` +
           'renderer (a bad, unreachable, or corrupt source). Trim or replace it.';
-        renderAbort.abort();
+        if (cancelRender) cancelRender();
       }
     }, 5000);
 
@@ -467,7 +469,9 @@ async function runRender(jobId, plan, reelId) {
         // container (compositor SIGKILL). 1 = one frame at a time, the lowest
         // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
         concurrency: 1,
-        cancelSignal: renderAbort.signal,
+        cancelSignal: (cancel) => {
+          cancelRender = cancel;
+        },
         onProgress: ({ progress }) => {
           if (progress !== lastProgress) {
             lastProgress = progress;
