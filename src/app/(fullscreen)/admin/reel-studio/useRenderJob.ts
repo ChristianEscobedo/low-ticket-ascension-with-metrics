@@ -31,6 +31,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type Aspect = 'vertical' | 'square' | 'landscape';
 
+/** Output resolution. '1080' is the canvas size (full res, needs a beefy
+ *  worker); '720' downsamples on the worker and fits a small container. */
+export type RenderQuality = '720' | '1080';
+
 export const ASPECTS: { value: Aspect; label: string; hint: string }[] = [
   { value: 'vertical', label: '9:16', hint: 'Reels · TikTok · Shorts' },
   { value: 'square', label: '1:1', hint: 'Feed' },
@@ -46,6 +50,8 @@ export type RenderJob = {
   hint: string;
   aspect: Aspect;
   setAspect: (a: Aspect) => void;
+  quality: RenderQuality;
+  setQuality: (q: RenderQuality) => void;
   busy: boolean;
   /** 0-100, for a bar. Only moves during frame rendering — see `status`. */
   progress: number;
@@ -127,6 +133,7 @@ export function useRenderJob({
   const [available, setAvailable] = useState<boolean | null>(null);
   const [hint, setHint] = useState('');
   const [aspect, setAspect] = useState<Aspect>('vertical');
+  const [quality, setQuality] = useState<RenderQuality>('1080');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
@@ -237,7 +244,7 @@ export function useRenderJob({
         const res = await fetch('/api/admin/reel-render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: reelId, aspect, project: getProject?.() ?? null }),
+          body: JSON.stringify({ id: reelId, aspect, quality, project: getProject?.() ?? null }),
         });
         const json = await res.json();
         if (!json?.success) {
@@ -256,13 +263,15 @@ export function useRenderJob({
         setBusy(false);
       }
     })();
-  }, [aspect, busy, getReelId, getProject, poll]);
+  }, [aspect, quality, busy, getReelId, getProject, poll]);
 
   return {
     available,
     hint,
     aspect,
     setAspect,
+    quality,
+    setQuality,
     busy,
     progress,
     status,

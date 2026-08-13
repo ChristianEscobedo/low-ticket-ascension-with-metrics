@@ -177,6 +177,9 @@ export async function POST(request: NextRequest) {
   const aspect = body.aspect === 'square' || body.aspect === 'landscape' ? body.aspect : 'vertical';
   const size = RENDER_SIZES[aspect];
   const fps = typeof body.fps === 'number' && body.fps > 0 ? body.fps : undefined;
+  // Output resolution: '720' downsamples to 720p on the worker (fits a small
+  // container); anything else renders at the full canvas size (1080p).
+  const quality = body.quality === '720' ? '720' : '1080';
 
   const plan = buildRenderPlan(project, { ...size, fps });
 
@@ -205,7 +208,7 @@ export async function POST(request: NextRequest) {
     workerRes = await fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ plan, reelId: id }),
+      body: JSON.stringify({ plan, reelId: id, quality }),
       signal: AbortSignal.timeout(45_000),
     });
   } catch (err) {

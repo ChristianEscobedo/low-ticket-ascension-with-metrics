@@ -51,6 +51,30 @@ export default function RenderPanel({ job }: { job: RenderJob }) {
         ))}
       </div>
 
+      {/* Output resolution. 1080p is the canvas size (full res — needs a beefy
+          worker); 720p downsamples on the worker and fits a small container.
+          Same shared-job dial as the aspect — what you pick here is what the
+          header button renders too. */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-white/50">Quality</span>
+        {(['1080', '720'] as const).map((q) => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => job.setQuality(q)}
+            disabled={job.busy}
+            title={q === '1080' ? 'Full canvas resolution (needs ~2-4GB on the worker)' : 'Downsampled — renders on a small worker'}
+            className={`rounded-md px-3 py-1.5 text-xs transition ${
+              job.quality === q
+                ? 'bg-white text-black'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            } disabled:opacity-50`}
+          >
+            {q}p
+          </button>
+        ))}
+      </div>
+
       <button
         type="button"
         onClick={job.start}

@@ -128,7 +128,7 @@ const BUILD = {
 app.get('/health', (_req, res) => res.json({ ok: true, bundled: !!bundled, build: BUILD }));
 
 app.post('/render', (req, res) => {
-  const { plan, reelId } = req.body || {};
+  const { plan, reelId, quality } = req.body || {};
   if (!plan || !plan.clips || !plan.clips.length) {
     return res.status(400).json({ success: false, error: 'Invalid plan — no clips.' });
   }
@@ -191,7 +191,7 @@ app.post('/render', (req, res) => {
     console.warn('[worker] could not log caption plan: ' + (e && e.message ? e.message : e));
   }
 
-  runRender(jobId, plan, reelId).catch((err) => {
+  runRender(jobId, plan, reelId, quality).catch((err) => {
     const job = jobs.get(jobId);
     if (job) Object.assign(job, { status: 'failed', error: err.message, updatedAt: Date.now() });
   });
@@ -383,7 +383,7 @@ async function runFetchClip(jobId, pageUrl) {
 }
 
 /** The background render: bundle → probe → render → upload → job URL. */
-async function runRender(jobId, plan, reelId) {
+async function runRender(jobId, plan, reelId, quality) {
   const job = jobs.get(jobId);
   const touch = (patch) => Object.assign(job, patch, { updatedAt: Date.now() });
 
@@ -441,12 +441,12 @@ async function runRender(jobId, plan, reelId) {
       // container (compositor SIGKILL). 1 = one frame at a time, the lowest
       // peak memory. If it still OOMs at 1, bump the Railway service's RAM.
       concurrency: 1,
-      // Resolution cap: render at 2/3 (1080x1920 -> 720x1280). 55% less memory
-      // per frame is the difference between the compositor OOM-SIGKILLing and
-      // the render actually finishing on a small container. The composition's
-      // coordinates stay 1080p; this only downsamples the output. To restore
-      // full 1080p, bump the Railway worker's RAM (~2-4GB) and delete this line.
-      scale: 2 / 3,
+      // Output resolution, chosen per render. The composition's coordinates are
+      // the canvas size (1080x1920 for 9:16); `scale` downsamples the OUTPUT
+      // only. '720' renders at 2/3 (~55% less memory per frame — fits a small
+      // container); anything else renders at full canvas resolution (1080p,
+      // which needs ~2-4GB of RAM on the worker or the compositor OOM-SIGKILLs).
+      scale: quality === '720' ? 2 / 3 : 1,
       onProgress: ({ progress }) => {
         touch({ progress });
         if (progress % 0.1 < 0.01) console.log(`[worker] ${Math.round(progress * 100)}%`);
