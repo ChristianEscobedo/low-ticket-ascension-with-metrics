@@ -8177,6 +8177,21 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, { scale });
                           }}
                           onStyle={(index, partial) => {
+                            if (partial.clearStyle) {
+                              // Keep placement + card; drop visual style fields.
+                              void applyWordMark(index, {
+                                anim: undefined,
+                                color: undefined,
+                                scale: undefined,
+                                fx: undefined,
+                                fxColor: undefined,
+                                fxColor2: undefined,
+                                ambient: undefined,
+                                font: undefined,
+                                hidden: undefined,
+                              });
+                              return;
+                            }
                             const patch: Partial<
                               import('@/lib/mothermode/reel/types').ReelWordMark
                             > = {};
@@ -8186,6 +8201,20 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             }
                             if ('color' in partial) {
                               patch.color = partial.color || undefined;
+                            }
+                            if ('fx' in partial) patch.fx = partial.fx || undefined;
+                            if ('fxColor' in partial) {
+                              patch.fxColor = partial.fxColor || undefined;
+                            }
+                            if ('fxColor2' in partial) {
+                              patch.fxColor2 = partial.fxColor2 || undefined;
+                            }
+                            if ('ambient' in partial) {
+                              patch.ambient = partial.ambient || undefined;
+                            }
+                            if ('font' in partial) patch.font = partial.font || undefined;
+                            if ('hidden' in partial) {
+                              patch.hidden = partial.hidden || undefined;
                             }
                             void applyWordMark(index, patch);
                           }}
@@ -8431,6 +8460,21 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, { scale });
                           }}
                           onStyle={(index, partial) => {
+                            if (partial.clearStyle) {
+                              // Keep placement + card; drop visual style fields.
+                              void applyWordMark(index, {
+                                anim: undefined,
+                                color: undefined,
+                                scale: undefined,
+                                fx: undefined,
+                                fxColor: undefined,
+                                fxColor2: undefined,
+                                ambient: undefined,
+                                font: undefined,
+                                hidden: undefined,
+                              });
+                              return;
+                            }
                             const patch: Partial<
                               import('@/lib/mothermode/reel/types').ReelWordMark
                             > = {};
@@ -8440,6 +8484,20 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             }
                             if ('color' in partial) {
                               patch.color = partial.color || undefined;
+                            }
+                            if ('fx' in partial) patch.fx = partial.fx || undefined;
+                            if ('fxColor' in partial) {
+                              patch.fxColor = partial.fxColor || undefined;
+                            }
+                            if ('fxColor2' in partial) {
+                              patch.fxColor2 = partial.fxColor2 || undefined;
+                            }
+                            if ('ambient' in partial) {
+                              patch.ambient = partial.ambient || undefined;
+                            }
+                            if ('font' in partial) patch.font = partial.font || undefined;
+                            if ('hidden' in partial) {
+                              patch.hidden = partial.hidden || undefined;
                             }
                             void applyWordMark(index, patch);
                           }}

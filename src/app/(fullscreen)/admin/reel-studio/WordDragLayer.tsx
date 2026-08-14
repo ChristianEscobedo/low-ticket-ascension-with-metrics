@@ -3,15 +3,16 @@
 /**
  * WordDragLayer — free-place editor for stack-card words.
  *
- * Hit targets sit ON the real Remotion glyphs (invisible boxes). No placeholder
- * labels. Selected word gets a thin outline + corner scale handle. Right-click
- * opens a compact style menu (anim / color / scale presets).
+ * Hit targets sit ON the real Remotion glyphs (invisible boxes). Selected word
+ * gets a thin outline + corner scale handle. Right-click opens a style menu:
+ * entrance, scale, color, FX (incl. gradient), ambient, font, clear/hide.
  *
  * Axes match the caption box: xPct = centre 0–100, yPct = from BOTTOM 0–100.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import type { ReelWord } from '@/lib/mothermode/reel/types';
+import type { ReelWord, ReelWordFx, ReelWordMark } from '@/lib/mothermode/reel/types';
+import { WORD_FONTS, WORD_FX } from '@/lib/mothermode/reel/types';
 import { CAPTION_ANIMS, type CaptionAnim } from '@/lib/mothermode/reel/captions';
 
 export type WordPlace = {
@@ -19,10 +20,34 @@ export type WordPlace = {
   xPct: number;
   yPct: number;
   label: string;
-  /** Current mark.scale (1 = default). */
   scale?: number;
   anim?: string;
   color?: string;
+  fx?: ReelWordFx;
+  fxColor?: string;
+  fxColor2?: string;
+  ambient?: 'float' | 'wiggle';
+  font?: string;
+  hidden?: boolean;
+};
+
+/** Partial mark fields the context menu can write. */
+export type WordStylePatch = Partial<
+  Pick<
+    ReelWordMark,
+    | 'anim'
+    | 'color'
+    | 'scale'
+    | 'fx'
+    | 'fxColor'
+    | 'fxColor2'
+    | 'ambient'
+    | 'font'
+    | 'hidden'
+  >
+> & {
+  /** Explicit clear of all style fields (keeps x/y/card). */
+  clearStyle?: boolean;
 };
 
 type MenuState = {
@@ -42,9 +67,14 @@ const QUICK_ANIMS: { id: CaptionAnim | ''; label: string }[] = [
   { id: 'glitch', label: 'Glitch' },
   { id: 'typewriter', label: 'Type' },
   { id: 'zoomSnap', label: 'Zoom' },
+  { id: 'blurIn', label: 'Blur' },
+  { id: 'elastic', label: 'Elastic' },
+  { id: 'neonPulse', label: 'Neon' },
+  { id: 'dropIn', label: 'Drop' },
+  { id: 'tilt3d', label: 'Tilt3D' },
+  { id: 'outlineFill', label: 'Outline' },
 ];
 
-// Prefer the short list; fall back if CAPTION_ANIMS is missing an id.
 const ANIM_MENU = QUICK_ANIMS.filter(
   (a) => !a.id || (CAPTION_ANIMS as string[]).includes(a.id),
 );
@@ -63,6 +93,54 @@ const COLOR_PRESETS = [
   { c: '#FF3B5C', label: 'Hot' },
   { c: '#3BFF9A', label: 'Mint' },
   { c: '#5B8CFF', label: 'Blue' },
+  { c: '#C084FC', label: 'Violet' },
+  { c: '#FB923C', label: 'Orange' },
+];
+
+const FX_MENU_ALL: { id: ReelWordFx | ''; label: string }[] = [
+  { id: '', label: 'None' },
+  { id: 'glow', label: 'Glow' },
+  { id: 'gradient', label: 'Gradient' },
+  { id: 'shine', label: 'Shine' },
+  { id: 'pulse', label: 'Pulse' },
+  { id: 'underline', label: 'Underline' },
+  { id: 'marker', label: 'Marker' },
+  { id: 'tilt', label: 'Tilt' },
+  { id: 'outline', label: 'Outline' },
+  { id: 'strike', label: 'Strike' },
+  { id: 'blink', label: 'Blink' },
+  { id: 'jelly', label: 'Jelly' },
+];
+const FX_MENU = FX_MENU_ALL.filter(
+  (f): f is { id: ReelWordFx | ''; label: string } =>
+    !f.id || (WORD_FX as readonly string[]).includes(f.id),
+);
+
+/** One-click gradient looks: sets fx=gradient + fxColor/fxColor2. */
+const GRADIENT_PRESETS: {
+  label: string;
+  a: string;
+  b: string;
+}[] = [
+  { label: 'Gold', a: '#F5C542', b: '#FFF3C4' },
+  { label: 'Fire', a: '#FF3B5C', b: '#FB923C' },
+  { label: 'Ocean', a: '#5B8CFF', b: '#3BFF9A' },
+  { label: 'Violet', a: '#C084FC', b: '#5B8CFF' },
+  { label: 'Sunset', a: '#FB923C', b: '#FF3B5C' },
+  { label: 'Ice', a: '#E0F2FE', b: '#5B8CFF' },
+  { label: 'Neon', a: '#3BFF9A', b: '#C084FC' },
+  { label: 'Mono', a: '#FFFFFF', b: '#94A3B8' },
+];
+
+const AMBIENT_MENU: { id: '' | 'float' | 'wiggle'; label: string }[] = [
+  { id: '', label: 'Still' },
+  { id: 'float', label: 'Float' },
+  { id: 'wiggle', label: 'Wiggle' },
+];
+
+const FONT_MENU: { id: string; label: string }[] = [
+  { id: '', label: 'Default' },
+  ...WORD_FONTS.map((f) => ({ id: f, label: f.replace(' Display', '').replace(' Mono One', '') })),
 ];
 
 export default function WordDragLayer({
@@ -82,11 +160,7 @@ export default function WordDragLayer({
   onCommit: (index: number, xPct: number, yPct: number) => void;
   onScale?: (index: number, scale: number) => void;
   onScaleCommit?: (index: number, scale: number) => void;
-  /** Apply mark fields (anim / color / scale preset). */
-  onStyle?: (
-    index: number,
-    partial: { anim?: string; color?: string; scale?: number },
-  ) => void;
+  onStyle?: (index: number, partial: WordStylePatch) => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const lastRef = useRef<{ index: number; x: number; y: number } | null>(null);
@@ -106,7 +180,6 @@ export default function WordDragLayer({
     };
   }, []);
 
-  // Close menu on outside click / Escape
   useEffect(() => {
     if (!menu) return;
     const onKey = (e: KeyboardEvent) => {
@@ -126,7 +199,7 @@ export default function WordDragLayer({
   }, [menu]);
 
   const startDrag = (index: number, e: React.PointerEvent) => {
-    if (e.button === 2) return; // right-click = menu only
+    if (e.button === 2) return;
     e.preventDefault();
     e.stopPropagation();
     setMenu(null);
@@ -177,7 +250,6 @@ export default function WordDragLayer({
     lastScaleRef.current = { index, scale: startScale };
 
     const onMoveEv = (ev: PointerEvent) => {
-      // Drag out/down-right = bigger. ~120px → +1.0 scale.
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       const delta = (dx + dy) / 120;
@@ -209,6 +281,11 @@ export default function WordDragLayer({
     setMenu({ index, clientX: e.clientX, clientY: e.clientY });
   };
 
+  const apply = (index: number, partial: WordStylePatch) => {
+    onStyle?.(index, partial);
+    setMenu(null);
+  };
+
   if (!words.length) return null;
 
   const selected = words.find((w) => w.index === selectedIndex) ?? null;
@@ -222,7 +299,6 @@ export default function WordDragLayer({
       {words.map((w) => {
         const isSel = selectedIndex === w.index;
         const sc = w.scale && w.scale > 0 ? w.scale : 1;
-        // Hit box sized roughly to a caption word; scales with mark.scale.
         const baseW = Math.max(48, Math.min(160, 14 + w.label.length * 11));
         const baseH = 36;
         const boxW = baseW * sc;
@@ -239,28 +315,28 @@ export default function WordDragLayer({
               height: boxH,
               transform: 'translate(-50%, 50%)',
               cursor: dragging && isSel ? 'grabbing' : 'grab',
+              opacity: w.hidden ? 0.35 : 1,
             }}
             onPointerDown={(e) => startDrag(w.index, e)}
             onContextMenu={(e) => openMenu(w.index, e)}
-            title={`"${w.label}" — drag to place · corner scales · right-click styles`}
+            title={`"${w.label}" — drag · corner scales · right-click styles`}
           >
-            {/* Invisible hit surface — real glyphs paint underneath in Remotion */}
             <div
               className={clsx(
                 'absolute inset-0 rounded-sm',
                 isSel
                   ? 'ring-2 ring-brass/80 ring-offset-0 bg-brass/[0.06]'
                   : 'hover:ring-1 hover:ring-white/35 hover:bg-white/[0.03]',
+                w.fx === 'gradient' && 'ring-1 ring-fuchsia-400/40',
               )}
             />
-            {/* Selection chrome only — no duplicate text */}
             {isSel && (
               <>
                 <div className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/70 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-brass">
                   {w.label}
                   {sc !== 1 ? ` · ${sc.toFixed(2)}×` : ''}
+                  {w.fx ? ` · ${w.fx}` : ''}
                 </div>
-                {/* Scale handle — bottom-right corner */}
                 {(onScale || onScaleCommit) && (
                   <button
                     type="button"
@@ -282,17 +358,17 @@ export default function WordDragLayer({
 
       {!dragging && (
         <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/55 px-2 py-0.5 text-[8px] text-white/45">
-          drag word · corner scales · right-click style
+          drag · corner scales · right-click style
         </div>
       )}
 
       {menu && selected && menu.index === selected.index && onStyle && (
         <div
           data-word-ctx-menu
-          className="pointer-events-auto fixed z-50 min-w-[168px] rounded-lg border border-white/15 bg-ink/95 p-1.5 shadow-xl backdrop-blur"
+          className="pointer-events-auto fixed z-50 max-h-[min(420px,70vh)] w-[200px] overflow-y-auto rounded-lg border border-white/15 bg-ink/95 p-1.5 shadow-xl backdrop-blur"
           style={{
-            left: Math.min(menu.clientX, window.innerWidth - 200),
-            top: Math.min(menu.clientY, window.innerHeight - 320),
+            left: Math.min(menu.clientX, (typeof window !== 'undefined' ? window.innerWidth : 800) - 220),
+            top: Math.min(menu.clientY, (typeof window !== 'undefined' ? window.innerHeight : 600) - 360),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -300,96 +376,268 @@ export default function WordDragLayer({
             {selected.label}
           </div>
 
-          <div className="mb-0.5 px-1.5 text-[8px] uppercase tracking-wide text-white/35">
-            Entrance
-          </div>
-          <div className="mb-1.5 grid max-h-28 grid-cols-2 gap-0.5 overflow-y-auto">
-            {ANIM_MENU.map((a) => {
-              const active = (selected.anim || '') === (a.id || '');
-              return (
-                <button
-                  key={a.label}
-                  type="button"
-                  className={clsx(
-                    'rounded px-1.5 py-1 text-left text-[10px]',
-                    active
-                      ? 'bg-brass/25 text-brass'
-                      : 'text-white/75 hover:bg-white/10',
-                  )}
-                  onClick={() => {
-                    onStyle(menu.index, { anim: a.id || undefined });
-                    setMenu(null);
-                  }}
-                >
-                  {a.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Entrance */}
+          <Section label="Entrance">
+            <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
+              {ANIM_MENU.map((a) => {
+                const active = (selected.anim || '') === (a.id || '');
+                return (
+                  <Chip
+                    key={a.label}
+                    active={active}
+                    onClick={() =>
+                      apply(menu.index, { anim: a.id || undefined })
+                    }
+                  >
+                    {a.label}
+                  </Chip>
+                );
+              })}
+            </div>
+          </Section>
 
-          <div className="mb-0.5 px-1.5 text-[8px] uppercase tracking-wide text-white/35">
-            Scale
-          </div>
-          <div className="mb-1.5 flex gap-0.5 px-1">
-            {SCALE_PRESETS.map((s) => {
-              const sc = selected.scale && selected.scale > 0 ? selected.scale : 1;
-              const active = Math.abs(sc - s.v) < 0.05;
-              return (
-                <button
-                  key={s.label}
-                  type="button"
-                  className={clsx(
-                    'flex-1 rounded py-1 text-[10px] font-semibold',
-                    active
-                      ? 'bg-brass/25 text-brass'
-                      : 'text-white/75 hover:bg-white/10',
-                  )}
-                  onClick={() => {
-                    onStyle(menu.index, { scale: s.v });
-                    setMenu(null);
-                  }}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Scale */}
+          <Section label="Scale">
+            <div className="flex gap-0.5 px-0.5">
+              {SCALE_PRESETS.map((s) => {
+                const sc =
+                  selected.scale && selected.scale > 0 ? selected.scale : 1;
+                const active = Math.abs(sc - s.v) < 0.05;
+                return (
+                  <button
+                    key={s.label}
+                    type="button"
+                    className={clsx(
+                      'flex-1 rounded py-1 text-[10px] font-semibold',
+                      active
+                        ? 'bg-brass/25 text-brass'
+                        : 'text-white/75 hover:bg-white/10',
+                    )}
+                    onClick={() => apply(menu.index, { scale: s.v })}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
 
-          <div className="mb-0.5 px-1.5 text-[8px] uppercase tracking-wide text-white/35">
-            Color
-          </div>
-          <div className="flex flex-wrap gap-1 px-1 pb-0.5">
-            {COLOR_PRESETS.map((c) => {
-              const active =
-                (selected.color || '').toLowerCase() === c.c.toLowerCase() ||
-                (!selected.color && !c.c);
-              return (
-                <button
-                  key={c.label}
-                  type="button"
-                  title={c.label}
-                  className={clsx(
-                    'h-5 w-5 rounded-full border',
-                    active ? 'border-brass ring-1 ring-brass/60' : 'border-white/25',
-                  )}
-                  style={{
-                    background: c.c || 'linear-gradient(135deg,#444,#222)',
-                  }}
-                  onClick={() => {
-                    onStyle(menu.index, {
-                      color: c.c || undefined,
-                    });
-                    // Clearing color: pass empty and let parent delete — use ''
-                    if (!c.c) onStyle(menu.index, { color: '' });
-                    setMenu(null);
-                  }}
-                />
-              );
-            })}
+          {/* Color */}
+          <Section label="Color">
+            <div className="flex flex-wrap gap-1 px-1">
+              {COLOR_PRESETS.map((c) => {
+                const active =
+                  (selected.color || '').toLowerCase() === c.c.toLowerCase() ||
+                  (!selected.color && !c.c);
+                return (
+                  <button
+                    key={c.label}
+                    type="button"
+                    title={c.label}
+                    className={clsx(
+                      'h-5 w-5 rounded-full border',
+                      active
+                        ? 'border-brass ring-1 ring-brass/60'
+                        : 'border-white/25',
+                    )}
+                    style={{
+                      background: c.c || 'linear-gradient(135deg,#444,#222)',
+                    }}
+                    onClick={() =>
+                      apply(menu.index, { color: c.c || undefined })
+                    }
+                  />
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* FX */}
+          <Section label="Effect">
+            <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
+              {FX_MENU.map((f) => {
+                const active = (selected.fx || '') === (f.id || '');
+                return (
+                  <Chip
+                    key={f.label}
+                    active={active}
+                    onClick={() => {
+                      if (!f.id) {
+                        apply(menu.index, {
+                          fx: undefined,
+                          fxColor: undefined,
+                          fxColor2: undefined,
+                        });
+                      } else if (f.id === 'gradient') {
+                        // Default gold gradient if none set
+                        apply(menu.index, {
+                          fx: 'gradient',
+                          fxColor: selected.fxColor || '#F5C542',
+                          fxColor2: selected.fxColor2 || '#FFF3C4',
+                        });
+                      } else {
+                        apply(menu.index, { fx: f.id });
+                      }
+                    }}
+                  >
+                    {f.label}
+                  </Chip>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* Gradient presets — always visible so one click applies gradient fill */}
+          <Section label="Gradient fill">
+            <div className="grid grid-cols-2 gap-0.5">
+              {GRADIENT_PRESETS.map((g) => {
+                const active =
+                  selected.fx === 'gradient' &&
+                  (selected.fxColor || '').toLowerCase() === g.a.toLowerCase() &&
+                  (selected.fxColor2 || '').toLowerCase() === g.b.toLowerCase();
+                return (
+                  <button
+                    key={g.label}
+                    type="button"
+                    className={clsx(
+                      'flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px]',
+                      active
+                        ? 'bg-brass/25 text-brass'
+                        : 'text-white/75 hover:bg-white/10',
+                    )}
+                    onClick={() =>
+                      apply(menu.index, {
+                        fx: 'gradient',
+                        fxColor: g.a,
+                        fxColor2: g.b,
+                      })
+                    }
+                  >
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-sm border border-white/20"
+                      style={{
+                        background: `linear-gradient(135deg, ${g.a}, ${g.b})`,
+                      }}
+                    />
+                    {g.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* Ambient */}
+          <Section label="Ambient">
+            <div className="flex gap-0.5 px-0.5">
+              {AMBIENT_MENU.map((a) => {
+                const active = (selected.ambient || '') === (a.id || '');
+                return (
+                  <button
+                    key={a.label}
+                    type="button"
+                    className={clsx(
+                      'flex-1 rounded py-1 text-[10px] font-semibold',
+                      active
+                        ? 'bg-brass/25 text-brass'
+                        : 'text-white/75 hover:bg-white/10',
+                    )}
+                    onClick={() =>
+                      apply(menu.index, {
+                        ambient: a.id || undefined,
+                      })
+                    }
+                  >
+                    {a.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* Font */}
+          <Section label="Font">
+            <div className="grid max-h-20 grid-cols-2 gap-0.5 overflow-y-auto">
+              {FONT_MENU.map((f) => {
+                const active = (selected.font || '') === (f.id || '');
+                return (
+                  <Chip
+                    key={f.id || 'def'}
+                    active={active}
+                    onClick={() =>
+                      apply(menu.index, { font: f.id || undefined })
+                    }
+                  >
+                    <span style={f.id ? { fontFamily: f.id } : undefined}>
+                      {f.label}
+                    </span>
+                  </Chip>
+                );
+              })}
+            </div>
+          </Section>
+
+          {/* Actions */}
+          <div className="mt-1 flex flex-col gap-0.5 border-t border-white/10 pt-1">
+            <button
+              type="button"
+              className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
+              onClick={() => apply(menu.index, { clearStyle: true })}
+            >
+              Clear styles
+            </button>
+            <button
+              type="button"
+              className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
+              onClick={() =>
+                apply(menu.index, { hidden: !selected.hidden })
+              }
+            >
+              {selected.hidden ? 'Unhide word' : 'Hide word'}
+            </button>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function Section({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-1.5">
+      <div className="mb-0.5 px-1.5 text-[8px] uppercase tracking-wide text-white/35">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={clsx(
+        'rounded px-1.5 py-1 text-left text-[10px]',
+        active ? 'bg-brass/25 text-brass' : 'text-white/75 hover:bg-white/10',
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -413,7 +661,7 @@ export function freePlaceWordsFrom(
   const out: WordPlace[] = [];
   for (let i = 0; i < all.length; i++) {
     const w = all[i];
-    if (w.mark?.hidden) continue;
+    // Include hidden so Edit can unhide; still need x/y
     if (typeof w.mark?.xPct !== 'number' || typeof w.mark?.yPct !== 'number') {
       continue;
     }
@@ -426,6 +674,12 @@ export function freePlaceWordsFrom(
       scale: w.mark.scale,
       anim: w.mark.anim,
       color: w.mark.color,
+      fx: w.mark.fx,
+      fxColor: w.mark.fxColor,
+      fxColor2: w.mark.fxColor2,
+      ambient: w.mark.ambient,
+      font: w.mark.font,
+      hidden: w.mark.hidden,
     });
   }
   return out;
