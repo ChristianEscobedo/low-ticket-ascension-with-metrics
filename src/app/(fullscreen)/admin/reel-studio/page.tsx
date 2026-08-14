@@ -2949,8 +2949,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const [fxMode, setFxMode] = useState(false);
   /** Live free-place drag offsets (index → x/y) — local only until commit. */
   const [wordPlaceLocal, setWordPlaceLocal] = useState<
-    Record<number, { xPct: number; yPct: number }
-  >>({});
+    Record<number, { xPct: number; yPct: number }>
+  >({});
+  const [wordScaleLocal, setWordScaleLocal] = useState<Record<number, number>>({});
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
   /** Scope: 'global' = settings write to every picked word (a bulk
    *  convenience); 'individual' = they write to ONE target word, seeded
@@ -8078,7 +8079,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             );
                             return freePlaceWordsFrom(base, clipSec).map((w) => {
                               const loc = wordPlaceLocal[w.index];
-                              return loc ? { ...w, xPct: loc.xPct, yPct: loc.yPct } : w;
+                              const sc = wordScaleLocal[w.index];
+                              return {
+                                ...w,
+                                xPct: loc ? loc.xPct : w.xPct,
+                                yPct: loc ? loc.yPct : w.yPct,
+                                scale: typeof sc === 'number' ? sc : w.scale,
+                              };
                             });
                           })()}
                           selectedIndex={
@@ -8103,6 +8110,30 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               return next;
                             });
                             void applyWordMark(index, { xPct, yPct });
+                          }}
+                          onScale={(index, scale) => {
+                            setWordScaleLocal((prev) => ({ ...prev, [index]: scale }));
+                          }}
+                          onScaleCommit={(index, scale) => {
+                            setWordScaleLocal((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                            void applyWordMark(index, { scale });
+                          }}
+                          onStyle={(index, partial) => {
+                            const patch: Partial<
+                              import('@/lib/mothermode/reel/types').ReelWordMark
+                            > = {};
+                            if ('anim' in partial) patch.anim = partial.anim || undefined;
+                            if ('scale' in partial && typeof partial.scale === 'number') {
+                              patch.scale = partial.scale;
+                            }
+                            if ('color' in partial) {
+                              patch.color = partial.color || undefined;
+                            }
+                            void applyWordMark(index, patch);
                           }}
                         />
                         </>
@@ -8289,7 +8320,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             );
                             return freePlaceWordsFrom(base, clipSec).map((w) => {
                               const loc = wordPlaceLocal[w.index];
-                              return loc ? { ...w, xPct: loc.xPct, yPct: loc.yPct } : w;
+                              const sc = wordScaleLocal[w.index];
+                              return {
+                                ...w,
+                                xPct: loc ? loc.xPct : w.xPct,
+                                yPct: loc ? loc.yPct : w.yPct,
+                                scale: typeof sc === 'number' ? sc : w.scale,
+                              };
                             });
                           })()}
                           selectedIndex={
@@ -8314,6 +8351,30 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               return next;
                             });
                             void applyWordMark(index, { xPct, yPct });
+                          }}
+                          onScale={(index, scale) => {
+                            setWordScaleLocal((prev) => ({ ...prev, [index]: scale }));
+                          }}
+                          onScaleCommit={(index, scale) => {
+                            setWordScaleLocal((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                            void applyWordMark(index, { scale });
+                          }}
+                          onStyle={(index, partial) => {
+                            const patch: Partial<
+                              import('@/lib/mothermode/reel/types').ReelWordMark
+                            > = {};
+                            if ('anim' in partial) patch.anim = partial.anim || undefined;
+                            if ('scale' in partial && typeof partial.scale === 'number') {
+                              patch.scale = partial.scale;
+                            }
+                            if ('color' in partial) {
+                              patch.color = partial.color || undefined;
+                            }
+                            void applyWordMark(index, patch);
                           }}
                         />
                         </>
