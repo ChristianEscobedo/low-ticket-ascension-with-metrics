@@ -859,7 +859,8 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
 
   // Let the closing word settle, then clear — see activeWordIndex.
   const activeIdx = activeWordIndex(words, frame, holdFrames);
-  if (activeIdx < 0) return null;
+  // Edit: still paint the section even if the playhead is between words.
+  if (activeIdx < 0 && !freePlaceEdit) return null;
 
   const css = captionCssFor(def);
   const rows = captionRows(words.length, activeIdx, layout.wordsPerRow, layout.rows);
@@ -1042,12 +1043,11 @@ if (blockFx.includes('punchIn')) {
   // never blows out theme gradients / shadows / entrance / FX.
   const freePlacedAbs = words
     .map((w, idx) => ({ w, idx }))
-    .filter(
-      ({ w }) =>
-        !w.mark?.hidden &&
-        typeof w.mark?.xPct === 'number' &&
-        typeof w.mark?.yPct === 'number',
-    )
+    .filter(({ w }) => !w.mark?.hidden)
+    .filter(({ w }) => {
+      if (freePlaceEdit) return true; // Edit: every word in this section
+      return typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
+    })
     .filter(({ w, idx }) => {
       // Edit: show every free-placed word so you can grab them.
       if (freePlaceEdit) return true;
@@ -1089,11 +1089,15 @@ if (blockFx.includes('punchIn')) {
           const isActive = idx === activeIdx;
           const power = isPowerWord(w.text, powerWords as string[]);
           const mark = w.mark;
-          const x = mark!.xPct as number;
-          const y = mark!.yPct as number;
-
-          // --- identical base to normal path ---
-          const themePaint = (isActive || power ? css.active : css.word) ?? css.word ?? {};
+          const x =
+            typeof mark?.xPct === 'number' ? (mark.xPct as number) : 50;
+          const y =
+            typeof mark?.yPct === 'number' ? (mark.yPct as number) : 18;
+          // Edit: full theme weight for every word. Idle css.word is the thin look.
+          const themePaint =
+            (freePlaceEdit || isActive || power ? css.active : css.word) ??
+            css.word ??
+            {};
           const base: React.CSSProperties = {
             ...themePaint,
             // Force theme type metrics — free-place was painting thinner when
@@ -1111,6 +1115,7 @@ if (blockFx.includes('punchIn')) {
             transform: 'translate(-50%, 50%)',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
+            ...(freePlaceEdit ? { opacity: 1, visibility: 'visible' as const } : {}),
           };
 
           if (mark?.color) {
