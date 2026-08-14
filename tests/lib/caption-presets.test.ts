@@ -209,7 +209,12 @@ describe('R24 modern caption tier (anims, highlights, spacing, power words)', ()
     // glow: the active word blooms in the accent color
     expect(String(captionCssFor(captionDefFor('opus')).active.textShadow)).toContain('#FFFFFF');
     // boxGrow: the highlight box grows in behind the word
-    expect(captionCssFor(captionDefFor('bounce-box')).active.backgroundColor).toBe('#4ADE80');
+    // boxGrow: layout padding reserved idle+active; plate is absolute in layer
+    expect(captionCssFor(captionDefFor('bounce-box')).active.padding).toBeTruthy();
+    expect(captionCssFor(captionDefFor('bounce-box')).word.padding).toBe(
+      captionCssFor(captionDefFor('bounce-box')).active.padding,
+    );
+    expect(captionCssFor(captionDefFor('bounce-box')).active.backgroundColor).toBeUndefined();
     // soft-card: the whole LINE gets a rounded card
     expect(captionCssFor(captionDefFor('soft-card')).line.backgroundColor).toContain('rgba');
   });
