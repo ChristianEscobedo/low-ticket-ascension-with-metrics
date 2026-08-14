@@ -3532,7 +3532,29 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     });
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || (kind === 'audio' ? 'mp3' : 'mp4');
-      const localDur = kind === 'video' ? await probeDuration(localBlob!) : 0;
+      // Drop the clip on the timeline NOW so the player never goes blank.
+      // Probe duration in the background — a 3-min file can take a while.
+      let clipId: string | null = null;
+      let localDur = 0;
+      if (kind === 'video' && localBlob) {
+        const clip = {
+          id: makeClipId(),
+          name: file.name.slice(0, 60),
+          url: localBlob,
+          durationSec: 5,
+          trimEndSec: 0,
+        };
+        clipId = clip.id;
+        insertClipAtPlayhead(clip);
+        setSelectedClip(clip.id);
+        setTab('clips');
+        void probeDuration(localBlob).then((dur) => {
+          if (dur > 0 && clipId) {
+            localDur = dur;
+            patchClip(clipId, { durationSec: dur });
+          }
+        });
+      }
       setUploadJob((j) => (j ? { ...j, pct: 8, phase: 'Requesting upload slot…' } : j));
       const mint = await fetch(UPLOAD_API, {
         method: 'POST',
@@ -3541,22 +3563,6 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       });
       const mintJson = await mint.json();
       if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
-
-      // Keep the canvas alive: drop the clip in NOW from the local file.
-      let clipId: string | null = null;
-      if (kind === 'video') {
-        const clip = {
-          id: makeClipId(),
-          name: file.name.slice(0, 60),
-          url: localBlob!,
-          durationSec: localDur || 5,
-          trimEndSec: 0,
-        };
-        clipId = clip.id;
-        insertClipAtPlayhead(clip);
-        setSelectedClip(clip.id);
-        setTab('clips');
-      }
 
       const putHeaders: Record<string, string> = {
         'content-type': file.type || 'application/octet-stream',
@@ -5243,8 +5249,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
   /** Insert position for new scenes: right after the current clip (or at the end). */
   function insertClipAtPlayhead(clip: ReelClip) {
-
-    if (!project) return;
+    if (!project) {
+      // First clip of a brand-new session — stand up a local draft so the
+      // player never waits on a server round-trip.
+      setProject({
+        id: `draft-${Date.now().toString(36)}`,
+        name: clip.name.slice(0, 48) || 'Untitled reel',
+        clips: [clip],
+        audio: null,
+      } as ReelProject);
+      return;
+    }
     const at = currentClip
       ? project.clips.findIndex((c) => c.id === currentClip.id) + 1
       : project.clips.length;
@@ -8263,22 +8278,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         </label>
                       </div>
                     )}
-                    {uploadJob?.blobUrl ? (
-                      <video
-                        src={uploadJob.blobUrl}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="absolute inset-0 h-full w-full object-contain bg-black"
-                      />
-                    ) : (
-                      <RemotionPreview
+                    <RemotionPreview
                         project={projectWithWordPlace ?? project}
                         aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
                         playheadSec={playheadSec}
                         freePlaceEdit={stackEditMode}
                       />
-                    )}
                     {uploadJob && (
                       <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
                         <p className="mb-1.5 text-[11px] font-semibold text-bone">
