@@ -21,6 +21,8 @@ import { clsx } from 'clsx';
 const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
 /** Caption placement, shared by BOTH preview branches so neither can lose it. */
 const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: false });
+const WordDragLayer = dynamic(() => import('./WordDragLayer'), { ssr: false });
+import { freePlaceWordsFrom } from './WordDragLayer';
 // The media-cue transform box — same overlay pattern, mounted in both previews.
 const CueDragLayer = dynamic(() => import('./CueDragLayer'), { ssr: false });
 
@@ -5904,7 +5906,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     }
                     fxMode={fxMode}
                     onFxWord={(i) => toggleFxWord(i)}
-                    fxWordIndexes={
+                    fxWords={
                       fxScope === 'individual'
                         ? new Set(fxTarget != null ? [fxTarget] : [])
                         : fxWords
@@ -8080,13 +8082,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             });
                           })()}
                           selectedIndex={
-                            fxWordIndexes && fxWordIndexes.size === 1
-                              ? [...fxWordIndexes][0]
+                            fxWords && fxWords.size === 1
+                              ? [...fxWords][0]
                               : null
                           }
                           onSelect={(index) => {
                             setFxMode(true);
-                            setFxPicked(new Set([index]));
+                            setFxWords(new Set([index]));
                           }}
                           onMove={(index, xPct, yPct) => {
                             setWordPlaceLocal((prev) => ({
@@ -8291,13 +8293,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             });
                           })()}
                           selectedIndex={
-                            fxWordIndexes && fxWordIndexes.size === 1
-                              ? [...fxWordIndexes][0]
+                            fxWords && fxWords.size === 1
+                              ? [...fxWords][0]
                               : null
                           }
                           onSelect={(index) => {
                             setFxMode(true);
-                            setFxPicked(new Set([index]));
+                            setFxWords(new Set([index]));
                           }}
                           onMove={(index, xPct, yPct) => {
                             setWordPlaceLocal((prev) => ({

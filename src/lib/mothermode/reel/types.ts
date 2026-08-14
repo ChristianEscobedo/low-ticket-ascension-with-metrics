@@ -125,6 +125,9 @@ export interface ReelWordMark {
     /** Default entrance for words in this card (overridden by mark.anim). */
     anim?: string;
   };
+  /** Free-place frame position (centre x, bottom y). */
+  xPct?: number;
+  yPct?: number;
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
