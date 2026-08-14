@@ -1045,11 +1045,13 @@ if (blockFx.includes('punchIn')) {
     .map((w, idx) => ({ w, idx }))
     .filter(({ w }) => !w.mark?.hidden)
     .filter(({ w }) => {
-      if (freePlaceEdit) return true; // Edit: every word in this section
+      // Overlay ONLY words that already have a place. Unplaced words stay
+      // in the caption row — Edit must look identical to Preview.
       return typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
     })
     .filter(({ w, idx }) => {
-      // Edit: show every free-placed word so you can grab them.
+      // Edit: still only overlay placed words, but keep them visible so
+      // you can grab the one you want without karaoke hiding it.
       if (freePlaceEdit) return true;
       // Preview/render: follow caption timing — only paint while the word
       // (or its card window) is live. Never leave glyphs stuck on screen.
