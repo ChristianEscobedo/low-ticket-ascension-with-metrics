@@ -1111,7 +1111,7 @@ if (blockFx.includes('punchIn')) {
                       background: def.activeBg ?? 'rgba(255,255,255,0.2)',
                       borderRadius: '0.2em',
                       zIndex: -1,
-                      transformOrigin: 'left center',
+                      transformOrigin: 'center center',
                       transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
                     }}
                   />

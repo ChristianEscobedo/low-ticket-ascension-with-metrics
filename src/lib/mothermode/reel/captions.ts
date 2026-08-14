@@ -960,6 +960,8 @@ function wordCss(
   const css: React.CSSProperties = {
     color,
     fontStyle: def.italic ? 'italic' : undefined,
+    // Always the same box model idle↔active so highlight never reflows glyphs.
+    display: 'inline-block',
   };
   // Gradient fill: active-only by default, or every word when scope is 'all'.
   // NEVER combine with WebkitTextStroke — the stroke paints outside the clip
@@ -980,14 +982,12 @@ function wordCss(
     (css as Record<string, unknown>)['backgroundClip'] = 'text';
     (css as Record<string, unknown>)['WebkitTextFillColor'] = 'transparent';
     css['color'] = 'transparent';
-    // background-clip:text needs a real box; inline spans clip unreliably.
-    css['display'] = 'inline-block';
     // Larger background so gradientShift can drift without seams.
     if (def.gradientShift) {
       (css as Record<string, unknown>)['backgroundSize'] = '200% 200%';
       (css as Record<string, unknown>)['backgroundRepeat'] = 'no-repeat';
     }
-    // Depth via filter (not text-shadow) so the gradient stays visible.
+    // Depth via dual-layer shadow var (not text-shadow) so the gradient stays visible.
     if (def.shadow) {
       (css as Record<string, unknown>)['--caption-grad-shadow'] = def.shadow;
     }
@@ -1002,25 +1002,29 @@ function wordCss(
     css['textShadow'] = def.shadow;
   }
 
+  // ---- Highlight chrome: reserve layout on BOTH states ----
+  // Horizontal padding only on the active word was the right-shift bug
+  // (padding-left pushes glyphs). Keep metrics identical idle↔active.
+  if (def.highlightMode === 'box' && def.activeBg && !paintGradient) {
+    css['padding'] = '0 0.18em';
+    css['borderRadius'] = '0.18em';
+    if (active) css['backgroundColor'] = def.activeBg;
+  } else if (def.highlightMode === 'boxGrow' && !paintGradient) {
+    // Layer draws the growing absolute bg; only reserve a hair of space so
+    // the absolute plate doesn't clip, same idle + active.
+    css['padding'] = '0 0.12em';
+    css['borderRadius'] = '0.28em';
+    // No backgroundColor / scale here — absolute boxGrowBg handles the pop
+    // without changing glyph metrics.
+  }
+
   if (active) {
-    // Big-word emphasis (~1.6× the active word).
+    // Big-word emphasis. transform does not affect layout; pin origin center
+    // so the pop doesn't read as a sideways shove.
     const bigScale = def.big ? 1.55 : 1.18;
     if (def.highlightMode === 'scale' || def.big) {
       css['transform'] = `scale(${bigScale})`;
-      css['display'] = 'inline-block';
-    } else if (def.highlightMode === 'box' && def.activeBg && !paintGradient) {
-      css['backgroundColor'] = def.activeBg;
-      css['padding'] = '0 0.18em';
-      css['borderRadius'] = '0.18em';
-      css['display'] = 'inline-block';
-    } else if (def.highlightMode === 'boxGrow' && !paintGradient) {
-      // The highlight box GROWS in behind the word (the modern soft-pop look).
-      css['backgroundColor'] = def.activeBg ?? 'rgba(255,255,255,0.16)';
-      css['padding'] = '0 0.22em';
-      css['borderRadius'] = '0.28em';
-      css['display'] = 'inline-block';
-      css['transform'] = 'scale(1.06)';
-      css['boxShadow'] = `0 0 0 0.06em ${def.activeBg ?? 'rgba(255,255,255,0.16)'}`;
+      css['transformOrigin'] = 'center center';
     } else if (def.highlightMode === 'glow') {
       // Animated bloom in the accent color (neon without a hard box).
       // On gradient glyphs, stack into filter so we don't kill the fill.
