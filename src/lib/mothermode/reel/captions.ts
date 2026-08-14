@@ -1171,6 +1171,20 @@ export interface CaptionOverrides {
   wordsPerRow?: number;
   /** How many ROWS show at once (1 = one line, 2 = the current + next line). 1–3. */
   rows?: number;
+  /**
+   * Stack behaviour for multi-row pages.
+   * - 'page' (default): whole page visible, highlight walks (karaoke).
+   * - 'build': words appear as spoken and HOLD until the page flips — the
+   *   stacked phrase-card look (hero word stays big while the line fills).
+   */
+  stackMode?: 'page' | 'build';
+  /** Master captions visibility. false = hide all captions. Default true. */
+  captionsOn?: boolean;
+  /**
+   * Time windows (seconds, project clock) where captions are forced off —
+   * e.g. when a lower-third or other text is already on the frame.
+   */
+  muteRanges?: { fromSec: number; toSec: number }[];
   /** Letter spacing in em (−0.05 tight … 0.3 tracked out). Overrides the preset. */
   letterSpacing?: number;
   /** Space BETWEEN words in em (0 … 0.6 — the airy look). Overrides the preset. */
@@ -1571,6 +1585,27 @@ export function powerKey(word: string): string {
 }
 
 /** Is this word in the reel's POWER WORDS list? (they glow even when idle) */
+/** True when captions should paint at project-clock `sec`. */
+export function isCaptionVisibleAt(
+  sec: number,
+  overrides?: CaptionOverrides | null,
+): boolean {
+  if (!overrides) return true;
+  if (overrides.captionsOn === false) return false;
+  const ranges = overrides.muteRanges;
+  if (!Array.isArray(ranges) || !ranges.length) return true;
+  const t = Number.isFinite(sec) ? sec : 0;
+  for (const r of ranges) {
+    const a = typeof r?.fromSec === 'number' ? r.fromSec : NaN;
+    const b = typeof r?.toSec === 'number' ? r.toSec : NaN;
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (t >= lo && t < hi) return false;
+  }
+  return true;
+}
+
 export function isPowerWord(word: string, powerWords?: string[] | null): boolean {
   if (!powerWords || powerWords.length === 0) return false;
   const key = powerKey(word);

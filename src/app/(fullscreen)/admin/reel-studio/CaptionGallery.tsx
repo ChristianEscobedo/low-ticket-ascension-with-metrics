@@ -824,6 +824,139 @@ export function CaptionGallery({
               </div>
             )}
 
+
+            {/* Stack + visibility */}
+            <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
+              <div className="flex items-center justify-between">
+                <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">
+                  Captions
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onCustomize({
+                      captionsOn: !(overrides?.captionsOn !== false),
+                    })
+                  }
+                  className={
+                    overrides?.captionsOn === false
+                      ? 'rounded-full border border-rose-400/40 px-2.5 py-0.5 text-[9px] font-bold uppercase text-rose-300'
+                      : 'rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase text-ink'
+                  }
+                  title="Show or hide all captions"
+                >
+                  {overrides?.captionsOn === false ? 'Hidden' : 'Shown'}
+                </button>
+              </div>
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50 pt-0.5">
+                Stack mode
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    { id: 'page', label: 'Karaoke page' },
+                    { id: 'build', label: 'Build & hold' },
+                  ] as const
+                ).map((m) => {
+                  const cur = overrides?.stackMode ?? 'page';
+                  const on = cur === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      title={
+                        m.id === 'build'
+                          ? 'Words appear on speech and stay until the page flips — stacked phrase card'
+                          : 'Whole page visible; highlight walks word-to-word'
+                      }
+                      onClick={() => onCustomize({ stackMode: m.id })}
+                      className={
+                        on
+                          ? 'rounded-full bg-brass px-2 py-0.5 text-[9px] font-bold text-ink'
+                          : 'rounded-full border border-bone/15 px-2 py-0.5 text-[9px] font-bold text-bone/45 hover:bg-bone/10'
+                      }
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[8px] leading-relaxed text-bone/30">
+                Build & hold + 2–3 rows + power words = the big stacked phrase look.
+                Still locked to the spoken word clock.
+              </p>
+              <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50 pt-1">
+                Mute ranges
+              </div>
+              <div className="space-y-1">
+                {(overrides?.muteRanges ?? []).map((r, i) => (
+                  <div key={i} className="flex items-center gap-1 text-[10px] text-bone/70">
+                    <input
+                      type="number"
+                      step={0.1}
+                      value={r.fromSec}
+                      onChange={(e) => {
+                        const next = [...(overrides?.muteRanges ?? [])];
+                        next[i] = {
+                          ...next[i],
+                          fromSec: Number(e.target.value) || 0,
+                        };
+                        onCustomize({ muteRanges: next });
+                      }}
+                      className="w-14 rounded border border-bone/15 bg-ink px-1 py-0.5 text-[10px]"
+                      title="From (sec)"
+                    />
+                    <span className="text-bone/30">→</span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      value={r.toSec}
+                      onChange={(e) => {
+                        const next = [...(overrides?.muteRanges ?? [])];
+                        next[i] = {
+                          ...next[i],
+                          toSec: Number(e.target.value) || 0,
+                        };
+                        onCustomize({ muteRanges: next });
+                      }}
+                      className="w-14 rounded border border-bone/15 bg-ink px-1 py-0.5 text-[10px]"
+                      title="To (sec)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = (overrides?.muteRanges ?? []).filter(
+                          (_, j) => j !== i,
+                        );
+                        onCustomize({ muteRanges: next });
+                      }}
+                      className="ml-auto text-[9px] text-bone/35 hover:text-rose-300"
+                    >
+                      remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onCustomize({
+                      muteRanges: [
+                        ...(overrides?.muteRanges ?? []),
+                        { fromSec: 0, toSec: 2 },
+                      ],
+                    })
+                  }
+                  className="rounded-full border border-bone/15 px-2 py-0.5 text-[9px] font-bold uppercase text-bone/45 hover:bg-bone/10"
+                >
+                  + mute window
+                </button>
+              </div>
+              <p className="text-[8px] leading-relaxed text-bone/25">
+                Mute windows hide captions while other text is on screen. Times
+                are project seconds.
+              </p>
+            </div>
+
 {/* Entrance animation + highlight */}
             <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
               <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">

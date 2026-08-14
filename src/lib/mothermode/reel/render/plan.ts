@@ -133,6 +133,7 @@ export interface RenderPlan {
   captionStyle: CaptionStyleDef;
   /** Position / size / rows, resolved from the same overrides. */
   captionLayout: CaptionLayout;
+  captionOverrides?: import('../captions').CaptionOverrides | null;
   /** Words that render in the active style even when idle. */
   powerWords: string[];
   /** Word-triggered media cues (image fly-ins), frame-resolved. */

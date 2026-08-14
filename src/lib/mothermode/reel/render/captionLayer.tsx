@@ -50,6 +50,7 @@
  * effect is stored per word or row, so a trim/split can never orphan one.
  */
 import React from 'react';
+import { isCaptionVisibleAt } from '../../captions';
 import {
   captionCssFor,
   captionRows,
@@ -753,6 +754,13 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
 }) => {
   const { words, captionStyle: def, captionLayout: layout, powerWords } = plan;
   if (!words.length) return null;
+  // Master off + mute ranges (project clock).
+  {
+    const sec = frame / Math.max(1, plan.fps);
+    const ov = (plan as { captionOverrides?: import('../../captions').CaptionOverrides })
+      .captionOverrides;
+    if (!isCaptionVisibleAt(sec, ov ?? null)) return null;
+  }
 
   const holdFrames = Math.round(plan.fps * CAPTION_HOLD_SEC);
 
@@ -763,6 +771,11 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   const css = captionCssFor(def);
   const rows = captionRows(words.length, activeIdx, layout.wordsPerRow, layout.rows);
   const defAnim = (def as { anim?: string }).anim ?? 'pop';
+  const stackMode =
+    ((plan as { captionOverrides?: { stackMode?: string } }).captionOverrides
+      ?.stackMode as string) ||
+    'page';
+  const isBuildStack = stackMode === 'build';
   const activeWord = words[activeIdx];
 
   // sizePx is authored against the 360px editor stage, so scale it to the real
@@ -998,6 +1011,11 @@ if (blockFx.includes('punchIn')) {
 
             // Compose the transform: entrance anim + optional mark scale.
             const style: React.CSSProperties = { ...base };
+            if (isBuildStack && isActive && !style.transform) {
+              style.transform = 'scale(1.35)';
+              style.transformOrigin = 'center center';
+              style.zIndex = 2;
+            }
             const isCascade =
               isActive && (wordAnim === 'cascade' || (mark?.stagger ?? 0) > 0);
             const useFill = isActive && def.karaokeFill && !isCascade;
