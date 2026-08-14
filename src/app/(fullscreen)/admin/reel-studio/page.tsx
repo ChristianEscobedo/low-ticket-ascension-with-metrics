@@ -5906,7 +5906,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     }
                     fxMode={fxMode}
                     onFxWord={(i) => toggleFxWord(i)}
-                    fxWords={
+                    fxWordIndexes={
                       fxScope === 'individual'
                         ? new Set(fxTarget != null ? [fxTarget] : [])
                         : fxWords
@@ -8083,7 +8083,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           })()}
                           selectedIndex={
                             fxWords && fxWords.size === 1
-                              ? [...fxWords][0]
+                              ? Array.from(fxWords)[0]
                               : null
                           }
                           onSelect={(index) => {
@@ -8294,7 +8294,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           })()}
                           selectedIndex={
                             fxWords && fxWords.size === 1
-                              ? [...fxWords][0]
+                              ? Array.from(fxWords)[0]
                               : null
                           }
                           onSelect={(index) => {

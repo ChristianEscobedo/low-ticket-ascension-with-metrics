@@ -831,6 +831,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
       ?.stackMode as string) ||
     'page';
   const isBuildStack = stackMode === 'build';
+  const cardWin = resolveCardWindow(words, activeIdx);
   const activeWord = words[activeIdx];
 
   // sizePx is authored against the 360px editor stage, so scale it to the real
