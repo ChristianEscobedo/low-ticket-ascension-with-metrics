@@ -176,6 +176,9 @@ export default function WordDragLayer({
   const lastScaleRef = useRef<{ index: number; scale: number } | null>(null);
   const [menu, setMenu] = useState<MenuState>(null);
   const [dragging, setDragging] = useState(false);
+  const [glyphBox, setGlyphBox] = useState<
+    Record<number, { left: number; top: number; width: number; height: number }>
+  >({});
 
   const clientToPct = useCallback((clientX: number, clientY: number) => {
     const el = frameRef.current;
@@ -213,17 +216,25 @@ export default function WordDragLayer({
     e.stopPropagation();
     setMenu(null);
     onSelect(index);
-    setDragging(true);
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const { x, y } = clientToPct(e.clientX, e.clientY);
-    lastRef.current = { index, x, y };
-    (() => { const _s = snapPct(x, y); onMove(index, _s.x, _s.y); })();
+    const originX = e.clientX;
+    const originY = e.clientY;
+    let armed = false;
+    lastRef.current = null;
 
     const onMoveEv = (ev: PointerEvent) => {
+      const dx = ev.clientX - originX;
+      const dy = ev.clientY - originY;
+      if (!armed) {
+        if (dx * dx + dy * dy < 25) return; // 5px — click ≠ move
+        armed = true;
+        setDragging(true);
+      }
       const p = clientToPct(ev.clientX, ev.clientY);
       lastRef.current = { index, x: p.x, y: p.y };
-      onMove(index, p.x, p.y);
+      const snapped = snapPct(p.x, p.y);
+      onMove(index, snapped.x, snapped.y);
     };
     const onUp = (ev: PointerEvent) => {
       el.releasePointerCapture(ev.pointerId);
@@ -232,8 +243,10 @@ export default function WordDragLayer({
       el.removeEventListener('pointercancel', onUp);
       setDragging(false);
       const last = lastRef.current;
-      if (last && last.index === index) {
-        onCommit(index, last.x, last.y);
+      // Only commit if the user actually dragged. A click must not invent x/y.
+      if (armed && last && last.index === index) {
+        const snapped = snapPct(last.x, last.y);
+        onCommit(index, snapped.x, snapped.y);
       }
       lastRef.current = null;
     };
@@ -300,6 +313,30 @@ export default function WordDragLayer({
   const selected = words.find((w) => w.index === selectedIndex) ?? null;
 
 
+  /* hug painted glyphs — never guess a box from captionLineLayout */
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const root = frame.parentElement;
+    if (!root) return;
+    const next: Record<number, { left: number; top: number; width: number; height: number }> = {};
+    const fr = frame.getBoundingClientRect();
+    for (const w of words) {
+      const el = root.querySelector(
+        `[data-caption-word="${w.index}"]`,
+      ) as HTMLElement | null;
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      next[w.index] = {
+        left: ((r.left - fr.left) / Math.max(1, fr.width)) * 100,
+        top: ((r.top - fr.top) / Math.max(1, fr.height)) * 100,
+        width: (r.width / Math.max(1, fr.width)) * 100,
+        height: (r.height / Math.max(1, fr.height)) * 100,
+      };
+    }
+    setGlyphBox(next);
+  }, [words, selectedIndex]);
+
   /* arrow-nudge */
   useEffect(() => {
     if (selectedIndex == null) return;
@@ -350,21 +387,30 @@ export default function WordDragLayer({
         const isSel = selectedIndex === w.index;
         const sc = w.scale && w.scale > 0 ? w.scale : 1;
         // Generous hit target — theme glyphs are large; a tight box is ungrabbable.
-        const baseW = Math.max(72, Math.min(220, 28 + w.label.length * 14));
-        const baseH = 52;
-        const boxW = baseW * sc;
-        const boxH = baseH * sc;
+        const g = glyphBox[w.index];
+        const boxStyle: React.CSSProperties = g
+          ? {
+              left: `${g.left}%`,
+              top: `${g.top}%`,
+              width: `${Math.max(g.width, 4)}%`,
+              height: `${Math.max(g.height, 3)}%`,
+              transform: 'none',
+            }
+          : {
+              left: `${w.xPct}%`,
+              bottom: `${w.yPct}%`,
+              width: Math.max(72, Math.min(220, 28 + w.label.length * 14)) * sc,
+              height: 52 * sc,
+              transform: 'translate(-50%, 50%)',
+            };
 
         return (
           <div
             key={w.index}
+            data-glyph-hit={g ? '1' : '0'}
             className="pointer-events-auto absolute"
             style={{
-              left: `${w.xPct}%`,
-              bottom: `${w.yPct}%`,
-              width: boxW,
-              height: boxH,
-              transform: 'translate(-50%, 50%)',
+              ...boxStyle,
               cursor: dragging && isSel ? 'grabbing' : 'grab',
               opacity: w.hidden ? 0.35 : 1,
             }}

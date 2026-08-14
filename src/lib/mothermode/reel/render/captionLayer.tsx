@@ -1184,7 +1184,7 @@ if (blockFx.includes('punchIn')) {
                 ? (mark?.stagger as number)
                 : CASCADE_STAGGER_SEC;
             return (
-              <span key={`fp-${idx}`} style={style}>
+              <span key={`fp-${idx}`} data-caption-word={idx} style={style}>
                 <CascadeWord
                   text={text}
                   base={{}}
@@ -1206,7 +1206,7 @@ if (blockFx.includes('punchIn')) {
               // keep free-place anchor
             };
             return (
-              <span key={`fp-${idx}`} style={fillStyle}>
+              <span key={`fp-${idx}`} data-caption-word={idx} style={fillStyle}>
                 {renderGradientWord(text, style, emoji, '')}
               </span>
             );
@@ -1220,7 +1220,7 @@ if (blockFx.includes('punchIn')) {
             // layer moves as one unit.
             return (
               <span
-                key={`fp-${idx}`}
+                key={`fp-${idx}`} data-caption-word={idx}
                 style={{
                   position: 'absolute',
                   left: `${x}%`,
@@ -1241,7 +1241,7 @@ if (blockFx.includes('punchIn')) {
           }
 
           return (
-            <span key={`fp-${idx}`} style={style}>
+            <span key={`fp-${idx}`} data-caption-word={idx} style={style}>
               {text}
               {emoji ? <span className="emoji-burst">{emoji}</span> : null}
             </span>
@@ -1368,7 +1368,7 @@ return (
               const staggerSec =
                 (mark?.stagger ?? 0) > 0 ? (mark?.stagger as number) : CASCADE_STAGGER_SEC;
               return (
-                <span key={`${idx}-${w.text}`} style={base}>
+                <span key={`${idx}-${w.text}`} data-caption-word={idx} style={base}>
                   <CascadeWord
                     text={text}
                     base={{}}
@@ -1403,7 +1403,7 @@ return (
               );
               applyWordMarkExtras(base, mark, frame, w.fromFrame, plan.fps, css.active.color as string);
               return (
-                <span key={`${idx}-${w.text}`} style={base}>
+                <span key={`${idx}-${w.text}`} data-caption-word={idx} style={base}>
                   <span style={{ color: css.word.color as string }}>{text}</span>
                   <span
                     style={{
@@ -1439,7 +1439,7 @@ return (
               const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
               if (isGradFill) {
                 return (
-                  <span key={`${idx}-${w.text}`} style={{ display: 'inline-block', position: 'relative' }}>
+                  <span key={`${idx}-${w.text}`} data-caption-word={idx} style={{ display: 'inline-block', position: 'relative' }}>
                     {renderGradientWord(text, style, emoji, tail)}
                   </span>
                 );
@@ -1447,7 +1447,7 @@ return (
             }
 
             return (
-              <span key={`${idx}-${w.text}`} style={style}>
+              <span key={`${idx}-${w.text}`} data-caption-word={idx} style={style}>
                 {def.highlightMode === 'boxGrow' && isActive ? (
                   <span
                     aria-hidden
