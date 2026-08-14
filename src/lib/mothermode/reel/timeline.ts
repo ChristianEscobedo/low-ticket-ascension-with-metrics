@@ -170,15 +170,20 @@ export function offsetAudio(
   return { ...audio, offsetSec: Math.round(off * 1000) / 1000 };
 }
 
+/** Local blob URLs are valid in the studio while a file is still uploading. */
+function isStudioSourceUrl(url: string | undefined | null): boolean {
+  return typeof url === 'string' && /^(https?:|blob:)/i.test(url);
+}
+
 /** Validation errors that block composing. Empty array = ready. */
 export function timelineErrors(project: Pick<ReelProject, 'clips' | 'audio'>): string[] {
   const errors: string[] = [];
   if (!project.clips.length) errors.push('Add at least one clip to the timeline.');
   for (const c of project.clips) {
-    if (!/^https?:\/\//i.test(c.url)) errors.push(`Clip "${c.name}" has no valid source URL.`);
+    if (!isStudioSourceUrl(c.url)) errors.push(`Clip "${c.name}" has no valid source URL.`);
     if (!(c.durationSec > 0)) errors.push(`Clip "${c.name}" is missing its runtime.`);
   }
-  if (project.audio && !/^https?:\/\//i.test(project.audio.url)) {
+  if (project.audio && !isStudioSourceUrl(project.audio.url)) {
     errors.push('The audio track has no valid source URL.');
   }
   if (project.audio && project.audio.offsetSec >= reelDurationSec(project.clips)) {
