@@ -250,7 +250,13 @@ export function SubtitlePanel({
                 ref={rowActive ? activeRowRef : undefined}
                 className={clsx(
                   'flex gap-2.5 rounded-lg px-2.5 py-2 transition-colors',
-                  rowActive ? 'bg-brass/[0.10] ring-1 ring-inset ring-brass/25' : 'hover:bg-bone/[0.04]',
+                  rowActive
+                    ? 'bg-brass/[0.10] ring-1 ring-inset ring-brass/25'
+                    : muted
+                      ? 'bg-rose-500/[0.04] opacity-70'
+                      : cardId
+                        ? 'bg-brass/[0.04]'
+                        : 'hover:bg-bone/[0.04]',
                 )}
               >
                 {/* timecode — click to seek */}
@@ -265,8 +271,54 @@ export function SubtitlePanel({
                   {tc(words[p.from].start)}
                 </button>
 
+                {/* mute + stack card */}
+                <div className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleMutePhrase(p.from, p.to);
+                    }}
+                    title={muted ? 'Show captions for this line' : 'Mute captions for this line'}
+                    className={clsx(
+                      'rounded p-0.5',
+                      muted
+                        ? 'text-rose-300 hover:bg-rose-400/15'
+                        : 'text-bone/30 hover:bg-bone/10 hover:text-bone/70',
+                    )}
+                  >
+                    {muted ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStackCard(p.from, p.to);
+                    }}
+                    title={
+                      cardId
+                        ? 'Remove stack card (back to normal karaoke)'
+                        : 'Make stack card — words build & hold as a phrase block'
+                    }
+                    className={clsx(
+                      'rounded p-0.5',
+                      cardId
+                        ? 'text-brass hover:bg-brass/15'
+                        : 'text-bone/30 hover:bg-bone/10 hover:text-bone/70',
+                    )}
+                  >
+                    <Layers className="h-3 w-3" />
+                  </button>
+                </div>
+
                 {/* the phrase — words as flowing text, active word highlighted inline */}
-                <p className="min-w-0 flex-1 text-[12px] leading-5 text-bone/80">
+                <p
+                  className={clsx(
+                    'min-w-0 flex-1 text-[12px] leading-5',
+                    muted ? 'text-bone/25 line-through decoration-bone/20' : 'text-bone/80',
+                    cardId && !muted && 'text-bone/90',
+                  )}
+                >
                   {words.slice(p.from, p.to).map((w, k) => {
                     const i = p.from + k;
                     const isActive = i === activeIdx;
@@ -335,6 +387,36 @@ export function SubtitlePanel({
                     );
                   })}
                 </p>
+                {cardId ? (
+                  <div className="flex shrink-0 flex-col gap-0.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setCardMode(p.from, p.to, 'build')}
+                      className={clsx(
+                        'rounded px-1 py-0.5 text-[8px] font-bold uppercase',
+                        cardMode === 'build'
+                          ? 'bg-brass text-ink'
+                          : 'border border-bone/15 text-bone/40 hover:bg-bone/10',
+                      )}
+                      title="Build & hold — words appear on speech and stay"
+                    >
+                      build
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardMode(p.from, p.to, 'page')}
+                      className={clsx(
+                        'rounded px-1 py-0.5 text-[8px] font-bold uppercase',
+                        cardMode === 'page'
+                          ? 'bg-brass text-ink'
+                          : 'border border-bone/15 text-bone/40 hover:bg-bone/10',
+                      )}
+                      title="Karaoke page — whole card visible, highlight walks"
+                    >
+                      page
+                    </button>
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -345,7 +427,7 @@ export function SubtitlePanel({
           ? 'fx mode: click words to pick them · amber-underlined words are picked'
           : cueMode
             ? 'cue mode: click a word to attach an image fly-in · underlined words have one'
-            : 'click a timecode to seek · click a word to edit it'}
+            : 'eye = mute line · layers = stack card · click timecode to seek · click word to edit'}
       </p>
     </div>
   );
