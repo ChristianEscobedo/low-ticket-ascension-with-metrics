@@ -763,7 +763,7 @@ function renderGradientWord(
 
 /** When the active word belongs to a stack card, return that card's word window. */
 function resolveCardWindow(
-  words: CaptionWord[],
+  words: readonly CaptionWord[],
   activeIdx: number,
 ): { from: number; to: number; mode: 'build' | 'page'; rows: number; wordsPerRow: number; anim?: string } | null {
   const m = words[activeIdx]?.mark?.card;
