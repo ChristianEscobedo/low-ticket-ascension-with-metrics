@@ -1000,50 +1000,41 @@ if (blockFx.includes('punchIn')) {
     (blockStyle as Record<string, unknown>).__pageStartFrame = pageStartFrame;
   }
 
-  
-  // Free-place stack card: every word with xPct/yPct is painted at absolute
-  // frame coords instead of flowing inside the caption box. This is the
-  // MILLIONAIRES composition mode — drag on the stage writes mark.xPct/yPct.
-  const freePlaceCard =
-    !!cardWin &&
-    words
-      .slice(cardWin.from, cardWin.to)
-      .some(
-        (w) =>
-          w.mark &&
-          typeof w.mark.xPct === 'number' &&
-          typeof w.mark.yPct === 'number',
-      );
-  if (freePlaceCard && cardWin) {
-    const visible = words
-      .slice(cardWin.from, cardWin.to)
-      .map((w, i) => ({ w, idx: cardWin.from + i }))
-      .filter(({ w, idx }) => {
-        if (w.mark?.hidden) return false;
-        // Edit mode: every free-placed word in the card is visible so you can
-        // drag/scale the full composition without scrubbing to each word.
-        if (freePlaceEdit) return true;
-        if (isBuildStack && frame < w.fromFrame) return false;
-        if (!isBuildStack) return true;
-        return frame >= w.fromFrame || idx <= activeIdx;
-      });
-    return (
+    // Free-place MIXED mode: only words that the user has actually moved
+  // (mark.xPct + mark.yPct) leave the caption line. Everything else stays in
+  // the normal karaoke block so Stack/FP never changes look until edited.
+  const freePlacedAbs = words
+    .map((w, idx) => ({ w, idx }))
+    .filter(
+      ({ w }) =>
+        !w.mark?.hidden &&
+        typeof w.mark?.xPct === 'number' &&
+        typeof w.mark?.yPct === 'number',
+    )
+    .filter(({ w, idx }) => {
+      if (freePlaceEdit) return true;
+      if (isBuildStack && frame < w.fromFrame) return false;
+      if (!isBuildStack) return true;
+      return frame >= w.fromFrame || idx <= activeIdx;
+    });
+
+  const absOverlay =
+    freePlacedAbs.length > 0 ? (
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          zIndex: 10,
+          zIndex: 11,
           pointerEvents: 'none',
           fontSize,
         }}
       >
-        {visible.map(({ w, idx }) => {
+        {freePlacedAbs.map(({ w, idx }) => {
           const isActive = idx === activeIdx;
           const power = isPowerWord(w.text, powerWords as string[]);
           const mark = w.mark;
-          const x = typeof mark?.xPct === 'number' ? mark.xPct : layout.xPct;
-          const y =
-            typeof mark?.yPct === 'number' ? mark.yPct : layout.positionPct;
+          const x = mark!.xPct as number;
+          const y = mark!.yPct as number;
           const base: React.CSSProperties = {
             ...(isActive || power ? css.active : css.word),
             position: 'absolute',
@@ -1054,7 +1045,6 @@ if (blockFx.includes('punchIn')) {
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
           };
-          // Theme gradient shift (same as normal path) when no mark color.
           if (mark?.color) {
             base.color = mark.color;
             delete (base as Record<string, unknown>)['backgroundImage'];
@@ -1073,33 +1063,12 @@ if (blockFx.includes('punchIn')) {
               (base as Record<string, unknown>)['backgroundSize'] = '200% 200%';
             }
           }
-
           const text = def.upper ? w.text.toUpperCase() : w.text;
-          const wordAnim = mark?.anim ?? defAnim;
-          // In Edit mode every word is shown; still run entrance for the active
-          // spoken word so Preview and Edit share the same look when scrubbing.
-          const wordEnterT =
-            isActive && !freePlaceEdit
-              ? entranceProgress(frame, w.fromFrame, plan.fps)
-              : isActive
-                ? entranceProgress(frame, w.fromFrame, plan.fps)
-                : 1;
-
           const style: React.CSSProperties = { ...base };
-          if (isActive && wordAnim && wordEnterT < 1) {
-            const entrance = entranceStyle(wordAnim as string, wordEnterT);
-            // Keep free-place anchor; compose entrance on top of translate.
-            const entT = (entrance.transform as string) || '';
-            const entRest = { ...entrance };
-            delete entRest.transform;
-            Object.assign(style, entRest);
-            style.transform = `translate(-50%, 50%)${entT ? ` ${entT}` : ''}`.trim();
-          }
           if (mark?.scale && mark.scale !== 1) {
-            style.transform = `${(style.transform as string) || 'translate(-50%, 50%)'} scale(${mark.scale})`.trim();
+            style.transform = `translate(-50%, 50%) scale(${mark.scale})`;
             style.transformOrigin = 'center center';
           }
-          // Full mark FX (glow / gradient / shine / pulse / font / ambient…)
           applyWordMarkExtras(
             style,
             mark,
@@ -1108,78 +1077,40 @@ if (blockFx.includes('punchIn')) {
             plan.fps,
             css.active.color as string,
           );
-
           const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
           if (isGradFill) {
             return (
-              <span key={idx} style={{ position: 'absolute', left: `${x}%`, bottom: `${y}%`, transform: 'translate(-50%, 50%)', display: 'inline-block', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+              <span
+                key={`fp-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: `${x}%`,
+                  bottom: `${y}%`,
+                  transform: 'translate(-50%, 50%)',
+                  display: 'inline-block',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                }}
+              >
                 {renderGradientWord(text, style, '', '')}
               </span>
             );
           }
-
           return (
-            <span key={idx} style={style}>
-              {mark?.fx === 'marker' ? (
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    inset: '-0.04em -0.14em',
-                    background: mark.fxColor ?? (css.active.color as string),
-                    opacity: Math.min(
-                      0.85,
-                      0.34 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1)),
-                    ),
-                    zIndex: -1,
-                    borderRadius: '0.14em',
-                    transformOrigin: 'left center',
-                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
-                  }}
-                />
-              ) : null}
+            <span key={`fp-${idx}`} style={style}>
               {text}
-              {mark?.fx === 'underline' ? (
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    left: '-0.04em',
-                    right: '-0.04em',
-                    bottom: '-0.10em',
-                    height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
-                    borderRadius: '0.06em',
-                    background: mark.fxColor ?? (css.active.color as string),
-                    boxShadow: `0 0 0.12em ${mark.fxColor ?? (css.active.color as string)}`,
-                    transformOrigin: 'left center',
-                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
-                  }}
-                />
-              ) : null}
-              {mark?.fx === 'strike' ? (
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    left: '-0.04em',
-                    right: '-0.04em',
-                    top: '52%',
-                    height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
-                    borderRadius: '0.06em',
-                    background: mark.fxColor ?? (css.active.color as string),
-                    transformOrigin: 'left center',
-                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
-                  }}
-                />
-              ) : null}
             </span>
           );
         })}
       </div>
-    );
-  }
+    ) : null;
+
+
 
 return (
+    <>
+      {absOverlay}
+
     <div
       style={{
         position: 'absolute',
@@ -1207,6 +1138,13 @@ return (
             const power = isPowerWord(w.text, powerWords as string[]);
             const mark = w.mark;
             if (mark?.hidden) {
+              return null;
+            }
+            // skip free-placed words (painted in absOverlay)
+            if (
+              typeof mark?.xPct === 'number' &&
+              typeof mark?.yPct === 'number'
+            ) {
               return null;
             }
 
@@ -1462,5 +1400,6 @@ return (
         </p>
       ))}
     </div>
+    </>
   );
 };

@@ -198,22 +198,16 @@ export function SubtitlePanel({
   function enableFreePlace(from: number, to: number) {
     const id = phraseCardId(words, from, to);
     if (!id) return;
-    const count = to - from;
-    const sample = words[from]?.mark?.card;
-    const wordsPerRow = sample?.wordsPerRow ?? Math.min(4, Math.max(1, count));
-    const rows = sample?.rows ?? Math.min(3, Math.max(1, Math.ceil(count / wordsPerRow)));
-    const layout = defaultStackLayout(count, { rows, wordsPerRow });
+    // Flag only — do NOT assign xPct/yPct. Words stay on the normal caption
+    // line until the user drags one (that drag writes coords for that word).
     const next = words.map((w, i) => {
       if (i < from || i >= to) return w;
       if (!w.mark?.card || w.mark.card.id !== id) return w;
-      const li = i - from;
-      const pos = layout[li] ?? { xPct: 50, yPct: 40 };
       return {
         ...w,
         mark: {
           ...w.mark,
-          xPct: pos.xPct,
-          yPct: pos.yPct,
+          card: { ...w.mark.card, freePlace: true },
         },
       };
     });
@@ -229,6 +223,11 @@ export function SubtitlePanel({
       const mark = { ...w.mark };
       delete mark.xPct;
       delete mark.yPct;
+      if (mark.card) {
+        const card = { ...mark.card };
+        delete (card as { freePlace?: boolean }).freePlace;
+        mark.card = card;
+      }
       return { ...w, mark };
     });
     onEdit(next);
@@ -362,8 +361,9 @@ export function SubtitlePanel({
                           .slice(p.from, p.to)
                           .some(
                             (w) =>
-                              typeof w.mark?.xPct === 'number' &&
-                              typeof w.mark?.yPct === 'number',
+                              w.mark?.card?.freePlace === true ||
+                              (typeof w.mark?.xPct === 'number' &&
+                                typeof w.mark?.yPct === 'number'),
                           );
                         if (hasFp) clearFreePlace(p.from, p.to);
                         else enableFreePlace(p.from, p.to);
@@ -373,11 +373,12 @@ export function SubtitlePanel({
                           .slice(p.from, p.to)
                           .some(
                             (w) =>
-                              typeof w.mark?.xPct === 'number' &&
-                              typeof w.mark?.yPct === 'number',
+                              w.mark?.card?.freePlace === true ||
+                              (typeof w.mark?.xPct === 'number' &&
+                                typeof w.mark?.yPct === 'number'),
                           )
-                          ? 'Exit free-place — back to normal caption layout'
-                          : 'Free place — drag words anywhere on the frame'
+                          ? 'Exit word edit — clear nudged positions'
+                          : 'Word edit — keep layout; drag a word to nudge it'
                       }
                       className={clsx(
                         'rounded p-0.5 text-[8px] font-bold leading-none',
@@ -385,8 +386,9 @@ export function SubtitlePanel({
                           .slice(p.from, p.to)
                           .some(
                             (w) =>
-                              typeof w.mark?.xPct === 'number' &&
-                              typeof w.mark?.yPct === 'number',
+                              w.mark?.card?.freePlace === true ||
+                              (typeof w.mark?.xPct === 'number' &&
+                                typeof w.mark?.yPct === 'number'),
                           )
                           ? 'bg-brass/20 text-brass'
                           : 'text-bone/30 hover:bg-bone/10 hover:text-bone/70',

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import type { ReelWord, ReelWordFx, ReelWordMark } from '@/lib/mothermode/reel/types';
-import { WORD_FONTS, WORD_FX } from '@/lib/mothermode/reel/types';
+import { WORD_FONTS, WORD_FX, captionLineLayout } from '@/lib/mothermode/reel/types';
 import { CAPTION_ANIMS, type CaptionAnim } from '@/lib/mothermode/reel/captions';
 
 export type WordPlace = {
@@ -645,8 +645,11 @@ function Chip({
 export function freePlaceWordsFrom(
   all: ReelWord[],
   playheadSec: number,
+  layout?: { xPct?: number; positionPct?: number; wordsPerRow?: number },
 ): WordPlace[] {
+  // Prefer the card under the playhead; else any freePlace-flagged card.
   let cardId: string | null = null;
+  let cardMeta: { wordsPerRow?: number; freePlace?: boolean } | null = null;
   for (let i = 0; i < all.length; i++) {
     const w = all[i];
     if (
@@ -655,32 +658,71 @@ export function freePlaceWordsFrom(
       playheadSec <= w.end + 0.8
     ) {
       cardId = w.mark.card.id;
+      cardMeta = w.mark.card;
       break;
     }
   }
-  const out: WordPlace[] = [];
-  for (let i = 0; i < all.length; i++) {
-    const w = all[i];
-    // Include hidden so Edit can unhide; still need x/y
-    if (typeof w.mark?.xPct !== 'number' || typeof w.mark?.yPct !== 'number') {
-      continue;
+  if (!cardId) {
+    for (let i = 0; i < all.length; i++) {
+      const w = all[i];
+      if (w.mark?.card?.freePlace || (typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number')) {
+        cardId = w.mark!.card!.id;
+        cardMeta = w.mark!.card!;
+        break;
+      }
     }
-    if (cardId && w.mark?.card?.id !== cardId) continue;
+  }
+  if (!cardId) return [];
+
+  // Collect card word indexes in order
+  const idxs: number[] = [];
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].mark?.card?.id === cardId) idxs.push(i);
+  }
+  if (!idxs.length) return [];
+
+  // Only show drag UI when freePlace is on OR some word already has coords
+  const editable =
+    cardMeta?.freePlace === true ||
+    idxs.some(
+      (i) =>
+        typeof all[i].mark?.xPct === 'number' &&
+        typeof all[i].mark?.yPct === 'number',
+    );
+  if (!editable) return [];
+
+  const estimates = captionLineLayout(idxs.length, {
+    wordsPerRow:
+      cardMeta?.wordsPerRow ??
+      layout?.wordsPerRow ??
+      Math.min(4, idxs.length),
+    baseXPct: layout?.xPct ?? 50,
+    baseYPct: layout?.positionPct ?? 12,
+  });
+
+  const out: WordPlace[] = [];
+  idxs.forEach((i, li) => {
+    const w = all[i];
+    const est = estimates[li] ?? { xPct: 50, yPct: 12 };
+    const xPct =
+      typeof w.mark?.xPct === 'number' ? w.mark.xPct : est.xPct;
+    const yPct =
+      typeof w.mark?.yPct === 'number' ? w.mark.yPct : est.yPct;
     out.push({
       index: i,
-      xPct: w.mark.xPct,
-      yPct: w.mark.yPct,
+      xPct,
+      yPct,
       label: w.word,
-      scale: w.mark.scale,
-      anim: w.mark.anim,
-      color: w.mark.color,
-      fx: w.mark.fx,
-      fxColor: w.mark.fxColor,
-      fxColor2: w.mark.fxColor2,
-      ambient: w.mark.ambient,
-      font: w.mark.font,
-      hidden: w.mark.hidden,
+      scale: w.mark?.scale,
+      anim: w.mark?.anim,
+      color: w.mark?.color,
+      fx: w.mark?.fx,
+      fxColor: w.mark?.fxColor,
+      fxColor2: w.mark?.fxColor2,
+      ambient: w.mark?.ambient,
+      font: w.mark?.font,
+      hidden: w.mark?.hidden,
     });
-  }
+  });
   return out;
 }

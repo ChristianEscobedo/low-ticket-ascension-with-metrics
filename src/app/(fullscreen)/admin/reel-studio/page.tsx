@@ -8054,8 +8054,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     {currentClip &&
                       (project.captions[currentClip.id] ?? []).some(
                         (w) =>
-                          typeof w.mark?.xPct === 'number' &&
-                          typeof w.mark?.yPct === 'number',
+                          w.mark?.card?.freePlace === true ||
+                          (typeof w.mark?.xPct === 'number' &&
+                            typeof w.mark?.yPct === 'number'),
                       ) && (
                         <div
                           data-stack-edit-toggle
@@ -8141,7 +8142,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                   ),
                                 ),
                             );
-                            return freePlaceWordsFrom(base, clipSec).map((w) => {
+                            return freePlaceWordsFrom(base, clipSec, {
+                              xPct: project.captionOverrides?.xPct ?? 50,
+                              positionPct: project.captionOverrides?.positionPct ?? 12,
+                              wordsPerRow: project.captionOverrides?.wordsPerRow,
+                            }).map((w) => {
                               const loc = wordPlaceLocal[w.index];
                               const sc = wordScaleLocal[w.index];
                               return {
@@ -8424,7 +8429,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                   ),
                                 ),
                             );
-                            return freePlaceWordsFrom(base, clipSec).map((w) => {
+                            return freePlaceWordsFrom(base, clipSec, {
+                              xPct: project.captionOverrides?.xPct ?? 50,
+                              positionPct: project.captionOverrides?.positionPct ?? 12,
+                              wordsPerRow: project.captionOverrides?.wordsPerRow,
+                            }).map((w) => {
                               const loc = wordPlaceLocal[w.index];
                               const sc = wordScaleLocal[w.index];
                               return {

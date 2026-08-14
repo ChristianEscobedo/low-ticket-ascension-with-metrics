@@ -124,6 +124,12 @@ export interface ReelWordMark {
     wordsPerRow?: number;
     /** Default entrance for words in this card (overridden by mark.anim). */
     anim?: string;
+    /**
+     * Opt-in word edit: drag/style individual words. Does NOT scatter —
+     * words keep normal caption layout until the user moves one (then
+     * that word alone gets xPct/yPct).
+     */
+    freePlace?: boolean;
   };
   /** Free-place frame position (centre x, bottom y). */
   xPct?: number;
@@ -491,7 +497,7 @@ export function wordMarkSummary(mark: ReelWordMark | undefined): string {
 
 /**
  * Seed free-place positions for a stack-card phrase.
- * Spreads words into `rows` × words-per-row around the frame centre,
+ * Spreads words into `rows` x words-per-row around the frame centre,
  * matching the caption box's bottom-origin y axis.
  */
 export function defaultStackLayout(
@@ -507,7 +513,7 @@ export function defaultStackLayout(
   );
   const baseX = opts?.baseXPct ?? 50;
   const baseY = opts?.baseYPct ?? 42;
-  const rowGap = 9; // % of frame between rows (bottom → top)
+  const rowGap = 9; // % of frame between rows (bottom -> top)
   const colGap = 14; // % between word centres
   const out: { xPct: number; yPct: number }[] = [];
   for (let i = 0; i < n; i += 1) {
@@ -524,6 +530,46 @@ export function defaultStackLayout(
   return out;
 }
 
+/**
+ * Approximate on-frame positions for words as they sit in the normal caption
+ * block (centred row(s) at layout.xPct / layout.positionPct). Used so free-place
+ * edit can put hit targets ON the existing glyphs without scattering them.
+ */
+export function captionLineLayout(
+  count: number,
+  opts?: {
+    wordsPerRow?: number;
+    baseXPct?: number;
+    baseYPct?: number;
+    /** Rough centre-to-centre gap as % of frame width. */
+    colGapPct?: number;
+    rowGapPct?: number;
+  },
+): { xPct: number; yPct: number }[] {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return [];
+  const perRow = Math.max(1, Math.min(8, Math.round(opts?.wordsPerRow ?? Math.min(4, n))));
+  const baseX = opts?.baseXPct ?? 50;
+  const baseY = opts?.baseYPct ?? 12;
+  const colGap = opts?.colGapPct ?? 11;
+  const rowGap = opts?.rowGapPct ?? 7;
+  const out: { xPct: number; yPct: number }[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    // Last row may be shorter — centre that row too.
+    const rowStart = row * perRow;
+    const rowCount = Math.min(perRow, n - rowStart);
+    const rowWidth = (rowCount - 1) * colGap;
+    const x0 = baseX - rowWidth / 2;
+    out.push({
+      xPct: Math.max(4, Math.min(96, x0 + col * colGap)),
+      // Rows stack upward from the caption baseline (y is from bottom).
+      yPct: Math.max(4, Math.min(96, baseY + row * rowGap)),
+    });
+  }
+  return out;
+}
 
 /** Validate one word mark. Unknown anims DROP the key (the word then inherits
  *  the preset) — never a silent substitution onto 'pop'. Same rule for fx. */
