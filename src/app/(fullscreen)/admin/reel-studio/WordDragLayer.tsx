@@ -423,8 +423,7 @@ export default function WordDragLayer({
                 'absolute inset-0 rounded-sm',
                 isSel
                   ? 'ring-2 ring-brass ring-offset-0 bg-brass/10'
-                  : 'ring-1 ring-white/25 hover:ring-brass/50 hover:bg-white/[0.06]',
-                w.fx === 'gradient' && 'ring-1 ring-fuchsia-400/40',
+                  : 'hover:bg-white/[0.04]',
               )}
             />
             {isSel && (

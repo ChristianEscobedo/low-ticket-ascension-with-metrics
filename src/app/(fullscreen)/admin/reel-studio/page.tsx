@@ -8139,59 +8139,6 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
                   >
-                    {stackEditMode && currentClip && (project.captions[currentClip.id] ?? []).length > 0 && (
-                      <div
-                        data-word-rail
-                        className="absolute right-1 top-1 bottom-1 z-[28] w-[7.25rem] overflow-y-auto rounded-md border border-bone/15 bg-ink/85 p-1 backdrop-blur-sm"
-                      >
-                        <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-wide text-bone/40">
-                          Words
-                        </p>
-                        {(project.captions[currentClip.id] ?? []).map((w, i) => {
-                          const clipSec = Math.max(
-                            0,
-                            playheadSec -
-                              timelineStartOf(
-                                project.clips,
-                                Math.max(
-                                  0,
-                                  project.clips.findIndex((c) => c.id === currentClip.id),
-                                ),
-                              ),
-                          );
-                          const live = clipSec >= w.start - 0.04 && clipSec <= w.end + 0.12;
-                          const picked = fxTarget === i || (fxWords && fxWords.has(i));
-                          return (
-                            <button
-                              key={`wr-${i}`}
-                              type="button"
-                              onClick={() => {
-                                setFxMode(true);
-                                setFxTarget(i);
-                                setFxWords(new Set([i]));
-                                const start = timelineStartOf(
-                                  project.clips,
-                                  Math.max(
-                                    0,
-                                    project.clips.findIndex((c) => c.id === currentClip.id),
-                                  ),
-                                );
-                                seekTimeline(start + w.start + 0.01);
-                              }}
-                              className={
-                                picked
-                                  ? 'mb-0.5 block w-full truncate rounded bg-brass px-1.5 py-0.5 text-left text-[10px] font-semibold text-ink'
-                                  : live
-                                    ? 'mb-0.5 block w-full truncate rounded bg-white/15 px-1.5 py-0.5 text-left text-[10px] text-white'
-                                    : 'mb-0.5 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] text-bone/50 hover:bg-white/5 hover:text-bone/80'
-                              }
-                            >
-                              {w.word}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
                     {(!project || project.clips.length === 0) && (
                       <div
                         data-empty-start
@@ -8255,7 +8202,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           <button
                             type="button"
                             className={
-                              stackEditMode && !fxMode
+                              stackEditMode
                                 ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
                                 : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
                             }
@@ -8263,24 +8210,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               setStackEditMode(true);
                               setFxMode(false);
                             }}
-                            title="Place: freeze the clock and drag words"
+                            title="Edit: show every word in this section — click to move / style"
                           >
-                            Place
-                          </button>
-                          <button
-                            type="button"
-                            className={
-                              stackEditMode && fxMode
-                                ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
-                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
-                            }
-                            onClick={() => {
-                              setStackEditMode(true);
-                              setFxMode(true);
-                            }}
-                            title="Style: place + inspector for the selected word"
-                          >
-                            Style
+                            Edit
                           </button>
                           <button
                             type="button"
@@ -8293,9 +8225,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               setStackEditMode(false);
                               setFxMode(false);
                             }}
-                            title="Play: karaoke timing, clock owns the playhead"
+                            title="Preview this section with karaoke timing"
                           >
-                            Play
+                            Preview
                           </button>
                         </div>
                       )}
