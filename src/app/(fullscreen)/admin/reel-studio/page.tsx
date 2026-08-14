@@ -225,6 +225,50 @@ function probeFileDuration(file: File): Promise<number> {
   return probeDuration(blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
 }
 
+function putWithProgress(
+  url: string,
+  file: File,
+  headers: Record<string, string>,
+  onPct: (n: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        onPct(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload rejected (${xhr.status}): ${String(xhr.responseText || '').slice(0, 160)}`));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onabort = () => reject(new Error('Upload aborted'));
+    xhr.send(file);
+  });
+}
+
+function waitUntilPlayable(url: string, timeoutMs = 20000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    const done = (ok: boolean) => {
+      window.clearTimeout(timer);
+      v.onloadedmetadata = null;
+      v.onerror = null;
+      v.removeAttribute('src');
+      v.load();
+      resolve(ok);
+    };
+    const timer = window.setTimeout(() => done(false), timeoutMs);
+    v.onloadedmetadata = () => done(Number.isFinite(v.duration) && v.duration > 0);
+    v.onerror = () => done(false);
+    v.src = url;
+  });
+}
+
 /** The REAL platform logos as inline SVGs — brand color when selected, grayscale idle. */
 function BrandLogo({ id, active }: { id: string; active: boolean }) {
   const color: Record<string, string> = {
@@ -2914,6 +2958,12 @@ export default function ReelStudioPage() {
   const [project, setProject] = useState<ReelProject | null>(null);
   const [tab, setTab] = useState<Tab>('clips');
   const [busy, setBusy] = useState(false);
+  const [uploadJob, setUploadJob] = useState<{
+    name: string;
+    pct: number;
+    phase: string;
+    blobUrl: string | null;
+  } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
@@ -3473,9 +3523,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   async function addUpload(file: File, kind: 'video' | 'audio') {
     setBusy(true);
     setError(null);
+    const localBlob = kind === 'video' ? URL.createObjectURL(file) : null;
+    setUploadJob({
+      name: file.name,
+      pct: 2,
+      phase: 'Reading file…',
+      blobUrl: localBlob,
+    });
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || (kind === 'audio' ? 'mp3' : 'mp4');
-      const localDur = kind === 'video' ? await probeFileDuration(file) : 0;
+      const localDur = kind === 'video' ? await probeDuration(localBlob!) : 0;
+      setUploadJob((j) => (j ? { ...j, pct: 8, phase: 'Requesting upload slot…' } : j));
       const mint = await fetch(UPLOAD_API, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -3483,45 +3541,56 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       });
       const mintJson = await mint.json();
       if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+
+      // Keep the canvas alive: drop the clip in NOW from the local file.
+      let clipId: string | null = null;
+      if (kind === 'video') {
+        const clip = {
+          id: makeClipId(),
+          name: file.name.slice(0, 60),
+          url: localBlob!,
+          durationSec: localDur || 5,
+          trimEndSec: 0,
+        };
+        clipId = clip.id;
+        insertClipAtPlayhead(clip);
+        setSelectedClip(clip.id);
+        setTab('clips');
+      }
+
       const putHeaders: Record<string, string> = {
         'content-type': file.type || 'application/octet-stream',
         'x-upsert': 'false',
       };
       if (mintJson.token) putHeaders.authorization = `Bearer ${mintJson.token}`;
-      const put = await fetch(mintJson.signedUrl, {
-        method: 'PUT',
-        headers: putHeaders,
-        body: file,
+      setUploadJob((j) => (j ? { ...j, pct: 10, phase: `Uploading ${file.name}…` } : j));
+      await putWithProgress(mintJson.signedUrl, file, putHeaders, (pct) => {
+        setUploadJob((j) => (j ? { ...j, pct: 10 + Math.round(pct * 0.8), phase: `Uploading ${pct}%` } : j));
       });
-      if (!put.ok) {
-        const text = await put.text().catch(() => '');
-        throw new Error(
-          `Upload rejected (${put.status})${text ? `: ${text.slice(0, 160)}` : ''} — if this mentions size, apply the bucket-limit migration.`,
-        );
-      }
+
       const url = String(mintJson.publicUrl || '');
       if (!url) throw new Error('Upload returned no public URL');
-      if (kind === 'video') {
-        const remoteDur = await probeDuration(url);
-        const dur = localDur || remoteDur || 5;
-        const clip = {
-          id: makeClipId(),
-          name: file.name.slice(0, 60),
-          url,
-          durationSec: dur,
-          trimEndSec: 0,
-        };
-        insertClipAtPlayhead(clip);
-        setSelectedClip(clip.id);
-        setTab('clips');
+      setUploadJob((j) => (j ? { ...j, pct: 92, phase: 'Confirming the file is playable…' } : j));
+
+      if (kind === 'video' && clipId) {
+        const ready = await waitUntilPlayable(url);
+        patchClip(clipId, { url: ready ? url : localBlob!, durationSec: localDur || 5 });
+        if (!ready) {
+          setNote(`Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s). Storage is still catching up — preview is using the local file.`);
+        } else {
+          setNote(`Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s).`);
+          if (localBlob) URL.revokeObjectURL(localBlob);
+        }
       } else {
         patch({ audio: { url, name: file.name.slice(0, 60), offsetSec: 0, durationSec: null } });
         setTab('clips');
+        setNote(`Uploaded ${file.name} (audio).`);
       }
-      setNote(`Uploaded ${file.name} (${kind === 'video' ? (localDur || 0).toFixed(1) + 's' : 'audio'}).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
+      if (localBlob) URL.revokeObjectURL(localBlob);
     } finally {
+      setUploadJob(null);
       setBusy(false);
     }
   }
@@ -8194,15 +8263,38 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         </label>
                       </div>
                     )}
-                    <RemotionPreview
-                      project={projectWithWordPlace ?? project}
-                      aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
-                      // The timeline drives the frame. Without this the Player ran
-                      // its own clock and the ruler moved nothing: captions (React
-                      // state) tracked the playhead while the video sat still.
-                      playheadSec={playheadSec}
-                      freePlaceEdit={stackEditMode}
-                    />
+                    {uploadJob?.blobUrl ? (
+                      <video
+                        src={uploadJob.blobUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="absolute inset-0 h-full w-full object-contain bg-black"
+                      />
+                    ) : (
+                      <RemotionPreview
+                        project={projectWithWordPlace ?? project}
+                        aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
+                        playheadSec={playheadSec}
+                        freePlaceEdit={stackEditMode}
+                      />
+                    )}
+                    {uploadJob && (
+                      <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
+                        <p className="mb-1.5 text-[11px] font-semibold text-bone">
+                          {uploadJob.phase}
+                        </p>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
+                          <div
+                            className="h-full rounded-full bg-brass transition-[width] duration-150"
+                            style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[10px] text-bone/50">
+                          {uploadJob.name} · {uploadJob.pct}%
+                        </p>
+                      </div>
+                    )}
 
                     {/* Free-place stack Edit/Preview — only when card has placed words */}
                     {currentClip &&
@@ -8781,6 +8873,26 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   className="relative flex shrink-0 flex-col items-center justify-center gap-4 rounded-xl bg-black px-6 py-16 text-center shadow-2xl ring-1 ring-bone/10"
                   style={{ width: stageBox.w || 360, minHeight: stageBox.h || 480 }}
                 >
+                  {uploadJob?.blobUrl && (
+                    <video
+                      src={uploadJob.blobUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 h-full w-full object-contain opacity-40"
+                    />
+                  )}
+                  {uploadJob && (
+                    <div className="absolute inset-x-6 bottom-6 z-10">
+                      <p className="mb-1.5 text-[11px] font-semibold text-bone">{uploadJob.phase}</p>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
+                        <div
+                          className="h-full rounded-full bg-brass"
+                          style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <p className="text-sm font-semibold text-bone">Start a reel</p>
                   <p className="max-w-[240px] text-[11px] text-bone/50">
                     Upload a video or pull one from the media library. Captions can transcribe automatically.
