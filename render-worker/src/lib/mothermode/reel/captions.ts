@@ -81,6 +81,7 @@ export type CaptionBlockFx = 'ghostFade' | 'float' | 'wiggle' | 'punchIn' | 'let
 
 /** The CSS keyframe for a word-enter animation (injected once into the page). */
 export function captionAnimKeyframes(anim: CaptionAnim): string {
+  if (!anim) return '';
   switch (anim) {
     case 'pop':
       return `@keyframes cap-pop{0%{transform:scale(0.82);opacity:.3}100%{transform:scale(1);opacity:1}}`;
@@ -148,6 +149,7 @@ export function captionAnimKeyframes(anim: CaptionAnim): string {
 
 /** The animation shorthand for a word-enter animation (duration + easing). */
 export function captionAnimCss(anim: CaptionAnim): string {
+  if (!anim) return '';
   switch (anim) {
     case 'pop':
       return 'cap-pop 190ms cubic-bezier(0.2,0.9,0.3,1.3)';

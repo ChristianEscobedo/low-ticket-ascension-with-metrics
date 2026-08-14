@@ -185,6 +185,12 @@ describe('R17 caption preset gallery (structured model)', () => {
 describe('R24 modern caption tier (anims, highlights, spacing, power words)', () => {
   it('every CaptionAnim has BOTH keyframes and an animation shorthand (≤ 220ms)', () => {
     for (const anim of CAPTION_ANIMS) {
+      // '' / none = no entrance — no keyframes required.
+      if (!anim) {
+        expect(captionAnimKeyframes(anim)).toBe('');
+        expect(captionAnimCss(anim)).toBe('');
+        continue;
+      }
       const kf = captionAnimKeyframes(anim);
       const css = captionAnimCss(anim);
       expect(kf, `${anim} keyframes`).toContain('@keyframes');
