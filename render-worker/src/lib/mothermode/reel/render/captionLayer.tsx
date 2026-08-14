@@ -99,6 +99,16 @@ export const CASCADE_STAGGER_SEC = 0.035;
  * but this mirror keeps the layer free of the import either way.)
  */
 export interface CaptionWordMark {
+  /** Hide this word from paint (phrase mute). */
+  hidden?: boolean;
+  /** Phrase stack card (see ReelWordMark.card). */
+  card?: {
+    id: string;
+    mode: 'build' | 'page';
+    rows?: number;
+    wordsPerRow?: number;
+    anim?: string;
+  };
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
@@ -748,6 +758,48 @@ function renderGradientWord(
   );
 }
 
+/** When the active word belongs to a stack card, return that card's word window. */
+function resolveCardWindow(
+  words: CaptionWord[],
+  activeIdx: number,
+): { from: number; to: number; mode: 'build' | 'page'; rows: number; wordsPerRow: number; anim?: string } | null {
+  const m = words[activeIdx]?.mark?.card;
+  if (!m?.id) return null;
+  let from = activeIdx;
+  let to = activeIdx + 1;
+  while (from > 0 && words[from - 1]?.mark?.card?.id === m.id) from -= 1;
+  while (to < words.length && words[to]?.mark?.card?.id === m.id) to += 1;
+  return {
+    from,
+    to,
+    mode: m.mode === 'page' ? 'page' : 'build',
+    rows: Math.max(1, Math.min(4, Math.round(m.rows ?? 3))),
+    wordsPerRow: Math.max(1, Math.min(8, Math.round(m.wordsPerRow ?? 3))),
+    anim: m.anim,
+  };
+}
+
+function cardRows(
+  cardFrom: number,
+  cardTo: number,
+  activeIdx: number,
+  wordsPerRow: number,
+  rows: number,
+): { from: number; to: number }[] {
+  const perRow = Math.max(1, Math.round(wordsPerRow));
+  const rowCount = Math.max(1, Math.round(rows));
+  const local = Math.max(0, activeIdx - cardFrom);
+  const pageSize = perRow * rowCount;
+  const pageFrom = cardFrom + Math.floor(local / pageSize) * pageSize;
+  const out: { from: number; to: number }[] = [];
+  for (let r = 0; r < rowCount; r += 1) {
+    const from = pageFrom + r * perRow;
+    if (from >= cardTo) break;
+    out.push({ from, to: Math.min(cardTo, from + perRow) });
+  }
+  return out.length ? out : [{ from: cardFrom, to: cardTo }];
+}
+
 export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number }> = ({
   plan,
   frame,
@@ -970,6 +1022,9 @@ if (blockFx.includes('punchIn')) {
             const isActive = idx === activeIdx;
             const power = isPowerWord(w.text, powerWords as string[]);
             const mark = w.mark;
+            if (mark?.hidden) {
+              return null;
+            }
 
             // Base style: active look for the spoken/power word, idle look
             // otherwise. A marked word carries its color even when idle.

@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { AlignLeft, Check, Loader2, Mic, X } from 'lucide-react';
+import { AlignLeft, Check, Eye, EyeOff, Layers, Loader2, Mic, X } from 'lucide-react';
 import { wordMarkSummary, type ReelWord } from '@/lib/mothermode/reel/types';
 
 function tc(s: number): string {
@@ -60,6 +60,26 @@ function activeIndexAt(words: ReelWord[], tSec: number): number {
   }
   return idx;
 }
+
+function phraseMuted(words: ReelWord[], from: number, to: number): boolean {
+  let n = 0;
+  for (let i = from; i < to; i += 1) if (words[i]?.mark?.hidden) n += 1;
+  return n > 0 && n >= to - from;
+}
+
+function phraseCardId(words: ReelWord[], from: number, to: number): string | null {
+  const id = words[from]?.mark?.card?.id;
+  if (!id) return null;
+  for (let i = from; i < to; i += 1) {
+    if (words[i]?.mark?.card?.id !== id) return null;
+  }
+  return id;
+}
+
+function newCardId(): string {
+  return `card_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
 
 export function SubtitlePanel({
   words,
@@ -116,6 +136,77 @@ export function SubtitlePanel({
     onEdit(next);
     setEditing(null);
   }
+
+  function toggleMutePhrase(from: number, to: number) {
+    const muted = phraseMuted(words, from, to);
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      const mark = { ...(w.mark ?? {}) };
+      if (muted) delete mark.hidden;
+      else mark.hidden = true;
+      const empty = Object.keys(mark).length === 0;
+      return empty ? { word: w.word, start: w.start, end: w.end } : { ...w, mark };
+    });
+    onEdit(next);
+  }
+
+  function toggleStackCard(from: number, to: number) {
+    const existing = phraseCardId(words, from, to);
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      const mark = { ...(w.mark ?? {}) };
+      if (existing) {
+        delete mark.card;
+      } else {
+        // Keep a stable id across the phrase so the layer groups them.
+        mark.card = mark.card?.id
+          ? mark.card
+          : {
+              id: '', // filled below
+              mode: 'build',
+              rows: 3,
+              wordsPerRow: Math.min(4, Math.max(1, to - from)),
+            };
+      }
+      const empty = Object.keys(mark).length === 0;
+      return empty ? { word: w.word, start: w.start, end: w.end } : { ...w, mark };
+    });
+    if (!existing) {
+      const id = newCardId();
+      for (let i = from; i < to; i += 1) {
+        if (next[i].mark) {
+          next[i] = {
+            ...next[i],
+            mark: {
+              ...next[i].mark!,
+              card: {
+                id,
+                mode: 'build',
+                rows: 3,
+                wordsPerRow: Math.min(4, Math.max(1, to - from)),
+              },
+            },
+          };
+        }
+      }
+    }
+    onEdit(next);
+  }
+
+  function setCardMode(from: number, to: number, mode: 'build' | 'page') {
+    const id = phraseCardId(words, from, to);
+    if (!id) return;
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      if (!w.mark?.card || w.mark.card.id !== id) return w;
+      return {
+        ...w,
+        mark: { ...w.mark, card: { ...w.mark.card, mode } },
+      };
+    });
+    onEdit(next);
+  }
+
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-bone/10 bg-ink/40">

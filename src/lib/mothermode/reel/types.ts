@@ -107,6 +107,24 @@ export const WORD_FONTS = [
 ] as const;
 
 export interface ReelWordMark {
+  /**
+   * Hide this word from the caption layer (phrase mute). Timing stays so
+   * the transcript/editor still shows it dimmed.
+   */
+  hidden?: boolean;
+  /**
+   * Phrase stack card membership. Contiguous words sharing the same card.id
+   * render as one stacked page (build&hold or karaoke) with optional local
+   * rows/wordsPerRow/anim — the MILLIONAIRES-style phrase block.
+   */
+  card?: {
+    id: string;
+    mode: 'build' | 'page';
+    rows?: number;
+    wordsPerRow?: number;
+    /** Default entrance for words in this card (overridden by mark.anim). */
+    anim?: string;
+  };
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
@@ -451,6 +469,8 @@ function normalizeCueSfx(raw: unknown): { url: string; volume?: number } | undef
 export function wordMarkSummary(mark: ReelWordMark | undefined): string {
   if (!mark) return '';
   const parts: string[] = [];
+  if (mark.hidden) parts.push('muted');
+  if (mark.card) parts.push(`card ${mark.card.mode}`);
   if (mark.fx) parts.push(mark.fx);
   if (mark.anim) parts.push(`anim ${mark.anim}`);
   if (mark.color) parts.push(mark.color);
