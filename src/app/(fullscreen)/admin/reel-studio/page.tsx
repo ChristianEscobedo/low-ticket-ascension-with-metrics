@@ -654,11 +654,13 @@ function TimeRuler({
   clips,
   zoom,
   onScrub,
+  wordMarks = [],
 }: {
   totalSec: number;
   clips: ReelClip[];
   zoom: number;
   onScrub: (timelineSec: number) => void;
+  wordMarks?: { t: number; label: string }[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const base = totalSec <= 45 ? 5 : totalSec <= 120 ? 10 : totalSec <= 300 ? 30 : 60;
@@ -701,6 +703,15 @@ function TimeRuler({
         >
           {fmtSec(t)}
         </div>
+      ))}
+      {wordMarks.slice(0, 400).map((w, i) => (
+        <div
+          key={`wm-${i}-${w.t}`}
+          data-word-tick
+          title={w.label}
+          className="pointer-events-none absolute bottom-0 h-2 w-px bg-brass/50"
+          style={{ left: `${(w.t / Math.max(totalSec, 0.001)) * 100}%` }}
+        />
       ))}
       {/* clip-boundary notches: which scene owns each stretch of the ruler */}
       {clips.map((c, i) => (
@@ -5261,10 +5272,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         setHelpOpen((v) => !v);
         return;
       }
-      if (e.code === 'Space') {
-
+      if (e.code === 'Space' || e.key === 'k' || e.key === 'K') {
         e.preventDefault();
         togglePlay();
+      } else if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        stopClock();
+        seekTimeline(clockRef.current.t - (e.shiftKey ? 5 : 1));
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        stopClock();
+        seekTimeline(clockRef.current.t + (e.shiftKey ? 5 : 1));
       } else if (e.key === 's' || e.key === 'S') {
         splitAtPlayhead();
       } else if (e.key === 'c' || e.key === 'C') {
@@ -5276,12 +5294,15 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         e.preventDefault();
         stopClock();
         seekTimeline(clockRef.current.t + (e.key === ',' ? -1 : 1) / 30);
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-
+      } else if (
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        !stackEditMode
+      ) {
+        // In Place, WordDragLayer owns arrows as a 0.5% nudge.
         e.preventDefault();
         const step = (e.shiftKey ? 5 : 1) * (e.key === 'ArrowLeft' ? -1 : 1);
         seekTimeline(clockRef.current.t + step);
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClip && project) {
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedClip && project && !stackEditMode) {
 
         patch({ clips: project.clips.filter((c) => c.id !== selectedClip) });
         setSelectedClip(null);
@@ -5290,7 +5311,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, selectedClip, total]);
+  }, [project, selectedClip, total, stackEditMode]);
 
 
   return (
@@ -8118,6 +8139,59 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
                   >
+                    {stackEditMode && currentClip && (project.captions[currentClip.id] ?? []).length > 0 && (
+                      <div
+                        data-word-rail
+                        className="absolute right-1 top-1 bottom-1 z-[28] w-[7.25rem] overflow-y-auto rounded-md border border-bone/15 bg-ink/85 p-1 backdrop-blur-sm"
+                      >
+                        <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-wide text-bone/40">
+                          Words
+                        </p>
+                        {(project.captions[currentClip.id] ?? []).map((w, i) => {
+                          const clipSec = Math.max(
+                            0,
+                            playheadSec -
+                              timelineStartOf(
+                                project.clips,
+                                Math.max(
+                                  0,
+                                  project.clips.findIndex((c) => c.id === currentClip.id),
+                                ),
+                              ),
+                          );
+                          const live = clipSec >= w.start - 0.04 && clipSec <= w.end + 0.12;
+                          const picked = fxTarget === i || (fxWords && fxWords.has(i));
+                          return (
+                            <button
+                              key={`wr-${i}`}
+                              type="button"
+                              onClick={() => {
+                                setFxMode(true);
+                                setFxTarget(i);
+                                setFxWords(new Set([i]));
+                                const start = timelineStartOf(
+                                  project.clips,
+                                  Math.max(
+                                    0,
+                                    project.clips.findIndex((c) => c.id === currentClip.id),
+                                  ),
+                                );
+                                seekTimeline(start + w.start + 0.01);
+                              }}
+                              className={
+                                picked
+                                  ? 'mb-0.5 block w-full truncate rounded bg-brass px-1.5 py-0.5 text-left text-[10px] font-semibold text-ink'
+                                  : live
+                                    ? 'mb-0.5 block w-full truncate rounded bg-white/15 px-1.5 py-0.5 text-left text-[10px] text-white'
+                                    : 'mb-0.5 block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] text-bone/50 hover:bg-white/5 hover:text-bone/80'
+                              }
+                            >
+                              {w.word}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {(!project || project.clips.length === 0) && (
                       <div
                         data-empty-start
@@ -8181,14 +8255,32 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           <button
                             type="button"
                             className={
-                              stackEditMode
+                              stackEditMode && !fxMode
                                 ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
                                 : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
                             }
-                            onClick={() => setStackEditMode(true)}
-                            title="Show every word in the stack card for drag/scale"
+                            onClick={() => {
+                              setStackEditMode(true);
+                              setFxMode(false);
+                            }}
+                            title="Place: freeze the clock and drag words"
                           >
-                            Edit
+                            Place
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              stackEditMode && fxMode
+                                ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
+                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
+                            }
+                            onClick={() => {
+                              setStackEditMode(true);
+                              setFxMode(true);
+                            }}
+                            title="Style: place + inspector for the selected word"
+                          >
+                            Style
                           </button>
                           <button
                             type="button"
@@ -8197,10 +8289,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                 ? 'rounded-full bg-white/15 px-2.5 py-1 font-semibold text-white'
                                 : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
                             }
-                            onClick={() => setStackEditMode(false)}
-                            title="Preview karaoke/build timing"
+                            onClick={() => {
+                              setStackEditMode(false);
+                              setFxMode(false);
+                            }}
+                            title="Play: karaoke timing, clock owns the playhead"
                           >
-                            Preview
+                            Play
                           </button>
                         </div>
                       )}
@@ -8295,7 +8390,21 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           }
                           onSelect={(index) => {
                             setFxMode(true);
+                            setFxTarget(index);
                             setFxWords(new Set([index]));
+                            if (currentClip && project) {
+                              const w = (project.captions[currentClip.id] ?? [])[index];
+                              if (w) {
+                                const start = timelineStartOf(
+                                  project.clips,
+                                  Math.max(
+                                    0,
+                                    project.clips.findIndex((c) => c.id === currentClip.id),
+                                  ),
+                                );
+                                seekTimeline(start + w.start + 0.01);
+                              }
+                            }
                           }}
                           onMove={(index, xPct, yPct) => {
                             setWordPlaceLocal((prev) => ({
@@ -8898,7 +9007,27 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     className="relative"
                     style={{ width: Math.max(total * pxPerSec, 1) }}
                   >
-                    <TimeRuler totalSec={total} clips={project.clips} zoom={pxPerSec / 36} onScrub={seekTimeline} />
+                    <TimeRuler
+                      totalSec={total}
+                      clips={project.clips}
+                      zoom={pxPerSec / 36}
+                      onScrub={seekTimeline}
+                      wordMarks={
+                        currentClip
+                          ? (project.captions[currentClip.id] ?? []).map((w) => ({
+                              t:
+                                timelineStartOf(
+                                  project.clips,
+                                  Math.max(
+                                    0,
+                                    project.clips.findIndex((c) => c.id === currentClip.id),
+                                  ),
+                                ) + w.start,
+                              label: w.word,
+                            }))
+                          : []
+                      }
+                    />
                     {/* R8 story card guides: FB/IG stories split at 15s — land cuts on a card edge */}
                     {isStoryTarget(postTarget) &&
                       total > 15 &&
