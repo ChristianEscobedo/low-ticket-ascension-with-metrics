@@ -1,0 +1,14 @@
+const fs = require('fs');
+const s = fs.readFileSync('src/lib/mothermode/reel/captions.ts', 'utf8');
+const a = s.indexOf('export function captionAnimKeyframes');
+const b = s.indexOf('export function captionAnimCss');
+const body = s.slice(a, b);
+console.log('LEN', body.length);
+console.log('---TAIL---');
+console.log(body.slice(-1200));
+console.log('---FLAGS---');
+console.log('cascade', body.includes("case 'cascade'"));
+console.log('tilt3d', body.includes("case 'tilt3d'"));
+console.log('slam', body.includes("case 'slam'"));
+console.log('default idx', body.lastIndexOf('default:'));
+console.log('return empty', body.includes("return ''"));

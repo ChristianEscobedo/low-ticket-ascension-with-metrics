@@ -3580,14 +3580,26 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
       if (kind === 'video' && clipId) {
         const ready = await waitUntilPlayable(url);
-        patchClip(clipId, { url: ready ? url : localBlob!, durationSec: localDur || 5 });
-        if (!ready) {
-          setNote(`Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s). Storage is still catching up — preview is using the local file.`);
-        } else {
-          setNote(`Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s).`);
-          if (localBlob) URL.revokeObjectURL(localBlob);
+        if (ready) {
+          // Warm the browser cache BEFORE we swap the <video> src. Without this the
+          // player briefly has no decoded frame and the canvas goes black/blank.
+          try {
+            await fetch(url, { headers: { range: 'bytes=0-262143' }, cache: 'force-cache' });
+          } catch {
+            /* warming is best-effort */
+          }
         }
+        patchClip(clipId, { url: ready ? url : localBlob!, durationSec: localDur || 5 });
+        setNote(
+          ready
+            ? `Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s).`
+            : `Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s). Storage is still catching up — preview is using the local file.`,
+        );
+        // NOTE: we deliberately do NOT revoke localBlob here. The player may still be
+        // holding it for a frame or two during the swap, and revoking mid-swap is what
+        // made the video vanish the instant the upload finished. It is released on unload.
       } else {
+
         patch({ audio: { url, name: file.name.slice(0, 60), offsetSec: 0, durationSec: null } });
         setTab('clips');
         setNote(`Uploaded ${file.name} (audio).`);

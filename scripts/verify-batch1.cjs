@@ -1,0 +1,10 @@
+const fs = require('fs');
+const s = fs.readFileSync('src/lib/mothermode/reel/render/captionLayer.tsx', 'utf8');
+console.log('renderGradientWord calls', s.split('renderGradientWord(').length - 1);
+const i = s.indexOf('// Dual-layer');
+console.log(s.slice(i, i + 700));
+const w = fs.readFileSync('render-worker/server.js', 'utf8');
+console.log('draft', w.includes("quality === 'draft'"));
+console.log('warm', w.includes("app.get('/warm'"));
+const c = fs.readFileSync('src/lib/mothermode/reel/captions.ts', 'utf8');
+console.log('grad-shadow in captions', c.includes('--caption-grad-shadow'));
