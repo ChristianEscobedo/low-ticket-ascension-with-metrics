@@ -207,11 +207,22 @@ function probeDuration(url: string): Promise<number> {
   return new Promise((resolve) => {
     const v = document.createElement('video');
     v.preload = 'metadata';
+    const done = (n: number) => {
+      v.removeAttribute('src');
+      v.load();
+      resolve(n);
+    };
     v.onloadedmetadata = () =>
-      resolve(Number.isFinite(v.duration) ? Math.round(v.duration * 10) / 10 : 0);
-    v.onerror = () => resolve(0);
+      done(Number.isFinite(v.duration) && v.duration > 0 ? Math.round(v.duration * 10) / 10 : 0);
+    v.onerror = () => done(0);
     v.src = url;
   });
+}
+
+/** Probe a local File before upload so we never fall back to 5s on a 3-min clip. */
+function probeFileDuration(file: File): Promise<number> {
+  const blobUrl = URL.createObjectURL(file);
+  return probeDuration(blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
 }
 
 /** The REAL platform logos as inline SVGs — brand color when selected, grayscale idle. */
@@ -3460,11 +3471,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
 
   async function addUpload(file: File, kind: 'video' | 'audio') {
-    if (!project) return;
     setBusy(true);
     setError(null);
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || (kind === 'audio' ? 'mp3' : 'mp4');
+      const localDur = kind === 'video' ? await probeFileDuration(file) : 0;
       const mint = await fetch(UPLOAD_API, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -3472,9 +3483,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       });
       const mintJson = await mint.json();
       if (!mintJson.success) throw new Error(mintJson.error || 'Could not mint an upload URL');
+      const putHeaders: Record<string, string> = {
+        'content-type': file.type || 'application/octet-stream',
+        'x-upsert': 'false',
+      };
+      if (mintJson.token) putHeaders.authorization = `Bearer ${mintJson.token}`;
       const put = await fetch(mintJson.signedUrl, {
         method: 'PUT',
-        headers: { 'content-type': file.type || 'application/octet-stream' },
+        headers: putHeaders,
         body: file,
       });
       if (!put.ok) {
@@ -3486,23 +3502,23 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       const url = String(mintJson.publicUrl || '');
       if (!url) throw new Error('Upload returned no public URL');
       if (kind === 'video') {
-        const dur = await probeDuration(url);
+        const remoteDur = await probeDuration(url);
+        const dur = localDur || remoteDur || 5;
         const clip = {
           id: makeClipId(),
           name: file.name.slice(0, 60),
           url,
-          durationSec: dur || 5,
+          durationSec: dur,
           trimEndSec: 0,
         };
         insertClipAtPlayhead(clip);
         setSelectedClip(clip.id);
         setTab('clips');
-
       } else {
         patch({ audio: { url, name: file.name.slice(0, 60), offsetSec: 0, durationSec: null } });
         setTab('clips');
       }
-      setNote('Uploaded and attached.');
+      setNote(`Uploaded ${file.name} (${kind === 'video' ? (localDur || 0).toFixed(1) + 's' : 'audio'}).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -4015,6 +4031,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     const tot = clockStateRef.current.total;
     if (!proj || proj.clips.length === 0 || c.playing) return;
     if (c.t >= tot - 0.01) c.t = 0; // replay from the top when at the end
+    swappingRef.current = false; // leftover swap must not block play()
     c.playing = true;
     c.lastTs = performance.now();
     setPlaying(true);
@@ -8493,10 +8510,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       }}
                       onPause={() => {
                         if (swappingRef.current) return; // a src swap, not a user pause
-                        if (clockRef.current.playing) stopClock();
+                        if (clockRef.current.playing && !swappingRef.current) stopClock();
                       }}
                       onLoadedMetadata={(e) => {
                         swappingRef.current = false;
+                        const el = e.currentTarget;
                         const pending = pendingSeekRef.current;
                         if (pending != null) {
                           pendingSeekRef.current = null;
@@ -8758,9 +8776,34 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   </div>
 
                 ) : (
-
-                <div className="rounded-xl border border-dashed border-bone/10 px-10 py-16 text-sm text-bone/30">
-                  Add a scene to see it here.
+                <div
+                  data-empty-start
+                  className="relative flex shrink-0 flex-col items-center justify-center gap-4 rounded-xl bg-black px-6 py-16 text-center shadow-2xl ring-1 ring-bone/10"
+                  style={{ width: stageBox.w || 360, minHeight: stageBox.h || 480 }}
+                >
+                  <p className="text-sm font-semibold text-bone">Start a reel</p>
+                  <p className="max-w-[240px] text-[11px] text-bone/50">
+                    Upload a video or pull one from the media library. Captions can transcribe automatically.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInput.current?.click()}
+                      className="rounded-md bg-brass px-3 py-1.5 text-[11px] font-semibold text-ink"
+                    >
+                      Upload video
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tabBtn = document.querySelector('[data-tab="clips"]') as HTMLButtonElement | null;
+                        tabBtn?.click();
+                      }}
+                      className="rounded-md border border-bone/20 px-3 py-1.5 text-[11px] font-semibold text-bone/80 hover:bg-white/5"
+                    >
+                      Media library
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

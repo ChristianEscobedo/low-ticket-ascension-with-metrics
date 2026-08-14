@@ -66,5 +66,11 @@ export async function POST(request: NextRequest) {
   }
 
   const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  return NextResponse.json({ success: true, signedUrl: data.signedUrl, publicUrl });
+  return NextResponse.json({
+    success: true,
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path: data.path,
+    publicUrl,
+  });
 }
