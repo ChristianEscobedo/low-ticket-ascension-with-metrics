@@ -2980,22 +2980,24 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   >({});
   const [wordScaleLocal, setWordScaleLocal] = useState<Record<number, number>>({});
   /** Free-place stack: Edit shows all card words + handles; Preview = karaoke timing. */
-  const [stackEditMode, setStackEditMode] = useState(true);
+  const [stackEditMode, setStackEditMode] = useState(false);
+  const [autoTranscribeOnImport, setAutoTranscribeOnImport] = useState(true);
 
-  /* edit-mode auto-pause */
+  /* edit-mode auto-pause — only when ENTERING edit, never on first mount. */
+  const prevEditRef = useRef(false);
   useEffect(() => {
-    if (!stackEditMode) return;
-    // Freeze the clock so free-place editing isn't fighting a moving playhead.
+    const entered = stackEditMode && !prevEditRef.current;
+    prevEditRef.current = stackEditMode;
+    if (!entered) return;
     const c = clockRef.current;
-    if (c?.playing) {
-      c.playing = false;
-      cancelAnimationFrame(c.raf);
-      setPlaying(false);
-      const v = previewRef.current;
-      if (v && !v.paused) v.pause();
-      const ov = overlayRef.current;
-      if (ov && !ov.paused) ov.pause();
-    }
+    if (!c?.playing) return;
+    c.playing = false;
+    cancelAnimationFrame(c.raf);
+    setPlaying(false);
+    const v = previewRef.current;
+    if (v && !v.paused) v.pause();
+    const ov = overlayRef.current;
+    if (ov && !ov.paused) ov.pause();
   }, [stackEditMode]);
 
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
@@ -3293,6 +3295,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     };
     insertClipAtPlayhead(clip);
     setSelectedClip(clip.id);
+    if (autoTranscribeOnImport) {
+      window.setTimeout(() => { void transcribeCurrentClip(); }, 400);
+    }
     setTab('clips');
     setHubOpen(false);
     setNote('Hub render added to the timeline.');
@@ -8113,6 +8118,44 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
                   >
+                    {(!project || project.clips.length === 0) && (
+                      <div
+                        data-empty-start
+                        className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/70 px-6 text-center"
+                      >
+                        <p className="text-sm font-semibold text-bone">Start a reel</p>
+                        <p className="max-w-[240px] text-[11px] text-bone/50">
+                          Upload a video or pull one from the media library. Captions can transcribe automatically.
+                        </p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInput.current?.click()}
+                            className="rounded-md bg-brass px-3 py-1.5 text-[11px] font-semibold text-ink"
+                          >
+                            Upload video
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tabBtn = document.querySelector('[data-tab="clips"]') as HTMLButtonElement | null;
+                              tabBtn?.click();
+                            }}
+                            className="rounded-md border border-bone/20 px-3 py-1.5 text-[11px] font-semibold text-bone/80 hover:bg-white/5"
+                          >
+                            From library
+                          </button>
+                        </div>
+                        <label className="flex items-center gap-2 text-[10px] text-bone/55">
+                          <input
+                            type="checkbox"
+                            checked={autoTranscribeOnImport}
+                            onChange={(e) => setAutoTranscribeOnImport(e.target.checked)}
+                          />
+                          Auto-transcribe on import
+                        </label>
+                      </div>
+                    )}
                     <RemotionPreview
                       project={projectWithWordPlace ?? project}
                       aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}

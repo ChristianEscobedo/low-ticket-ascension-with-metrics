@@ -1093,7 +1093,7 @@ if (blockFx.includes('punchIn')) {
           const y = mark!.yPct as number;
 
           // --- identical base to normal path ---
-          const themePaint = isActive || power ? css.active : css.word;
+          const themePaint = (isActive || power ? css.active : css.word) ?? css.word ?? {};
           const base: React.CSSProperties = {
             ...themePaint,
             // Force theme type metrics — free-place was painting thinner when

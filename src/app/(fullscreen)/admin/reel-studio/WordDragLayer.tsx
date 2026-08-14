@@ -716,14 +716,37 @@ export function freePlaceWordsFrom(
   if (!cardId) {
     for (let i = 0; i < all.length; i++) {
       const w = all[i];
-      if (w.mark?.card?.freePlace || (typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number')) {
-        cardId = w.mark!.card!.id;
-        cardMeta = w.mark!.card!;
+      if (w.mark?.card?.id && w.mark.card.freePlace) {
+        cardId = w.mark.card.id;
+        cardMeta = w.mark.card;
         break;
       }
     }
   }
-  if (!cardId) return [];
+  // Mixed free-place: words with x/y but NO card. Build a synthetic list.
+  if (!cardId) {
+    const placed = all
+      .map((w, i) => ({ w, i }))
+      .filter(
+        ({ w }) =>
+          typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number',
+      );
+    if (!placed.length) return [];
+    return placed.map(({ w, i }) => ({
+      index: i,
+      xPct: w.mark!.xPct as number,
+      yPct: w.mark!.yPct as number,
+      label: w.word,
+      scale: w.mark?.scale,
+      anim: w.mark?.anim,
+      color: w.mark?.color,
+      fx: w.mark?.fx,
+      fxColor: w.mark?.fxColor,
+      fxColor2: w.mark?.fxColor2,
+      font: w.mark?.font,
+      hidden: w.mark?.hidden,
+    }));
+  }
 
   // Collect card word indexes in order
   const idxs: number[] = [];
