@@ -244,6 +244,9 @@ export function SubtitlePanel({
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5">
           {phrases.map((p, pi) => {
             const rowActive = activeIdx >= p.from && activeIdx < p.to;
+            const muted = phraseMuted(words, p.from, p.to);
+            const cardId = phraseCardId(words, p.from, p.to);
+            const cardMode = cardId ? words[p.from]?.mark?.card?.mode : null;
             return (
               <div
                 key={pi}
