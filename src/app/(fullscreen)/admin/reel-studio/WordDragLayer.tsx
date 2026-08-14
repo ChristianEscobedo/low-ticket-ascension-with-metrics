@@ -15,6 +15,15 @@ import type { ReelWord, ReelWordFx, ReelWordMark } from '@/lib/mothermode/reel/t
 import { WORD_FONTS, WORD_FX, captionLineLayout } from '@/lib/mothermode/reel/types';
 import { CAPTION_ANIMS, type CaptionAnim } from '@/lib/mothermode/reel/captions';
 
+/** Snap to center axes when within threshold (percent). */
+function snapPct(x: number, y: number, thr = 1.5): { x: number; y: number } {
+  /* center-snap */
+  return {
+    x: Math.abs(x - 50) <= thr ? 50 : x,
+    y: Math.abs(y - 50) <= thr ? 50 : y,
+  };
+}
+
 export type WordPlace = {
   index: number;
   xPct: number;
@@ -209,7 +218,7 @@ export default function WordDragLayer({
     el.setPointerCapture(e.pointerId);
     const { x, y } = clientToPct(e.clientX, e.clientY);
     lastRef.current = { index, x, y };
-    onMove(index, x, y);
+    (() => { const _s = snapPct(x, y); onMove(index, _s.x, _s.y); })();
 
     const onMoveEv = (ev: PointerEvent) => {
       const p = clientToPct(ev.clientX, ev.clientY);
@@ -290,12 +299,53 @@ export default function WordDragLayer({
 
   const selected = words.find((w) => w.index === selectedIndex) ?? null;
 
+
+  /* arrow-nudge */
+  useEffect(() => {
+    if (selectedIndex == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const step = e.shiftKey ? 2.5 : 0.5; // % of frame
+      let dx = 0;
+      let dy = 0;
+      if (e.key === 'ArrowLeft') dx = -step;
+      else if (e.key === 'ArrowRight') dx = step;
+      else if (e.key === 'ArrowUp') dy = step; // bottom-% grows upward
+      else if (e.key === 'ArrowDown') dy = -step;
+      else return;
+      e.preventDefault();
+      const w = words.find((x) => x.index === selectedIndex);
+      if (!w) return;
+      const xPct = Math.max(2, Math.min(98, w.xPct + dx));
+      const yPct = Math.max(2, Math.min(98, w.yPct + dy));
+      (() => { const _s = snapPct(xPct, yPct); onMove(selectedIndex, _s.x, _s.y); })();
+      (() => { const _s = snapPct(xPct, yPct); onCommit(selectedIndex, _s.x, _s.y); })();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedIndex, words, onMove, onCommit]);
+
   return (
     <div
       ref={frameRef}
       className="pointer-events-none absolute inset-0 z-30"
       data-word-drag-layer
     >
+      {selectedIndex != null && (
+        <>
+          <div
+            data-center-guide
+            className="pointer-events-none absolute left-1/2 top-0 bottom-0 w-px bg-brass/40"
+            style={{ transform: 'translateX(-0.5px)' }}
+          />
+          <div
+            data-center-guide
+            className="pointer-events-none absolute top-1/2 left-0 right-0 h-px bg-brass/25"
+            style={{ transform: 'translateY(-0.5px)' }}
+          />
+        </>
+      )}
+
       {words.map((w) => {
         const isSel = selectedIndex === w.index;
         const sc = w.scale && w.scale > 0 ? w.scale : 1;

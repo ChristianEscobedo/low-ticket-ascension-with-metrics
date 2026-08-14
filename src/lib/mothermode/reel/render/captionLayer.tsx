@@ -1049,10 +1049,24 @@ if (blockFx.includes('punchIn')) {
         typeof w.mark?.yPct === 'number',
     )
     .filter(({ w, idx }) => {
+      // Edit: show every free-placed word so you can grab them.
       if (freePlaceEdit) return true;
-      if (isBuildStack && frame < w.fromFrame) return false;
-      if (!isBuildStack) return true;
-      return frame >= w.fromFrame || idx <= activeIdx;
+      // Preview/render: follow caption timing — only paint while the word
+      // (or its card window) is live. Never leave glyphs stuck on screen.
+      if (activeIdx < 0) return false;
+      if (cardWin) {
+        // Phrase card: show free-placed members of the active card only.
+        if (w.mark?.card?.id && w.mark.card.id === words[activeIdx]?.mark?.card?.id) {
+          if (isBuildStack) return frame >= w.fromFrame || idx <= activeIdx;
+          return true; // page mode: whole card while card is active
+        }
+        // Free-placed word outside the active card — hide.
+        if (w.mark?.card?.id) return false;
+      }
+      // Lone free-placed word: visible from its start through hold after end,
+      // same window the karaoke line uses for the spoken word.
+      const hold = Math.round(plan.fps * CAPTION_HOLD_SEC);
+      return frame >= w.fromFrame && frame < w.toFrame + hold;
     });
 
   const absOverlay =
@@ -1079,8 +1093,17 @@ if (blockFx.includes('punchIn')) {
           const y = mark!.yPct as number;
 
           // --- identical base to normal path ---
+          const themePaint = isActive || power ? css.active : css.word;
           const base: React.CSSProperties = {
-            ...(isActive || power ? css.active : css.word),
+            ...themePaint,
+            // Force theme type metrics — free-place was painting thinner when
+            // only a subset of paint props survived the dual-layer path.
+            fontSize: (themePaint as React.CSSProperties).fontSize ?? fontSize,
+            fontWeight: (themePaint as React.CSSProperties).fontWeight,
+            fontFamily: (themePaint as React.CSSProperties).fontFamily,
+            letterSpacing: (themePaint as React.CSSProperties).letterSpacing,
+            WebkitTextStroke: (themePaint as React.CSSProperties).WebkitTextStroke,
+            paintOrder: (themePaint as React.CSSProperties).paintOrder,
             display: 'inline-block',
             position: 'absolute',
             left: `${x}%`,

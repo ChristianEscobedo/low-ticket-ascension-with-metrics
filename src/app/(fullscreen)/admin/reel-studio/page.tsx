@@ -758,8 +758,23 @@ function WaveformLane({ url }: { url: string }) {
  * itself be the reason no font loaded. captionFontsFor only asks for axes a
  * family actually has.
  */
-function useCaptionFonts(def: { font?: string; fontUrl?: string }) {
-  const fonts = useMemo(() => captionFontsFor(def), [def.font, def.fontUrl]);
+function useCaptionFonts(
+  def: { font?: string; fontUrl?: string },
+  extraFamilies: string[] = [],
+) {
+  const fonts = useMemo(() => {
+    const base = captionFontsFor(def);
+    const seen = new Set(base.map((f) => f.family));
+    const out = [...base];
+    for (const fam of extraFamilies) {
+      if (!fam || seen.has(fam)) continue;
+      seen.add(fam);
+      out.push(
+        ...captionFontsFor({ font: fam } as Parameters<typeof captionFontsFor>[0]),
+      );
+    }
+    return out;
+  }, [def.font, def.fontUrl, extraFamilies.join('|')]);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     for (const f of fonts) {
@@ -916,7 +931,14 @@ function StageCaptions({
 }) {
   const def = resolveCaptionStyle(captionDefFor(preset), overrides);
   const layout = captionLayoutFor(def, overrides);
-  useCaptionFonts(def);
+  const markFonts = useMemo(() => {
+    const set = new Set<string>();
+    for (const w of words) {
+      if (w.mark?.font) set.add(w.mark.font);
+    }
+    return Array.from(set);
+  }, [words]);
+  useCaptionFonts(def, markFonts);
 
   // The layer thinks in FRAMES (so it matches the renderer exactly); the stage
   // thinks in seconds. Convert here, once, rather than teaching the layer a
@@ -2959,6 +2981,23 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const [wordScaleLocal, setWordScaleLocal] = useState<Record<number, number>>({});
   /** Free-place stack: Edit shows all card words + handles; Preview = karaoke timing. */
   const [stackEditMode, setStackEditMode] = useState(true);
+
+  /* edit-mode auto-pause */
+  useEffect(() => {
+    if (!stackEditMode) return;
+    // Freeze the clock so free-place editing isn't fighting a moving playhead.
+    const c = clockRef.current;
+    if (c?.playing) {
+      c.playing = false;
+      cancelAnimationFrame(c.raf);
+      setPlaying(false);
+      const v = previewRef.current;
+      if (v && !v.paused) v.pause();
+      const ov = overlayRef.current;
+      if (ov && !ov.paused) ov.pause();
+    }
+  }, [stackEditMode]);
+
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
   /** Scope: 'global' = settings write to every picked word (a bulk
    *  convenience); 'individual' = they write to ONE target word, seeded
@@ -8161,6 +8200,21 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         />
                         )}
                           {stackEditMode && (
+                        <>
+                        {/* Blocks click-through to the video/player while placing words. */}
+                        <div
+                          data-edit-shield
+                          className="absolute inset-0 z-[25]"
+                          style={{ pointerEvents: 'auto', cursor: 'default' }}
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                        />
                         <WordDragLayer
                           words={(() => {
                             if (!currentClip) return [];
@@ -8268,6 +8322,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, patch);
                           }}
                         />
+                        </>
                         )}
                         </>
                         )}
