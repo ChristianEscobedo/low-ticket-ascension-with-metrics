@@ -157,7 +157,7 @@ export function SubtitlePanel({
   function toggleStackCard(from: number, to: number) {
     const existing = phraseCardId(words, from, to);
     if (existing) {
-      // Remove card + free-place coords
+      // Remove card + any free-place coords (back to normal karaoke).
       const next = words.map((w, i) => {
         if (i < from || i >= to) return w;
         const mark = { ...(w.mark ?? {}) };
@@ -170,15 +170,14 @@ export function SubtitlePanel({
       onEdit(next);
       return;
     }
+    // Stack ONLY tags the phrase — layout/theme stay identical to normal
+    // captions until the user opts into Free place (xPct/yPct) or per-word style.
     const id = newCardId();
     const count = to - from;
     const wordsPerRow = Math.min(4, Math.max(1, count));
     const rows = Math.min(3, Math.max(1, Math.ceil(count / wordsPerRow)));
-    const layout = defaultStackLayout(count, { rows, wordsPerRow });
     const next = words.map((w, i) => {
       if (i < from || i >= to) return w;
-      const li = i - from;
-      const pos = layout[li] ?? { xPct: 50, yPct: 40 };
       return {
         ...w,
         mark: {
@@ -189,10 +188,48 @@ export function SubtitlePanel({
             rows,
             wordsPerRow,
           },
+        },
+      };
+    });
+    onEdit(next);
+  }
+
+  /** Opt-in free-place: scatter card words so they can be dragged on stage. */
+  function enableFreePlace(from: number, to: number) {
+    const id = phraseCardId(words, from, to);
+    if (!id) return;
+    const count = to - from;
+    const sample = words[from]?.mark?.card;
+    const wordsPerRow = sample?.wordsPerRow ?? Math.min(4, Math.max(1, count));
+    const rows = sample?.rows ?? Math.min(3, Math.max(1, Math.ceil(count / wordsPerRow)));
+    const layout = defaultStackLayout(count, { rows, wordsPerRow });
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      if (!w.mark?.card || w.mark.card.id !== id) return w;
+      const li = i - from;
+      const pos = layout[li] ?? { xPct: 50, yPct: 40 };
+      return {
+        ...w,
+        mark: {
+          ...w.mark,
           xPct: pos.xPct,
           yPct: pos.yPct,
         },
       };
+    });
+    onEdit(next);
+  }
+
+  function clearFreePlace(from: number, to: number) {
+    const id = phraseCardId(words, from, to);
+    if (!id) return;
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      if (!w.mark?.card || w.mark.card.id !== id) return w;
+      const mark = { ...w.mark };
+      delete mark.xPct;
+      delete mark.yPct;
+      return { ...w, mark };
     });
     onEdit(next);
   }
@@ -305,7 +342,7 @@ export function SubtitlePanel({
                     title={
                       cardId
                         ? 'Remove stack card (back to normal karaoke)'
-                        : 'Make stack card — words build & hold as a phrase block'
+                        : 'Stack phrase — same caption look; use FP to free-place words'
                     }
                     className={clsx(
                       'rounded p-0.5',
@@ -316,6 +353,48 @@ export function SubtitlePanel({
                   >
                     <Layers className="h-3 w-3" />
                   </button>
+                  {cardId ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const hasFp = words
+                          .slice(p.from, p.to)
+                          .some(
+                            (w) =>
+                              typeof w.mark?.xPct === 'number' &&
+                              typeof w.mark?.yPct === 'number',
+                          );
+                        if (hasFp) clearFreePlace(p.from, p.to);
+                        else enableFreePlace(p.from, p.to);
+                      }}
+                      title={
+                        words
+                          .slice(p.from, p.to)
+                          .some(
+                            (w) =>
+                              typeof w.mark?.xPct === 'number' &&
+                              typeof w.mark?.yPct === 'number',
+                          )
+                          ? 'Exit free-place — back to normal caption layout'
+                          : 'Free place — drag words anywhere on the frame'
+                      }
+                      className={clsx(
+                        'rounded p-0.5 text-[8px] font-bold leading-none',
+                        words
+                          .slice(p.from, p.to)
+                          .some(
+                            (w) =>
+                              typeof w.mark?.xPct === 'number' &&
+                              typeof w.mark?.yPct === 'number',
+                          )
+                          ? 'bg-brass/20 text-brass'
+                          : 'text-bone/30 hover:bg-bone/10 hover:text-bone/70',
+                      )}
+                    >
+                      FP
+                    </button>
+                  ) : null}
                 </div>
 
                 {/* the phrase — words as flowing text, active word highlighted inline */}
