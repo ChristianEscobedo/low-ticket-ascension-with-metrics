@@ -4546,6 +4546,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   /** Merge overrides into a clean object (drops empty color wells). */
   function mergeCaptionOv(patchOv: Partial<CaptionOverrides>): CaptionOverrides {
     const merged: CaptionOverrides = { ...(project?.captionOverrides ?? {}), ...patchOv };
+    // Explicit null deletes a key (reset one dial without wiping the rest).
+    for (const [k, v] of Object.entries(patchOv)) {
+      if (v === null) delete (merged as Record<string, unknown>)[k];
+    }
     if (merged.colors && merged.colors.every((c) => !c)) delete merged.colors;
     return merged;
   }
@@ -6669,6 +6673,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       overrides={project.captionOverrides}
                       onPick={(def) => void setCaptionStyle(def.id as CaptionPreset)}
                       onCustomize={(patchOv) => void setCaptionOverrides(patchOv)}
+                    onResetOverrides={() => {
+                      void (async () => {
+                        if (!project) return;
+                        const updated = { ...project, captionOverrides: {} };
+                        setProject(updated);
+                        await post({ action: 'save', project: updated });
+                      })();
+                    }}
                     />
                   </div>
                   {/* R27 FANCY SUBTITLES (veed) — word-timed burn-in via fal */}

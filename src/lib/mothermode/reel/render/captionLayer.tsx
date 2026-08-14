@@ -692,7 +692,9 @@ function renderGradientWord(
   tail: string,
 ): React.ReactNode {
   const shadow = String(
-    (style as Record<string, unknown>)['--caption-grad-shadow'] ?? '',
+    (style as Record<string, unknown>)['--caption-grad-shadow'] ??
+      style.textShadow ??
+      '',
   );
   const hasGrad = !!(style as Record<string, unknown>)['backgroundImage'];
   if (!hasGrad || !shadow) {
@@ -999,7 +1001,7 @@ if (blockFx.includes('punchIn')) {
             const isCascade =
               isActive && (wordAnim === 'cascade' || (mark?.stagger ?? 0) > 0);
             const useFill = isActive && def.karaokeFill && !isCascade;
-            if (isActive && !useFill && !isCascade) {
+            if (isActive && !useFill && !isCascade && wordAnim) {
               const entrance = entranceStyle(wordAnim, wordEnterT);
               Object.assign(style, entrance);
               if (mark?.scale) {

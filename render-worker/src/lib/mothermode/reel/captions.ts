@@ -213,6 +213,7 @@ export function captionAnimCss(anim: CaptionAnim): string {
 
 /** Every word-enter animation — the gallery + tests iterate this. */
 export const CAPTION_ANIMS: CaptionAnim[] = [
+  '',
   'pop',
   'fade',
   'slide',
@@ -1026,21 +1027,41 @@ function wordCss(
       css['transform'] = `scale(${bigScale})`;
       css['transformOrigin'] = 'center center';
     } else if (def.highlightMode === 'glow') {
-      // Animated bloom in the accent color (neon without a hard box).
-      // On gradient glyphs, stack into filter so we don't kill the fill.
+      // Compose bloom WITH the base shadow — never replace it (that made the
+      // active word look flat / "shadow disappeared").
+      const baseSh = def.shadow || '0 2px 6px rgba(0,0,0,0.9)';
+      const bloom =
+        `0 0 0.35em ${def.activeColor}, 0 0 0.9em ${def.activeColor}66`;
       if (paintGradient) {
-        const glow = `drop-shadow(0 0 0.35em ${def.activeColor}) drop-shadow(0 0 0.9em ${def.activeColor}66)`;
-        css['filter'] = css['filter'] ? `${glow} ${css['filter']}` : glow;
+        // Gradient glyphs use dual-layer shadow var, not filter/text-shadow.
+        const prev = String((css as Record<string, unknown>)['--caption-grad-shadow'] ?? '');
+        (css as Record<string, unknown>)['--caption-grad-shadow'] = prev
+          ? `${bloom}, ${prev}`
+          : `${bloom}, ${baseSh}`;
       } else {
-        css['textShadow'] =
-          `0 0 0.35em ${def.activeColor}, 0 0 0.9em ${def.activeColor}66, ${def.shadow ?? '0 2px 6px rgba(0,0,0,0.9)'}`;
+        const prev = typeof css['textShadow'] === 'string' ? css['textShadow'] : '';
+        css['textShadow'] = prev
+          ? `${bloom}, ${prev}`
+          : `${bloom}, ${baseSh}`;
       }
     } else if (def.highlightMode === 'underline') {
       css['textDecoration'] = 'underline';
       css['textDecorationThickness'] = '0.12em';
       css['textUnderlineOffset'] = '0.18em';
     }
-    // 'color'/'sweep'/'gradient' just change color (gradient fills via background-clip above).
+    // 'color'/'sweep'/'gradient'/'box' — color/chrome only; shadow already set above.
+  }
+
+  // Final guard: if we still have a base shadow and somehow lost it on the
+  // active glyph path, put it back. Idle already set it in the branches above.
+  if (def.shadow) {
+    if (paintGradient) {
+      if (!(css as Record<string, unknown>)['--caption-grad-shadow']) {
+        (css as Record<string, unknown>)['--caption-grad-shadow'] = def.shadow;
+      }
+    } else if (!css['textShadow']) {
+      css['textShadow'] = def.shadow;
+    }
   }
   return css;
 }

@@ -190,6 +190,8 @@ export function CaptionGallery({
   overrides,
   onPick,
   onCustomize,
+  onResetOverrides,
+
   words = [],
   clipName = '',
 }: {
@@ -197,6 +199,8 @@ export function CaptionGallery({
   overrides?: CaptionOverrides;
   onPick: (def: CaptionStyleDef) => void;
   onCustomize: (patch: Partial<CaptionOverrides>) => void;
+  /** Clear every caption override back to the preset defaults. */
+  onResetOverrides?: () => void;
   /** R20: the current scene's word track (shown as a timestamped subtitle list). */
   words?: { word: string; start: number; end: number }[];
   clipName?: string;
@@ -802,7 +806,25 @@ export function CaptionGallery({
             </div>
 
             
-            {/* Entrance animation + highlight */}
+            
+            {/* Reset every dial back to the active preset */}
+            {onResetOverrides && (
+              <div className="flex items-center justify-between rounded-md border border-bone/10 bg-ink/40 px-2 py-1.5">
+                <span className="text-[9px] text-bone/45">
+                  Custom look applied
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onResetOverrides()}
+                  className="rounded-full border border-bone/20 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/60 hover:bg-bone/10 hover:text-bone"
+                  title="Clear all caption overrides and restore the preset defaults"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            )}
+
+{/* Entrance animation + highlight */}
             <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/50 px-2 py-1.5">
               <div className="text-[9px] font-bold uppercase tracking-wide text-bone/50">
                 Entrance anim
