@@ -3799,6 +3799,35 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const errors = useMemo(() => (project ? timelineErrors(project) : []), [project]);
   const selected = project?.clips.find((c) => c.id === selectedClip) ?? null;
   const currentClip = selected ?? project?.clips[0] ?? null;
+
+/** Live free-place drag: merge local x/y into caption marks so Remotion
+   *  paints the moved word with FULL theme styles (not just the hit target). */
+  const projectWithWordPlace = useMemo(() => {
+    if (!project || !currentClip) return project;
+    const locals = wordPlaceLocal;
+    const scales = wordScaleLocal;
+    const hasLoc = Object.keys(locals).length > 0 || Object.keys(scales).length > 0;
+    if (!hasLoc) return project;
+    const base = project.captions[currentClip.id] ?? [];
+    const next = base.map((w, i) => {
+      const loc = locals[i];
+      const sc = scales[i];
+      if (!loc && typeof sc !== 'number') return w;
+      return {
+        ...w,
+        mark: {
+          ...(w.mark ?? {}),
+          ...(loc ? { xPct: loc.xPct, yPct: loc.yPct } : {}),
+          ...(typeof sc === 'number' ? { scale: sc } : {}),
+        },
+      };
+    });
+    return {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: next },
+    };
+  }, [project, currentClip, wordPlaceLocal, wordScaleLocal]);
+
   // R25: the STAGE shows the clip under the CLOCK (not the inspector selection).
   const clockHit = useMemo(
     () => (project ? clipAtTime(project.clips, playheadSec) : null),
@@ -8041,7 +8070,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
                   >
                     <RemotionPreview
-                      project={project}
+                      project={projectWithWordPlace ?? project}
                       aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
                       // The timeline drives the frame. Without this the Player ran
                       // its own clock and the ruler moved nothing: captions (React

@@ -1000,9 +1000,9 @@ if (blockFx.includes('punchIn')) {
     (blockStyle as Record<string, unknown>).__pageStartFrame = pageStartFrame;
   }
 
-    // Free-place MIXED mode: only words that the user has actually moved
-  // (mark.xPct + mark.yPct) leave the caption line. Everything else stays in
-  // the normal karaoke block so Stack/FP never changes look until edited.
+    // Free-place MIXED mode: only words the user moved (xPct+yPct) leave the
+  // caption line. Style pipeline MUST match the normal karaoke path so a drag
+  // never blows out theme gradients / shadows / entrance / FX.
   const freePlacedAbs = words
     .map((w, idx) => ({ w, idx }))
     .filter(
@@ -1027,6 +1027,11 @@ if (blockFx.includes('punchIn')) {
           zIndex: 11,
           pointerEvents: 'none',
           fontSize,
+          // Inherit the same typeface stack the caption box uses.
+          fontFamily: (css.word as React.CSSProperties).fontFamily,
+          fontWeight: (css.word as React.CSSProperties).fontWeight,
+          letterSpacing: (css.word as React.CSSProperties).letterSpacing,
+          textTransform: (css.word as React.CSSProperties).textTransform,
         }}
       >
         {freePlacedAbs.map(({ w, idx }) => {
@@ -1035,22 +1040,25 @@ if (blockFx.includes('punchIn')) {
           const mark = w.mark;
           const x = mark!.xPct as number;
           const y = mark!.yPct as number;
+
+          // --- identical base to normal path ---
           const base: React.CSSProperties = {
             ...(isActive || power ? css.active : css.word),
+            display: 'inline-block',
             position: 'absolute',
             left: `${x}%`,
             bottom: `${y}%`,
             transform: 'translate(-50%, 50%)',
-            display: 'inline-block',
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
           };
+
           if (mark?.color) {
             base.color = mark.color;
             delete (base as Record<string, unknown>)['backgroundImage'];
-            delete (base as Record<string, unknown>)['WebkitBackgroundClip'];
-            delete (base as Record<string, unknown>)['backgroundClip'];
             delete (base as Record<string, unknown>)['WebkitTextFillColor'];
+            delete (base as Record<string, unknown>)['backgroundClip'];
+            delete (base as Record<string, unknown>)['WebkitBackgroundClip'];
           } else if (
             def.gradientShift &&
             (base as Record<string, unknown>)['backgroundImage']
@@ -1063,12 +1071,39 @@ if (blockFx.includes('punchIn')) {
               (base as Record<string, unknown>)['backgroundSize'] = '200% 200%';
             }
           }
+
           const text = def.upper ? w.text.toUpperCase() : w.text;
+          const wordAnim = mark?.anim ?? defAnim;
+          // Edit mode still runs entrance on the spoken word so Preview/Edit match.
+          const wordEnterT = isActive
+            ? entranceProgress(frame, w.fromFrame, plan.fps)
+            : 1;
+
           const style: React.CSSProperties = { ...base };
-          if (mark?.scale && mark.scale !== 1) {
+          if (isBuildStack && isActive && !style.transform?.includes('scale')) {
+            // keep translate anchor; stack pop on top
+            style.transform = 'translate(-50%, 50%) scale(1.35)';
+            style.transformOrigin = 'center center';
+            style.zIndex = 2;
+          }
+          const isCascade =
+            isActive && (wordAnim === 'cascade' || (mark?.stagger ?? 0) > 0);
+          const useFill = isActive && def.karaokeFill && !isCascade;
+          if (isActive && !useFill && !isCascade && wordAnim) {
+            const entrance = entranceStyle(wordAnim as string, wordEnterT);
+            // entrance may set transform — re-anchor to free-place centre
+            const entT = (entrance.transform as string | undefined) ?? '';
+            const rest = { ...entrance };
+            delete (rest as { transform?: string }).transform;
+            Object.assign(style, rest);
+            const scaleBit = mark?.scale ? ` scale(${mark.scale})` : '';
+            style.transform = `translate(-50%, 50%) ${entT}${scaleBit}`.trim();
+            style.transformOrigin = 'center center';
+          } else if (mark?.scale && mark.scale !== 1) {
             style.transform = `translate(-50%, 50%) scale(${mark.scale})`;
             style.transformOrigin = 'center center';
           }
+
           applyWordMarkExtras(
             style,
             mark,
@@ -1077,8 +1112,52 @@ if (blockFx.includes('punchIn')) {
             plan.fps,
             css.active.color as string,
           );
+
+          const emoji =
+            (isActive || power) && def.emoji && emojiFor(w.text)
+              ? ` ${emojiFor(w.text)}`
+              : '';
+
+          if (isCascade) {
+            const staggerSec =
+              (mark?.stagger ?? 0) > 0
+                ? (mark?.stagger as number)
+                : CASCADE_STAGGER_SEC;
+            return (
+              <span key={`fp-${idx}`} style={style}>
+                <CascadeWord
+                  text={text}
+                  base={{}}
+                  frame={frame}
+                  fromFrame={w.fromFrame}
+                  staggerFrames={Math.round(plan.fps * staggerSec)}
+                  fps={plan.fps}
+                />
+                {emoji ? <span className="emoji-burst">{emoji}</span> : null}
+              </span>
+            );
+          }
+
+          if (useFill) {
+            // Karaoke fill still works free-placed — clip progress on the glyph.
+            const fillT = wordEnterT;
+            const fillStyle: React.CSSProperties = {
+              ...style,
+              // keep free-place anchor
+            };
+            return (
+              <span key={`fp-${idx}`} style={fillStyle}>
+                {renderGradientWord(text, style, emoji, '')}
+              </span>
+            );
+          }
+
           const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
           if (isGradFill) {
+            // IMPORTANT: pass FULL style (incl. gradient + shadow vars) into
+            // renderGradientWord. Outer shell only anchors position — but must
+            // NOT strip transform scale the inner needs. renderGradientWord
+            // paints dual layers using the style bag.
             return (
               <span
                 key={`fp-${idx}`}
@@ -1086,24 +1165,30 @@ if (blockFx.includes('punchIn')) {
                   position: 'absolute',
                   left: `${x}%`,
                   bottom: `${y}%`,
-                  transform: 'translate(-50%, 50%)',
+                  transform: style.transform ?? 'translate(-50%, 50%)',
+                  transformOrigin: 'center center',
                   display: 'inline-block',
                   whiteSpace: 'nowrap',
                   pointerEvents: 'none',
+                  zIndex: style.zIndex,
+                  opacity: style.opacity,
                 }}
               >
-                {renderGradientWord(text, style, '', '')}
+                {renderGradientWord(text, style, emoji, '')}
               </span>
             );
           }
+
           return (
             <span key={`fp-${idx}`} style={style}>
               {text}
+              {emoji ? <span className="emoji-burst">{emoji}</span> : null}
             </span>
           );
         })}
       </div>
     ) : null;
+
 
 
 
