@@ -50,7 +50,6 @@
  * effect is stored per word or row, so a trim/split can never orphan one.
  */
 import React from 'react';
-import { isCaptionVisibleAt } from '../../captions';
 import {
   captionCssFor,
   captionRows,
@@ -978,6 +977,10 @@ if (blockFx.includes('punchIn')) {
               display: 'inline-block',
               position: 'relative',
             };
+            const stackBuildHide = isBuildStack && frame < w.fromFrame;
+            if (stackBuildHide) {
+              base.opacity = 0;
+            }
             
             if (mark?.color) {
               base.color = mark.color;
