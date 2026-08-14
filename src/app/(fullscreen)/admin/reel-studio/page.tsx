@@ -2952,6 +2952,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     Record<number, { xPct: number; yPct: number }>
   >({});
   const [wordScaleLocal, setWordScaleLocal] = useState<Record<number, number>>({});
+  /** Free-place stack: Edit shows all card words + handles; Preview = karaoke timing. */
+  const [stackEditMode, setStackEditMode] = useState(true);
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
   /** Scope: 'global' = settings write to every picked word (a bulk
    *  convenience); 'individual' = they write to ONE target word, seeded
@@ -8035,7 +8037,47 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       // its own clock and the ruler moved nothing: captions (React
                       // state) tracked the playhead while the video sat still.
                       playheadSec={playheadSec}
+                      freePlaceEdit={stackEditMode}
                     />
+
+                    {/* Free-place stack Edit/Preview — only when card has placed words */}
+                    {currentClip &&
+                      (project.captions[currentClip.id] ?? []).some(
+                        (w) =>
+                          typeof w.mark?.xPct === 'number' &&
+                          typeof w.mark?.yPct === 'number',
+                      ) && (
+                        <div
+                          data-stack-edit-toggle
+                          className="pointer-events-auto absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full border border-white/15 bg-black/70 p-0.5 text-[10px] shadow-lg backdrop-blur"
+                        >
+                          <button
+                            type="button"
+                            className={
+                              stackEditMode
+                                ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
+                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
+                            }
+                            onClick={() => setStackEditMode(true)}
+                            title="Show every word in the stack card for drag/scale"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              !stackEditMode
+                                ? 'rounded-full bg-white/15 px-2.5 py-1 font-semibold text-white'
+                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
+                            }
+                            onClick={() => setStackEditMode(false)}
+                            title="Preview karaoke/build timing"
+                          >
+                            Preview
+                          </button>
+                        </div>
+                      )}
+
                     {/* The Remotion branch paints captions inside the Player, so the
                         drag handle has to ride ABOVE it as its own layer. Without
                         this the caption is unmovable on the preview that actually
@@ -8043,7 +8085,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     {ccOn &&
                       Object.values(project.captions ?? {}).some((w) => (w?.length ?? 0) > 0) && (
                         <>
-                          <CaptionDragLayer
+                          {/* stack-edit: hide box when free-place */}
+                        {!(() => {
+                        if (!currentClip) return false;
+                        const ws = project.captions[currentClip.id] ?? [];
+                        return ws.some(
+                          (w) =>
+                            typeof w.mark?.xPct === 'number' &&
+                            typeof w.mark?.yPct === 'number',
+                        );
+                      })() && (
+                        <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
                           sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
@@ -8062,7 +8114,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void setCaptionOverrides({ sizePx });
                           }}
                         />
-                          <WordDragLayer
+                        )}
+                          {stackEditMode && (
+                        <WordDragLayer
                           words={(() => {
                             if (!currentClip) return [];
                             const base = project.captions[currentClip.id] ?? [];
@@ -8136,6 +8190,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, patch);
                           }}
                         />
+                        )}
                         </>
                         )}
                     {/* The media-cue transform box — the caption puck's pattern
@@ -8289,6 +8344,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           </div>
                           {/* Placement uses the SAME puck as the Remotion branch, so
                               dragging behaves identically on both previews. */}
+                        {/* stack-edit: hide box when free-place */}
+                        {!(() => {
+                        if (!currentClip) return false;
+                        const ws = project.captions[currentClip.id] ?? [];
+                        return ws.some(
+                          (w) =>
+                            typeof w.mark?.xPct === 'number' &&
+                            typeof w.mark?.yPct === 'number',
+                        );
+                      })() && (
                         <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
@@ -8303,6 +8368,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void setCaptionOverrides({ sizePx });
                           }}
                         />
+                        )}
+                        {stackEditMode && (
                         <WordDragLayer
                           words={(() => {
                             if (!currentClip) return [];
@@ -8377,6 +8444,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, patch);
                           }}
                         />
+                        )}
                         </>
                       )}
                     {/* The media-cue transform box on the EDIT stage too — same

@@ -24,6 +24,7 @@ const ReelComposition = dynamic(
 );
 
 export default function RemotionPreview({
+  freePlaceEdit = false,
   project,
   aspect = 'vertical',
   fps = DEFAULT_FPS,
@@ -46,16 +47,18 @@ export default function RemotionPreview({
    * of them invisible to the ruler.
    */
   playheadSec?: number;
+  freePlaceEdit?: boolean;
 }) {
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
   const playerRef = useRef<PlayerRef>(null);
 
   // The SAME plan the renderer builds. When the editor state changes, the plan
   // (and therefore the preview) recomputes — identical to what gets rendered.
-  const plan = useMemo(
-    () => buildRenderPlan(project, { fps, width: size.width, height: size.height }),
-    [project, fps, size.width, size.height],
-  );
+  const plan = useMemo(() => {
+    const base = buildRenderPlan(project, { fps, width: size.width, height: size.height });
+    // Studio-only: free-place Edit mode shows every card word (not in final render).
+    return freePlaceEdit ? { ...base, freePlaceEdit: true as const } : base;
+  }, [project, fps, size.width, size.height, freePlaceEdit]);
 
   /**
    * Follow the timeline. Seek only on a real difference (>1 frame) so we never

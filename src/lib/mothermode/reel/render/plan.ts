@@ -133,6 +133,8 @@ export interface RenderPlan {
   captionStyle: CaptionStyleDef;
   /** Position / size / rows, resolved from the same overrides. */
   captionLayout: CaptionLayout;
+  /** Studio-only: show all free-place card words (ignored in final render). */
+  freePlaceEdit?: boolean;
   captionOverrides?: import('../captions').CaptionOverrides | null;
   /** Words that render in the active style even when idle. */
   powerWords: string[];

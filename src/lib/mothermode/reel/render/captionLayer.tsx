@@ -808,6 +808,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   frame,
 }) => {
   const { words, captionStyle: def, captionLayout: layout, powerWords } = plan;
+  const freePlaceEdit = !!(plan as { freePlaceEdit?: boolean }).freePlaceEdit;
   if (!words.length) return null;
   // Master off + mute ranges (project clock).
   {
@@ -1019,12 +1020,11 @@ if (blockFx.includes('punchIn')) {
       .map((w, i) => ({ w, idx: cardWin.from + i }))
       .filter(({ w, idx }) => {
         if (w.mark?.hidden) return false;
+        // Edit mode: every free-placed word in the card is visible so you can
+        // drag/scale the full composition without scrubbing to each word.
+        if (freePlaceEdit) return true;
         if (isBuildStack && frame < w.fromFrame) return false;
-        // page mode: show whole card; build: spoken + held
-        if (!isBuildStack) {
-          // still only while the card's time window is live
-          return true;
-        }
+        if (!isBuildStack) return true;
         return frame >= w.fromFrame || idx <= activeIdx;
       });
     return (
