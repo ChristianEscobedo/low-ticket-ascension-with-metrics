@@ -470,6 +470,7 @@ export function wordMarkSummary(mark: ReelWordMark | undefined): string {
   if (!mark) return '';
   const parts: string[] = [];
   if (mark.hidden) parts.push('muted');
+  if (mark.xPct != null && mark.yPct != null) parts.push('placed');
   if (mark.card) parts.push(`card ${mark.card.mode}`);
   if (mark.fx) parts.push(mark.fx);
   if (mark.anim) parts.push(`anim ${mark.anim}`);
@@ -484,6 +485,42 @@ export function wordMarkSummary(mark: ReelWordMark | undefined): string {
   if (mark.sfx) parts.push('sfx ✓');
   return parts.join(' · ');
 }
+
+/**
+ * Seed free-place positions for a stack-card phrase.
+ * Spreads words into `rows` × words-per-row around the frame centre,
+ * matching the caption box's bottom-origin y axis.
+ */
+export function defaultStackLayout(
+  count: number,
+  opts?: { rows?: number; wordsPerRow?: number; baseYPct?: number; baseXPct?: number },
+): { xPct: number; yPct: number }[] {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return [];
+  const rows = Math.max(1, Math.min(4, Math.round(opts?.rows ?? Math.min(3, n))));
+  const perRow = Math.max(
+    1,
+    Math.min(8, Math.round(opts?.wordsPerRow ?? Math.ceil(n / rows))),
+  );
+  const baseX = opts?.baseXPct ?? 50;
+  const baseY = opts?.baseYPct ?? 42;
+  const rowGap = 9; // % of frame between rows (bottom → top)
+  const colGap = 14; // % between word centres
+  const out: { xPct: number; yPct: number }[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const r = Math.floor(i / perRow);
+    const c = i % perRow;
+    const rowLen = Math.min(perRow, n - r * perRow);
+    const rowWidth = (rowLen - 1) * colGap;
+    const x0 = baseX - rowWidth / 2;
+    // First row is lowest (closest to baseY); later rows stack upward.
+    const y = Math.max(6, Math.min(88, baseY + r * rowGap));
+    const x = Math.max(8, Math.min(92, x0 + c * colGap));
+    out.push({ xPct: Math.round(x * 10) / 10, yPct: Math.round(y * 10) / 10 });
+  }
+  return out;
+}
+
 
 /** Validate one word mark. Unknown anims DROP the key (the word then inherits
  *  the preset) — never a silent substitution onto 'pop'. Same rule for fx. */

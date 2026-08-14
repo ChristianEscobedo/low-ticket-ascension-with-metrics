@@ -2945,6 +2945,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   /** Word FX mode: click words in the subtitle list to mark them, then the FX
    *  bar applies the effect to every picked word (the cue flow's sibling). */
   const [fxMode, setFxMode] = useState(false);
+  /** Live free-place drag offsets (index → x/y) — local only until commit. */
+  const [wordPlaceLocal, setWordPlaceLocal] = useState<
+    Record<number, { xPct: number; yPct: number }
+  >>({});
   const [fxWords, setFxWords] = useState<ReadonlySet<number>>(new Set());
   /** Scope: 'global' = settings write to every picked word (a bulk
    *  convenience); 'individual' = they write to ONE target word, seeded
@@ -8035,7 +8039,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         matches the render — which is the one people reach for. */}
                     {ccOn &&
                       Object.values(project.captions ?? {}).some((w) => (w?.length ?? 0) > 0) && (
-                        <CaptionDragLayer
+                        <>
+                          <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
                           sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
@@ -8054,7 +8059,52 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void setCaptionOverrides({ sizePx });
                           }}
                         />
-                      )}
+                          <WordDragLayer
+                          words={(() => {
+                            if (!currentClip) return [];
+                            const base = project.captions[currentClip.id] ?? [];
+                            const clipSec = Math.max(
+                              0,
+                              playheadSec -
+                                timelineStartOf(
+                                  project.clips,
+                                  Math.max(
+                                    0,
+                                    project.clips.findIndex((c) => c.id === currentClip.id),
+                                  ),
+                                ),
+                            );
+                            return freePlaceWordsFrom(base, clipSec).map((w) => {
+                              const loc = wordPlaceLocal[w.index];
+                              return loc ? { ...w, xPct: loc.xPct, yPct: loc.yPct } : w;
+                            });
+                          })()}
+                          selectedIndex={
+                            fxWordIndexes && fxWordIndexes.size === 1
+                              ? [...fxWordIndexes][0]
+                              : null
+                          }
+                          onSelect={(index) => {
+                            setFxMode(true);
+                            setFxPicked(new Set([index]));
+                          }}
+                          onMove={(index, xPct, yPct) => {
+                            setWordPlaceLocal((prev) => ({
+                              ...prev,
+                              [index]: { xPct, yPct },
+                            }));
+                          }}
+                          onCommit={(index, xPct, yPct) => {
+                            setWordPlaceLocal((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                            void applyWordMark(index, { xPct, yPct });
+                          }}
+                        />
+                        </>
+                        )}
                     {/* The media-cue transform box — the caption puck's pattern
                         (overlay above the Player, local while dragging, one write
                         on release), mounted in BOTH preview branches so the cue
@@ -8218,6 +8268,50 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           onResize={(sizePx) => setCaptionOverridesLocal({ sizePx })}
                           onResizeCommit={(sizePx) => {
                             void setCaptionOverrides({ sizePx });
+                          }}
+                        />
+                        <WordDragLayer
+                          words={(() => {
+                            if (!currentClip) return [];
+                            const base = project.captions[currentClip.id] ?? [];
+                            const clipSec = Math.max(
+                              0,
+                              playheadSec -
+                                timelineStartOf(
+                                  project.clips,
+                                  Math.max(
+                                    0,
+                                    project.clips.findIndex((c) => c.id === currentClip.id),
+                                  ),
+                                ),
+                            );
+                            return freePlaceWordsFrom(base, clipSec).map((w) => {
+                              const loc = wordPlaceLocal[w.index];
+                              return loc ? { ...w, xPct: loc.xPct, yPct: loc.yPct } : w;
+                            });
+                          })()}
+                          selectedIndex={
+                            fxWordIndexes && fxWordIndexes.size === 1
+                              ? [...fxWordIndexes][0]
+                              : null
+                          }
+                          onSelect={(index) => {
+                            setFxMode(true);
+                            setFxPicked(new Set([index]));
+                          }}
+                          onMove={(index, xPct, yPct) => {
+                            setWordPlaceLocal((prev) => ({
+                              ...prev,
+                              [index]: { xPct, yPct },
+                            }));
+                          }}
+                          onCommit={(index, xPct, yPct) => {
+                            setWordPlaceLocal((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
+                            void applyWordMark(index, { xPct, yPct });
                           }}
                         />
                         </>

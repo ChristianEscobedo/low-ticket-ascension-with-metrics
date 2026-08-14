@@ -12,7 +12,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { AlignLeft, Check, Eye, EyeOff, Layers, Loader2, Mic, X } from 'lucide-react';
-import { wordMarkSummary, type ReelWord } from '@/lib/mothermode/reel/types';
+import {
+  defaultStackLayout,
+  wordMarkSummary,
+  type ReelWord,
+} from '@/lib/mothermode/reel/types';
 
 function tc(s: number): string {
   const v = Math.max(0, s);
@@ -152,44 +156,44 @@ export function SubtitlePanel({
 
   function toggleStackCard(from: number, to: number) {
     const existing = phraseCardId(words, from, to);
+    if (existing) {
+      // Remove card + free-place coords
+      const next = words.map((w, i) => {
+        if (i < from || i >= to) return w;
+        const mark = { ...(w.mark ?? {}) };
+        delete mark.card;
+        delete mark.xPct;
+        delete mark.yPct;
+        const empty = Object.keys(mark).length === 0;
+        return empty ? { word: w.word, start: w.start, end: w.end } : { ...w, mark };
+      });
+      onEdit(next);
+      return;
+    }
+    const id = newCardId();
+    const count = to - from;
+    const wordsPerRow = Math.min(4, Math.max(1, count));
+    const rows = Math.min(3, Math.max(1, Math.ceil(count / wordsPerRow)));
+    const layout = defaultStackLayout(count, { rows, wordsPerRow });
     const next = words.map((w, i) => {
       if (i < from || i >= to) return w;
-      const mark = { ...(w.mark ?? {}) };
-      if (existing) {
-        delete mark.card;
-      } else {
-        // Keep a stable id across the phrase so the layer groups them.
-        mark.card = mark.card?.id
-          ? mark.card
-          : {
-              id: '', // filled below
-              mode: 'build',
-              rows: 3,
-              wordsPerRow: Math.min(4, Math.max(1, to - from)),
-            };
-      }
-      const empty = Object.keys(mark).length === 0;
-      return empty ? { word: w.word, start: w.start, end: w.end } : { ...w, mark };
+      const li = i - from;
+      const pos = layout[li] ?? { xPct: 50, yPct: 40 };
+      return {
+        ...w,
+        mark: {
+          ...(w.mark ?? {}),
+          card: {
+            id,
+            mode: 'build' as const,
+            rows,
+            wordsPerRow,
+          },
+          xPct: pos.xPct,
+          yPct: pos.yPct,
+        },
+      };
     });
-    if (!existing) {
-      const id = newCardId();
-      for (let i = from; i < to; i += 1) {
-        if (next[i].mark) {
-          next[i] = {
-            ...next[i],
-            mark: {
-              ...next[i].mark!,
-              card: {
-                id,
-                mode: 'build',
-                rows: 3,
-                wordsPerRow: Math.min(4, Math.max(1, to - from)),
-              },
-            },
-          };
-        }
-      }
-    }
     onEdit(next);
   }
 

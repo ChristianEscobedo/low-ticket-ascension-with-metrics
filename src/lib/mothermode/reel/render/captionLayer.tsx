@@ -109,6 +109,9 @@ export interface CaptionWordMark {
     wordsPerRow?: number;
     anim?: string;
   };
+  /** Free-place frame position (see ReelWordMark.xPct/yPct). */
+  xPct?: number;
+  yPct?: number;
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
@@ -995,7 +998,89 @@ if (blockFx.includes('punchIn')) {
     (blockStyle as Record<string, unknown>).__pageStartFrame = pageStartFrame;
   }
 
-  return (
+  
+  // Free-place stack card: every word with xPct/yPct is painted at absolute
+  // frame coords instead of flowing inside the caption box. This is the
+  // MILLIONAIRES composition mode — drag on the stage writes mark.xPct/yPct.
+  const freePlaceCard =
+    !!cardWin &&
+    words
+      .slice(cardWin.from, cardWin.to)
+      .some(
+        (w) =>
+          w.mark &&
+          typeof w.mark.xPct === 'number' &&
+          typeof w.mark.yPct === 'number',
+      );
+  if (freePlaceCard && cardWin) {
+    const visible = words
+      .slice(cardWin.from, cardWin.to)
+      .map((w, i) => ({ w, idx: cardWin.from + i }))
+      .filter(({ w, idx }) => {
+        if (w.mark?.hidden) return false;
+        if (isBuildStack && frame < w.fromFrame) return false;
+        // page mode: show whole card; build: spoken + held
+        if (!isBuildStack) {
+          // still only while the card's time window is live
+          return true;
+        }
+        return frame >= w.fromFrame || idx <= activeIdx;
+      });
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 10,
+          pointerEvents: 'none',
+          fontSize,
+        }}
+      >
+        {visible.map(({ w, idx }) => {
+          const isActive = idx === activeIdx;
+          const power = isPowerWord(w.text, powerWords as string[]);
+          const mark = w.mark;
+          const x = typeof mark?.xPct === 'number' ? mark.xPct : layout.xPct;
+          const y =
+            typeof mark?.yPct === 'number' ? mark.yPct : layout.positionPct;
+          const base: React.CSSProperties = {
+            ...(isActive || power ? css.active : css.word),
+            position: 'absolute',
+            left: `${x}%`,
+            bottom: `${y}%`,
+            transform: 'translate(-50%, 50%)',
+            display: 'inline-block',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          };
+          if (mark?.color) {
+            base.color = mark.color;
+            delete (base as Record<string, unknown>)['backgroundImage'];
+            delete (base as Record<string, unknown>)['WebkitBackgroundClip'];
+            delete (base as Record<string, unknown>)['backgroundClip'];
+            (base as Record<string, unknown>)['WebkitTextFillColor'] = undefined;
+          }
+          if (mark?.scale && mark.scale !== 1) {
+            const sc = mark.scale;
+            base.transform = `translate(-50%, 50%) scale(${sc})`;
+            base.transformOrigin = 'center center';
+          }
+          // Reuse the same word renderer path by cloning the normal branch
+          // via a minimal span — entrance anims still apply through wordMotion
+          // when present on the normal path; free-place keeps paint simple +
+          // correct so drag placement always matches the MP4.
+          const text = w.text;
+          return (
+            <span key={idx} style={base}>
+              {text}
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+return (
     <div
       style={{
         position: 'absolute',
