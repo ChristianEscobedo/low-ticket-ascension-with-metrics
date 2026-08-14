@@ -4357,9 +4357,19 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     partial: Partial<import('@/lib/mothermode/reel/types').ReelWordMark>,
   ) {
     if (!project || !currentClip) return;
-    const words = (project.captions[currentClip.id] ?? []).map((w, i) =>
-      i === index ? { ...w, mark: { ...(w.mark ?? {}), ...partial } } : w,
-    );
+    const words = (project.captions[currentClip.id] ?? []).map((w, i) => {
+      if (i !== index) return w;
+      // undefined in partial means "clear this field" (spread alone keeps old).
+      const next: Record<string, unknown> = { ...(w.mark ?? {}) };
+      for (const [k, v] of Object.entries(partial)) {
+        if (v === undefined) delete next[k];
+        else next[k] = v;
+      }
+      const empty = Object.keys(next).length === 0;
+      return empty
+        ? { word: w.word, start: w.start, end: w.end }
+        : { ...w, mark: next as import('@/lib/mothermode/reel/types').ReelWordMark };
+    });
     const updated: ReelProject = {
       ...project,
       captions: { ...project.captions, [currentClip.id]: words },

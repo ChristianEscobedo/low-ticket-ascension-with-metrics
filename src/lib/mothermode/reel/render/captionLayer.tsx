@@ -1054,26 +1054,124 @@ if (blockFx.includes('punchIn')) {
             whiteSpace: 'nowrap',
             pointerEvents: 'none',
           };
+          // Theme gradient shift (same as normal path) when no mark color.
           if (mark?.color) {
             base.color = mark.color;
             delete (base as Record<string, unknown>)['backgroundImage'];
             delete (base as Record<string, unknown>)['WebkitBackgroundClip'];
             delete (base as Record<string, unknown>)['backgroundClip'];
-            (base as Record<string, unknown>)['WebkitTextFillColor'] = undefined;
+            delete (base as Record<string, unknown>)['WebkitTextFillColor'];
+          } else if (
+            def.gradientShift &&
+            (base as Record<string, unknown>)['backgroundImage']
+          ) {
+            const tSec = frame / plan.fps;
+            const gx = ((tSec * 22) % 100).toFixed(1);
+            const gy = ((tSec * 13) % 100).toFixed(1);
+            (base as Record<string, unknown>)['backgroundPosition'] = `${gx}% ${gy}%`;
+            if (!(base as Record<string, unknown>)['backgroundSize']) {
+              (base as Record<string, unknown>)['backgroundSize'] = '200% 200%';
+            }
+          }
+
+          const text = def.upper ? w.text.toUpperCase() : w.text;
+          const wordAnim = mark?.anim ?? defAnim;
+          // In Edit mode every word is shown; still run entrance for the active
+          // spoken word so Preview and Edit share the same look when scrubbing.
+          const wordEnterT =
+            isActive && !freePlaceEdit
+              ? entranceProgress(frame, w.fromFrame, plan.fps)
+              : isActive
+                ? entranceProgress(frame, w.fromFrame, plan.fps)
+                : 1;
+
+          const style: React.CSSProperties = { ...base };
+          if (isActive && wordAnim && wordEnterT < 1) {
+            const entrance = entranceStyle(wordAnim as string, wordEnterT);
+            // Keep free-place anchor; compose entrance on top of translate.
+            const entT = (entrance.transform as string) || '';
+            const entRest = { ...entrance };
+            delete entRest.transform;
+            Object.assign(style, entRest);
+            style.transform = `translate(-50%, 50%)${entT ? ` ${entT}` : ''}`.trim();
           }
           if (mark?.scale && mark.scale !== 1) {
-            const sc = mark.scale;
-            base.transform = `translate(-50%, 50%) scale(${sc})`;
-            base.transformOrigin = 'center center';
+            style.transform = `${(style.transform as string) || 'translate(-50%, 50%)'} scale(${mark.scale})`.trim();
+            style.transformOrigin = 'center center';
           }
-          // Reuse the same word renderer path by cloning the normal branch
-          // via a minimal span — entrance anims still apply through wordMotion
-          // when present on the normal path; free-place keeps paint simple +
-          // correct so drag placement always matches the MP4.
-          const text = w.text;
+          // Full mark FX (glow / gradient / shine / pulse / font / ambient…)
+          applyWordMarkExtras(
+            style,
+            mark,
+            frame,
+            w.fromFrame,
+            plan.fps,
+            css.active.color as string,
+          );
+
+          const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
+          if (isGradFill) {
+            return (
+              <span key={idx} style={{ position: 'absolute', left: `${x}%`, bottom: `${y}%`, transform: 'translate(-50%, 50%)', display: 'inline-block', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                {renderGradientWord(text, style, '', '')}
+              </span>
+            );
+          }
+
           return (
-            <span key={idx} style={base}>
+            <span key={idx} style={style}>
+              {mark?.fx === 'marker' ? (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    inset: '-0.04em -0.14em',
+                    background: mark.fxColor ?? (css.active.color as string),
+                    opacity: Math.min(
+                      0.85,
+                      0.34 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1)),
+                    ),
+                    zIndex: -1,
+                    borderRadius: '0.14em',
+                    transformOrigin: 'left center',
+                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                  }}
+                />
+              ) : null}
               {text}
+              {mark?.fx === 'underline' ? (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: '-0.04em',
+                    right: '-0.04em',
+                    bottom: '-0.10em',
+                    height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
+                    borderRadius: '0.06em',
+                    background: mark.fxColor ?? (css.active.color as string),
+                    boxShadow: `0 0 0.12em ${mark.fxColor ?? (css.active.color as string)}`,
+                    transformOrigin: 'left center',
+                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                  }}
+                />
+              ) : null}
+              {mark?.fx === 'strike' ? (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: '-0.04em',
+                    right: '-0.04em',
+                    top: '52%',
+                    height: `${(0.09 * Math.max(0.2, Math.min(3, mark.fxAmount ?? 1))).toFixed(2)}em`,
+                    borderRadius: '0.06em',
+                    background: mark.fxColor ?? (css.active.color as string),
+                    transformOrigin: 'left center',
+                    transform: `scaleX(${wordSpanGrow(frame, w.fromFrame, plan.fps).toFixed(3)})`,
+                  }}
+                />
+              ) : null}
             </span>
           );
         })}

@@ -365,14 +365,14 @@ export default function WordDragLayer({
       {menu && selected && menu.index === selected.index && onStyle && (
         <div
           data-word-ctx-menu
-          className="pointer-events-auto fixed z-50 max-h-[min(420px,70vh)] w-[200px] overflow-y-auto rounded-lg border border-white/15 bg-ink/95 p-1.5 shadow-xl backdrop-blur"
+          className="pointer-events-auto fixed z-50 max-h-[min(480px,78vh)] w-[260px] overflow-y-auto rounded-xl border border-white/12 bg-ink/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/5 backdrop-blur-md"
           style={{
             left: Math.min(menu.clientX, (typeof window !== 'undefined' ? window.innerWidth : 800) - 220),
             top: Math.min(menu.clientY, (typeof window !== 'undefined' ? window.innerHeight : 600) - 360),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="mb-1 truncate px-1.5 text-[9px] font-semibold uppercase tracking-wide text-brass/90">
+          <div className="mb-1.5 truncate border-b border-white/8 px-2 pb-1.5 text-[10px] font-semibold tracking-wide text-brass">
             {selected.label}
           </div>
 
@@ -610,7 +610,7 @@ function Section({
 }) {
   return (
     <div className="mb-1.5">
-      <div className="mb-0.5 px-1.5 text-[8px] uppercase tracking-wide text-white/35">
+      <div className="mb-1 px-1.5 text-[9px] font-medium uppercase tracking-wider text-white/40">
         {label}
       </div>
       {children}
