@@ -350,7 +350,8 @@ export function buildRenderPlan(
     captionStyleId: typeof project.captionStyle === 'string' ? project.captionStyle : 'karaoke',
     captionStyle,
     captionLayout,
-    powerWords: project.captionOverrides?.powerWords ?? [],
+    captionOverrides: project.captionOverrides ?? null,
+      powerWords: project.captionOverrides?.powerWords ?? [],
     mediaCues: shiftMediaCues(project, fps),
     // The style's fonts PLUS any per-word font marks — a font the worker does
     // not fetch renders as a fallback face in the MP4, so marked families

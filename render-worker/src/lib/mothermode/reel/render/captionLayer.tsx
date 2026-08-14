@@ -50,8 +50,8 @@
  * effect is stored per word or row, so a trim/split can never orphan one.
  */
 import React from 'react';
-import { isCaptionVisibleAt } from '../../captions';
 import {
+  isCaptionVisibleAt,
   captionCssFor,
   captionRows,
   emojiFor,
@@ -757,7 +757,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   // Master off + mute ranges (project clock).
   {
     const sec = frame / Math.max(1, plan.fps);
-    const ov = (plan as { captionOverrides?: import('../../captions').CaptionOverrides })
+    const ov = (plan as { captionOverrides?: import('../captions').CaptionOverrides })
       .captionOverrides;
     if (!isCaptionVisibleAt(sec, ov ?? null)) return null;
   }
@@ -978,6 +978,10 @@ if (blockFx.includes('punchIn')) {
               display: 'inline-block',
               position: 'relative',
             };
+            const stackBuildHide = isBuildStack && frame < w.fromFrame;
+            if (stackBuildHide) {
+              base.opacity = 0;
+            }
             
             if (mark?.color) {
               base.color = mark.color;

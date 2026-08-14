@@ -51,6 +51,7 @@
  */
 import React from 'react';
 import {
+  isCaptionVisibleAt,
   captionCssFor,
   captionRows,
   emojiFor,
@@ -756,7 +757,7 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   // Master off + mute ranges (project clock).
   {
     const sec = frame / Math.max(1, plan.fps);
-    const ov = (plan as { captionOverrides?: import('../../captions').CaptionOverrides })
+    const ov = (plan as { captionOverrides?: import('../captions').CaptionOverrides })
       .captionOverrides;
     if (!isCaptionVisibleAt(sec, ov ?? null)) return null;
   }
