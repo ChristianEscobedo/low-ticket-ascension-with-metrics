@@ -299,8 +299,9 @@ export default function WordDragLayer({
       {words.map((w) => {
         const isSel = selectedIndex === w.index;
         const sc = w.scale && w.scale > 0 ? w.scale : 1;
-        const baseW = Math.max(48, Math.min(160, 14 + w.label.length * 11));
-        const baseH = 36;
+        // Generous hit target — theme glyphs are large; a tight box is ungrabbable.
+        const baseW = Math.max(72, Math.min(220, 28 + w.label.length * 14));
+        const baseH = 52;
         const boxW = baseW * sc;
         const boxH = baseH * sc;
 
@@ -325,8 +326,8 @@ export default function WordDragLayer({
               className={clsx(
                 'absolute inset-0 rounded-sm',
                 isSel
-                  ? 'ring-2 ring-brass/80 ring-offset-0 bg-brass/[0.06]'
-                  : 'hover:ring-1 hover:ring-white/35 hover:bg-white/[0.03]',
+                  ? 'ring-2 ring-brass ring-offset-0 bg-brass/10'
+                  : 'ring-1 ring-white/25 hover:ring-brass/50 hover:bg-white/[0.06]',
                 w.fx === 'gradient' && 'ring-1 ring-fuchsia-400/40',
               )}
             />

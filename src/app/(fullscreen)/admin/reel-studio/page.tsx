@@ -901,6 +901,7 @@ function StageCaptions({
   fps = DEFAULT_FPS,
   preset = 'karaoke',
   overrides,
+  freePlaceEdit = false,
 }: {
   /** The clip's words, in CLIP-LOCAL source seconds (what project.captions holds). */
   words: ReelWord[];
@@ -910,6 +911,8 @@ function StageCaptions({
   fps?: number;
   preset?: CaptionPreset;
   overrides?: CaptionOverrides;
+  /** Edit mode: show every free-placed word (not just the spoken one). */
+  freePlaceEdit?: boolean;
 }) {
   const def = resolveCaptionStyle(captionDefFor(preset), overrides);
   const layout = captionLayoutFor(def, overrides);
@@ -918,7 +921,7 @@ function StageCaptions({
   // The layer thinks in FRAMES (so it matches the renderer exactly); the stage
   // thinks in seconds. Convert here, once, rather than teaching the layer a
   // second time model.
-  const plan: CaptionPlanLike = useMemo(
+  const plan: CaptionPlanLike & { freePlaceEdit?: boolean } = useMemo(
     () => ({
       fps,
       width: Math.max(1, stageW),
@@ -926,12 +929,14 @@ function StageCaptions({
         text: w.word,
         fromFrame: Math.round(w.start * fps),
         toFrame: Math.round(w.end * fps),
+        ...(w.mark ? { mark: w.mark } : {}),
       })),
       captionStyle: def,
       captionLayout: layout,
       powerWords: overrides?.powerWords ?? [],
+      freePlaceEdit,
     }),
-    [words, fps, stageW, def, layout, overrides?.powerWords],
+    [words, fps, stageW, def, layout, overrides?.powerWords, freePlaceEdit],
   );
 
   return <CaptionLayerFrame plan={plan} frame={Math.round(timeSec * fps)} />;
@@ -8408,7 +8413,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         <>
                           <div className="pointer-events-none absolute inset-0 z-20">
                             <StageCaptions
-                              words={project.captions[stageClip.id]}
+                              words={(projectWithWordPlace ?? project).captions[stageClip.id] ?? []}
                               timeSec={previewTime + (stageClip.trimStartSec ?? 0)}
                               stageW={stageBox.w}
                               preset={project.captionStyle}

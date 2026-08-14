@@ -711,57 +711,94 @@ function renderGradientWord(
       '',
   );
   const hasGrad = !!(style as Record<string, unknown>)['backgroundImage'];
-  if (!hasGrad || !shadow) {
+  if (!hasGrad) {
+    // Solid fill path — still strip layout so free-place shells stay clean.
+    const solid: React.CSSProperties = { ...style };
+    delete solid.position;
+    delete solid.left;
+    delete solid.right;
+    delete solid.top;
+    delete solid.bottom;
+    delete solid.inset;
     return (
-      <>
+      <span style={solid}>
         {text}
         {emoji ? <span className="emoji-burst">{emoji}</span> : null}
         {tail}
-      </>
+      </span>
     );
   }
   // Dual layer: solid shadow under clipped gradient fill (Chromium-safe).
+  // CRITICAL: never let free-place layout (position/left/bottom/transform
+  // anchor) leak into the fill — that paints a black underlayer at the
+  // free-place spot and a gradient glyph somewhere else (double PROCESS).
   const shell: React.CSSProperties = {
     display: 'inline-block',
     position: 'relative',
-    transform: style.transform,
-    opacity: style.opacity,
+    // transform/opacity ride the OUTER free-place shell, not here
+    opacity: 1,
   };
   const under: React.CSSProperties = {
     position: 'absolute',
     left: 0,
     top: 0,
     color: '#000',
-    textShadow: shadow,
+    textShadow: shadow || (style.textShadow as string) || '0 2px 8px rgba(0,0,0,0.85)',
     WebkitTextFillColor: '#000',
+    backgroundImage: 'none',
+    backgroundClip: 'border-box',
+    WebkitBackgroundClip: 'border-box',
     pointerEvents: 'none',
     userSelect: 'none',
-    font: 'inherit',
-    letterSpacing: 'inherit',
-    whiteSpace: 'pre-wrap',
+    whiteSpace: 'nowrap',
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight,
+    fontSize: style.fontSize,
+    letterSpacing: style.letterSpacing,
+    lineHeight: style.lineHeight,
+    textTransform: style.textTransform,
   };
   const fill: React.CSSProperties = {
-    ...style,
+    backgroundImage: style.backgroundImage,
+    backgroundSize: style.backgroundSize,
+    backgroundPosition: style.backgroundPosition,
+    backgroundClip: 'text',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    color: 'transparent',
+    // Keep any non-layout paint bits
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight,
+    fontSize: style.fontSize,
+    letterSpacing: style.letterSpacing,
+    lineHeight: style.lineHeight,
+    textTransform: style.textTransform,
+    // Shadow lives on the under layer only — never on the clipped fill
+    textShadow: 'none',
     position: 'relative',
-    transform: undefined,
-    opacity: undefined,
-    filter: undefined,
-    textShadow: undefined,
+    display: 'inline-block',
+    whiteSpace: 'nowrap',
   };
-  delete (fill as Record<string, unknown>)['--caption-grad-shadow'];
+  // Preserve CSS var for consumers that read it
+  if ((style as Record<string, unknown>)['--caption-grad-shadow']) {
+    (fill as Record<string, unknown>)['--caption-grad-shadow'] = (
+      style as Record<string, unknown>
+    )['--caption-grad-shadow'];
+  }
   return (
     <span style={shell}>
-      <span aria-hidden style={under}>
+      <span style={under} aria-hidden>
         {text}
       </span>
-      <span style={fill}>{text}</span>
+      <span style={fill}>
+        {text}
+      </span>
       {emoji ? <span className="emoji-burst">{emoji}</span> : null}
       {tail}
     </span>
   );
 }
 
-/** When the active word belongs to a stack card, return that card's word window. */
 function resolveCardWindow(
   words: readonly CaptionWord[],
   activeIdx: number,
@@ -1154,10 +1191,10 @@ if (blockFx.includes('punchIn')) {
 
           const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
           if (isGradFill) {
-            // IMPORTANT: pass FULL style (incl. gradient + shadow vars) into
-            // renderGradientWord. Outer shell only anchors position — but must
-            // NOT strip transform scale the inner needs. renderGradientWord
-            // paints dual layers using the style bag.
+            // Outer shell ONLY anchors free-place. Paint styles go into
+            // renderGradientWord WITHOUT position/left/bottom (stripped there).
+            // Transform (entrance/scale) stays on the outer shell so the dual
+            // layer moves as one unit.
             return (
               <span
                 key={`fp-${idx}`}
@@ -1172,6 +1209,7 @@ if (blockFx.includes('punchIn')) {
                   pointerEvents: 'none',
                   zIndex: style.zIndex,
                   opacity: style.opacity,
+                  filter: style.filter,
                 }}
               >
                 {renderGradientWord(text, style, emoji, '')}
