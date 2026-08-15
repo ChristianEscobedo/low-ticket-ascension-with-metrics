@@ -8690,11 +8690,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       </div>
                     )}
 
-                    {/* R25: ONE element, driven 100% by the playback clock (no src prop,
-                        no fences — the clock swaps + seeks it; it never decides anything). */}
+                    {/* R25: ONE element, driven 100% by the playback clock for SEEKING.
+                        The src IS set on mount (src={previewSrc}) so the element is BORN
+                        with a source — the paint effect only fires when previewSrc CHANGES,
+                        so a video that mounts fresh (e.g. the branch just flipped from
+                        Remotion to edit because the upload is still a blob) would otherwise
+                        be born with NO src and sit black. The clock still owns drift/seek
+                        during playback; this just guarantees a first frame. */}
                     <video
 
                       ref={previewRef}
+                      src={previewSrc || undefined}
                       data-clip-url=""
                       preload="auto"
                       onClick={togglePlay}
