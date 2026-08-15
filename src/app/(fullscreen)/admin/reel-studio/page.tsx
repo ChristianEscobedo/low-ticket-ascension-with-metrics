@@ -3152,7 +3152,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     // the variant gene strip eats w-40 + mr-3 of the stage when it's showing
     const availW = stageSize.w - (geneStrip ? 172 : 0);
     const w = Math.min(availW, aspect === '16:9' ? 768 : availW);
-    return fitAspect(w, stageSize.h, aw, ah);
+    const measured = fitAspect(w, stageSize.h, aw, ah);
+    // NEVER hand the preview a 0×0 box. Until the ResizeObserver has measured
+    // the stage (first paint, or the moment a draft project mounts it), w/h are
+    // 0 and fitAspect returns {0,0} — and the preview branches style themselves
+    // with `width: stageBox.w || undefined`, i.e. they COLLAPSE to nothing:
+    // "the whole preview area is blank — no video, no upload bar, nothing".
+    // Fall back to a sensible default for the aspect so the player always has
+    // real dimensions; the observer overwrites it the moment it measures.
+    if (measured.w > 0 && measured.h > 0) return measured;
+    return fitAspect(aw === 16 ? 768 : 360, ah === 16 ? 432 : 480, aw, ah);
   }, [stageSize, aspect, geneStrip]);
 
   /** R15 keyframe editing: patch one key, add at the playhead, remove — undo-safe. */
