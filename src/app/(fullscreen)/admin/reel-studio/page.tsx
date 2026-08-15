@@ -4021,6 +4021,20 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     stageClip?.url || project?.clips?.[0]?.url || project?.composedUrl || '';
 
   /**
+   * Remotion's <OffthreadVideo> CANNOT decode a blob: URL — it extracts frames
+   * with an offscreen/ffmpeg-style fetch that needs a real http(s) source. An
+   * upload lands on the timeline as a blob: URL (the local file) and only
+   * becomes a storage URL seconds later, so the whole time it's a blob the
+   * Remotion preview paints BLACK: "the video does not mount after upload".
+   *
+   * While the stage clip is a blob we bail to the plain <video> edit-stage,
+   * which plays a blob: URL natively. As soon as the storage URL lands the
+   * flag clears and the true Remotion preview takes back over.
+   */
+  const stageIsBlob =
+    typeof previewSrc === 'string' && previewSrc.startsWith('blob:');
+
+  /**
    * PAINT THE STAGE WHEN THE SOURCE CHANGES.
    *
    * The <video> has no src prop on purpose - the clock owns it. But the clock
@@ -8295,7 +8309,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     })()}
                   </div>
                 )}
-                {previewMode === 'remotion' && project.clips.length > 0 ? (
+                {/* Remotion preview — UNLESS the stage clip is still a blob: URL.
+                    OffthreadVideo can't decode a blob (it fetches frames offscreen
+                    and needs http(s)), so an upload paints black until the storage
+                    URL lands. While it's a blob we fall through to the plain
+                    <video> edit-stage below, which plays a blob natively. */}
+                {previewMode === 'remotion' && project.clips.length > 0 && !stageIsBlob ? (
                   <div
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
