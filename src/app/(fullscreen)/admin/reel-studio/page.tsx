@@ -3449,6 +3449,22 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     patch({ clips: project.clips.map((c) => (c.id === id ? { ...c, ...partial } : c)) });
   }
 
+  /**
+   * Patch a clip through the STATE UPDATER, not the render-scope `project`.
+   *
+   * Upload callbacks (duration probe, "storage is ready" swap) resolve seconds
+   * to minutes after `addUpload` was called, by which time the `project` those
+   * closures captured is ancient — it predates the clip we just inserted. The
+   * plain `patchClip` then wrote that stale timeline back, which DELETED the
+   * new scene the instant the upload finished: "Uploaded … (152.9s)" with an
+   * empty player. Reading the live project inside the updater can't go stale.
+   */
+  function patchClipLive(id: string, partial: Partial<ReelClip>) {
+    setProject((p) =>
+      p ? { ...p, clips: p.clips.map((c) => (c.id === id ? { ...c, ...partial } : c)) } : p,
+    );
+  }
+
   /** R25 overlay (b-roll) layers: patch one, or add one at the playhead. */
   function patchOverlay(id: string, partial: Partial<ReelOverlayClip>) {
     if (!project) return;
@@ -3551,7 +3567,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         void probeDuration(localBlob).then((dur) => {
           if (dur > 0 && clipId) {
             localDur = dur;
-            patchClip(clipId, { durationSec: dur });
+            patchClipLive(clipId, { durationSec: dur });
           }
         });
       }
@@ -3589,7 +3605,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
             /* warming is best-effort */
           }
         }
-        patchClip(clipId, { url: ready ? url : localBlob!, durationSec: localDur || 5 });
+        patchClipLive(clipId, { url: ready ? url : localBlob!, durationSec: localDur || 5 });
         setNote(
           ready
             ? `Uploaded ${file.name} (${(localDur || 0).toFixed(1)}s).`
@@ -3600,7 +3616,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         // made the video vanish the instant the upload finished. It is released on unload.
       } else {
 
-        patch({ audio: { url, name: file.name.slice(0, 60), offsetSec: 0, durationSec: null } });
+        setProject((p) =>
+          p
+            ? { ...p, audio: { url, name: file.name.slice(0, 60), offsetSec: 0, durationSec: null } }
+            : p,
+        );
         setTab('clips');
         setNote(`Uploaded ${file.name} (audio).`);
       }
@@ -3997,7 +4017,35 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     [project, playheadSec],
   );
   const stageClip = clockHit?.clip ?? null;
-  const previewSrc = stageClip?.url || project?.composedUrl || '';
+  const previewSrc =
+    stageClip?.url || project?.clips?.[0]?.url || project?.composedUrl || '';
+
+  /**
+   * PAINT THE STAGE WHEN THE SOURCE CHANGES.
+   *
+   * The <video> has no src prop on purpose - the clock owns it. But the clock
+   * only runs while PLAYING, so a clip that lands while playback is parked
+   * (every upload, every project load) never got a source and the player sat
+   * black. This effect does the one thing the clock cannot: swap + seek the
+   * element the instant the stage URL changes, so an uploaded clip shows up
+   * immediately - and swaps cleanly again when the blob becomes a storage URL.
+   */
+  useEffect(() => {
+    const v = previewRef.current;
+    if (!v || !previewSrc) return;
+    if (v.dataset.clipUrl === previewSrc) return;
+    swappingRef.current = true;
+    v.dataset.clipUrl = previewSrc;
+    pendingSeekRef.current =
+      (stageClip?.trimStartSec ?? 0) + (clockHit?.local ?? 0);
+    v.src = previewSrc;
+    try {
+      v.load();
+    } catch {
+      /* Safari can throw on a same-tick load - the swap still lands */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewSrc, stageClip?.id]);
   /** R25: the overlay (b-roll) layer currently under the clock, if any. */
   const overlayHit = useMemo(() => {
     for (const o of project?.overlays ?? []) {
@@ -8595,12 +8643,32 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
                   >
 
+                    {/* Upload feedback lives ON the stage - the sidebar is not where
+                        the eye is while a file is climbing. */}
+                    {uploadJob && (
+                      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/85 via-black/50 to-transparent px-3 pb-6 pt-2.5">
+                        <p className="text-[11px] font-semibold text-bone">
+                          {uploadJob.phase}
+                        </p>
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bone/20">
+                          <div
+                            className="h-full rounded-full bg-emerald-400 transition-[width] duration-200"
+                            style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+                          />
+                        </div>
+                        <p className="mt-1 truncate text-[10px] text-bone/60">
+                          {uploadJob.name} {uploadJob.pct}%
+                        </p>
+                      </div>
+                    )}
+
                     {/* R25: ONE element, driven 100% by the playback clock (no src prop,
                         no fences — the clock swaps + seeks it; it never decides anything). */}
                     <video
 
                       ref={previewRef}
                       data-clip-url=""
+                      preload="auto"
                       onClick={togglePlay}
                       style={{
                         transform: stageClip?.motion
