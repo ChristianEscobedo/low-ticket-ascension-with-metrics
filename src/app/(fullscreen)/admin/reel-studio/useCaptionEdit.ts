@@ -496,6 +496,19 @@ export function useCaptionEdit({
     const baseTransform = t.style.transform || '';
     let moved = false;
     let last = { xPct: startCX, yPct: startCY };
+    // A rAF loop owns the glyph's transform for the WHOLE drag and re-applies
+    // it EVERY frame. React re-renders — setFxMode on the press, setStackEditMode
+    // on the first move, the commit — RESET the inline transform, and without
+    // the loop the glyph snaps back mid-drag: "clunky", "the word disappeared",
+    // "doesn't react". The loop re-applies it faster than any re-render can
+    // clear it, so the word always glides with the pointer.
+    const delta = { x: 0, y: 0 };
+    let raf = 0;
+    const paint = () => {
+      t.style.transform = `${baseTransform} translate(${delta.x}px, ${delta.y}px)`;
+      raf = requestAnimationFrame(paint);
+    };
+    raf = requestAnimationFrame(paint);
 
     const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
@@ -505,9 +518,8 @@ export function useCaptionEdit({
         moved = true;
         setStackEditMode(true); // a drag enters Edit so the word shows as placed
       }
-      // Move the REAL glyph. No state write → no re-render → the transform
-      // persists for the whole gesture and the word glides with the pointer.
-      t.style.transform = `${baseTransform} translate(${dx}px, ${dy}px)`;
+      delta.x = dx;
+      delta.y = dy;
       last = {
         xPct: Math.max(2, Math.min(98, startCX + (dx / Math.max(1, frame.width)) * 100)),
         yPct: Math.max(2, Math.min(98, startCY - (dy / Math.max(1, frame.height)) * 100)),
@@ -517,6 +529,7 @@ export function useCaptionEdit({
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      cancelAnimationFrame(raf);
       if (moved) {
         const finalPos = last;
         // Commit the dragged spot. The re-render repaints the word at the
