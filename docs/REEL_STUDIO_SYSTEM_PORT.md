@@ -1,5 +1,32 @@
 # Reel Studio — System Port
 
+> **2026-08-16 (latest) — the caption free-place overhaul (drag the REAL
+> word):** the per-word editor no longer drags an invisible hit box over a
+> separate paint — you drag the painted glyph itself. `onCaptionWordPointerDown`
+> (useCaptionEdit.ts) resolves the `data-caption-word` glyph under the pointer
+> (closest + elementsFromPoint + clipWordIndexFromPlanIndex on the Remotion
+> surface) and a `requestAnimationFrame` loop owns the glyph's inline transform
+> for the whole drag — re-applied EVERY frame, so no React re-render
+> (setFxMode/setStackEditMode/the commit) can snap the word back mid-drag. On
+> release it commits the x/y% (applyWordMark → one save). The WordDragLayer's
+> boxes are VISUAL-ONLY now (the selected word's outline + corner scale
+> handle); the glyph is the handle. The caption layer (captionLayer.tsx, +
+> the vendored worker copy) settles the entrance in edit mode
+> (`wordEnterT = 1` when freePlaceEdit — a dragged word renders at REST, not
+> mid-pop/spring, which was the "moves a little then snaps" + "looks like it
+> shrinks"), and a placed word paints while its PAGE is current AND spoken
+> (`frame >= w.fromFrame && idx >= pageFrom && idx < pageTo`) — a past word
+> you drag no longer vanishes on mount, and a moved word no longer shows
+> before its time on the preview. The selected word always gets its outline +
+> scale handle (the surface adds it to the box list even when
+> freePlaceWordsFrom didn't surface it). The arrow-nudge moves FREE (the
+> center-snap made a word near the middle snap to 50, then snap BACK — stuck
+> — and snapped words overlapped, so grabbing one grabbed the other). Reset
+> strips the WHOLE scene's words (not just the current page). The note/error
+> banner is a floating toast (never pushes the player smaller). Verified: tsc
+> clean, caption suites + vendor-parity green. Commits: e5fe809, c3584ff,
+> d45c957, 42ceeb5, bb5852b, 13b9152, 8e5ddd, a10fb92.
+>
 > **2026-08-16 (latest) — the page.tsx split (the hook half):** the
 > caption-edit surface's state + handlers live in
 > `src/app/(fullscreen)/admin/reel-studio/useCaptionEdit.ts` now, extracted
