@@ -9,7 +9,7 @@
  *
  * Axes match the caption box: xPct = centre 0–100, yPct = from BOTTOM 0–100.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import type { ReelWord, ReelWordFx, ReelWordMark } from '@/lib/mothermode/reel/types';
 import { WORD_FONTS, WORD_FX, captionLineLayout } from '@/lib/mothermode/reel/types';
@@ -62,12 +62,6 @@ export type WordStylePatch = Partial<
   /** Explicit clear of all style fields (keeps x/y/card). */
   clearStyle?: boolean;
 };
-
-type MenuState = {
-  index: number;
-  clientX: number;
-  clientY: number;
-} | null;
 
 const QUICK_ANIMS: { id: CaptionAnim | ''; label: string }[] = [
   { id: '', label: 'None' },
@@ -164,9 +158,6 @@ export default function WordDragLayer({
   onCommit,
   onScale,
   onScaleCommit,
-  onStyle,
-  onRemovePlace,
-  onToggleBehind,
   mapGlyphIndex,
 }: {
   words: WordPlace[];
@@ -196,70 +187,10 @@ export default function WordDragLayer({
   mapGlyphIndex?: (clipIndex: number) => number;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const lastRef = useRef<{ index: number; x: number; y: number } | null>(null);
   const lastScaleRef = useRef<{ index: number; scale: number } | null>(null);
-  const [menu, setMenu] = useState<MenuState>(null);
-  const [dragging, setDragging] = useState(false);
   const [glyphBox, setGlyphBox] = useState<
     Record<number, { left: number; top: number; width: number; height: number }>
   >({});
-
-  const clientToPct = useCallback((clientX: number, clientY: number) => {
-    const el = frameRef.current;
-    if (!el) return { x: 50, y: 50 };
-    const r = el.getBoundingClientRect();
-    const x = ((clientX - r.left) / Math.max(1, r.width)) * 100;
-    const y = (1 - (clientY - r.top) / Math.max(1, r.height)) * 100;
-    return {
-      x: Math.max(2, Math.min(98, x)),
-      y: Math.max(2, Math.min(98, y)),
-    };
-  }, []);
-
-  const startDrag = (index: number, e: React.PointerEvent) => {
-    if (e.button === 2) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu(null);
-    onSelect(index);
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-    const originX = e.clientX;
-    const originY = e.clientY;
-    let armed = false;
-    lastRef.current = null;
-
-    const onMoveEv = (ev: PointerEvent) => {
-      const dx = ev.clientX - originX;
-      const dy = ev.clientY - originY;
-      if (!armed) {
-        if (dx * dx + dy * dy < 25) return; // 5px — click ≠ move
-        armed = true;
-        setDragging(true);
-      }
-      const p = clientToPct(ev.clientX, ev.clientY);
-      lastRef.current = { index, x: p.x, y: p.y };
-      const snapped = snapPct(p.x, p.y);
-      onMove(index, snapped.x, snapped.y);
-    };
-    const onUp = (ev: PointerEvent) => {
-      el.releasePointerCapture(ev.pointerId);
-      el.removeEventListener('pointermove', onMoveEv);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-      setDragging(false);
-      const last = lastRef.current;
-      // Only commit if the user actually dragged. A click must not invent x/y.
-      if (armed && last && last.index === index) {
-        const snapped = snapPct(last.x, last.y);
-        onCommit(index, snapped.x, snapped.y);
-      }
-      lastRef.current = null;
-    };
-    el.addEventListener('pointermove', onMoveEv);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-  };
 
   const startScale = (
     index: number,
@@ -268,7 +199,6 @@ export default function WordDragLayer({
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu(null);
     onSelect(index);
     if (!onScale || !onScaleCommit) return;
     const el = e.currentTarget as HTMLElement;
@@ -301,21 +231,6 @@ export default function WordDragLayer({
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onUp);
   };
-
-  const openMenu = (index: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onSelect(index);
-    setMenu({ index, clientX: e.clientX, clientY: e.clientY });
-  };
-
-  const apply = (index: number, partial: WordStylePatch) => {
-    onStyle?.(index, partial);
-    setMenu(null);
-  };
-
-  const selected = words.find((w) => w.index === selectedIndex) ?? null;
-
 
   /* hug painted glyphs — never guess a box from captionLineLayout */
   useEffect(() => {
@@ -457,15 +372,15 @@ export default function WordDragLayer({
           <div
             key={w.index}
             data-glyph-hit={g ? '1' : '0'}
-            className="pointer-events-auto absolute"
+            // VISUAL ONLY — the box is the selected word's outline, never a hit
+            // target. The REAL glyph is the drag handle now (you grab the word
+            // you see); a parallel invisible box is what made it clunky.
+            className="pointer-events-none absolute"
             style={{
               ...boxStyle,
-              cursor: dragging && isSel ? 'grabbing' : 'grab',
               opacity: w.hidden ? 0.35 : 1,
             }}
-            onPointerDown={(e) => startDrag(w.index, e)}
-            onContextMenu={(e) => openMenu(w.index, e)}
-            title={`"${w.label}" — drag · corner scales · right-click styles`}
+            title={`"${w.label}" — drag it · corner scales · right-click styles`}
           >
             <div
               className={clsx(
@@ -488,7 +403,7 @@ export default function WordDragLayer({
                     aria-label="Scale word"
                     onPointerDown={(e) => startScale(w.index, sc, e)}
                     className={clsx(
-                      'absolute -bottom-1.5 -right-1.5 z-10 h-3.5 w-3.5',
+                      'pointer-events-auto absolute -bottom-1.5 -right-1.5 z-10 h-3.5 w-3.5',
                       'rounded-sm border border-brass bg-ink shadow',
                       'cursor-nwse-resize hover:bg-brass/30',
                     )}
@@ -501,42 +416,9 @@ export default function WordDragLayer({
         );
       })}
 
-      {!dragging && (
-        <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/55 px-2 py-0.5 text-[8px] text-white/45">
-          drag · corner scales · right-click style
-        </div>
-      )}
-
-      {menu && selected && menu.index === selected.index && onStyle && (
-        <WordContextMenu
-          clientX={menu.clientX}
-          clientY={menu.clientY}
-          selected={selected}
-          onApply={(p) => apply(menu.index, p)}
-          onClose={() => setMenu(null)}
-          onRemovePlace={
-            selected.placed && onRemovePlace
-              ? () => {
-                  onRemovePlace(menu.index);
-                  setMenu(null);
-                }
-              : undefined
-          }
-          onToggleBehind={
-            onToggleBehind
-              ? () => {
-                  // Pin an un-placed word where it sits (the measured glyph
-                  // centre) so "behind" never teleports it across the frame.
-                  const g = glyphBox[menu.index];
-                  const cx = g ? g.left + g.width / 2 : selected.xPct;
-                  const cy = g ? 100 - (g.top + g.height / 2) : selected.yPct;
-                  onToggleBehind(menu.index, cx, cy);
-                  setMenu(null);
-                }
-              : undefined
-          }
-        />
-      )}
+      <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/55 px-2 py-0.5 text-[8px] text-white/45">
+        drag a word · corner scales · right-click styles
+      </div>
     </div>
   );
 }

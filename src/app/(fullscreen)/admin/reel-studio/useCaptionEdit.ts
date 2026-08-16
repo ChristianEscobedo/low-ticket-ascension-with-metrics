@@ -489,6 +489,11 @@ export function useCaptionEdit({
     const startCY = (1 - (glyph.top + glyph.height / 2 - frame.top) / Math.max(1, frame.height)) * 100;
     const startX = e.clientX;
     const startY = e.clientY;
+    // The glyph's inline transform at grab time. The drag APPENDS a pixel
+    // translate to it, so the REAL word rides the pointer live — a CSS
+    // transform at 60fps, never a plan rebuild, never an invisible box, never
+    // a teleport-on-release. This is the smooth path: you drag the word you see.
+    const baseTransform = t.style.transform || '';
     let moved = false;
     let last = { xPct: startCX, yPct: startCY };
 
@@ -500,11 +505,13 @@ export function useCaptionEdit({
         moved = true;
         setStackEditMode(true); // a drag enters Edit so the word shows as placed
       }
+      // Move the REAL glyph. No state write → no re-render → the transform
+      // persists for the whole gesture and the word glides with the pointer.
+      t.style.transform = `${baseTransform} translate(${dx}px, ${dy}px)`;
       last = {
         xPct: Math.max(2, Math.min(98, startCX + (dx / Math.max(1, frame.width)) * 100)),
         yPct: Math.max(2, Math.min(98, startCY - (dy / Math.max(1, frame.height)) * 100)),
       };
-      setWordPlaceLocal((prev) => ({ ...prev, [index]: last }));
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -512,13 +519,15 @@ export function useCaptionEdit({
       window.removeEventListener('pointercancel', up);
       if (moved) {
         const finalPos = last;
-        setWordPlaceLocal((prev) => {
-          const next = { ...prev };
-          delete next[index];
-          return next;
-        });
+        // Commit the dragged spot. The re-render repaints the word at the
+        // committed mark — the SAME spot the transform left it — so there's no
+        // snap-back flash. (Don't restore baseTransform here; that would snap
+        // the glyph home first and THEN the re-render would move it again.)
         void applyWordMark(index, { xPct: finalPos.xPct, yPct: finalPos.yPct }, clipId);
         setNote('Placed — drag any word to move it; right-click it for styles.');
+      } else {
+        // A click (no drag) never touched the transform.
+        t.style.transform = baseTransform;
       }
     };
     window.addEventListener('pointermove', move);
@@ -527,13 +536,14 @@ export function useCaptionEdit({
   }
 
   /**
-   * Right-click a caption word ON THE CANVAS (Preview mode — Edit mode's
-   * WordDragLayer owns right-click there). The caption glyphs carry
+   * Right-click a caption word ON THE CANVAS. The caption glyphs carry
    * data-caption-word; the menu offers Free-place / Remove placement /
    * Behind the subject + the full style editor (the shared WordContextMenu).
+   * Works in BOTH modes — the glyph is the handle now (the WordDragLayer's
+   * boxes are visual-only), so right-click resolves the glyph the same way.
    */
   function onCaptionWordContextMenu(e: React.MouseEvent, surface: 'remotion' | 'stage') {
-    if (!project || !ccOn || stackEditMode) return;
+    if (!project || !ccOn) return;
     // The caption words are hit-testable (the <style> on the root sets
     // pointer-events:auto), but the block-move drag box (z-30) and the
     // composition's pointer-events-none root can sit between the click and the
