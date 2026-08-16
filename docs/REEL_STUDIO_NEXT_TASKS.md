@@ -122,13 +122,42 @@ is the drift this killed).
 **Verify:** `npx tsc --noEmit` clean; 383/383 across the 16-file reel/caption
 suite.
 
-**Still on the board (the component half):** `CaptionEditSurface.tsx` — the
-stage overlay stack JSX (CaptionDragLayer, WordDragLayer, CueDragLayer, the
-Words/Preview pill, the edit-shield, the WordContextMenu mount) is still
-inline in page.tsx (two near-identical copies, one per preview branch).
-Extract it the same way: one component, both branches mount it with their
-surface-specific props (`surface='remotion'|'stage'`, the WordDragLayer's
-`mapGlyphIndex`). Pure extraction, the guard + suite stay green.
+**The component half — ✅ SHIPPED (2026-08-16):** `CaptionEditSurface.tsx`
+owns the stage overlay stack — the Words/Preview pill (Remotion branch only),
+the edit-shield (Remotion only), `CaptionDragLayer` (both branches, Preview
+mode), `WordDragLayer` (both branches, Words mode — the `mapGlyphIndex` +
+fxTarget seed differ per surface, preserved exactly), and the `CueDragLayer`s
+(identical on both). `CaptionWordContextMenu` owns the right-click word menu
+mount (the page renders it once at its root). Both preview branches mount
+`<CaptionEditSurface surface="remotion"|"stage" edit={captionEdit} …>` — the
+two inline copies that used to drift are one component. The page captures the
+hook's return as `captionEdit` and destructures from it (the JSX names are
+unchanged). The guard grew to 7 tests: the page mounts the surface for both
+branches + the menu once, and no longer mounts the drag layers or the word
+menu inline.
+
+**+ the Script Lab round (same session, user ask):** steering + export.
+`scriptLab.ts` gains `SOPHISTICATION_LEVELS` (Everyday / Sharp / Expert —
+Sharp is the default, no guide line) and `steeredGuides(transcript, {sophistication,
+notes})` — the transcript grounding + the level's guide line + the creator's
+free notes (capped at 300 chars). `ScriptLabPanel.tsx` rides every amplify
+call on the steered guides, and a hook variant's **→ full script** grows it
+into a complete script (the picked hook seeds the bodies call with a
+"must open with this exact hook" line). Export: any variant opens in the
+**Teleprompter** (fullscreen, huge high-contrast text, auto-scroll at a
+words-per-minute pace, play/pause + speed + font-size controls, Esc/Space) —
+the record-a-new-take view — and the whole lab downloads as one `.txt`
+(`scriptToText` — full scripts first, then hook/body/CTA variants).
+
+**Tests:** `script-lab.test.ts` grew to 13 — the steering (default adds no
+line, everyday/expert append, notes cap, the dial's three levels) and the
+export (section markers, full-first order, empty-section skip).
+
+**Verify:** `npx tsc --noEmit` clean; 20/20 across the two touched suites
+(script-lab + caption-edit-extraction). The full suite's 48 failures are all
+in `tests/api/create-payment-intent`, `tests/api/webhooks`, and
+`tests/utils/receipt*` — Stripe/Resend env-key tests, pre-existing and
+untouched by this round.
 
 ---
 

@@ -19,17 +19,6 @@ import { clsx } from 'clsx';
 // The TRUE render preview — the same ReelComposition + buildRenderPlan the
 // Remotion Lambda renderer uses. Browser-only, so load it client-side.
 const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false });
-/** Caption placement, shared by BOTH preview branches so neither can lose it. */
-const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: false });
-const WordDragLayer = dynamic(() => import('./WordDragLayer'), { ssr: false });
-import {
-  freePlaceWordsFrom,
-  WordContextMenu,
-  type WordPlace,
-  type WordStylePatch,
-} from './WordDragLayer';
-// The media-cue transform box — same overlay pattern, mounted in both previews.
-const CueDragLayer = dynamic(() => import('./CueDragLayer'), { ssr: false });
 
 // The SAME font resolver the render plan uses. Two resolvers = two things that
 // drift, which is exactly how the burned MP4 ended up on a different typeface
@@ -113,13 +102,8 @@ import { CaptionGallery } from './CaptionGallery';
 import { SubtitlePanel } from './SubtitlePanel';
 import ScriptLabPanel from './ScriptLabPanel';
 import { transcriptForProject } from '@/lib/mothermode/reel/scriptLab';
-import {
-  useCaptionEdit,
-  timelineStartOf,
-  clipWordIndexFromPlanIndex,
-  planWordIndexFromClipIndex,
-  wordStylePatchToMark,
-} from './useCaptionEdit';
+import { useCaptionEdit, timelineStartOf } from './useCaptionEdit';
+import { CaptionEditSurface, CaptionWordContextMenu } from './CaptionEditSurface';
 import ThumbnailLabSheet from './ThumbnailLabSheet';
 import RenderPanel from './RenderPanel';
 import RenderButton from './RenderButton';
@@ -4065,6 +4049,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
    * destructure keeps the SAME names the JSX always used, so the body below
    * is untouched: pure extraction, no behavior change.
    */
+  const captionEdit = useCaptionEdit({
+    project,
+    setProject,
+    currentClip,
+    stageClip,
+    playheadSec,
+    ccOn,
+    post,
+    setNote,
+    setSelectedClip,
+  });
   const {
     wordPlaceLocal,
     setWordPlaceLocal,
@@ -4095,17 +4090,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     exitStackEdit,
     onCaptionWordPointerDown,
     onCaptionWordContextMenu,
-  } = useCaptionEdit({
-    project,
-    setProject,
-    currentClip,
-    stageClip,
-    playheadSec,
-    ccOn,
-    post,
-    setNote,
-    setSelectedClip,
-  });
+  } = captionEdit;
 
   /* edit-mode auto-pause — only when ENTERING edit, never on first mount. */
   const prevEditRef = useRef(false);
@@ -8643,264 +8628,22 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       </div>
                     )}
 
-                    {/* Free-place stack Edit/Preview — only when card has placed words */}
-                    {currentClip &&
-                      (project.captions[currentClip.id] ?? []).length > 0 && (
-                        <div
-                          data-stack-edit-toggle
-                          className="pointer-events-auto absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full border border-white/15 bg-black/70 p-0.5 text-[10px] shadow-lg backdrop-blur"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => void resetCaptionWords()}
-                            className="rounded-full px-1.5 py-1 text-[11px] leading-none text-white/50 hover:text-red-300"
-                            title="Reset caption edits — clear every free-place position + per-word style on this scene, back to the clean theme"
-                          >
-                            ↺
-                          </button>
-                          <button
-                            type="button"
-                            className={
-                              stackEditMode
-                                ? 'rounded-full bg-brass px-2.5 py-1 font-semibold text-ink'
-                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
-                            }
-                            onClick={() => {
-                              setStackEditMode(true);
-                              setFxMode(false);
-                            }}
-                            title="Words: edit each word on its own — drag to move, corner to scale, right-click for styles"
-                          >
-                            Words
-                          </button>
-                          <button
-                            type="button"
-                            className={
-                              !stackEditMode
-                                ? 'rounded-full bg-white/15 px-2.5 py-1 font-semibold text-white'
-                                : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
-                            }
-                            onClick={exitStackEdit}
-                            title="Preview this section with karaoke timing (saves the placement)"
-                          >
-                            Preview
-                          </button>
-                          {/* Edit mode opt-in: show EVERY word on the card.
-                              Off (default) = just the on-screen page, same as
-                              Preview — so Edit no longer scatters the card. */}
-                          {stackEditMode && (
-                            <button
-                              type="button"
-                              className={
-                                showAllCardWords
-                                  ? 'rounded-full bg-violet-500 px-2.5 py-1 font-semibold text-white'
-                                  : 'rounded-full px-2.5 py-1 text-white/50 hover:text-white'
-                              }
-                              onClick={() => setShowAllCardWords((v) => !v)}
-                              title="Show every word on this card (off = just the words on screen, same as Preview)"
-                            >
-                              all
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                    {/* The Remotion branch paints captions inside the Player, so the
-                        drag handle has to ride ABOVE it as its own layer. Without
-                        this the caption is unmovable on the preview that actually
-                        matches the render — which is the one people reach for. */}
-                    {ccOn &&
-                      Object.values(project.captions ?? {}).some((w) => (w?.length ?? 0) > 0) && (
-                        <>
-                          {/* stack-edit: hide box when free-place */}
-                        {!stackEditMode && (
-                        <CaptionDragLayer
-                          xPct={project.captionOverrides?.xPct ?? 50}
-                          yPct={project.captionOverrides?.positionPct ?? 12}
-                          sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
-                          // The box is as tall as the rows the caption wraps to, so the
-                          // outline tracks the text instead of sitting at a fixed size.
-                          rows={project.captionOverrides?.rows ?? 1}
-                          onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
-                          onCommit={(x, y) => {
-                            void setCaptionOverrides({ xPct: x, positionPct: y });
-                          }}
-                          // Same local/persist split as the move: live while dragging a
-                          // corner, one write on release. Per-frame writes here would
-                          // hammer the API for a single resize gesture.
-                          onResize={(sizePx) => setCaptionOverridesLocal({ sizePx })}
-                          onResizeCommit={(sizePx) => {
-                            void setCaptionOverrides({ sizePx });
-                          }}
-                        />
-                        )}
-                          {stackEditMode && (
-                        <>
-                        {/* Blocks click-through to the video/player while placing words. */}
-                        <div
-                          data-edit-shield
-                          className="absolute inset-0 z-[25]"
-                          style={{ pointerEvents: 'auto', cursor: 'default' }}
-                          onPointerDown={(e) => {
-                            // Block the video toggle, but let the press BUBBLE to
-                            // the stage container so a word drag still starts.
-                            e.preventDefault();
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                        />
-                        <WordDragLayer
-                          words={(() => {
-                            if (!currentClip) return [];
-                            const base = project.captions[currentClip.id] ?? [];
-                            const clipSec = Math.max(
-                              0,
-                              playheadSec -
-                                timelineStartOf(
-                                  project.clips,
-                                  Math.max(
-                                    0,
-                                    project.clips.findIndex((c) => c.id === currentClip.id),
-                                  ),
-                                ),
-                            );
-                            return freePlaceWordsFrom(base, clipSec, {
-                              xPct: project.captionOverrides?.xPct ?? 50,
-                              positionPct: project.captionOverrides?.positionPct ?? 12,
-                              wordsPerRow: project.captionOverrides?.wordsPerRow,
-                            }).map((w) => {
-                              const loc = wordPlaceLocal[w.index];
-                              const sc = wordScaleLocal[w.index];
-                              return {
-                                ...w,
-                                xPct: loc ? loc.xPct : w.xPct,
-                                yPct: loc ? loc.yPct : w.yPct,
-                                scale: typeof sc === 'number' ? sc : w.scale,
-                              };
-                            });
-                          })()}
-                          selectedIndex={
-                            fxWords && fxWords.size === 1
-                              ? Array.from(fxWords)[0]
-                              : null
-                          }
-                          mapGlyphIndex={(i) =>
-                            currentClip
-                              ? planWordIndexFromClipIndex(project, currentClip.id, i) ?? i
-                              : i
-                          }
-                          onSelect={(index) => {
-                            // Select WITHOUT seeking — clicking a word to edit it
-                            // must not move the playhead. The word is already on
-                            // screen; a seek flips the visible page (Edit shows
-                            // just the on-screen page now) and reads as "it jumped
-                            // back and showed the words before it".
-                            setFxMode(true);
-                            setFxTarget(index);
-                            setFxWords(new Set([index]));
-                          }}
-                          onMove={(index, xPct, yPct) => {
-                            setWordPlaceLocal((prev) => ({
-                              ...prev,
-                              [index]: { xPct, yPct },
-                            }));
-                          }}
-                          onCommit={(index, xPct, yPct) => {
-                            setWordPlaceLocal((prev) => {
-                              const next = { ...prev };
-                              delete next[index];
-                              return next;
-                            });
-                            void applyWordMark(index, { xPct, yPct });
-                          }}
-                          onScale={(index, scale) => {
-                            setWordScaleLocal((prev) => ({ ...prev, [index]: scale }));
-                          }}
-                          onScaleCommit={(index, scale) => {
-                            setWordScaleLocal((prev) => {
-                              const next = { ...prev };
-                              delete next[index];
-                              return next;
-                            });
-                            void applyWordMark(index, { scale });
-                          }}
-                          onStyle={(index, partial) => {
-                            void applyWordMark(index, wordStylePatchToMark(partial));
-                          }}
-                          onRemovePlace={(index) => {
-                            if (currentClip) removeWordPlace(currentClip.id, index);
-                          }}
-                          onToggleBehind={(index, x, y) => {
-                            if (currentClip) toggleWordBehind(currentClip.id, index, x, y);
-                          }}
-                        />
-                        </>
-                        )}
-                        </>
-                        )}
-                    {/* The media-cue transform box — the caption puck's pattern
-                        (overlay above the Player, local while dragging, one write
-                        on release), mounted in BOTH preview branches so the cue
-                        is placeable on the preview that matches the render. It
-                        shows while a cue's style editor is open, even outside
-                        the cue's window — it marks where the fly-in lands. */}
-                    {(() => {
-                      const clipCues = (project.mediaCues ?? []).filter(
-                        (x) => x.clipId === currentClip?.id,
-                      );
-                      // The drag box shows ONLY while the cue's image is actually
-                      // on screen at the playhead — it used to pin to the selected
-                      // cue forever. Click the box to grab + select that cue; the
-                      // ⚙ editor auto-seeks to the word so the image appears.
-                      const onScreen = clipCues.filter((c) => cueOnScreen(c));
-                      if (!onScreen.length) return null;
-                      return onScreen.map((cue) => {
-                        const sx = cue.style?.xPct ?? 60;
-                        const sy = cue.style?.yPct ?? 16;
-                        const sw = cue.style?.widthPct ?? 34;
-                        const local = cue.id === cueStyleEditId ? cueDragLocal : null;
-                        return (
-                          <CueDragLayer
-                            key={cue.id}
-                            xPct={local?.xPct ?? sx}
-                            yPct={local?.yPct ?? sy}
-                            widthPct={local?.widthPct ?? sw}
-                            src={cue.url}
-                            word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
-                            onSelect={() => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal(null);
-                            }}
-                            onMove={(x, y) => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal({
-                                xPct: x,
-                                yPct: y,
-                                widthPct: local?.widthPct ?? sw,
-                              });
-                            }}
-                            onCommit={(x, y) => {
-                              setCueDragLocal(null);
-                              void patchCueStyle(cue.id, { xPct: x, yPct: y });
-                            }}
-                            onResize={(w) => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal({
-                                xPct: local?.xPct ?? sx,
-                                yPct: local?.yPct ?? sy,
-                                widthPct: w,
-                              });
-                            }}
-                            onResizeCommit={(w) => {
-                              setCueDragLocal(null);
-                              void patchCueStyle(cue.id, { widthPct: w });
-                            }}
-                          />
-                        );
-                      });
-                    })()}
+                    <CaptionEditSurface
+                      surface="remotion"
+                      project={project}
+                      currentClip={currentClip}
+                      playheadSec={playheadSec}
+                      ccOn={ccOn}
+                      edit={captionEdit}
+                      setCaptionOverrides={setCaptionOverrides}
+                      setCaptionOverridesLocal={setCaptionOverridesLocal}
+                      cueStyleEditId={cueStyleEditId}
+                      setCueStyleEditId={setCueStyleEditId}
+                      cueDragLocal={cueDragLocal}
+                      setCueDragLocal={setCueDragLocal}
+                      patchCueStyle={patchCueStyle}
+                      cueOnScreen={cueOnScreen}
+                    />
                   </div>
                 ) : previewSrc ? (
                   <div
@@ -9067,161 +8810,25 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               overrides={project.captionOverrides}
                             />
                           </div>
-                          {/* Placement uses the SAME puck as the Remotion branch, so
-                              dragging behaves identically on both previews. */}
-                        {/* stack-edit: hide box when free-place */}
-                        {!stackEditMode && (
-                        <CaptionDragLayer
-                          xPct={project.captionOverrides?.xPct ?? 50}
-                          yPct={project.captionOverrides?.positionPct ?? 12}
-                          sizePx={project.captionOverrides?.sizePx ?? CAPTION_SIZE_DEFAULT}
-                          rows={project.captionOverrides?.rows ?? 1}
-                          onMove={(x, y) => setCaptionOverridesLocal({ xPct: x, positionPct: y })}
-                          onCommit={(x, y) => {
-                            void setCaptionOverrides({ xPct: x, positionPct: y });
-                          }}
-                          onResize={(sizePx) => setCaptionOverridesLocal({ sizePx })}
-                          onResizeCommit={(sizePx) => {
-                            void setCaptionOverrides({ sizePx });
-                          }}
-                        />
-                        )}
-                        {stackEditMode && (
-                        <WordDragLayer
-                          words={(() => {
-                            if (!currentClip) return [];
-                            const base = project.captions[currentClip.id] ?? [];
-                            const clipSec = Math.max(
-                              0,
-                              playheadSec -
-                                timelineStartOf(
-                                  project.clips,
-                                  Math.max(
-                                    0,
-                                    project.clips.findIndex((c) => c.id === currentClip.id),
-                                  ),
-                                ),
-                            );
-                            return freePlaceWordsFrom(base, clipSec, {
-                              xPct: project.captionOverrides?.xPct ?? 50,
-                              positionPct: project.captionOverrides?.positionPct ?? 12,
-                              wordsPerRow: project.captionOverrides?.wordsPerRow,
-                            }).map((w) => {
-                              const loc = wordPlaceLocal[w.index];
-                              const sc = wordScaleLocal[w.index];
-                              return {
-                                ...w,
-                                xPct: loc ? loc.xPct : w.xPct,
-                                yPct: loc ? loc.yPct : w.yPct,
-                                scale: typeof sc === 'number' ? sc : w.scale,
-                              };
-                            });
-                          })()}
-                          selectedIndex={
-                            fxWords && fxWords.size === 1
-                              ? Array.from(fxWords)[0]
-                              : null
-                          }
-                          onSelect={(index) => {
-                            setFxMode(true);
-                            setFxWords(new Set([index]));
-                          }}
-                          onMove={(index, xPct, yPct) => {
-                            setWordPlaceLocal((prev) => ({
-                              ...prev,
-                              [index]: { xPct, yPct },
-                            }));
-                          }}
-                          onCommit={(index, xPct, yPct) => {
-                            setWordPlaceLocal((prev) => {
-                              const next = { ...prev };
-                              delete next[index];
-                              return next;
-                            });
-                            void applyWordMark(index, { xPct, yPct });
-                          }}
-                          onScale={(index, scale) => {
-                            setWordScaleLocal((prev) => ({ ...prev, [index]: scale }));
-                          }}
-                          onScaleCommit={(index, scale) => {
-                            setWordScaleLocal((prev) => {
-                              const next = { ...prev };
-                              delete next[index];
-                              return next;
-                            });
-                            void applyWordMark(index, { scale });
-                          }}
-                          onStyle={(index, partial) => {
-                            void applyWordMark(index, wordStylePatchToMark(partial));
-                          }}
-                          onRemovePlace={(index) => {
-                            if (currentClip) removeWordPlace(currentClip.id, index);
-                          }}
-                          onToggleBehind={(index, x, y) => {
-                            if (currentClip) toggleWordBehind(currentClip.id, index, x, y);
-                          }}
-                        />
-                        )}
+                    <CaptionEditSurface
+                      surface="stage"
+                      project={project}
+                      currentClip={currentClip}
+                      stageClip={stageClip}
+                      playheadSec={playheadSec}
+                      ccOn={ccOn}
+                      edit={captionEdit}
+                      setCaptionOverrides={setCaptionOverrides}
+                      setCaptionOverridesLocal={setCaptionOverridesLocal}
+                      cueStyleEditId={cueStyleEditId}
+                      setCueStyleEditId={setCueStyleEditId}
+                      cueDragLocal={cueDragLocal}
+                      setCueDragLocal={setCueDragLocal}
+                      patchCueStyle={patchCueStyle}
+                      cueOnScreen={cueOnScreen}
+                    />
                         </>
                       )}
-                    {/* The media-cue transform box on the EDIT stage too — same
-                        overlay, same numbers, so placement agrees across both
-                        previews by construction. */}
-                    {(() => {
-                      const clipCues = (project.mediaCues ?? []).filter(
-                        (x) => x.clipId === currentClip?.id,
-                      );
-                      // The drag box shows ONLY while the cue's image is actually
-                      // on screen at the playhead — it used to pin to the selected
-                      // cue forever. Click the box to grab + select that cue; the
-                      // ⚙ editor auto-seeks to the word so the image appears.
-                      const onScreen = clipCues.filter((c) => cueOnScreen(c));
-                      if (!onScreen.length) return null;
-                      return onScreen.map((cue) => {
-                        const sx = cue.style?.xPct ?? 60;
-                        const sy = cue.style?.yPct ?? 16;
-                        const sw = cue.style?.widthPct ?? 34;
-                        const local = cue.id === cueStyleEditId ? cueDragLocal : null;
-                        return (
-                          <CueDragLayer
-                            key={cue.id}
-                            xPct={local?.xPct ?? sx}
-                            yPct={local?.yPct ?? sy}
-                            widthPct={local?.widthPct ?? sw}
-                            src={cue.url}
-                            word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
-                            onSelect={() => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal(null);
-                            }}
-                            onMove={(x, y) => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal({
-                                xPct: x,
-                                yPct: y,
-                                widthPct: local?.widthPct ?? sw,
-                              });
-                            }}
-                            onCommit={(x, y) => {
-                              setCueDragLocal(null);
-                              void patchCueStyle(cue.id, { xPct: x, yPct: y });
-                            }}
-                            onResize={(w) => {
-                              setCueStyleEditId(cue.id);
-                              setCueDragLocal({
-                                xPct: local?.xPct ?? sx,
-                                yPct: local?.yPct ?? sy,
-                                widthPct: w,
-                              });
-                            }}
-                            onResizeCommit={(w) => {
-                              setCueDragLocal(null);
-                              void patchCueStyle(cue.id, { widthPct: w });
-                            }}
-                          />
-                        );
-                      });
-                    })()}
 
                     {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
                     {lensMode === 'platform' && aspect === '9:16' && (
@@ -9996,71 +9603,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
       {/* The canvas right-click word menu (Preview mode — Edit mode's
           WordDragLayer owns right-click there). Free-place / Remove placement /
           Behind the subject + the full per-word style editor. */}
-      {wordCtxMenu &&
-        project &&
-        (() => {
-          const words = project.captions[wordCtxMenu.clipId] ?? [];
-          const w = words[wordCtxMenu.index];
-          if (!w) return null;
-          const placed =
-            typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
-          const selected: WordPlace = {
-            index: wordCtxMenu.index,
-            xPct: w.mark?.xPct ?? wordCtxMenu.xPct,
-            yPct: w.mark?.yPct ?? wordCtxMenu.yPct,
-            label: w.word,
-            placed,
-            behind: w.mark?.behind === true,
-            scale: w.mark?.scale,
-            anim: w.mark?.anim,
-            color: w.mark?.color,
-            fx: w.mark?.fx,
-            fxColor: w.mark?.fxColor,
-            fxColor2: w.mark?.fxColor2,
-            ambient: w.mark?.ambient,
-            font: w.mark?.font,
-            hidden: w.mark?.hidden,
-          };
-          return (
-            <WordContextMenu
-              clientX={wordCtxMenu.clientX}
-              clientY={wordCtxMenu.clientY}
-              selected={selected}
-              onApply={(partial) =>
-                void applyWordMark(
-                  wordCtxMenu.index,
-                  wordStylePatchToMark(partial),
-                  wordCtxMenu.clipId,
-                )
-              }
-              onClose={() => setWordCtxMenu(null)}
-              onFreePlace={
-                placed
-                  ? undefined
-                  : () =>
-                      freePlaceWord(
-                        wordCtxMenu.clipId,
-                        wordCtxMenu.index,
-                        wordCtxMenu.xPct,
-                        wordCtxMenu.yPct,
-                      )
-              }
-              onRemovePlace={
-                placed
-                  ? () => removeWordPlace(wordCtxMenu.clipId, wordCtxMenu.index)
-                  : undefined
-              }
-              onToggleBehind={() =>
-                toggleWordBehind(
-                  wordCtxMenu.clipId,
-                  wordCtxMenu.index,
-                  wordCtxMenu.xPct,
-                  wordCtxMenu.yPct,
-                )
-              }
-            />
-          );
-        })()}
+      <CaptionWordContextMenu project={project} edit={captionEdit} />
     </div>
   );
 }

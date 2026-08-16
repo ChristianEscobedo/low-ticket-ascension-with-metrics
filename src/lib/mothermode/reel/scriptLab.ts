@@ -59,3 +59,101 @@ export function scriptLabGuides(transcript: string): string {
     transcript.slice(0, 1800)
   );
 }
+
+// ---------------------------------------------------------------------------
+// Steering — the sophistication dial + free notes, appended to the guides.
+// ---------------------------------------------------------------------------
+
+/** How the variants should SOUND. 'sharp' is the house default (no line). */
+export type Sophistication = 'everyday' | 'sharp' | 'expert';
+
+export const SOPHISTICATION_LEVELS: {
+  id: Sophistication;
+  label: string;
+  hint: string;
+  /** The guide line appended to the prompt ('sharp' = none — the default). */
+  guide: string;
+}[] = [
+  {
+    id: 'everyday',
+    label: 'Everyday',
+    hint: 'plain words, short sentences',
+    guide:
+      'Write at a 6th-grade reading level: plain everyday words, short ' +
+      'sentences, zero jargon — anyone scrolling half-asleep gets it.',
+  },
+  {
+    id: 'sharp',
+    label: 'Sharp',
+    hint: 'conversational but precise (default)',
+    guide: '',
+  },
+  {
+    id: 'expert',
+    label: 'Expert',
+    hint: 'talks like a peer to peers',
+    guide:
+      'Write for an audience that already knows the space: use the ' +
+      "industry's vocabulary precisely, skip the beginner explanations, " +
+      'and let the nuance carry the credibility.',
+  },
+];
+
+/**
+ * The guides WITH steering: the transcript grounding + the sophistication
+ * line + the owner's free notes ("make it punchier", "more personal",
+ * "add a story beat"). Notes cap at 300 chars so they steer, not swamp.
+ */
+export function steeredGuides(
+  transcript: string,
+  opts: { sophistication?: Sophistication; notes?: string } = {},
+): string {
+  const parts = [scriptLabGuides(transcript)];
+  const level = SOPHISTICATION_LEVELS.find((l) => l.id === opts.sophistication);
+  if (level?.guide) parts.push(level.guide);
+  const notes = (opts.notes ?? '').trim().slice(0, 300);
+  if (notes) parts.push(`Direction from the creator (honor it in every variant): ${notes}`);
+  return parts.join('\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Export — the script as a recordable artifact (.txt + the teleprompter).
+// ---------------------------------------------------------------------------
+
+/** The four sections the lab fills. */
+export interface ScriptSections {
+  full: string[];
+  hooks: string[];
+  body: string[];
+  ctas: string[];
+}
+
+/**
+ * The whole lab as ONE .txt download — the full scripts first (the recordable
+ * ones), then the hook / body / CTA variants as reference. Plain text with
+ * clear section markers so it reads clean in any editor or print dialog.
+ */
+export function scriptToText(sections: ScriptSections, theme: string): string {
+  const out: string[] = [
+    `SCRIPT LAB — ${theme || 'Untitled reel'}`,
+    `exported ${new Date().toLocaleString()} — every variant grounded in the reel's transcript`,
+    '',
+  ];
+  const section = (label: string, items: string[]) => {
+    if (!items.length) return;
+    out.push('='.repeat(48));
+    out.push(label.toUpperCase());
+    out.push('='.repeat(48));
+    items.forEach((t, i) => {
+      out.push('');
+      out.push(`— ${label} ${i + 1} ${'—'.repeat(Math.max(2, 40 - label.length - String(i + 1).length))}`);
+      out.push(t.trim());
+    });
+    out.push('');
+  };
+  section('Full script', sections.full);
+  section('Hook', sections.hooks);
+  section('Body', sections.body);
+  section('CTA', sections.ctas);
+  return out.join('\n').trim() + '\n';
+}

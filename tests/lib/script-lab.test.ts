@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SOPHISTICATION_LEVELS,
   scriptLabGuides,
+  scriptToText,
+  steeredGuides,
   transcriptCta,
   transcriptForProject,
   transcriptHook,
@@ -54,6 +57,69 @@ describe('Script Lab transcript builder', () => {
     expect(g).toContain('the actual words');
     expect(g).toContain('transcript');
     expect(scriptLabGuides('x'.repeat(5000)).length).toBeLessThan(2100);
+  });
+});
+
+describe('Script Lab steering (steeredGuides)', () => {
+  it('the default (sharp) adds NO extra line — the bare transcript grounding', () => {
+    expect(steeredGuides('the words', { sophistication: 'sharp' })).toBe(
+      scriptLabGuides('the words'),
+    );
+    expect(steeredGuides('the words')).toBe(scriptLabGuides('the words'));
+  });
+
+  it('everyday + expert append their level line; the transcript stays the base', () => {
+    const everyday = steeredGuides('the words', { sophistication: 'everyday' });
+    expect(everyday).toContain('the words');
+    expect(everyday).toContain('6th-grade');
+    const expert = steeredGuides('the words', { sophistication: 'expert' });
+    expect(expert).toContain('the words');
+    expect(expert).toContain('industry');
+  });
+
+  it('the notes ride as a creator-direction line (capped at 300 chars)', () => {
+    const g = steeredGuides('the words', { notes: 'make it punchier, more personal' });
+    expect(g).toContain('make it punchier, more personal');
+    expect(g).toContain('Direction from the creator');
+    const long = steeredGuides('the words', { notes: 'x'.repeat(500) });
+    expect(long.length).toBeLessThan(scriptLabGuides('the words').length + 400);
+  });
+
+  it('every sophistication level has a label + hint (the dial renders all three)', () => {
+    expect(SOPHISTICATION_LEVELS.map((l) => l.id)).toEqual(['everyday', 'sharp', 'expert']);
+    for (const l of SOPHISTICATION_LEVELS) {
+      expect(l.label.length).toBeGreaterThan(0);
+      expect(l.hint.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('Script Lab export (scriptToText)', () => {
+  it('bundles the four sections with clear markers, full scripts first', () => {
+    const txt = scriptToText(
+      {
+        full: ['the whole script'],
+        hooks: ['hook one', 'hook two'],
+        body: ['a middle'],
+        ctas: ['an ask'],
+      },
+      'My Reel',
+    );
+    expect(txt).toContain('SCRIPT LAB — My Reel');
+    expect(txt).toContain('FULL SCRIPT');
+    expect(txt).toContain('the whole script');
+    expect(txt).toContain('HOOK');
+    expect(txt).toContain('hook two');
+    expect(txt).toContain('an ask');
+    // full script section comes before the hooks section
+    expect(txt.indexOf('FULL SCRIPT')).toBeLessThan(txt.indexOf('HOOK'));
+  });
+
+  it('skips empty sections (a hooks-only lab exports just the hooks)', () => {
+    const txt = scriptToText({ full: [], hooks: ['only a hook'], body: [], ctas: [] }, 'x');
+    expect(txt).toContain('only a hook');
+    expect(txt).not.toContain('FULL SCRIPT');
+    expect(txt).not.toContain('CTA');
   });
 });
 
