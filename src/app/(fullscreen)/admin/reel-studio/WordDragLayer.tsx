@@ -901,7 +901,7 @@ function Chip({
 export function freePlaceWordsFrom(
   all: ReelWord[],
   playheadSec: number,
-  layout?: { xPct?: number; positionPct?: number; wordsPerRow?: number },
+  layout?: { xPct?: number; positionPct?: number; wordsPerRow?: number; showAll?: boolean },
 ): WordPlace[] {
   // Prefer the card under the playhead; else any freePlace-flagged card.
   let cardId: string | null = null;
@@ -945,7 +945,21 @@ export function freePlaceWordsFrom(
       baseXPct: layout?.xPct ?? 50,
       baseYPct: layout?.positionPct ?? 12,
     });
-    return all.map((w, i) => {
+    // Only surface words ON SCREEN — a word from another part of the transcript
+    // must not be grabbable — or paint — early (the "words bleed through and
+    // move even though not on screen" bug). Default = the build-stack page
+    // (the spoken word + the words it just built). "All" widens to the whole
+    // current page (the cascade reveal — the page's not-yet-spoken words too).
+    // Far-away words are excluded either way; scrub to one to edit it.
+    const showAll = layout?.showAll === true;
+    const backSec = 2.0; // the page hold (spoken + recent past)
+    const fwdSec = showAll ? 2.0 : 0.05; // "all" also reveals the page's future words
+    const onScreen = (w: ReelWord) =>
+      playheadSec >= w.start - fwdSec && playheadSec <= w.end + backSec;
+    return all
+      .map((w, i) => ({ w, i }))
+      .filter(({ w }) => onScreen(w))
+      .map(({ w, i }) => {
       const placed =
         typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
       const est = estimates[i] ?? { xPct: 50, yPct: 12 };

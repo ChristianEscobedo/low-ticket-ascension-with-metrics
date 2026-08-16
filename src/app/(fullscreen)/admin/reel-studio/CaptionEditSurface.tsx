@@ -137,6 +137,9 @@ export function CaptionEditSurface({
       xPct: project.captionOverrides?.xPct ?? 50,
       positionPct: project.captionOverrides?.positionPct ?? 12,
       wordsPerRow: project.captionOverrides?.wordsPerRow,
+      // "all" widens the grabbable set to the whole current page (the cascade
+      // reveal); off = just the on-screen page. Far-away words never box.
+      showAll: showAllCardWords,
     }).map((w) => {
       const loc = wordPlaceLocal[w.index];
       const sc = wordScaleLocal[w.index];

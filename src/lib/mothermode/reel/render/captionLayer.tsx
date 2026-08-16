@@ -1123,7 +1123,13 @@ if (blockFx.includes('punchIn')) {
       // only the on-screen words show.
       if (showAllWords) {
         if (cardWin) return idx >= cardWin.from && idx < cardWin.to;
-        return true; // no card: the placed words are the edit set
+        // No card: "all" must NOT reveal every placed word across the whole
+        // transcript — a word you moved earlier (or later) bleeds through and
+        // paints before its time. Gate to the word's spoken window (the same
+        // window the default lone-word path uses), so only ON-SCREEN placed
+        // words show. Scrub to a future word to edit it.
+        const holdAll = Math.round(plan.fps * CAPTION_HOLD_SEC);
+        return frame >= w.fromFrame && frame < w.toFrame + holdAll;
       }
       // Preview/render: follow caption timing — only paint while the word
       // (or its card window) is live. Never leave glyphs stuck on screen.
