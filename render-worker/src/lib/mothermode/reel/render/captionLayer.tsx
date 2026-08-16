@@ -1145,6 +1145,16 @@ if (blockFx.includes('punchIn')) {
       }
       // Lone free-placed word: visible from its start through hold after end,
       // same window the karaoke line uses for the spoken word.
+      // EDIT MODE: a placed word stays visible while its PAGE is current. The
+      // build-stack holds the whole page, so a PAST word you drag must not
+      // vanish the moment it's placed — the spoken-window gate dropped it from
+      // the overlay AND the block skipped it (it's placed now), so it was gone
+      // from both: "the text disappears on mount". Gate to the page instead.
+      if (freePlaceEdit) {
+        const pageFrom = rows[0]?.from ?? 0;
+        const pageTo = rows[rows.length - 1]?.to ?? words.length;
+        return idx >= pageFrom && idx < pageTo;
+      }
       const hold = Math.round(plan.fps * CAPTION_HOLD_SEC);
       return frame >= w.fromFrame && frame < w.toFrame + hold;
     });
