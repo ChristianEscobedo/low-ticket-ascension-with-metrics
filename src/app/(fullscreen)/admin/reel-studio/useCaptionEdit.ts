@@ -388,30 +388,11 @@ export function useCaptionEdit({
   async function resetCaptionWords() {
     if (!project || !currentClip) return;
     const all = project.captions[currentClip.id] ?? [];
-    // Scope to the words ON the current timestamp — the page showing at the
-    // playhead — not the whole scene. Compute the page from the active word +
-    // the layout's page size (wordsPerRow × rows).
-    const clipIdx = Math.max(
-      0,
-      project.clips.findIndex((c) => c.id === currentClip.id),
-    );
-    const clipSec = Math.max(0, playheadSec - timelineStartOf(project.clips, clipIdx));
-    let activeIdx = 0;
-    for (let i = 0; i < all.length; i += 1) {
-      if (clipSec < all[i].start) break;
-      activeIdx = i;
-    }
-    const wpr = project.captionOverrides?.wordsPerRow ?? 3;
-    const rowCount = project.captionOverrides?.rows ?? 1;
-    const pageSize = Math.max(1, wpr * rowCount);
-    const pageFrom = Math.floor(activeIdx / pageSize) * pageSize;
-    const pageEnd = Math.min(all.length, pageFrom + pageSize);
-    const inPage = new Set<number>();
-    for (let i = pageFrom; i < pageEnd; i += 1) inPage.add(i);
-    // Strip the marks on JUST this page's words; every other word keeps its edit.
-    const words = all.map((w, i) =>
-      inPage.has(i) ? { word: w.word, start: w.start, end: w.end } : w,
-    );
+    // Reset the WHOLE scene's words to the clean theme — every per-word mark
+    // (free-place x/y, fx, color, scale, anim, ambient, font, hide, behind,
+    // card) stripped. The old version scoped to the current PAGE, so edits on
+    // other pages survived and it read as "reset doesn't work all the time".
+    const words = all.map((w) => ({ word: w.word, start: w.start, end: w.end }));
     const updated: ReelProject = {
       ...project,
       captions: { ...project.captions, [currentClip.id]: words },
@@ -422,7 +403,7 @@ export function useCaptionEdit({
     setFxWords(new Set());
     setFxTarget(null);
     await post({ action: 'save', project: updated });
-    setNote('Reset the words on this timestamp to the clean theme.');
+    setNote("Reset this scene's words to the clean theme.");
   }
 
   /**

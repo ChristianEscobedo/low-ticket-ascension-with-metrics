@@ -302,8 +302,14 @@ export default function WordDragLayer({
       if (!w) return;
       const xPct = Math.max(2, Math.min(98, w.xPct + dx));
       const yPct = Math.max(2, Math.min(98, w.yPct + dy));
-      (() => { const _s = snapPct(xPct, yPct); onMove(selectedIndex, _s.x, _s.y); })();
-      (() => { const _s = snapPct(xPct, yPct); onCommit(selectedIndex, _s.x, _s.y); })();
+      // No snapPct on the nudge — a fine arrow nudge must move FREELY. The
+      // center-snap made a word near the middle snap to 50, then the next
+      // nudge read the committed 50 and snapped BACK to 50 — the word was
+      // STUCK ("the text got blocked, it could not move next to other text").
+      // And words snapped to 50 overlap, so grabbing one grabbed the other
+      // ("moving one word moves the other"). The nudge moves free.
+      onMove(selectedIndex, xPct, yPct);
+      onCommit(selectedIndex, xPct, yPct);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
