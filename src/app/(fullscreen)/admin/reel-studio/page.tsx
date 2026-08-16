@@ -5784,13 +5784,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         )}
       </header>
 
+      {/* The note/error banner is a FLOATING toast — never in the flow. In the
+          flow it pushed the player down and shrank the preview every time a
+          note landed ("the preview got smaller after mounting"). Now it floats
+          over the top and the player never budges. */}
       {(note || error) && (
-        <div className="shrink-0 px-4 pt-2">
+        <div className="pointer-events-none fixed left-1/2 top-16 z-[70] -translate-x-1/2 px-4">
           {note && (
-            <p className="rounded-lg border border-brass/30 bg-brass/10 px-3 py-1.5 text-xs text-brass/90">{note}</p>
+            <p className="rounded-lg border border-brass/30 bg-ink/95 px-3 py-1.5 text-xs text-brass/90 shadow-lg backdrop-blur">{note}</p>
           )}
           {error && (
-            <p className="mt-1 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs text-red-200">
+            <p className="mt-1 rounded-lg border border-red-500/30 bg-ink/95 px-3 py-1.5 text-xs text-red-200 shadow-lg backdrop-blur">
               {error}
             </p>
           )}
