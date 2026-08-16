@@ -422,19 +422,19 @@ export default function WordDragLayer({
       {words.map((w) => {
         const isSel = selectedIndex === w.index;
         const sc = w.scale && w.scale > 0 ? w.scale : 1;
-        // Generous hit target — theme glyphs are large; a tight box is ungrabbable.
+        // The hit box is ALWAYS rendered — never gated on a freshly-measured
+        // glyph. The old `if (!g) return null` is why words vanished: any word
+        // whose glyph wasn't painted THIS frame (off the on-screen page, mid
+        // remount, mid page-flip) lost its box and became ungrabbable — "words
+        // disappear", "hard to grab", "better when I click all" (all paints
+        // every glyph, so every word boxed). Now: the measured glyph is the
+        // precise position when we have it; the word's own xPct/yPct (its mark
+        // or its estimated slot) is the always-correct fallback. A placed word
+        // is exactly where its mark says — no measuring needed, ever.
         const g = glyphBox[w.index];
-        // ONLY box a word that's actually painted on screen right now (a
-        // measured glyph). No glyph → no box — placed or not. This is the rule:
-        // "only the words showing where I stopped the playhead are editable."
-        // An off-page word (even a placed one) is reached by scrubbing to it or
-        // toggling "all" (which paints the current card's words so they box).
-        if (!g) return null;
         // The hit box is the measured glyph PADDED — a short word ("a", "I")
-        // measures a sliver, and a sliver is ungrabbable ("the words are not
-        // easy to grab"). Pad ~1.2% of frame each side and floor the box at
-        // 6% × 5% so every word is a real target, without overlapping the
-        // next word's box enough to matter (the topmost wins the press).
+        // measures a sliver, and a sliver is ungrabbable. Pad ~1.2% of frame
+        // each side and floor the box at 6% × 5% so every word is a real target.
         const PAD_X = 1.2;
         const PAD_Y = 1.0;
         const boxStyle: React.CSSProperties = g

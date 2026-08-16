@@ -4111,31 +4111,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
 /** Live free-place drag: merge local x/y into caption marks so Remotion
    *  paints the moved word with FULL theme styles (not just the hit target). */
-  const projectWithWordPlace = useMemo(() => {
-    if (!project || !currentClip) return project;
-    const locals = wordPlaceLocal;
-    const scales = wordScaleLocal;
-    const hasLoc = Object.keys(locals).length > 0 || Object.keys(scales).length > 0;
-    if (!hasLoc) return project;
-    const base = project.captions[currentClip.id] ?? [];
-    const next = base.map((w, i) => {
-      const loc = locals[i];
-      const sc = scales[i];
-      if (!loc && typeof sc !== 'number') return w;
-      return {
-        ...w,
-        mark: {
-          ...(w.mark ?? {}),
-          ...(loc ? { xPct: loc.xPct, yPct: loc.yPct } : {}),
-          ...(typeof sc === 'number' ? { scale: sc } : {}),
-        },
-      };
-    });
-    return {
-      ...project,
-      captions: { ...project.captions, [currentClip.id]: next },
-    };
-  }, [project, currentClip, wordPlaceLocal, wordScaleLocal]);
+  // The preview uses the BASE project — NEVER a live-merged one. Merging the
+  // in-flight drag offsets (wordPlaceLocal/wordScaleLocal) into the project
+  // rebuilt the ENTIRE render plan on every pointermove (60×/sec): the "screen
+  // jumps", the "words get smaller and change", and the jank. The hit box
+  // already glides with the pointer via the surface's dragWords merge; the
+  // painted word snaps to the committed position on release (applyWordMark →
+  // ONE rebuild). This is the smooth + performant path.
+  const projectWithWordPlace = project;
 
   const previewSrc =
     stageClip?.url || project?.clips?.[0]?.url || project?.composedUrl || '';
