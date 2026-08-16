@@ -90,6 +90,7 @@ export function CaptionEditSurface({
     stackEditMode,
     showAllCardWords,
     fxWords,
+    fxTarget,
     setFxMode,
     setFxTarget,
     setFxWords,
@@ -133,7 +134,7 @@ export function CaptionEditSurface({
           ),
         ),
     );
-    return freePlaceWordsFrom(base, clipSec, {
+    const list = freePlaceWordsFrom(base, clipSec, {
       xPct: project.captionOverrides?.xPct ?? 50,
       positionPct: project.captionOverrides?.positionPct ?? 12,
       wordsPerRow: project.captionOverrides?.wordsPerRow,
@@ -150,6 +151,33 @@ export function CaptionEditSurface({
         scale: typeof sc === 'number' ? sc : w.scale,
       };
     });
+    // The SELECTED word always gets its box (the outline + scale handle) —
+    // even when freePlaceWordsFrom didn't surface it (not placed yet, or a
+    // future word without "all"). Without this the outline "was gone" on the
+    // exact word you're dragging. The glyph measuring positions the box.
+    if (fxTarget != null && !list.some((w) => w.index === fxTarget)) {
+      const w = base[fxTarget];
+      if (w) {
+        list.push({
+          index: fxTarget,
+          xPct: w.mark?.xPct ?? 50,
+          yPct: w.mark?.yPct ?? 12,
+          label: w.word,
+          scale: w.mark?.scale,
+          anim: w.mark?.anim,
+          color: w.mark?.color,
+          fx: w.mark?.fx,
+          fxColor: w.mark?.fxColor,
+          fxColor2: w.mark?.fxColor2,
+          ambient: w.mark?.ambient,
+          font: w.mark?.font,
+          hidden: w.mark?.hidden,
+          placed: typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number',
+          behind: w.mark?.behind === true,
+        });
+      }
+    }
+    return list;
   })();
 
   return (
