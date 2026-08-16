@@ -1,5 +1,24 @@
 # Reel Studio — System Port
 
+> **2026-08-16 (latest) — the page.tsx split (the hook half):** the
+> caption-edit surface's state + handlers live in
+> `src/app/(fullscreen)/admin/reel-studio/useCaptionEdit.ts` now, extracted
+> from page.tsx with NO behavior change. The hook owns the nine state slots
+> (wordPlaceLocal/wordScaleLocal/stackEditMode/showAllCardWords/wordCtxMenu/
+> fxMode/fxWords/fxScope/fxTarget) + the eleven handlers (applyWordMark(s),
+> clearWordFx, toggleFxWord, freePlaceWord, removeWordPlace, toggleWordBehind,
+> resetCaptionWords, exitStackEdit, onCaptionWordPointerDown/ContextMenu), and
+> the four free helpers (timelineStartOf, clipWordIndexFromPlanIndex,
+> planWordIndexFromClipIndex, wordStylePatchToMark) live there as the single
+> source — the page imports them back (no cycle: the hook never imports the
+> page). The page destructures the SAME names its JSX always used, so the body
+> is untouched; `ccOn` hoisted up and `clockHit`/`stageClip` computed above
+> the hook call to satisfy the ordering. Guard:
+> `tests/lib/caption-edit-extraction.test.ts` (5 — the page can't re-inline a
+> copy). Verified: `tsc` clean, 383/383 across the 16-file suite. The
+> component half (CaptionEditSurface.tsx — the overlay-stack JSX, still two
+> inline copies) is the follow-up.
+>
 > **2026-08-16 (later still) — creator packs + the Script Lab:** two one-click
 > surfaces. **Creator packs** — the `EDITOR_PACKS` model in captions.ts grew
 > the full creator set (MrBeast / Hormozi / Faceless / Cinematic / Luxury /

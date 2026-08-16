@@ -92,30 +92,43 @@ suite.
 
 ---
 
-## 3 · Split `page.tsx` (unblocks everything else)
+## 3 · Split `page.tsx` — ✅ SHIPPED (2026-08-16, the hook half)
 
-**Why third (but do it before the canvas grows more):** the studio page is
-~490KB. Every stage edit risks breaking it, and it's why caption work has been
-fiddly. Splitting it makes #1 and #2 (and everything after) safe.
+**What landed:** `src/app/(fullscreen)/admin/reel-studio/useCaptionEdit.ts` —
+the caption-edit surface's state + handlers, extracted from page.tsx with NO
+behavior change. The hook owns the nine state slots (`wordPlaceLocal`,
+`wordScaleLocal`, `stackEditMode`, `showAllCardWords`, `wordCtxMenu`,
+`fxMode`, `fxWords`, `fxScope`, `fxTarget`) and the eleven handlers
+(`applyWordMark`, `applyWordMarks`, `clearWordFx`, `toggleFxWord`,
+`freePlaceWord`, `removeWordPlace`, `toggleWordBehind`, `resetCaptionWords`,
+`exitStackEdit`, `onCaptionWordPointerDown`, `onCaptionWordContextMenu`), and
+the four free helpers (`timelineStartOf`, `clipWordIndexFromPlanIndex`,
+`planWordIndexFromClipIndex`, `wordStylePatchToMark`) live there as the
+single source — the page imports them back (no circular import: the hook
+never imports the page). The page calls `useCaptionEdit({ project, setProject,
+currentClip, stageClip, playheadSec, ccOn, post, setNote, setSelectedClip })`
+and destructures the SAME names its JSX always used, so the body is
+untouched. Two ordering moves made it typecheck: `ccOn` hoisted next to the
+other early state (the hook reads it), and `clockHit`/`stageClip` computed
+above the hook call (the pointer handlers read them); the edit-mode
+auto-pause effect moved down beside the hook (it reads `stackEditMode`).
 
-**Scope:** extract the caption-edit surface out of
-`src/app/(fullscreen)/admin/reel-studio/page.tsx` into its own component +
-hook, with no behavior change:
-- `CaptionEditSurface.tsx` — the stage overlay stack (CaptionDragLayer,
-  WordDragLayer, CueDragLayer, the Words/Preview pill, the word context menu).
-- `useCaptionEdit.ts` — the handlers (`onCaptionWordPointerDown`,
-  `onCaptionWordContextMenu`, `freePlaceWord`, `removeWordPlace`,
-  `toggleWordBehind`, `resetCaptionWords`, `exitStackEdit`, `applyWordMark`,
-  the `wordPlaceLocal`/`wordScaleLocal`/`fxWords`/`stackEditMode` state).
+**The guard:** `tests/lib/caption-edit-extraction.test.ts` (5 tests) pins the
+contract — the hook exports the hook + the helpers, the page imports +
+destructures the same names, and the page does NOT re-declare a moved state
+slot or handler (a future edit can't silently re-inline a copy — two sources
+is the drift this killed).
 
-**The guard (do this FIRST):** the caption tests already pin the layer +
-vendored parity. Add a smoke test that the extracted surface renders the same
-(the `stage-caption-single-source.test.ts` is the model). Extract → tests stay
-green → no behavior change.
+**Verify:** `npx tsc --noEmit` clean; 383/383 across the 16-file reel/caption
+suite.
 
-**Risk:** a big move. **Mitigation:** pure extraction (no logic edits), one
-component + one hook at a time, the caption suite + `tsc` green after each
-move. Do NOT combine with a feature in the same commit.
+**Still on the board (the component half):** `CaptionEditSurface.tsx` — the
+stage overlay stack JSX (CaptionDragLayer, WordDragLayer, CueDragLayer, the
+Words/Preview pill, the edit-shield, the WordContextMenu mount) is still
+inline in page.tsx (two near-identical copies, one per preview branch).
+Extract it the same way: one component, both branches mount it with their
+surface-specific props (`surface='remotion'|'stage'`, the WordDragLayer's
+`mapGlyphIndex`). Pure extraction, the guard + suite stay green.
 
 ---
 
