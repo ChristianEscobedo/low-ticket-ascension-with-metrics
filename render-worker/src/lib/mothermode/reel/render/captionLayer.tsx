@@ -1153,7 +1153,12 @@ if (blockFx.includes('punchIn')) {
       if (freePlaceEdit) {
         const pageFrom = rows[0]?.from ?? 0;
         const pageTo = rows[rows.length - 1]?.to ?? words.length;
-        return idx >= pageFrom && idx < pageTo;
+        // Spoken gate + page gate: a moved word shows from its SPOKEN start
+        // through the page end — so a past word you drag stays visible (the
+        // "disappears on mount" fix) WITHOUT showing before its time. The
+        // page-only gate showed a moved word from the page START, which made
+        // moved words show up early — "moved words change the timing on preview".
+        return frame >= w.fromFrame && idx >= pageFrom && idx < pageTo;
       }
       const hold = Math.round(plan.fps * CAPTION_HOLD_SEC);
       return frame >= w.fromFrame && frame < w.toFrame + hold;
