@@ -1247,7 +1247,11 @@ if (blockFx.includes('punchIn')) {
           const text = def.upper ? w.text.toUpperCase() : w.text;
           const wordAnim = mark?.anim ?? defAnim;
           // Edit mode still runs entrance on the spoken word so Preview/Edit match.
-          const wordEnterT = isActive
+          // Edit mode SETTLES the entrance (wordEnterT = 1): a word you're
+          // dragging must sit at its RESTING position, not mid-pop/spring.
+          // The frame-driven entrance transform fought the drag (the word
+          // moved a little, then snapped to the entrance's end on release).
+          const wordEnterT = isActive && !freePlaceEdit
             ? entranceProgress(frame, w.fromFrame, plan.fps, wordAnim)
             : 1;
 
@@ -1473,7 +1477,7 @@ return (
             const text = def.upper ? w.text.toUpperCase() : w.text;
 
             const wordAnim = mark?.anim ?? defAnim;
-            const wordEnterT = isActive
+            const wordEnterT = isActive && !freePlaceEdit
               ? entranceProgress(frame, w.fromFrame, plan.fps, wordAnim)
               : 1;
 
