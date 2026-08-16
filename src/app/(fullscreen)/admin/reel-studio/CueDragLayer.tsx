@@ -54,6 +54,7 @@ export default function CueDragLayer({
   onCommit,
   onResize,
   onResizeCommit,
+  onSelect,
 }: {
   /** Box top-left, % of frame — the same defaults MediaCueLayer falls back to. */
   xPct: number;
@@ -72,6 +73,8 @@ export default function CueDragLayer({
   onResize: (widthPct: number) => void;
   /** Final width on pointerup — the one that persists. */
   onResizeCommit: (widthPct: number) => void;
+  /** Fires on grab — selects this cue so the style editor follows the click. */
+  onSelect?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const lastRef = useRef({ x: xPct, y: yPct });
@@ -96,6 +99,7 @@ export default function CueDragLayer({
   function startMove(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation(); // never let the Player treat this as click-to-play
+    onSelect?.(); // clicking the image's box selects it (the style editor follows)
     const puck = e.currentTarget;
     const frame = frameRef.current;
     if (!frame) return;

@@ -154,9 +154,20 @@ export default function CaptionDragLayer({
     const frame = frameRef.current;
     if (!frame) return;
 
+    const frame0 = frameRef.current;
+    const r0check = frame0?.getBoundingClientRect();
+    // Bail on an unmeasured frame — the drag math divides by r.width/height, and a
+    // 0-size frame makes every computed % garbage (the caption teleports off-screen).
+    if (!r0check || r0check.width < 4 || r0check.height < 4) return;
+
     puck.setPointerCapture(e.pointerId);
     lastRef.current = { x: xPct, y: yPct };
     setActive('move');
+    // Track whether the pointer actually MOVED. A bare click must NOT commit —
+    // otherwise a single click on the box re-writes the position (and a stale
+    // grab offset can teleport the caption off-screen, which reads as "the text
+    // vanished when I clicked it").
+    let moved = false;
 
     /**
      * Grab OFFSET, not absolute pointer position.
@@ -176,6 +187,9 @@ export default function CaptionDragLayer({
       const nx = clamp(snap(((ev.clientX - grabX - r.left) / r.width) * 100, SNAP_XS), X_MIN, X_MAX);
       // Bottom-anchored: invert, because y grows downward in client space.
       const ny = clamp(100 - ((ev.clientY - grabY - r.top) / r.height) * 100, Y_MIN, Y_MAX);
+      // Only count it as a drag once the pointer travelled a real distance —
+      // a bare click must not move the caption.
+      if (Math.abs(nx - xPct) > 0.5 || Math.abs(ny - yPct) > 0.5) moved = true;
       lastRef.current = { x: nx, y: ny };
       onMove(nx, ny);
     };
@@ -185,7 +199,9 @@ export default function CaptionDragLayer({
       puck.removeEventListener('pointerup', end);
       puck.removeEventListener('pointercancel', end);
       setActive(null);
-      onCommit(lastRef.current.x, lastRef.current.y);
+      // A bare click (no real movement) is NOT a drag — don't commit, or a single
+      // click on the box re-writes the position and the caption teleports/vanishes.
+      if (moved) onCommit(lastRef.current.x, lastRef.current.y);
     };
 
     puck.addEventListener('pointermove', move);

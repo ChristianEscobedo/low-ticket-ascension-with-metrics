@@ -758,6 +758,53 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.34.0',
+    releasedOn: '2026-08-15',
+    entryType: 'added',
+    title: 'Caption system: clean looks, phrase rows, per-card grids + the persistence fix',
+    body: cl([
+      '<p>The caption system leveled up. <strong>Accent Pop</strong> joins the gallery — the clean single-accent-word look (white bold sans, ONE word lit in a bright accent, a thin outline, a soft drop shadow). <strong>Phrase rows</strong> (a toggle in Customize) shape each row as a natural speech phrase — breaking on punctuation or a pause — instead of a fixed word count, the organic "kinda random" rhythm. And a <strong>per-card grid</strong>: a phrase card now carries its own words-per-row × rows (a stepper on the card), so a punchy 1-word beat sits next to a 3-word card, independent of the reel-wide settings.</p>',
+      '<p>Plus the house default is now <strong>Kelly Neon</strong> (build & hold, float + wiggle on), spacing dials go tighter, drop-shadow and outer-glow have reach sliders, and you can <strong>Save as theme</strong> to name a look and reuse it. Under the hood: the preview no longer restarts the video when you tweak a caption, the gallery highlight stays in sync with the preview, and a persistence fix means hiding a caption card, a phrase-card assignment, or a free-place word position now survives a refresh.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.35.0',
+    releasedOn: '2026-08-15',
+    entryType: 'added',
+    title: 'Fly-in entrances: slide up + tilt, and the right-to-left sweep',
+    body: cl([
+      '<p>Two new entrances for image fly-ins, one click each in the cue\'s motion row. <strong>Slide up + tilt</strong> — the full-width image entrance: the image flies in from the bottom fast, then settles into a slight tilt (the lower-right lifts) and holds. <strong>Sweep ←</strong> — an icon or image slides in from the right edge moving left and holds; set the cue\'s layer to <strong>under text</strong> and it runs under the captions.</p>',
+      '<p>Both are keyframe recipes on the existing motion system, so they render frame-exact in the preview and the MP4, and the keyframe editor still fine-tunes after you apply one. Transparent PNG/WebP icons work with these today — a logo or checkmark sweeping in under the captions, no extra setup.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.36.0',
+    releasedOn: '2026-08-15',
+    entryType: 'added',
+    title: 'Caption behind the speaker + free-place precision fix',
+    body: cl([
+      '<p><strong>Caption behind the speaker.</strong> The Clipping Studio can now remove a scene\'s background and stack the subject cutout ABOVE the captions — the speaker occludes the words. A per-row <strong>Behind</strong> button in the subtitle panel processes just that line\'s timing (the bria model caps at 60s, so the card\'s span, not the whole clip, is what gets processed), with a model picker (bria is the cost-effective default, mp4 + auto-zoom).</p>',
+      '<p><strong>Free-place precision fix.</strong> A word you free-placed used to change size and position the moment you toggled fp off — Edit mode painted it at the full theme weight while Preview fell back to the thin idle look. A placed word now paints the full theme weight in Edit AND Preview/render, so the placement + size persist exactly as you edited them.</p>',
+      '<p><strong>Why it matters:</strong> the caption-behind-the-speaker look is one click, and a free-placed word stays exactly where you put it — in the preview AND the exported MP4.</p>',
+    ]),
+    published: true,
+  },
+  {
+    version: '2.37.0',
+    releasedOn: '2026-08-15',
+    entryType: 'added',
+    title: 'Behind-the-subject as a real layer, the right-click word menu, and the free-place layout fix',
+    body: cl([
+      '<p><strong>Behind the subject, for real.</strong> Removing a scene\'s background now lands as a <strong>Cutout layer on the violet overlay lane</strong> — a duplicate of the scene with the background removed that you can see, drag to re-time, and × to remove (it used to be an invisible window you couldn\'t touch). Then <strong>right-click any caption word on the canvas → Behind the subject</strong> to send just that word UNDER the cutout — every other word stays in front.</p>',
+      '<p><strong>The right-click word menu.</strong> Right-click any caption word on the canvas (Preview mode) for its full menu: Free-place this word, Remove placement, Behind the subject, and the complete per-word style editor (entrance, scale, color, FX + gradient, ambient, font, hide). The same menu opens from a word\'s drag box in Edit mode.</p>',
+      '<p><strong>The free-place layout fix.</strong> Toggling fp off no longer shifts the un-edited words up a row or thins the placed one — Edit mode now renders the SAME caption rows as Preview and the exported MP4, and a placed word keeps the full theme weight in all three. What you drag is what renders.</p>',
+      '<p><strong>Round 2 polish.</strong> Edit mode now shows just the words on screen (the same page as Preview) instead of scattering the whole card — tap the new <strong>all</strong> pill on the Edit/Preview toggle to expand to every word when you want the full set. And the image fly-in drag box now appears only while the image is actually on screen — click it to grab, move, and scale, and the ⚙ editor seeks right to it.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

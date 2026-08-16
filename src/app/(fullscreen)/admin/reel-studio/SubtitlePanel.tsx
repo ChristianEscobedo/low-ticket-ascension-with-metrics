@@ -96,6 +96,8 @@ export function SubtitlePanel({
   cueMode = false,
   onCueWord,
   cuedWordIndexes,
+  onBehind,
+  behindBusy = false,
   fxMode = false,
   onFxWord,
   fxWordIndexes,
@@ -114,6 +116,14 @@ export function SubtitlePanel({
   cueMode?: boolean;
   onCueWord?: (wordIndex: number) => void;
   cuedWordIndexes?: ReadonlySet<number>;
+  /**
+   * Caption behind the speaker: a per-row trigger (right of the text) that
+   * removes the background for JUST this phrase's window — the bria model caps
+   * at 60s, so the card's timing (not the whole clip) is what gets processed.
+   * The page passes the handler; it opens the window/model options and runs.
+   */
+  onBehind?: (fromSec: number, toSec: number) => void;
+  behindBusy?: boolean;
   /**
    * Word FX mode: clicking a word toggles it in the FX bar's picked set
    * (amber underline) instead of opening the editor — the bar applies the
@@ -187,6 +197,41 @@ export function SubtitlePanel({
             mode: 'build' as const,
             rows,
             wordsPerRow,
+          },
+        },
+      };
+    });
+    onEdit(next);
+  }
+
+  /**
+   * Per-card layout override: set THIS card's rows / wordsPerRow (the phrase
+   * card's own grid), independent of the reel-wide words/rows settings. Writes
+   * the same card.rows / card.wordsPerRow the layer's resolveCardWindow reads.
+   * This is the "more words or rows on certain caption cards, not the full
+   * thing" control — a punchy 1-word card next to a 3-word card.
+   */
+  function setCardLayout(
+    from: number,
+    to: number,
+    patch: { rows?: number; wordsPerRow?: number },
+  ) {
+    const next = words.map((w, i) => {
+      if (i < from || i >= to) return w;
+      const card = w.mark?.card;
+      if (!card) return w;
+      return {
+        ...w,
+        mark: {
+          ...(w.mark ?? {}),
+          card: {
+            ...card,
+            ...(typeof patch.rows === 'number'
+              ? { rows: Math.max(1, Math.min(4, patch.rows)) }
+              : {}),
+            ...(typeof patch.wordsPerRow === 'number'
+              ? { wordsPerRow: Math.max(1, Math.min(8, patch.wordsPerRow)) }
+              : {}),
           },
         },
       };
@@ -438,6 +483,10 @@ export function SubtitlePanel({
                       <button
                         key={i}
                         onClick={() => {
+                          // Two-way sync: clicking a word on the card jumps the
+                          // video preview to it (the playhead → card highlight
+                          // already rides the other way via activeIdx + scroll).
+                          onSeek(w.start);
                           if (fxMode) {
                             onFxWord?.(i);
                             return;
@@ -475,6 +524,23 @@ export function SubtitlePanel({
                     );
                   })}
                 </p>
+                {/* Caption behind the speaker — a per-row trigger, RIGHT of the
+                    text (not stacked under stack/fp). Processes JUST this
+                    phrase's window (the bria model caps at 60s). */}
+                {onBehind && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onBehind(words[p.from].start, words[p.to - 1]?.end ?? words[p.from].end);
+                    }}
+                    disabled={behindBusy}
+                    title={`Caption behind the speaker for this line (${tc(words[p.from].start)}–${tc(words[p.to - 1]?.end ?? words[p.from].end)}) — removes the background for just this window`}
+                    className="shrink-0 self-start rounded border border-brass/40 px-1.5 py-0.5 text-[8px] font-bold uppercase text-brass/80 hover:bg-brass/10 disabled:opacity-40"
+                  >
+                    {behindBusy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : 'Behind'}
+                  </button>
+                )}
                 {cardId ? (
                   <div className="flex shrink-0 flex-col gap-0.5 pt-0.5">
                     <button
@@ -503,6 +569,48 @@ export function SubtitlePanel({
                     >
                       page
                     </button>
+                    {/* Per-card layout: THIS card's words-per-row × rows, independent
+                        of the reel-wide settings. The "more words/rows on certain
+                        cards, not the full thing" control. */}
+                    {(() => {
+                      const card = words[p.from]?.mark?.card;
+                      const wpr = card?.wordsPerRow ?? 3;
+                      const r = card?.rows ?? 3;
+                      return (
+                        <div className="mt-0.5 flex flex-col gap-0.5" title="This card's words-per-row × rows">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setCardLayout(p.from, p.to, { wordsPerRow: wpr - 1 }); }}
+                              disabled={wpr <= 1}
+                              className="h-3.5 w-3.5 rounded border border-bone/15 text-[9px] leading-none text-bone/50 hover:bg-bone/10 disabled:opacity-30"
+                            >−</button>
+                            <span className="w-7 text-center text-[8px] font-bold text-brass/80">{wpr}w</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setCardLayout(p.from, p.to, { wordsPerRow: wpr + 1 }); }}
+                              disabled={wpr >= 8}
+                              className="h-3.5 w-3.5 rounded border border-bone/15 text-[9px] leading-none text-bone/50 hover:bg-bone/10 disabled:opacity-30"
+                            >+</button>
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setCardLayout(p.from, p.to, { rows: r - 1 }); }}
+                              disabled={r <= 1}
+                              className="h-3.5 w-3.5 rounded border border-bone/15 text-[9px] leading-none text-bone/50 hover:bg-bone/10 disabled:opacity-30"
+                            >−</button>
+                            <span className="w-7 text-center text-[8px] font-bold text-brass/80">{r}r</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setCardLayout(p.from, p.to, { rows: r + 1 }); }}
+                              disabled={r >= 4}
+                              className="h-3.5 w-3.5 rounded border border-bone/15 text-[9px] leading-none text-bone/50 hover:bg-bone/10 disabled:opacity-30"
+                            >+</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : null}
               </div>

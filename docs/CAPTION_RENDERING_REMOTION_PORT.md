@@ -1,5 +1,16 @@
 # Caption Rendering — Remotion Port (Complete)
 
+> **2026-08-14 caption session** (see `REEL_STUDIO_SYSTEM_PORT.md` top note for
+> the full record): new default theme `kelly-neon` (the `captionDefFor`
+> fallback), build & hold as the default stack mode, tighter letter/word spacing
+> clamps, `dropShadowSpread` + `outerGlow.spread` reach dials, "Save as theme"
+> (localStorage custom themes), the playhead-restore fix (a caption tweak no
+> longer restarts the video), the gallery↔preview selection sync, and the
+> `normalizeWordMark` persistence fix — it now preserves `hidden`, `card`,
+> `xPct`, `yPct`, so hiding a caption card / a phrase card / a free-place
+> position survives save + refresh. The worker vendors the same four files
+> byte-identical, so the MP4 renders what the stage shows.
+
 **Goal:** Make captions render EXACTLY as they preview — same words, same timings, same animations, same styles. The preview (Remotion Player) and the export (Railway worker) use the SAME `ReelComposition` + `CaptionLayer` + `buildRenderPlan`. No more "the captions look different in the MP4."
 
 ---

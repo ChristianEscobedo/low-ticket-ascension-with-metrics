@@ -65,6 +65,7 @@ class PreviewErrorBoundary extends React.Component<
 
 export default function RemotionPreview({
   freePlaceEdit = false,
+  showAllWords = false,
   project,
   aspect = 'vertical',
   fps = DEFAULT_FPS,
@@ -88,9 +89,18 @@ export default function RemotionPreview({
    */
   playheadSec?: number;
   freePlaceEdit?: boolean;
+  /** Edit mode opt-in: show EVERY card word (not just the on-screen page). */
+  showAllWords?: boolean;
 }) {
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
   const playerRef = useRef<PlayerRef>(null);
+  /**
+   * The frame the user is actually on, tracked across plan rebuilds. When a
+   * caption change rebuilds the plan, the Player can remount and snap back to
+   * frame 0 — this ref is what we restore from so a style tweak never restarts
+   * the video. Updated from the Player's own frame on every render.
+   */
+  const lastFrameRef = useRef(0);
 
   // The SAME plan the renderer builds. When the editor state changes, the plan
   // (and therefore the preview) recomputes — identical to what gets rendered.
@@ -98,23 +108,38 @@ export default function RemotionPreview({
   const plan = useMemo(() => {
     try {
       const base = buildRenderPlan(project, { fps, width: size.width, height: size.height });
-      // Studio-only: free-place Edit mode shows every card word (not in final render).
-      return freePlaceEdit ? { ...base, freePlaceEdit: true as const } : base;
+      // Studio-only: free-place Edit mode. showAllWords is the opt-in "every
+      // card word" toggle — off, Edit shows just the on-screen page (Preview's
+      // visibility). Neither is ever set for the final render.
+      return freePlaceEdit
+        ? { ...base, freePlaceEdit: true as const, showAllWords }
+        : base;
     } catch (e) {
       console.error('[RemotionPreview] buildRenderPlan threw:', e);
       return null;
     }
-  }, [project, fps, size.width, size.height, freePlaceEdit]);
+  }, [project, fps, size.width, size.height, freePlaceEdit, showAllWords]);
 
   /**
    * Follow the timeline. Seek only on a real difference (>1 frame) so we never
    * fight the Player's own playback: while it plays it advances itself, and a
    * seek every render would stutter it back. Rounding to whole frames is what
    * keeps a dragged playhead landing on the same frame the render would emit.
+   *
+   * ALSO: after a plan rebuild (a caption tweak), restore the tracked frame so
+   * the video doesn't snap back to 0. The Player remounts on a new inputProps;
+   * this puts the playhead back where it was.
    */
   useEffect(() => {
     const p = playerRef.current;
-    if (!p || !plan || playheadSec == null || !Number.isFinite(playheadSec)) return;
+    if (!p || !plan) return;
+    try {
+      const cur = p.getCurrentFrame();
+      if (Number.isFinite(cur) && cur > 0) lastFrameRef.current = cur;
+    } catch {
+      /* not mounted yet */
+    }
+    if (playheadSec == null || !Number.isFinite(playheadSec)) return;
     const target = Math.max(
       0,
       Math.min(plan.durationInFrames - 1, Math.round(playheadSec * plan.fps)),
@@ -125,6 +150,23 @@ export default function RemotionPreview({
       // The Player isn't mounted yet on the first paint; the next effect run seeks.
     }
   }, [playheadSec, plan]);
+
+  /**
+   * Restore the tracked frame after a plan rebuild. When the plan changes the
+   * Player gets new inputProps and can reset to frame 0; this seeks it back to
+   * where the user was. Runs AFTER the plan change, on the next paint.
+   */
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !plan) return;
+    const restore = Math.min(lastFrameRef.current, plan.durationInFrames - 1);
+    if (restore <= 1) return;
+    try {
+      if (Math.abs(p.getCurrentFrame() - restore) > 1) p.seekTo(restore);
+    } catch {
+      /* not mounted yet */
+    }
+  }, [plan]);
 
   if (!plan) {
     return (

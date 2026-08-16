@@ -68,14 +68,83 @@ function useMotionTransform(clip: RenderClip, fps: number): string {
   return `translate(${x}%, ${y}%) scale(${scale}) rotate(${rotate}deg)`;
 }
 
-const ClipLayer: React.FC<{ clip: RenderClip; fps: number; muted?: boolean }> = ({
-  clip,
-  fps,
-  muted,
-}) => {
+/**
+ * Per-boundary scene transitions, frame-driven like everything else in this
+ * file (a CSS transition/animation clock does not advance between renderMedia
+ * screenshots — it would render frozen at the seam).
+ *
+ * `t` is 0→1 through the OVERLAP window: the incoming clip's first
+ * `transition.frames` frames, which are also the outgoing clip's last
+ * `transition.frames` frames (the plan overlapped them — both sequences are
+ * mounted for the window). 'in' styles the incoming scene, 'out' the leaving
+ * one. At t=0 and t=1 every style is identity, so the seam never pops.
+ */
+function transitionStyleFor(
+  type: string,
+  phase: 'in' | 'out',
+  t: number,
+): React.CSSProperties {
+  const p = Math.min(1, Math.max(0, t));
+  switch (type) {
+    case 'crossfade':
+      // The incoming scene fades up over the outgoing one (which holds still
+      // beneath — DOM order already stacks the later clip on top).
+      return phase === 'in' ? { opacity: p } : {};
+    case 'whip': {
+      // Whip-pan: the outgoing scene whips off left with a motion blur while
+      // the incoming one whips in from the right. Fast + blurred = the whip.
+      const x = phase === 'out' ? -105 * p : 105 * (1 - p);
+      const blur = 10 * (phase === 'out' ? p : 1 - p);
+      return {
+        transform: `translateX(${x.toFixed(2)}%)`,
+        filter: `blur(${blur.toFixed(1)}px)`,
+        opacity: phase === 'out' ? 1 - p * 0.35 : 1,
+      };
+    }
+    case 'zoom':
+      // Zoom-through: the outgoing scene pushes INTO the camera (scale up +
+      // fade, riding ON TOP via the zIndex the loop passes) while the
+      // incoming scene settles from slightly oversized underneath.
+      return phase === 'out'
+        ? { transform: `scale(${(1 + p * 0.5).toFixed(4)})`, opacity: 1 - p * p }
+        : { transform: `scale(${(1.14 - 0.14 * p).toFixed(4)})` };
+    default:
+      return {};
+  }
+}
+
+const ClipLayer: React.FC<{
+  clip: RenderClip;
+  fps: number;
+  muted?: boolean;
+  zIndex?: number;
+  /** The transition INTO this clip (its first `frames` frames blend). */
+  enter?: { type: string; frames: number };
+  /** The transition OUT of this clip (its last `frames` frames blend) — the
+   *  NEXT clip's transitionIn, passed down by the loop. */
+  exit?: { type: string; frames: number };
+}> = ({ clip, fps, muted, zIndex, enter, exit }) => {
+  const frame = useCurrentFrame(); // clip-local, because we're inside its Sequence
   const transform = useMotionTransform(clip, fps);
+
+  // The transition style rides the OUTER AbsoluteFill so it composes with the
+  // motion track on the video inside instead of fighting over `transform`.
+  let tf: React.CSSProperties = {};
+  if (enter && enter.frames > 0 && frame < enter.frames) {
+    tf = transitionStyleFor(enter.type, 'in', frame / Math.max(1, enter.frames - 1));
+  } else if (exit && exit.frames > 0 && frame >= clip.durationInFrames - exit.frames) {
+    const local = frame - (clip.durationInFrames - exit.frames);
+    tf = transitionStyleFor(exit.type, 'out', local / Math.max(1, exit.frames - 1));
+  }
+
   return (
-    <AbsoluteFill style={{ overflow: 'hidden' }}>
+    <AbsoluteFill
+      style={{
+        overflow: 'hidden',
+        ...(typeof zIndex === 'number' ? { zIndex } : {}),
+        ...tf,
+      }}
+    >
       {/* OffthreadVideo (not <Video>) is what makes Lambda renders reliable:
           frames are extracted with ffmpeg instead of waiting on a <video> tag
           to seek, which is where headless renders used to hang or drop frames. */}
@@ -191,16 +260,33 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
-      {plan.clips.map((clip) => (
-        <Sequence
-          key={clip.id}
-          from={clip.fromFrame}
-          durationInFrames={clip.durationInFrames}
-          layout="none"
-        >
-          <ClipLayer clip={clip} fps={fps} muted={muteClips} />
-        </Sequence>
-      ))}
+      {plan.clips.map((clip, i) => {
+        // A transition lives on the INCOMING clip (plan.ts overlapped its
+        // start with the previous clip's tail); the outgoing clip's exit is
+        // the NEXT clip's entrance. During the overlap both Sequences are
+        // mounted, so the two scenes blend frame-exactly.
+        const exit = plan.clips[i + 1]?.transition;
+        return (
+          <Sequence
+            key={clip.id}
+            from={clip.fromFrame}
+            durationInFrames={clip.durationInFrames}
+            layout="none"
+          >
+            <ClipLayer
+              clip={clip}
+              fps={fps}
+              muted={muteClips}
+              enter={clip.transition}
+              exit={exit}
+              // Zoom-through rides the OUTGOING scene on top while it pushes
+              // into the camera; crossfade/whip let DOM order stack the
+              // incoming scene on top.
+              zIndex={exit?.type === 'zoom' ? 3 : undefined}
+            />
+          </Sequence>
+        );
+      })}
 
       {plan.overlays.map((ov) => (
         <Sequence
@@ -209,7 +295,11 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
           durationInFrames={ov.durationInFrames}
           layout="none"
         >
-          <ClipLayer clip={ov} fps={fps} muted />
+          {/* A subject CUTOUT rides at z 6: UNDER the caption block (z 10) and
+              the front free-placed words (z 11), but OVER a behind-marked word
+              (z 5) — the "caption behind the speaker" stack. A plain b-roll
+              overlay keeps z auto (under the captions, as always). */}
+          <ClipLayer clip={ov} fps={fps} muted zIndex={ov.isCutout ? 6 : undefined} />
         </Sequence>
       ))}
 
@@ -262,6 +352,32 @@ export const ReelComposition: React.FC<{ plan: RenderPlan }> = ({ plan }) => {
 
       {/* Captions live at the top of the stack, timed in absolute frames. */}
       <CaptionLayer plan={plan} />
+
+      {/* Background-removed subject cutouts — the "caption behind the speaker"
+          foreground layer. Rendered ABOVE the captions (after CaptionLayer in
+          the stack) for [fromFrame, toFrame): the speaker occludes the words.
+          The cutout is a transparent VP9 webm (the fal pixelcut output); the
+          OffthreadVideo composites its alpha over the caption layer. */}
+      {(plan.cutouts ?? []).map((c) => (
+        <Sequence
+          key={c.id}
+          from={c.fromFrame}
+          durationInFrames={Math.max(1, c.toFrame - c.fromFrame)}
+          layout="none"
+        >
+          {/* z 6 — UNDER the caption block (z 10) but OVER a behind-marked
+              word (z 5). Without the explicit z the cutout painted UNDER every
+              caption (z-auto loses to z 10/11), so the "behind" look never
+              actually appeared. */}
+          <AbsoluteFill style={{ zIndex: 6 }}>
+            <OffthreadVideo
+              src={c.src}
+              muted
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </AbsoluteFill>
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

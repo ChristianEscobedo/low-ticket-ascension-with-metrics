@@ -57,6 +57,9 @@ const FILES = [
   // the vendored plan resolves that to the vendored types.ts, so it must be
   // a literal copy too (cue style/holdSec fields live there).
   'src/lib/mothermode/reel/types.ts',
+  // plan.ts imports transitionOverlapSec from '../timeline' (the seam-overlap
+  // math every transition rides on) — vendored plan → vendored timeline.
+  'src/lib/mothermode/reel/timeline.ts',
   'src/lib/mothermode/reel/render/plan.ts',
   // The ONE caption layer, shared by the preview composition and the worker's.
   'src/lib/mothermode/reel/render/captionLayer.tsx',

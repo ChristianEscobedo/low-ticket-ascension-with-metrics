@@ -33,6 +33,17 @@ const VENDORED: ReadonlyArray<readonly [string, string]> = [
     'src/lib/mothermode/reel/render/plan.ts',
     'render-worker/src/lib/mothermode/reel/render/plan.ts',
   ],
+  // plan.ts imports ReelMediaCueStyle/ReelProject/ReelWord from '../types' and
+  // transitionOverlapSec from '../timeline' — the vendored plan resolves those
+  // to the vendored copies, so both are guarded copies too.
+  [
+    'src/lib/mothermode/reel/types.ts',
+    'render-worker/src/lib/mothermode/reel/types.ts',
+  ],
+  [
+    'src/lib/mothermode/reel/timeline.ts',
+    'render-worker/src/lib/mothermode/reel/timeline.ts',
+  ],
   /**
    * The caption LAYER, not just the caption styles. This used to be two
    * hand-written components — remotion-project/CaptionLayer.tsx and

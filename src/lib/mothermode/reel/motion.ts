@@ -66,7 +66,9 @@ export type MotionPresetId =
   | 'pan-r'
   | 'tilt-up'
   | 'shake'
-  | 'rotate-sway';
+  | 'rotate-sway'
+  | 'slide-up-tilt'
+  | 'sweep-left';
 
 export interface MotionPreset {
   id: MotionPresetId;
@@ -83,6 +85,8 @@ export const MOTION_PRESETS: MotionPreset[] = [
   { id: 'tilt-up', label: 'tilt up', hint: 'Rise from below at 110% zoom' },
   { id: 'shake', label: 'shake', hint: 'Handheld micro-shake the whole scene' },
   { id: 'rotate-sway', label: 'sway', hint: 'Gentle ±1.5° roll — a floating camera feel' },
+  { id: 'slide-up-tilt', label: 'slide up + tilt', hint: 'Fly in from the bottom fast, then settle into a slight tilt — the full-width image entrance' },
+  { id: 'sweep-left', label: 'sweep ←', hint: 'Slide in from the right edge moving left — an icon/image sweeping in under the captions' },
 ];
 
 /** Expand a preset into keyframes for a clip of `durSec` effective seconds. */
@@ -116,6 +120,23 @@ export function presetKeys(id: MotionPresetId, durSec: number): MotionKey[] {
         k(0, { rotateDeg: -1.5 }),
         k(d / 2, { rotateDeg: 1.5 }),
         k(d, { rotateDeg: -1.5 }),
+      ];
+    // Fly in from the BOTTOM fast, then settle into a slight tilt (the
+    // lower-right lifts). The full-width image entrance: slide up → tilt → hold.
+    case 'slide-up-tilt':
+      return [
+        k(0, { panY: 30, scale: 1.06, rotateDeg: 0 }),
+        k(Math.min(0.28, d * 0.3), { panY: 0, scale: 1, rotateDeg: 0 }),
+        k(Math.min(0.5, d * 0.55), { rotateDeg: -3 }),
+        k(d, { rotateDeg: -3 }),
+      ];
+    // Slide in from the RIGHT edge moving left — an icon/image sweeping in
+    // (pair with the cue's z = under-text to run it under the captions).
+    case 'sweep-left':
+      return [
+        k(0, { panX: 30, scale: 1 }),
+        k(Math.min(0.3, d * 0.4), { panX: 0 }),
+        k(d, { panX: 0 }),
       ];
     default:
       return [k(0, {})];

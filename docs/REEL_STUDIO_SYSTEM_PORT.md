@@ -1,5 +1,152 @@
 # Reel Studio — System Port
 
+> **2026-08-16 (later still) — creator packs + the Script Lab:** two one-click
+> surfaces. **Creator packs** — the `EDITOR_PACKS` model in captions.ts grew
+> the full creator set (MrBeast / Hormozi / Faceless / Cinematic / Luxury /
+> Neon / Podcast), and each pack now carries a `transition?:
+> ReelTransitionType`: one click applies the preset + the overrides AND sets
+> that transition on every seam (the gallery's new `onApplyTransition` prop
+> hands it to the page, which patches every clip after the first; a pack with
+> no transition clears the seams — hard cuts are a look too). **The Script
+> Lab** — a new **Scripts** tab: variation scripts from the reel's OWN
+> transcript, Content-Hub style. `src/lib/mothermode/reel/scriptLab.ts`
+> builds the transcript (`transcriptForProject` — every clip's Whisper words
+> in timeline order), its hook (first ~14 words), its CTA (last ~14), and the
+> grounding guides; `ScriptLabPanel.tsx` runs the Content Hub's amplify flow
+> against it — ONE click (`aiAmplifyParts`) fills full script ×2 (bodies),
+> hook/intro ×4 (hooks), body ×2 (angles), CTA ×4 (ctas), every variant
+> grounded in what is actually said. A variant copies to the clipboard or
+> loads into the Scenes panel's voiceover box (the ElevenLabs flow); no
+> transcript yet → the panel offers Transcribe first. Tests:
+> `tests/lib/script-lab.test.ts` (7 — the transcript builder, hook/CTA
+> windows, the pack shape). Verified: `tsc` clean, 378/378 across the
+> 15-file reel/caption suite.
+>
+> **2026-08-16 (later) — scene transitions + the spring entrance:** scenes no
+> longer only hard-cut. `ReelClip.transitionIn?: { type: 'crossfade' | 'whip' |
+> 'zoom', durationSec }` lives on the INCOMING clip (types.ts +
+> `normalizeTransition`); the render plan OVERLAPS the two scenes by the
+> transition's frames — the incoming clip's `fromFrame` pulls earlier into the
+> outgoing tail, so both `<Sequence>`s are mounted for the window and
+> `ReelComposition.tsx`'s `transitionStyleFor` blends them frame-exactly
+> (crossfade fades the incoming scene up over the outgoing one; whip pans both
+> with a motion blur; zoom pushes the outgoing scene into the camera riding on
+> top via zIndex). `transitionOverlapSec` in `timeline.ts` is the ONE overlap
+> number every layer reads — the plan, `reelDurationSec`, `clipAtTime`, and the
+> editor's `timelineStartOf` — so captions, media cues, and the playhead never
+> drift right of the picture by the overlap (it clamps so both scenes keep
+> ≥ 0.1s of solo runtime). The timeline strip has a seam dot on every block
+> except the first: click cycles off → crossfade → whip → zoom → off,
+> right-click cycles 0.3 → 0.5 → 0.8s (undo-safe via `patch`). The spring
+> caption entrance (`CaptionAnim` `'spring'`) is a damped overshoot computed
+> frame-driven in `entranceStyle` like every other case — never a CSS clock —
+> over its own longer window (`SPRING_ENTER_SEC` 0.42s) with RAW linear
+> progress from the now-anim-aware `entranceProgress` (pre-easing a spring
+> flattens it); it settles at exactly scale(1). `timeline.ts` joined the
+> vendored set (sync script + `render-vendor-parity.test.ts`, which now also
+> guards `types.ts`); both `ReelComposition.tsx` copies are byte-identical.
+> Tests: `tests/lib/reel-transitions.test.ts` (normalize round-trip, overlap
+> math, the plan seam, the spring curve). **Also fixed:** `normalizeCaptionPreset`
+> compared its fallback to hardcoded `'karaoke'` while the house default had
+> moved to `kelly-neon`, so junk preset ids leaked through un-normalized — it
+> now compares to `captionDefFor(undefined).id`; three stale tests updated to
+> the current intended behavior (the kelly-neon fallback, the wordSpacing
+> −0.1em tightening floor, the spring's longer CSS-duration carve-out in the
+> ≤220ms entrance guard). Verified: `tsc` clean, 371/371 across the 14-file
+> reel/caption suite.
+>
+> **2026-08-16 — the caption-editing overhaul (the two-level model):** the
+> canvas now has two clean editing levels that no longer fight. **Preview
+> (default) = edit captions, always on** — the whole-block drag + corner-scale
+> box (`CaptionDragLayer`) shows whenever you're NOT in per-word mode (its gate
+> moved from `!hasPlaced` to `!stackEditMode`, so it no longer vanishes the
+> moment a word is placed). **Words (the toggle, renamed from "Edit") = edit
+> per word** — drag + scale + style individual words. The per-word drag is a
+> **direct press-drag on the glyph** (`onCaptionWordPointerDown` on the stage
+> container): it resolves the word under the pointer via the SAME
+> `closest('[data-caption-word]')` + `elementsFromPoint` hit-resolution the
+> right-click menu uses (NOT the drag layer's pre-measured boxes, which kept
+> failing), moves it relative to the grab point (no jump), and commits via
+> `applyWordMark` on release. It only fires in Words mode, so it never hijacks
+> the block drag. The **↺ reset** (in the canvas pill) strips the marks on just
+> the current timestamp's page (the words showing at the playhead), not the
+> whole scene. The pill is **always visible** when the scene has captions.
+> **fx fixes:** the gradient/shine (`isGradFill`) shell now carries
+> `style.transform` + `style.opacity` — so an fx word scales/moves again, and a
+> shine/gradient word stays hidden until its turn on build-and-hold (the shell
+> used to drop both). **The highlight stays on the spoken word** in Words mode
+> — the overlay's paint ternary dropped `freePlaceEdit`/`isFreePlaced`, so an
+> idle placed word keeps the idle color at the full theme weight (the
+> `css.line` fallback), and Edit === Preview (no size/color shift on toggle).
+> **Two-way caption-card sync:** clicking a word on the SubtitlePanel card
+> seeks the video to it (`onSeek(w.start)`); the playhead → highlight +
+> auto-scroll already rode the other way. **Player-resize fix:** the
+> WordDragLayer's glyph boxes (the scale outline) re-measure on a
+> `ResizeObserver` now — a player resize (gene-strip toggle, window, aspect)
+> no longer leaves them stale. Verified: `tsc` clean, 19/19 caption tests.
+>
+> **Caption system — 2026-08-14 session:** the house default + the persistence
+> fix. New default theme **`kelly-neon`** (kelly2 base + `neonFlicker` entrance +
+> red gradient highlight + red outer glow + `float`/`wiggle` on) — it is the
+> `captionDefFor` fallback, so new reels and unknown ids open with it.
+> **Build & hold is the default stack mode** (`captionLayer.tsx` `stackMode`
+> defaults to `'build'`; `'page'` karaoke is still selectable). **Spacing goes
+> tighter** — `letterSpacing` clamps to −0.2em, `wordSpacing` to −0.1em.
+> **Shadow/glow spread** — new `dropShadowSpread` + `outerGlow.spread` (0–1)
+> scale the blur radius/offset (reach, not just opacity), with "Shadow reach" /
+> "Glow reach" sliders in the customizer. **Save as theme** — the customizer's
+> "Save as theme" names the current preset + overrides into
+> `localStorage['reel-studio:custom-caption-themes']` and lists them under
+> "Custom themes" with a live visual; clicking one applies it.
+>
+> **Three editor fixes:** (1) `RemotionPreview` tracks the current frame in
+> `lastFrameRef` and re-seeks after a plan rebuild, so a caption tweak no longer
+> restarts the video at frame 0. (2) `CaptionGallery` resolves `currentPreset`
+> through `captionDefFor` and highlights tiles by the resolved def id, so a
+> legacy id ('karaoke') lights its mapped def — the panel↔preview selection
+> sync. (3) **`normalizeWordMark` now preserves `hidden`, `card`, `xPct`,
+> `yPct`** — it rebuilds each word's mark field-by-field on save and previously
+> dropped all four, so hiding a caption card, a phrase-card assignment, or a
+> free-place word position vanished on refresh. This was the root cause of the
+> "hide captions doesn't persist" report (and the phrase-card / free-place
+> equivalents). The render worker vendors `captions.ts`, `types.ts`,
+> `render/plan.ts`, `render/captionLayer.tsx` byte-identical via
+> `scripts/sync-vendored-captions.cjs` (enforced by
+> `tests/lib/render-vendor-parity.test.ts` + `caption-vendor-parity.test.ts` +
+> `caption-layer-geometry-parity.test.ts`, 12 tests), so the MP4 renders the
+> same fields the stage shows.
+>
+> **2026-08-15 — the clean-look round:** three additions. (1) **`accent-pop`**
+> preset — the clean single-accent-word look (white Inter 800, ONE word lit in a
+> bright sky-blue `#38BDF8` accent, a thin 1px dark outline, a soft drop shadow);
+> the light, modern end, tagged new + trend. (2) **Phrase rows** — a new
+> `rowMode: 'fixed' | 'phrase'` override + `captionPhraseRows()` in captions.ts:
+> each row is a natural speech phrase (breaks on punctuation or a >0.9s pause,
+> capped ~8 words) instead of a fixed wordsPerRow chunk — the organic "kinda
+> random, not 2-words-2-rows" rhythm. The layer maps frame-timed words into
+> phrase rows; a "Phrase rows" toggle in the customizer (under the words/rows
+> steppers) flips it. (3) **Per-card layout override** — `setCardLayout()` in
+> SubtitlePanel + a `Nw`/`Nr` stepper on a phrase card's button column sets THAT
+> card's `card.wordsPerRow` / `card.rows` (1–8 words, 1–4 rows), independent of
+> the reel-wide settings — a punchy 1-word card next to a 3-word card. The
+> layer's `resolveCardWindow` already reads them; the `normalizeWordMark` fix is
+> what makes them persist.
+>
+> **2026-08-15 (cont.) — two cue entrance presets:** `motion.ts` gains
+> **`slide-up-tilt`** ("slide up + tilt") and **`sweep-left`** ("sweep ←") in
+> `MOTION_PRESETS` + `presetKeys` — they surface in the cue editor's motion row
+> automatically (it iterates the list). `slide-up-tilt` is the full-width image
+> entrance: flies in from the bottom fast (`panY 30 → 0` in ~0.28s + a slight
+> scale), then settles into a −3° tilt (the lower-right lifts) and holds.
+> `sweep-left` slides in from the right edge moving left (`panX 30 → 0` in
+> ~0.3s) and holds — pair it with the cue's z = under-text to run an icon/image
+> under the captions. Both are keyframe recipes on the existing motion system,
+> so they render frame-exact in preview + MP4, and the keyframe editor
+> fine-tunes after. Transparent PNG/WebP icons work with these today (the cue
+> renders an `<img>`, alpha is free). True transparent-VIDEO (a webm/mov alpha
+> channel — a particle burst) is the scoped follow-up: it touches the worker's
+> compositing, not just the editor.
+>
 > **Phases 2–4 shipped:** Phase 2 — the Director (`/api/admin/reel-director`,
 > replies + validated trim/remove/move actions that EXECUTE on the timeline) +
 > Hook Lab + Variant duplication. Phase 3 — the Cutdown Agent
@@ -104,3 +251,15 @@ Read `docs/REEL_STUDIO_R25_R28_PORT.md` for the full record. Highlights:
 - **R28 fit-to-width timeline**: `pxPerSec = max(36 × zoom, stripWidth / total)` — a 27s reel and a 3-minute reel both fill the strip exactly; the zoom absorbs length, never the layout. Ruler ticks follow the effective zoom.
 
 Next initiative: `docs/AI_CLONE_PUBLISHING_MEDIA_LIBRARY_TASK.md` — AI clone, publishing fixes, media library.
+
+---
+
+## LATEST UPDATES (2026-08-15) — Behind-the-subject layer + the right-click word menu + the free-place layout fix
+
+Read `docs/CAPTION_BEHIND_SPEAKER_PORT.md` for the full record. Highlights:
+
+- **Behind the subject as a REAL layer.** Removing a scene's background now lands as a `Cutout · <scene>` entry on the violet overlay lane (`ReelOverlayClip.isCutout`) — visible, re-timeable (drag), removable (×). It replaces the invisible `cutouts[]` window, which nothing could re-time or remove. A per-word `mark.behind` sends ONE word UNDER the cutout: the z-stack is clip → behind word (z 5) → cutout (z 6) → caption block (z 10) → front words (z 11). Both compositions (preview + the vendored worker) agree.
+- **The right-click word menu.** Right-click any caption word on the canvas (Preview mode) opens the shared `WordContextMenu` (extracted from `WordDragLayer.tsx`): Free-place this word / Remove placement / Behind the subject + the full per-word style editor. The page resolves the clicked glyph's `data-caption-word` index back to the clip's own captions index (`clipWordIndexFromPlanIndex` — the Remotion layer numbers words in the timeline-merged plan list). Edit mode's WordDragLayer owns right-click there (the same menu).
+- **The free-place layout fix (fp persistence).** Edit mode no longer collapses the page into one row — it renders the SAME theme rows as Preview/render, so toggling fp off doesn't reflow the un-edited words (they "jumped up") and the drag coords map 1:1. And the free-place overlay reads its type metrics (fontFamily/fontWeight/letterSpacing) off `css.line` — they were never on `css.word`, which is why a placed word rendered thinner once fp toggled off.
+- **Round 2/3 polish (same session).** Edit mode now shows just the on-screen caption page by default — the "show every word" behavior moved off `freePlaceEdit` onto a new `showAllWords` plan flag (the `all` pill on the Edit/Preview toggle), so the card no longer scatters; the MP4 never sets it. Right-click works in Preview (a `[data-caption-word]{pointer-events:auto}` rule + an `elementsFromPoint` hit-stack, so it lands on the glyph even under the block-move box). Leaving Edit saves pending placements (`exitStackEdit`). A word click no longer seeks the playhead. And the fly-in drag box shows only while the image is on screen (`cueOnScreen`), with click-to-select + the ⚙ auto-seek.
+- **Guards:** `tests/lib/caption-behind-and-freeplace.test.ts` (6 tests) locks the z-stack, the `behind`/`isCutout` round-trips, and the Edit⇄Preview parity. 48/48 caption tests pass, tsc clean, the vendored worker copies are in sync.

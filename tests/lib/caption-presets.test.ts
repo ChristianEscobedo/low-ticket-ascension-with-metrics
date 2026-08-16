@@ -83,10 +83,11 @@ describe('R17 caption preset gallery (structured model)', () => {
     expect(captionDefFor('minimal').id).toBe('minimal');
   });
 
-  it('captionDefFor falls back to karaoke on junk/undefined', () => {
-    expect(captionDefFor('neon-rainbow').id).toBe('karaoke');
-    expect(captionDefFor(undefined).id).toBe('karaoke');
-    expect(captionDefFor(null).id).toBe('karaoke');
+  it('captionDefFor falls back to the house default on junk/undefined', () => {
+    // The house default is kelly-neon — unknown/junk/empty ids land there.
+    expect(captionDefFor('neon-rainbow').id).toBe('kelly-neon');
+    expect(captionDefFor(undefined).id).toBe('kelly-neon');
+    expect(captionDefFor(null).id).toBe('kelly-neon');
   });
 
   it('resolveCaptionStyle merges color wells over the preset (never mutates)', () => {
@@ -195,9 +196,12 @@ describe('R24 modern caption tier (anims, highlights, spacing, power words)', ()
       const css = captionAnimCss(anim);
       expect(kf, `${anim} keyframes`).toContain('@keyframes');
       expect(css, `${anim} css`).toContain('cap-');
-      // nothing slower than 220ms — longer reads as laggy at 30fps
+      // nothing slower than 220ms — longer reads as laggy at 30fps.
+      // EXCEPT spring: a damped overshoot needs its longer window to read as a
+      // spring at all (the render layer runs it over SPRING_ENTER_SEC; this
+      // CSS shorthand is only the decorative swatch).
       const ms = Number(css.match(/(\d+)ms/)?.[1] ?? 0);
-      expect(ms, `${anim} duration`).toBeLessThanOrEqual(220);
+      expect(ms, `${anim} duration`).toBeLessThanOrEqual(anim === 'spring' ? 450 : 220);
     }
   });
 
@@ -237,9 +241,10 @@ describe('R24 modern caption tier (anims, highlights, spacing, power words)', ()
     });
     const css = captionCssFor(merged);
     expect(css.line.letterSpacing).toBe('0.3em');
-    // wordSpacing clamped at the 0 floor — never negative (0 emits no property, which is fine)
-    expect(String(css.line.wordSpacing ?? '0em')).toBe('0em');
-    expect(merged.wordSpacingEm).toBe(0);
+    // wordSpacing clamps at the -0.1 floor — a slight TIGHTENING is allowed
+    // (the tracking dial goes a touch negative), junk like -1 lands on -0.1.
+    expect(String(css.line.wordSpacing ?? '0em')).toBe('-0.1em');
+    expect(merged.wordSpacingEm).toBe(-0.1);
     // base preset untouched
     expect(captionDefFor('clean-rise').letterSpacingEm).toBe(0.02);
   });

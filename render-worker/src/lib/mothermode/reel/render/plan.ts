@@ -29,8 +29,14 @@ import {
 } from '../captions';
 import { captionFontsFor, type CaptionFont } from '../captionFonts';
 import type { MotionKey } from '../motion';
-import { effectiveClipDuration, MIN_CLIP_SECONDS } from '../timeline';
-import type { ReelMediaCueStyle, ReelProject, ReelWord, ReelWordMark } from '../types';
+import { effectiveClipDuration, MIN_CLIP_SECONDS, transitionOverlapSec } from '../timeline';
+import type {
+  ReelMediaCueStyle,
+  ReelProject,
+  ReelTransitionType,
+  ReelWord,
+  ReelWordMark,
+} from '../types';
 
 /**
  * Unwrap a Remotion preview proxy URL back to its raw source. The studio's
@@ -67,11 +73,25 @@ export interface RenderClip {
   trimStartSec: number;
   /** Keyframed scale/pan/rotate, times still in clip-local seconds. */
   motion?: MotionKey[];
+  /**
+   * The scene transition INTO this clip, frame-resolved. `frames` is the
+   * overlap with the previous scene: this clip's fromFrame already starts
+   * that many frames BEFORE the hard-cut point, so the two scenes share
+   * [fromFrame, fromFrame + frames) — the composition renders both at once
+   * there (crossfade/whip/zoom). Omit = hard cut.
+   */
+  transition?: { type: ReelTransitionType; frames: number };
 }
 
 export interface RenderOverlay extends RenderClip {
   /** Overlays ride above the main track (b-roll). */
   layer: number;
+  /**
+   * Background-removed subject cutout (the "caption behind the speaker"
+   * layer): the composition renders it at z 6 — UNDER the caption block
+   * (z 10) but OVER any word marked `behind` (z 5).
+   */
+  isCutout?: boolean;
 }
 
 export interface RenderAudio {
@@ -95,6 +115,19 @@ export interface RenderWord {
  * own holdSec when set, else MEDIA_CUE_HOLD_SEC (clamped to the clip's
  * surviving window either way).
  */
+/**
+ * A background-removed subject cutout, frame-resolved. Rendered as a
+ * foreground layer ABOVE the captions for [fromFrame, toFrame) — the speaker
+ * occludes the words (the "caption behind the speaker" look).
+ */
+export interface RenderCutout {
+  id: string;
+  /** The transparent cutout video URL (webm, alpha). */
+  src: string;
+  fromFrame: number;
+  toFrame: number;
+}
+
 export interface RenderMediaCue {
   id: string;
   src: string;
@@ -140,6 +173,9 @@ export interface RenderPlan {
   powerWords: string[];
   /** Word-triggered media cues (image fly-ins), frame-resolved. */
   mediaCues: RenderMediaCue[];
+  /** Background-removed subject cutouts, frame-resolved — the "caption behind
+   *  the speaker" foreground layer (above the captions). */
+  cutouts: RenderCutout[];
   /**
    * Webfonts the renderer must fetch *before* drawing frame 0. The render
    * container ships only Noto, so without this the caption font silently
@@ -228,10 +264,16 @@ export function shiftMediaCues(
 ): RenderMediaCue[] {
   const out: RenderMediaCue[] = [];
   let cursor = 0;
+  let prevClip: (typeof project.clips)[number] | null = null;
   for (const clip of project.clips) {
     const effSec = effectiveClipDuration(clip);
     const frames = clipFrames(effSec, fps);
     const trimStartSec = Math.max(0, clip.trimStartSec ?? 0);
+    // Same transition overlap as buildRenderPlan's clip loop — a cue keyed to
+    // a word near a seam must land on the SAME frame the word does (both
+    // derive from the word's own timing, shifted with the clip).
+    const overlapFrames = prevClip ? toFrames(transitionOverlapSec(clip, prevClip), fps) : 0;
+    const clipStart = cursor - overlapFrames;
     const cues = (project.mediaCues ?? []).filter((c) => c.clipId === clip.id);
     const words = project.captions?.[clip.id] ?? [];
     for (const cue of cues) {
@@ -240,8 +282,8 @@ export function shiftMediaCues(
       const localStart = w.start - trimStartSec;
       const localEnd = w.end - trimStartSec;
       if (localEnd <= 0 || localStart >= effSec) continue;
-      const from = cursor + toFrames(Math.max(0, localStart), fps);
-      const to = cursor + toFrames(Math.min(effSec, localEnd + (cue.holdSec ?? MEDIA_CUE_HOLD_SEC)), fps);
+      const from = clipStart + toFrames(Math.max(0, localStart), fps);
+      const to = clipStart + toFrames(Math.min(effSec, localEnd + (cue.holdSec ?? MEDIA_CUE_HOLD_SEC)), fps);
       out.push({
         id: cue.id,
         src: unwrapProxySrc(cue.url),
@@ -256,9 +298,31 @@ export function shiftMediaCues(
         ...(cue.sfx ? { sfx: cue.sfx } : {}),
       });
     }
-    cursor += frames;
+    // The cursor IS the next clip's start: advance from the (overlapped)
+    // start, so each seam's overlap shrinks the running total once — the
+    // same accumulation buildRenderPlan's clip loop produces.
+    cursor = clipStart + frames;
+    prevClip = clip;
   }
   return out;
+}
+
+/**
+ * Resolve background-removed cutouts to TIMELINE frames. The cutout's
+ * fromSec/toSec are project seconds (the window the editor set), so this is a
+ * straight seconds→frames map — no per-clip shifting (the window is already
+ * timeline-absolute).
+ */
+export function shiftCutouts(
+  project: Pick<ReelProject, 'cutouts'>,
+  fps: number,
+): RenderCutout[] {
+  return (project.cutouts ?? []).map((c) => ({
+    id: c.id,
+    src: unwrapProxySrc(c.url),
+    fromFrame: toFrames(Math.max(0, c.fromSec), fps),
+    toFrame: Math.max(toFrames(Math.max(0, c.fromSec), fps) + 1, toFrames(Math.max(0, c.toSec), fps)),
+  }));
 }
 
 /**
@@ -268,7 +332,7 @@ export function shiftMediaCues(
 export function buildRenderPlan(
   project: Pick<
     ReelProject,
-    'clips' | 'audio' | 'captions' | 'captionStyle' | 'captionOverrides' | 'overlays' | 'mediaCues'
+    'clips' | 'audio' | 'captions' | 'captionStyle' | 'captionOverrides' | 'overlays' | 'mediaCues' | 'cutouts'
   >,
   options: RenderPlanOptions = {},
 ): RenderPlan {
@@ -283,32 +347,45 @@ export function buildRenderPlan(
   const clips: RenderClip[] = [];
   const words: RenderWord[] = [];
   let cursor = 0; // frames
+  let prevClip: (typeof project.clips)[number] | null = null;
 
   for (const clip of project.clips) {
     const effSec = effectiveClipDuration(clip);
     const frames = clipFrames(effSec, fps);
     const trimStartSec = Math.max(0, clip.trimStartSec ?? 0);
+    // A scene transition overlaps this clip's head with the previous clip's
+    // tail: the scene starts `overlap` frames BEFORE the hard-cut point, so
+    // both sequences are mounted for that window and the composition blends
+    // them. The overlap eats into both scenes, so the reel runs that much
+    // shorter per seam (the CapCut ripple) — durationInFrames below already
+    // reflects it, and the words shift with the clip via clipStartFrame.
+    const overlapFrames = prevClip ? toFrames(transitionOverlapSec(clip, prevClip), fps) : 0;
+    const fromFrame = cursor - overlapFrames;
     clips.push({
       id: clip.id,
       name: clip.name,
       src: unwrapProxySrc(clip.url),
-      fromFrame: cursor,
+      fromFrame,
       durationInFrames: frames,
       trimStartSec,
       ...(clip.motion && clip.motion.length >= 2 ? { motion: clip.motion } : {}),
+      ...(overlapFrames > 0 && clip.transitionIn
+        ? { transition: { type: clip.transitionIn.type, frames: overlapFrames } }
+        : {}),
     });
     const clipWords = project.captions?.[clip.id] ?? [];
     if (clipWords.length) {
       words.push(
         ...shiftWords(clipWords, {
-          clipStartFrame: cursor,
+          clipStartFrame: fromFrame,
           trimStartSec,
           effectiveSec: effSec,
           fps,
         }),
       );
     }
-    cursor += frames;
+    cursor = fromFrame + frames;
+    prevClip = clip;
   }
 
   const durationInFrames = Math.max(1, cursor);
@@ -323,6 +400,9 @@ export function buildRenderPlan(
       durationInFrames: clipFrames(effSec, fps),
       trimStartSec: Math.max(0, o.trimStartSec ?? 0),
       layer: i + 1,
+      // The cutout flag rides the plan so the composition can z-index the
+      // layer between the caption block and the behind-marked words.
+      ...(o.isCutout === true ? { isCutout: true } : {}),
       ...(o.motion && o.motion.length >= 2 ? { motion: o.motion } : {}),
     };
   });
@@ -355,6 +435,7 @@ export function buildRenderPlan(
     captionOverrides: project.captionOverrides ?? null,
       powerWords: project.captionOverrides?.powerWords ?? [],
     mediaCues: shiftMediaCues(project, fps),
+    cutouts: shiftCutouts(project, fps),
     // The style's fonts PLUS any per-word font marks — a font the worker does
     // not fetch renders as a fallback face in the MP4, so marked families
     // ride the same plan.fonts list the preview and the worker both load.

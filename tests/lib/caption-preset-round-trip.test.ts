@@ -89,9 +89,11 @@ describe('caption preset round-trip (picker → DB → render plan)', () => {
     expect(plan.captionStyle.id).toBe(id);
   });
 
-  it('still falls back to karaoke for junk and missing values', () => {
+  it('still falls back to the house default for junk and missing values', () => {
+    // The house default is kelly-neon (captionDefFor's fallback) — junk and
+    // missing values normalize to it, so they render like a fresh reel.
     for (const junk of [undefined, null, '', 42, {}, 'not-a-real-preset']) {
-      expect(normalizeCaptionPreset(junk)).toBe('karaoke');
+      expect(normalizeCaptionPreset(junk)).toBe('kelly-neon');
     }
   });
 });

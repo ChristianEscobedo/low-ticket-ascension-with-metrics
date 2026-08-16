@@ -13,6 +13,28 @@ import { makeClipId, type ReelClip, type ReelAudioTrack, type ReelProject } from
 /** Minimum playback a clip may contribute (fal rejects zero-length keyframes). */
 export const MIN_CLIP_SECONDS = 0.1;
 
+/**
+ * The overlap a scene transition creates at the seam BEFORE `clip`, in
+ * seconds. The incoming clip starts this much earlier than a hard cut, so
+ * the two scenes share the window (crossfade/whip/zoom all render both at
+ * once) and the reel runs that much shorter — the CapCut ripple.
+ *
+ * Clamped so the overlap can never swallow either scene: both keep at least
+ * MIN_CLIP_SECONDS of solo runtime. Returns 0 for the first clip (no seam
+ * before it) and for clips with no transitionIn — so a timeline without
+ * transitions computes EXACTLY the pre-transition numbers.
+ */
+export function transitionOverlapSec(clip: ReelClip, prev: ReelClip | null): number {
+  if (!prev || !clip.transitionIn) return 0;
+  const want = Math.max(0, clip.transitionIn.durationSec);
+  if (want <= 0) return 0;
+  const headroom = Math.min(
+    effectiveClipDuration(prev) - MIN_CLIP_SECONDS,
+    effectiveClipDuration(clip) - MIN_CLIP_SECONDS,
+  );
+  return Math.round(Math.max(0, Math.min(want, headroom)) * 1000) / 1000;
+}
+
 /** Effective playback duration of one clip after BOTH trims (in-point + tail). */
 export function effectiveClipDuration(clip: ReelClip): number {
   // `?? 0` matters: clips that arrive without trimEndSec (legacy rows, partial
@@ -25,24 +47,43 @@ export function effectiveClipDuration(clip: ReelClip): number {
   return Math.max(MIN_CLIP_SECONDS, Math.round(eff * 1000) / 1000);
 }
 
-/** R25: which clip owns timeline-second `t`, with its start + clip-local offset. */
+/**
+ * R25: which clip owns timeline-second `t`, with its start + clip-local offset.
+ *
+ * Transition-aware: a clip with a `transitionIn` starts its overlap EARLIER
+ * than the hard-cut point (see transitionOverlapSec), so positions after a
+ * seam shift left by the overlap — the same frame space buildRenderPlan
+ * produces. During the overlap window itself the INCOMING clip owns `t`
+ * (its head is what's fading in); the outgoing clip's tail still renders
+ * underneath it in the composition. With no transitions anywhere the walk
+ * is byte-for-byte the old naive sum.
+ */
 export function clipAtTime(
   clips: ReelClip[],
   t: number,
 ): { clip: ReelClip; index: number; start: number; local: number } | null {
   if (!clips.length) return null;
-  let acc = 0;
+  let start = 0;
   for (let i = 0; i < clips.length; i += 1) {
+    if (i > 0) {
+      start += effectiveClipDuration(clips[i - 1]) - transitionOverlapSec(clips[i], clips[i - 1]);
+    }
     const eff = effectiveClipDuration(clips[i]);
-    if (t < acc + eff || i === clips.length - 1) {
+    const isLast = i === clips.length - 1;
+    // Clip i owns [start, start-of-next): during the overlap the incoming
+    // scene is the dominant one, so the boundary sits at the INCOMING clip's
+    // (early) start, not the outgoing clip's end.
+    const nextStart = isLast
+      ? Number.POSITIVE_INFINITY
+      : start + eff - transitionOverlapSec(clips[i + 1], clips[i]);
+    if (t < nextStart || isLast) {
       return {
         clip: clips[i],
         index: i,
-        start: acc,
-        local: Math.max(0, Math.min(t - acc, eff)),
+        start,
+        local: Math.max(0, Math.min(t - start, eff)),
       };
     }
-    acc += eff;
   }
   return null;
 }
@@ -122,10 +163,19 @@ export function clipPlaybackAction(
   return 'play';
 }
 
+/**
+ * Total reel runtime across the ordered clips. Transition-aware: each seam
+ * with a `transitionIn` overlaps that many seconds, so the reel runs
+ * shorter than the naive sum — matching buildRenderPlan's durationInFrames
+ * (the Player's clock, the strip's total, and the MP4 all agree).
+ */
 export function reelDurationSec(clips: ReelClip[]): number {
-
-  const total = clips.reduce((sum, c) => sum + effectiveClipDuration(c), 0);
-  return Math.round(total * 1000) / 1000;
+  let total = 0;
+  for (let i = 0; i < clips.length; i += 1) {
+    total += effectiveClipDuration(clips[i]);
+    if (i > 0) total -= transitionOverlapSec(clips[i], clips[i - 1]);
+  }
+  return Math.round(Math.max(0, total) * 1000) / 1000;
 }
 
 /** Move a clip one position (-1) earlier or (+1) later. No-op at the edges. */

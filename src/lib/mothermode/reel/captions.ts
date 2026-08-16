@@ -66,7 +66,8 @@ export type CaptionAnim =
   | 'outlineFill'
   | 'dualTone'
   | 'motionTrail'
-  | 'tickUp';
+  | 'tickUp'
+  | 'spring';
 
 /**
  * BLOCK-level ambience — the whole caption block, not one word.
@@ -141,6 +142,10 @@ export function captionAnimKeyframes(anim: CaptionAnim): string {
       return `@keyframes cap-motiontrail{0%{transform:translateX(-0.2em);opacity:.3;filter:blur(2px)}100%{transform:none;opacity:1;filter:blur(0)}}`;
     case 'tickUp':
       return `@keyframes cap-tickup{0%{transform:translateY(0.4em);opacity:0}100%{transform:translateY(0);opacity:1}}`;
+    case 'spring':
+      // The damped-spring overshoot (the Remotion spring() look). The frame-
+      // driven layer computes the real curve; this is the swatch approximation.
+      return `@keyframes cap-spring{0%{transform:scale(0);opacity:0}45%{transform:scale(1.18);opacity:1}70%{transform:scale(0.96)}100%{transform:scale(1);opacity:1}}`;
 
     default:
       return '';
@@ -207,6 +212,8 @@ export function captionAnimCss(anim: CaptionAnim): string {
       return 'cap-motiontrail 200ms ease-out';
     case 'tickUp':
       return 'cap-tickup 180ms cubic-bezier(0.2,0.9,0.3,1.2)';
+    case 'spring':
+      return 'cap-spring 420ms cubic-bezier(0.34,1.4,0.64,1)';
 
     default:
       return '';
@@ -243,7 +250,8 @@ export const CAPTION_ANIMS: CaptionAnim[] = [
   'outlineFill',
   'dualTone',
   'motionTrail',
-  'tickUp'
+  'tickUp',
+  'spring'
 ];
 
 /** Highlight modes the customizer can pick. */
@@ -263,7 +271,14 @@ export const HIGHLIGHT_MODES: HighlightMode[] = [
  * One-click editor packs — stacked look recipes (preset id + optional overrides).
  * Applied from the gallery "Packs" row.
  */
-export type EditorPackId = 'mrbeast' | 'faceless' | 'luxury' | 'podcast';
+export type EditorPackId =
+  | 'mrbeast'
+  | 'hormozi'
+  | 'faceless'
+  | 'cinematic'
+  | 'luxury'
+  | 'neon'
+  | 'podcast';
 
 export interface EditorPack {
   id: EditorPackId;
@@ -273,13 +288,19 @@ export interface EditorPack {
   presetId: string;
   /** Optional style overrides merged on apply */
   overrides?: CaptionOverrides;
+  /**
+   * The seam transition the pack sets on EVERY boundary (the one-click look
+   * includes how scenes cut). Omit = hard cuts (a deliberate look too — the
+   * apply path clears existing seams for it).
+   */
+  transition?: import('./types').ReelTransitionType;
 }
 
 export const EDITOR_PACKS: EditorPack[] = [
   {
     id: 'mrbeast',
     label: 'MrBeast',
-    blurb: 'Huge yellow pop, slam words, punch-in',
+    blurb: 'Huge yellow pop, slam words, punch-in, zoom-through cuts',
     presetId: 'beast',
     overrides: {
       anim: 'slam',
@@ -288,11 +309,27 @@ export const EDITOR_PACKS: EditorPack[] = [
       floatOn: false,
       punchIn: true,
     },
+    transition: 'zoom',
+  },
+  {
+    id: 'hormozi',
+    label: 'Hormozi',
+    blurb: 'Bold stroke pop, karaoke fill sweep, whip-pan cuts',
+    // fill-sweep IS the Hormozi look with the karaoke progress fill baked in
+    // (karaokeFill is a def field, not an override — the preset carries it).
+    presetId: 'fill-sweep',
+    overrides: {
+      anim: 'pop',
+      blockMotion: 'still',
+      ghostFade: false,
+      floatOn: false,
+    },
+    transition: 'whip',
   },
   {
     id: 'faceless',
     label: 'Faceless',
-    blurb: 'Clean gradient flow + ghost fade',
+    blurb: 'Clean gradient flow + ghost fade, soft crossfades',
     presetId: 'gradient-flow',
     overrides: {
       anim: 'fade',
@@ -302,6 +339,24 @@ export const EDITOR_PACKS: EditorPack[] = [
       blockMotion: 'float',
       floatOn: true,
     },
+    transition: 'crossfade',
+  },
+  {
+    id: 'cinematic',
+    label: 'Cinematic',
+    blurb: 'Ghost fade in/out, letterbox drift, slow crossfades',
+    presetId: 'ghost',
+    overrides: {
+      anim: 'fade',
+      ghostFade: true,
+      ghostFadeInSec: 0.4,
+      ghostFadeOutSec: 0.5,
+      ghostEase: 'smooth',
+      ghostDriftEm: 0.14,
+      blockMotion: 'float',
+      floatOn: true,
+    },
+    transition: 'crossfade',
   },
   {
     id: 'luxury',
@@ -316,17 +371,32 @@ export const EDITOR_PACKS: EditorPack[] = [
       blockMotion: 'float',
       floatOn: true,
     },
+    transition: 'crossfade',
+  },
+  {
+    id: 'neon',
+    label: 'Neon',
+    blurb: 'Kelly-neon glow, red gradient highlight, living gradient',
+    // The kelly-neon def already ships gradientShift + float/wiggle — the
+    // pack is the house look plus its crossfade seams.
+    presetId: 'kelly-neon',
+    overrides: {
+      floatOn: true,
+      wiggleOn: true,
+    },
+    transition: 'crossfade',
   },
   {
     id: 'podcast',
     label: 'Podcast',
-    blurb: 'Type-on + underline, readable',
+    blurb: 'Type-on + underline, readable, hard cuts',
     presetId: 'minimal',
     overrides: {
       anim: 'typeOn',
       ghostFade: false,
       blockMotion: 'still',
     },
+    // No transition — hard cuts are the podcast look.
   },
 ];
 
@@ -502,6 +572,33 @@ export const CAPTION_STYLE_DEFS: CaptionStyleDef[] = [
     activeBg: '#4ADE80',
     shadow: '0 2px 4px rgba(0,0,0,0.9)',
     wordsPerLine: 3,
+  },
+  // --- Kelly Neon (THE DEFAULT): kelly2 base + neon-flicker entrance + red
+  //     gradient highlight + red outer glow + float/wiggle on. This is the house
+  //     look every new reel opens with. ---
+  {
+    id: 'kelly-neon', label: 'Kelly Neon', tags: ['trend', 'new', 'premium'],
+    font: 'Inter', weight: 800, upper: false,
+    wordColor: '#FFFFFF', activeColor: '#FF3B3B', highlightMode: 'gradient',
+    gradient: ['#FF3B3B', '#FF7A3B'],
+    gradientScope: 'active',
+    gradientAngle: 120,
+    gradientShift: true,
+    shadow: '0 0 10px rgba(255,59,59,0.75), 0 0 24px rgba(255,59,59,0.35), 0 2px 6px rgba(0,0,0,0.9)',
+    wordsPerLine: 3,
+    anim: 'neonFlicker',
+    blockFx: ['float', 'wiggle'],
+  },
+  // --- Accent Pop (the clean single-accent-word look): white bold sans, ONE
+  //     word lit in a bright accent, a thin dark outline, a soft drop shadow.
+  //     The light, modern end — subtle, not the heavy Hormozi outline. ---
+  {
+    id: 'accent-pop', label: 'Accent Pop', tags: ['new', 'trend'],
+    font: 'Inter', weight: 800, upper: false,
+    wordColor: '#FFFFFF', activeColor: '#38BDF8', highlightMode: 'color',
+    stroke: { color: 'rgba(0,0,0,0.55)', width: 1 },
+    shadow: '0 2px 10px rgba(0,0,0,0.55)',
+    wordsPerLine: 3, anim: 'pop',
   },
   // --- Clean sans variants ---------------------------------------------------
   {
@@ -902,14 +999,16 @@ const LEGACY_MAP: Record<string, string> = {
   minimal: 'minimal',
 };
 
-/** Resolve any id (new OR legacy) to a def; junk falls back to karaoke. */
+/** Resolve any id (new OR legacy) to a def; junk falls back to the house default. */
 export function captionDefFor(id: string | undefined | null): CaptionStyleDef {
-  if (!id) return DEF_BY_ID.get('karaoke')!;
+  // The house default is kelly-neon (kelly2 base + neon flicker + red gradient
+  // highlight + red glow + float/wiggle). Unknown/junk ids land here too.
+  if (!id) return DEF_BY_ID.get('kelly-neon')!;
   const direct = DEF_BY_ID.get(id);
   if (direct) return direct;
   const mapped = LEGACY_MAP[id];
   if (mapped && DEF_BY_ID.has(mapped)) return DEF_BY_ID.get(mapped)!;
-  return DEF_BY_ID.get('karaoke')!;
+  return DEF_BY_ID.get('kelly-neon')!;
 }
 
 // ---------------------------------------------------------------------------
@@ -1172,6 +1271,12 @@ export interface CaptionOverrides {
   /** How many ROWS show at once (1 = one line, 2 = the current + next line). 1–3. */
   rows?: number;
   /**
+   * How rows are shaped. 'fixed' (default) = a fixed wordsPerRow chunk.
+   * 'phrase' = each row is a natural speech phrase (breaks on punctuation or a
+   * timing gap) — the organic "kinda random, not 2-words-2-rows" rhythm.
+   */
+  rowMode?: 'fixed' | 'phrase';
+  /**
    * Stack behaviour for multi-row pages.
    * - 'page' (default): whole page visible, highlight walks (karaoke).
    * - 'build': words appear as spoken and HOLD until the page flips — the
@@ -1227,11 +1332,14 @@ export interface CaptionOverrides {
    * 0 = none. Composes with outerGlow (glow layers first, then drop).
    */
   dropShadow?: number;
+  /** Drop shadow SPREAD 0–1: how far the shadow reaches (0 = tight, 1 = long soft drop). */
+  dropShadowSpread?: number;
   /**
    * Outer glow: soft bloom around every word. Color defaults to the active
-   * caption color when omitted. Strength 0–1 (0 = off).
+   * caption color when omitted. Strength 0–1 (0 = off). spread 0–1 = how far
+   * the glow feathers out (0 = tight halo, 1 = wide bloom).
    */
-  outerGlow?: { strength: number; color?: string };
+  outerGlow?: { strength: number; color?: string; spread?: number };
   /**
    * Full-block / active-word gradient fill. When set, paints with
    * background-clip:text and suppresses stroke on filled glyphs.
@@ -1291,6 +1399,8 @@ export interface CaptionLayout {
   sizePx: number;
   wordsPerRow: number;
   rows: number;
+  /** 'fixed' (default) = fixed wordsPerRow chunk · 'phrase' = natural phrase rows. */
+  rowMode: 'fixed' | 'phrase';
 }
 
 /**
@@ -1321,6 +1431,7 @@ export function captionLayoutFor(
     sizePx: clampNum(o.sizePx, CAPTION_SIZE_MIN, CAPTION_SIZE_MAX, CAPTION_SIZE_DEFAULT),
     wordsPerRow: Math.round(clampNum(o.wordsPerRow, 1, 6, def.wordsPerLine)),
     rows: Math.round(clampNum(o.rows, 1, 3, 1)),
+    rowMode: o.rowMode === 'phrase' ? 'phrase' : 'fixed',
   };
 }
 
@@ -1365,6 +1476,50 @@ export function captionRows(
 }
 
 /**
+ * PHRASE rows — the "kinda random, not 2-words-2-rows all the time" rhythm.
+ *
+ * Instead of a fixed wordsPerRow chunk, each ROW is a natural speech phrase:
+ * a break lands on sentence/clause punctuation (., !, ?, …, ,, ;, :) or a
+ * >0.9s timing gap, and a phrase never runs past ~8 words. So a punchy 1-word
+ * beat ("Stop.") sits as its own row next to a 4-word phrase — the organic,
+ * phrase-shaped look the reference reels have, instead of a metronome grid.
+ *
+ * The active phrase is the one containing the active word; the page shows up to
+ * `rows` phrases starting at the active one (rows=1 → just the current phrase).
+ * Returns each row as [from, to) into `words`, same shape as captionRows.
+ */
+export function captionPhraseRows(
+  words: readonly { word: string; start: number; end: number }[],
+  activeIdx: number,
+  rows: number,
+): { from: number; to: number }[] {
+  const total = words.length;
+  if (total === 0) return [];
+  // 1) Group into phrases (punctuation / timing gap / length cap).
+  const phrases: { from: number; to: number }[] = [];
+  let from = 0;
+  for (let i = 0; i < total; i += 1) {
+    const w = words[i];
+    const next = words[i + 1];
+    const clauseEnd = /[.!?…]["'”]?$/.test(w.word) || /[,;:]["'”]?$/.test(w.word);
+    const gap = next ? next.start - w.end : 0;
+    const tooLong = i - from + 1 >= 8;
+    if (clauseEnd || gap > 0.9 || tooLong || !next) {
+      phrases.push({ from, to: i + 1 });
+      from = i + 1;
+    }
+  }
+  if (!phrases.length) phrases.push({ from: 0, to: total });
+  // 2) The phrase holding the active word.
+  const idx = Math.max(0, Math.min(activeIdx, total - 1));
+  let pIdx = phrases.findIndex((p) => idx >= p.from && idx < p.to);
+  if (pIdx < 0) pIdx = phrases.length - 1;
+  // 3) Show up to `rows` phrases starting at the active one.
+  const rowCount = Math.max(1, Math.round(rows));
+  return phrases.slice(pIdx, pIdx + rowCount);
+}
+
+/**
  * Merge per-reel overrides over a preset def. Returns a NEW def (never mutates).
  * colors[0]→wordColor, colors[1]→activeColor, colors[2/3]→sweep accents.
  */
@@ -1383,11 +1538,13 @@ export function resolveCaptionStyle(
     }
   }
   // Spacing dials ride the def so captionCssFor picks them up everywhere.
+  // Letter spacing can now go MUCH tighter (−0.2 = glyphs nearly touching) —
+  // the tight, punchy look the user asked for when build/hold is off.
   if (typeof overrides.letterSpacing === 'number' && Number.isFinite(overrides.letterSpacing)) {
-    out.letterSpacingEm = Math.max(-0.05, Math.min(0.3, overrides.letterSpacing));
+    out.letterSpacingEm = Math.max(-0.2, Math.min(0.3, overrides.letterSpacing));
   }
   if (typeof overrides.wordSpacing === 'number' && Number.isFinite(overrides.wordSpacing)) {
-    out.wordSpacingEm = Math.max(0, Math.min(0.6, overrides.wordSpacing));
+    out.wordSpacingEm = Math.max(-0.1, Math.min(0.6, overrides.wordSpacing));
   }
   // Whole-text gradient fill override (paints every word, drops stroke).
   if (overrides.gradientFill && Array.isArray(overrides.gradientFill.colors)) {
@@ -1558,15 +1715,23 @@ export function resolveCaptionStyle(
     const glow = overrides.outerGlow;
     if (glow && typeof glow.strength === 'number' && glow.strength > 0) {
       const s = Math.max(0, Math.min(1, glow.strength));
+      // SPREAD: how far the glow feathers out (0 = tight halo, 1 = wide bloom).
+      // Multiplies the blur radii so the user controls the reach, not just opacity.
+      const spread = Math.max(0, Math.min(1, glow.spread ?? 0.5));
+      const reach = 1 + spread * 1.5;
       const c = (typeof glow.color === 'string' && glow.color) || out.activeColor || '#ffffff';
-      const r1 = (6 + s * 10).toFixed(1);
-      const r2 = (14 + s * 22).toFixed(1);
+      const r1 = ((6 + s * 10) * reach).toFixed(1);
+      const r2 = ((14 + s * 22) * reach).toFixed(1);
       parts.push(`0 0 ${r1}px ${c}`, `0 0 ${r2}px ${c}88`);
     }
     if (typeof overrides.dropShadow === 'number' && overrides.dropShadow > 0) {
       const s = Math.max(0, Math.min(1, overrides.dropShadow));
-      const y = (2 + s * 6).toFixed(1);
-      const b = (4 + s * 14).toFixed(1);
+      // SPREAD: how far the drop shadow reaches (0 = tight under the glyphs,
+      // 1 = a long soft drop). Scales both the offset and the blur.
+      const spread = Math.max(0, Math.min(1, overrides.dropShadowSpread ?? 0.5));
+      const reach = 1 + spread * 1.5;
+      const y = ((2 + s * 6) * reach).toFixed(1);
+      const b = ((4 + s * 14) * reach).toFixed(1);
       const a = (0.45 + s * 0.45).toFixed(2);
       parts.push(`0 ${y}px ${b}px rgba(0,0,0,${a})`);
     }

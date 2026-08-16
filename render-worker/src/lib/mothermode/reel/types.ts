@@ -26,6 +26,26 @@ import { normalizeClonePlan } from './clone';
 // Clips + audio
 // ---------------------------------------------------------------------------
 
+/**
+ * Scene transitions, picked per boundary on the timeline. The transition
+ * belongs to the INCOMING clip (the one whose head blends with the previous
+ * clip's tail) — `clip.transitionIn` is the seam BEFORE that clip. Omit = a
+ * hard cut, which is what every pre-transition reel already plays.
+ */
+export const REEL_TRANSITIONS = ['crossfade', 'whip', 'zoom'] as const;
+export type ReelTransitionType = (typeof REEL_TRANSITIONS)[number];
+
+export interface ReelTransition {
+  type: ReelTransitionType;
+  /**
+   * Seconds of overlap between the two scenes. The incoming scene starts
+   * this early, so the reel runs that much shorter per seam — the same
+   * ripple a CapCut transition applies. Clamped 0.15–1.2 on normalize, then
+   * re-clamped against both clips' surviving runtimes at plan time.
+   */
+  durationSec: number;
+}
+
 export interface ReelClip {
   /** Stable id for reorder/trim operations. */
   id: string;
@@ -45,12 +65,24 @@ export interface ReelClip {
   trimStartSec?: number;
   /** R15 Motion Lab: keyframed scale/pan/rotate (preset-expanded). Omit = static. */
   motion?: import('./motion').MotionKey[];
+  /** The transition that plays when THIS clip starts. Omit = hard cut. */
+  transitionIn?: ReelTransition;
 }
+
 
 /** R25: an overlay (b-roll) clip laid ON TOP of the main track at a timeline offset. */
 export interface ReelOverlayClip extends ReelClip {
   /** Timeline seconds where the overlay starts (it plays over the main track). */
   offsetSec: number;
+  /**
+   * This overlay is a background-removed SUBJECT CUTOUT (the "caption behind
+   * the speaker" layer, made by the Behind action in the subtitle panel): it
+   * renders at z 6 — UNDER the caption block (z 10) but OVER any word marked
+   * `behind` (z 5) — instead of under the captions like a plain b-roll layer.
+   * It shows on the timeline's overlay lane, so it can be re-timed (drag) and
+   * removed (×) like any layer.
+   */
+  isCutout?: boolean;
 }
 
 /** Optional audio bed (voiceover / music) laid over the composed cut. */
@@ -134,6 +166,12 @@ export interface ReelWordMark {
   /** Free-place frame position (centre x, bottom y). */
   xPct?: number;
   yPct?: number;
+  /**
+   * Render this word UNDER the subject cutout layer (the "caption behind the
+   * speaker" z-trick): the word leaves the row flow (pinned at xPct/yPct) and
+   * paints at z 5, under the cutout's z 6; unmarked words stay in front.
+   */
+  behind?: boolean;
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
@@ -219,6 +257,24 @@ export interface ReelMediaCueStyle {
  * frame timings from the word's own start/end, so a trim or split re-times the
  * cue automatically instead of stranding it.
  */
+/**
+ * A background-removed CUTOUT of a clip's subject (the fal pixelcut
+ * video-background-removal output — a transparent VP9 webm). Rendered as a
+ * foreground layer ABOVE the captions for its time window, so the speaker
+ * occludes the words — the "caption behind the speaker" look. The stack for
+ * the window: original clip → caption → this cutout on top.
+ */
+export interface ReelCutout {
+  id: string;
+  /** The clip this cutout was made from. */
+  clipId: string;
+  /** The transparent cutout video URL (webm, alpha). */
+  url: string;
+  /** The time window (project seconds) the cutout shows. */
+  fromSec: number;
+  toSec: number;
+}
+
 export interface ReelMediaCue {
   id: string;
   /** The clip whose transcript holds the trigger word. */
@@ -291,12 +347,18 @@ export type CaptionPreset = string;
  * other direction, so this does not create a runtime cycle.
  */
 export function normalizeCaptionPreset(raw: unknown): CaptionPreset {
-  if (typeof raw !== 'string' || !raw) return 'karaoke';
-  // captionDefFor resolves real ids AND legacy aliases, and falls back to
-  // karaoke. Comparing its result's id to karaoke tells us whether `raw` was
-  // actually recognized, without duplicating the id list here.
+  // Junk/missing → the HOUSE DEFAULT (what captionDefFor hands back for an
+  // unknown id — kelly-neon today), so a junk-storing reel renders the house
+  // look like a fresh one. The comparison used to hardcode 'karaoke'; when the
+  // house default moved to kelly-neon, junk started leaking through
+  // un-normalized (the round-trip test caught it).
+  const house = captionDefFor(undefined).id as CaptionPreset;
+  if (typeof raw !== 'string' || !raw) return house;
+  // captionDefFor resolves real ids AND legacy aliases. Comparing its result's
+  // id to the house default tells us whether `raw` was actually recognized,
+  // without duplicating the id list here.
   const resolved = captionDefFor(raw);
-  return resolved.id === 'karaoke' && raw !== 'karaoke' ? 'karaoke' : raw;
+  return resolved.id === house && raw !== house ? house : (raw as CaptionPreset);
 }
 
 export interface ReelProject {
@@ -317,6 +379,8 @@ export interface ReelProject {
   overlays?: ReelOverlayClip[];
   /** Word-triggered media cues (image fly-ins keyed to spoken words). */
   mediaCues?: ReelMediaCue[];
+  /** Background-removed subject cutouts — the "caption behind the speaker" layer. */
+  cutouts?: ReelCutout[];
   /** AI Clone: the per-reel clone manifest (clone, beats, gate, cost basis). */
   clonePlan?: import('./clone').ClonePlan;
   createdAt: string | null;
@@ -380,6 +444,26 @@ function normalizeMotionKeys(raw: unknown): import('./motion').MotionKey[] | und
 }
 
 /**
+ * A scene transition on the incoming clip. An unknown type drops the whole
+ * key (the seam then hard-cuts) — never a silent substitution onto
+ * 'crossfade'. Duration clamps to 0.15–1.2s here; transitionOverlapSec in
+ * timeline.ts re-clamps against both clips' surviving runtimes at plan time,
+ * so a transition can never swallow a scene.
+ */
+export function normalizeTransition(raw: unknown): ReelTransition | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.type !== 'string' || !(REEL_TRANSITIONS as readonly string[]).includes(o.type)) {
+    return undefined;
+  }
+  const durationSec = Math.max(0.15, Math.min(1.2, asNumber(o.durationSec, 0.4)));
+  return {
+    type: o.type as ReelTransitionType,
+    durationSec: Math.round(durationSec * 100) / 100,
+  };
+}
+
+/**
  * Per-cue style: clamp each field, drop keys that aren't usable, and when
  * nothing survived drop the whole style (the cue then renders the house
  * card). Border needs BOTH a color and a width — a lone width is dropped,
@@ -424,6 +508,7 @@ export function normalizeReelClip(raw: unknown): ReelClip | null {
   const durationSec = Math.max(0, asNumber(o.durationSec, 0));
   if (durationSec <= 0) return null;
   const motion = normalizeMotionKeys(o.motion);
+  const transitionIn = normalizeTransition(o.transitionIn);
   return {
     id: asString(o.id) || makeClipId(),
     name: asString(o.name).slice(0, 120) || 'Clip',
@@ -434,6 +519,9 @@ export function normalizeReelClip(raw: unknown): ReelClip | null {
       ? { trimStartSec: Math.max(0, Math.min(asNumber(o.trimStartSec, 0), durationSec)) }
       : {}),
     ...(motion && motion.length >= 2 ? { motion } : {}),
+    // The seam transition must survive a save/load round-trip or every
+    // transition silently reverts to a hard cut on refresh.
+    ...(transitionIn ? { transitionIn } : {}),
   };
 }
 
@@ -442,7 +530,13 @@ export function normalizeReelOverlay(raw: unknown): ReelOverlayClip | null {
   const clip = normalizeReelClip(raw);
   if (!clip) return null;
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  return { ...clip, offsetSec: Math.max(0, asNumber(o.offsetSec, 0)) };
+  return {
+    ...clip,
+    offsetSec: Math.max(0, asNumber(o.offsetSec, 0)),
+    // The cutout flag must survive a save/load round-trip or the layer drops
+    // UNDER the behind-words it was built to cover.
+    ...(o.isCutout === true ? { isCutout: true } : {}),
+  };
 }
 
 export function normalizeReelAudio(raw: unknown): ReelAudioTrack | null {
@@ -606,6 +700,43 @@ function normalizeWordMark(raw: unknown): ReelWordMark | undefined {
   if (typeof o.font === 'string' && (WORD_FONTS as readonly string[]).includes(o.font)) {
     out.font = o.font;
   }
+  // Phrase mute — the "hide captions on this card" flag. Without this the flag
+  // was stripped on every save, so a hidden card came back on refresh.
+  if (o.hidden === true) out.hidden = true;
+  // Free-place position (a word the user dragged out of the caption line).
+  if (typeof o.xPct === 'number' && Number.isFinite(o.xPct)) {
+    out.xPct = Math.max(0, Math.min(100, o.xPct));
+  }
+  if (typeof o.yPct === 'number' && Number.isFinite(o.yPct)) {
+    out.yPct = Math.max(0, Math.min(100, o.yPct));
+  }
+  // Behind-the-subject z-flag (rides with the free-place coords). Without this
+  // the flag was stripped on every save, so a "behind" word came back in front
+  // on refresh.
+  if (o.behind === true) out.behind = true;
+  // Phrase stack card membership — contiguous words sharing card.id render as
+  // one stacked page. Dropping this on save dissolved every card on refresh.
+  if (o.card && typeof o.card === 'object') {
+    const c = o.card as Record<string, unknown>;
+    const id = asString(c.id).trim();
+    if (id) {
+      const mode = c.mode === 'page' ? 'page' : 'build';
+      out.card = {
+        id: id.slice(0, 60),
+        mode,
+        ...(typeof c.rows === 'number' && Number.isFinite(c.rows)
+          ? { rows: Math.max(1, Math.min(4, Math.round(c.rows))) }
+          : {}),
+        ...(typeof c.wordsPerRow === 'number' && Number.isFinite(c.wordsPerRow)
+          ? { wordsPerRow: Math.max(1, Math.min(8, Math.round(c.wordsPerRow))) }
+          : {}),
+        ...(typeof c.anim === 'string' && (CAPTION_ANIMS as string[]).includes(c.anim)
+          ? { anim: c.anim }
+          : {}),
+        ...(c.freePlace === true ? { freePlace: true } : {}),
+      };
+    }
+  }
   const sfx = normalizeCueSfx(o.sfx);
   if (sfx) out.sfx = sfx;
   return Object.keys(out).length ? out : undefined;
@@ -658,6 +789,30 @@ function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>):
     .slice(0, 60);
 }
 
+/** Cutouts: keep only entries with a real clip id, a real url, and a sane window. */
+function normalizeCutouts(raw: unknown, clips: ReelClip[]): ReelCutout[] {
+  if (!Array.isArray(raw)) return [];
+  const clipIds = new Set(clips.map((c) => c.id));
+  return raw
+    .map((c) => {
+      const o = c && typeof c === 'object' ? (c as Record<string, unknown>) : {};
+      const url = asString(o.url).trim();
+      const clipId = asString(o.clipId);
+      if (!isHttpUrl(url) || !clipId || !clipIds.has(clipId)) return null;
+      const fromSec = Math.max(0, asNumber(o.fromSec, 0));
+      const toSec = Math.max(fromSec, asNumber(o.toSec, fromSec));
+      return {
+        id: asString(o.id) || makeClipId(),
+        clipId,
+        url,
+        fromSec,
+        toSec,
+      };
+    })
+    .filter((c): c is ReelCutout => !!c)
+    .slice(0, 24);
+}
+
 /** Project-level fields live at top level; clips/audio/captions ride the JSONB. */
 export function normalizeProjectJson(raw: unknown): {
   clips: ReelClip[];
@@ -669,12 +824,14 @@ export function normalizeProjectJson(raw: unknown): {
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
   mediaCues?: ReelMediaCue[];
+  cutouts?: ReelCutout[];
   clonePlan?: import('./clone').ClonePlan;
 } {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const clips = (Array.isArray(o.clips) ? o.clips : [])
     .map(normalizeReelClip)
     .filter((c): c is ReelClip => !!c);
+  const cutouts = normalizeCutouts(o.cutouts, clips);
   const overlays = (Array.isArray(o.overlays) ? o.overlays : [])
     .map(normalizeReelOverlay)
     .filter((c): c is ReelOverlayClip => !!c);
@@ -698,6 +855,7 @@ export function normalizeProjectJson(raw: unknown): {
       : {}),
     ...(overlays.length ? { overlays } : {}),
     ...(mediaCues.length ? { mediaCues } : {}),
+    ...(cutouts.length ? { cutouts } : {}),
     ...(normalizeClonePlanField(o.clonePlan)
       ? { clonePlan: normalizeClonePlanField(o.clonePlan) }
       : {}),
@@ -723,6 +881,7 @@ export function rowToReelProject(row: ReelProjectRow): ReelProject {
     ...(json.captionOverrides ? { captionOverrides: json.captionOverrides } : {}),
     ...(json.overlays ? { overlays: json.overlays } : {}),
     ...(json.mediaCues ? { mediaCues: json.mediaCues } : {}),
+    ...(json.cutouts ? { cutouts: json.cutouts } : {}),
     ...(json.clonePlan ? { clonePlan: json.clonePlan } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -741,6 +900,7 @@ export function projectToJson(project: {
   captionOverrides?: import('./captions').CaptionOverrides;
   overlays?: ReelOverlayClip[];
   mediaCues?: ReelMediaCue[];
+  cutouts?: ReelCutout[];
   clonePlan?: import('./clone').ClonePlan;
 }): Record<string, unknown> {
   return {
@@ -753,6 +913,7 @@ export function projectToJson(project: {
     ...(project.captionOverrides ? { captionOverrides: project.captionOverrides } : {}),
     ...(project.overlays && project.overlays.length ? { overlays: project.overlays } : {}),
     ...(project.mediaCues && project.mediaCues.length ? { mediaCues: project.mediaCues } : {}),
+    ...(project.cutouts && project.cutouts.length ? { cutouts: project.cutouts } : {}),
     ...(project.clonePlan ? { clonePlan: project.clonePlan } : {}),
   };
 }

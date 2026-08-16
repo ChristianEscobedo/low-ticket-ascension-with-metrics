@@ -54,6 +54,7 @@ import {
   isCaptionVisibleAt,
   captionCssFor,
   captionRows,
+  captionPhraseRows,
   emojiFor,
   isPowerWord,
   type CaptionLayout,
@@ -72,6 +73,12 @@ export const CAPTION_HOLD_SEC = 0.6;
 
 /** The active word's entrance duration. */
 export const CAPTION_ENTER_SEC = 0.18;
+
+/**
+ * The spring entrance runs longer — a damped overshoot needs room to breathe
+ * (0.18s would read as a generic pop). Only the 'spring' anim uses it.
+ */
+export const SPRING_ENTER_SEC = 0.42;
 
 /**
  * Default ghost page-fade durations (seconds).
@@ -112,6 +119,13 @@ export interface CaptionWordMark {
   /** Free-place frame position (see ReelWordMark.xPct/yPct). */
   xPct?: number;
   yPct?: number;
+  /**
+   * Render this word UNDER the subject cutout layer (the "caption behind the
+   * speaker" z-trick). The word leaves the row flow (it is pinned at
+   * xPct/yPct) and paints at z 5 — under the cutout's z 6; unmarked words
+   * stay in front (row block z 10, front overlay z 11).
+   */
+  behind?: boolean;
   /** Entrance anim for THIS word instead of the preset's. */
   anim?: string;
   /** Color override — the word carries it even when idle. */
@@ -386,7 +400,9 @@ export function entranceStyle(anim: string, e: number): React.CSSProperties {
       const pulse = 0.6 + 0.4 * Math.sin(p * Math.PI);
       return {
         opacity: Math.max(p, pulse),
-        transform: `scale(${(0.96 + 0.08 * p).toFixed(3)})`,
+        // 0.96 → exactly 1.0 at settle (the old 0.96+0.08p overshot to 1.04,
+        // which failed the "settles at identity" guard).
+        transform: `scale(${(1 - 0.04 * (1 - p)).toFixed(3)})`,
         textShadow: `0 0 ${(4 + p * 10).toFixed(1)}px currentColor`,
       };
     }
@@ -446,6 +462,17 @@ case 'elastic': {
       };
     case 'springPop':
       return { transform: `scale(${1 + Math.sin(p * Math.PI) * 0.32})`, opacity: Math.sqrt(p) };
+    case 'spring': {
+      // The damped-spring overshoot — the Remotion spring() look, computed
+      // frame-driven like every other case (NEVER a CSS clock: renderMedia
+      // screenshots one frame at a time). The (1 - p) envelope kills the
+      // oscillation's tail so the word settles at EXACTLY scale(1) — the
+      // "settles at identity" guard pins that. entranceProgress feeds this
+      // case RAW linear progress over a longer window (SPRING_ENTER_SEC);
+      // pre-easing a spring with the cubic would flatten the overshoot.
+      const s = 1 - (1 - p) * Math.exp(-4.5 * p) * Math.cos(11 * p);
+      return { transform: `scale(${s.toFixed(4)})`, opacity: clamp01(p * 3) };
+    }
     case 'neonFlicker':
       // Sign flicker: two brief dropouts inside the entrance, then solid.
       if (p < 0.6) {
@@ -503,10 +530,18 @@ export function entranceProgress(
   frame: number,
   wordFromFrame: number,
   fps: number,
+  anim?: string,
 ): number {
-  const enterFrames = Math.max(1, Math.round(fps * CAPTION_ENTER_SEC));
+  // The spring entrance runs its own longer window (SPRING_ENTER_SEC) and
+  // takes RAW linear progress: the damped curve in entranceStyle owns the
+  // shape, and pre-easing it with the cubic would flatten the overshoot.
+  const spring = anim === 'spring';
+  const enterFrames = Math.max(
+    1,
+    Math.round(fps * (spring ? SPRING_ENTER_SEC : CAPTION_ENTER_SEC)),
+  );
   const linear = Math.min(1, Math.max(0, (frame - wordFromFrame) / enterFrames));
-  return 1 - Math.pow(1 - linear, 3);
+  return spring ? linear : 1 - Math.pow(1 - linear, 3);
 }
 
 /**
@@ -846,6 +881,11 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
 }) => {
   const { words, captionStyle: def, captionLayout: layout, powerWords } = plan;
   const freePlaceEdit = !!(plan as { freePlaceEdit?: boolean }).freePlaceEdit;
+  // Edit mode shows the words ON THE SCREEN (Preview's visibility) by default.
+  // `showAllWords` is the opt-in "show every word on this card" toggle — without
+  // the split, Edit scattered the whole card across the frame, which read as a
+  // bug. The MP4 never sets this — the render always uses Preview visibility.
+  const showAllWords = !!(plan as { showAllWords?: boolean }).showAllWords;
   if (!words.length) return null;
   // Master off + mute ranges (project clock).
   {
@@ -863,15 +903,42 @@ export const CaptionLayerFrame: React.FC<{ plan: CaptionPlanLike; frame: number 
   if (activeIdx < 0 && !freePlaceEdit) return null;
 
   const css = captionCssFor(def);
-  const rows = captionRows(words.length, activeIdx, layout.wordsPerRow, layout.rows);
   const defAnim = (def as { anim?: string }).anim ?? 'pop';
   const stackMode =
     ((plan as { captionOverrides?: { stackMode?: string } }).captionOverrides
       ?.stackMode as string) ||
-    'page';
+    // DEFAULT: build & hold (words appear as spoken and HOLD until the page
+    // flips — the stacked phrase-card look). The user asked for this to be the
+    // house default; 'page' (plain karaoke) is still selectable in the gallery.
+    'build';
   const isBuildStack = stackMode === 'build';
   const cardWin = resolveCardWindow(words, activeIdx);
   const activeWord = words[activeIdx];
+  // EDIT MODE renders the SAME rows as Preview/render — the theme's slice, NOT
+  // a one-row-holding-the-page layout. Edit used to collapse the page into a
+  // single row so every word stayed grabbable, but that is a DIFFERENT layout:
+  // toggling Edit off reflowed the un-placed words (they "jumped up" a row) and
+  // the drag coords were measured against a box the render never draws, so a
+  // placed word landed somewhere else the moment fp toggled off. "See every
+  // word" is a VISIBILITY concern — handled in the row loop by skipping the
+  // build-stack hide in Edit — NOT a layout concern. The words sit where
+  // Preview puts them, so Edit ⇄ Preview ⇄ render map 1:1.
+  const rows =
+    layout.rowMode === 'phrase'
+      ? // PHRASE rows: each row is a natural speech phrase (punctuation / timing
+        // gap), not a fixed wordsPerRow chunk — the organic "kinda random" rhythm.
+        // Map CaptionWord (text/fromFrame/toFrame) → the phrase shape (word/start/end
+        // in seconds) so the gap threshold reads in seconds.
+        captionPhraseRows(
+          words.map((w) => ({
+            word: w.text,
+            start: w.fromFrame / Math.max(1, plan.fps),
+            end: w.toFrame / Math.max(1, plan.fps),
+          })),
+          activeIdx,
+          layout.rows,
+        )
+      : captionRows(words.length, activeIdx, layout.wordsPerRow, layout.rows);
 
   // sizePx is authored against the 360px editor stage, so scale it to the real
   // frame width. (The ASS path does the same with an explicit 1080/360.)
@@ -1050,9 +1117,14 @@ if (blockFx.includes('punchIn')) {
       return typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
     })
     .filter(({ w, idx }) => {
-      // Edit: still only overlay placed words, but keep them visible so
-      // you can grab the one you want without karaoke hiding it.
-      if (freePlaceEdit) return true;
+      // "Show all words" (the opt-in toggle): every placed word ON THE CURRENT
+      // CARD (the timestamp card the playhead is on) stays visible — NOT every
+      // placed word in the whole clip. Default Edit follows Preview timing —
+      // only the on-screen words show.
+      if (showAllWords) {
+        if (cardWin) return idx >= cardWin.from && idx < cardWin.to;
+        return true; // no card: the placed words are the edit set
+      }
       // Preview/render: follow caption timing — only paint while the word
       // (or its card window) is live. Never leave glyphs stuck on screen.
       if (activeIdx < 0) return false;
@@ -1071,23 +1143,34 @@ if (blockFx.includes('punchIn')) {
       return frame >= w.fromFrame && frame < w.toFrame + hold;
     });
 
-  const absOverlay =
-    freePlacedAbs.length > 0 ? (
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 11,
-          pointerEvents: 'none',
-          fontSize,
-          // Inherit the same typeface stack the caption box uses.
-          fontFamily: (css.word as React.CSSProperties).fontFamily,
-          fontWeight: (css.word as React.CSSProperties).fontWeight,
-          letterSpacing: (css.word as React.CSSProperties).letterSpacing,
-          textTransform: (css.word as React.CSSProperties).textTransform,
-        }}
-      >
-        {freePlacedAbs.map(({ w, idx }) => {
+  // The overlay container carries the LINE's type metrics. css.word/css.active
+  // do NOT carry fontFamily/fontWeight/letterSpacing/textTransform/lineHeight —
+  // those live on css.line — so reading them off css.word left every placed
+  // word at the browser default weight: the "placed text renders thinner once
+  // fp toggles off" bug. Read them off css.line so a placed word has the SAME
+  // type metrics as the same word in the row.
+  const placedContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 11,
+    pointerEvents: 'none',
+    fontSize,
+    fontFamily: (css.line as React.CSSProperties).fontFamily,
+    fontWeight: (css.line as React.CSSProperties).fontWeight,
+    letterSpacing: (css.line as React.CSSProperties).letterSpacing,
+    textTransform: (css.line as React.CSSProperties).textTransform,
+    lineHeight: (css.line as React.CSSProperties).lineHeight,
+  };
+
+  // One placed word, painted at its (xPct, yPct). Shared by the FRONT overlay
+  // (z 11, over the subject cutout) and the BEHIND overlay (z 5, under it).
+  const renderPlacedWord = ({
+    w,
+    idx,
+  }: {
+    w: CaptionWord;
+    idx: number;
+  }): React.ReactNode => {
           const isActive = idx === activeIdx;
           const power = isPowerWord(w.text, powerWords as string[]);
           const mark = w.mark;
@@ -1095,19 +1178,35 @@ if (blockFx.includes('punchIn')) {
             typeof mark?.xPct === 'number' ? (mark.xPct as number) : 50;
           const y =
             typeof mark?.yPct === 'number' ? (mark.yPct as number) : 18;
-          // Edit: full theme weight for every word. Idle css.word is the thin look.
+          // The highlight (css.active) marks the SPOKEN word — in Edit AND
+          // Preview. A placed word that isn't being spoken keeps the IDLE color
+          // (css.word) at the FULL theme weight (the css.line fallbacks below,
+          // since the weight lives on css.line, not css.word) — so it never
+          // renders thinner, and "highlighted" always means "being spoken",
+          // never every placed word at once (which read as confusing in Edit).
           const themePaint =
-            (freePlaceEdit || isActive || power ? css.active : css.word) ??
+            (isActive || power ? css.active : css.word) ??
             css.word ??
             {};
           const base: React.CSSProperties = {
             ...themePaint,
-            // Force theme type metrics — free-place was painting thinner when
-            // only a subset of paint props survived the dual-layer path.
+            // Force the theme's type metrics — the word-level css does NOT
+            // carry them (they live on css.line), so fall back to the line's
+            // values. Without this a placed word rendered at the browser
+            // default weight — thinner than the same word in the row.
             fontSize: (themePaint as React.CSSProperties).fontSize ?? fontSize,
-            fontWeight: (themePaint as React.CSSProperties).fontWeight,
-            fontFamily: (themePaint as React.CSSProperties).fontFamily,
-            letterSpacing: (themePaint as React.CSSProperties).letterSpacing,
+            fontWeight:
+              (themePaint as React.CSSProperties).fontWeight ??
+              (css.line as React.CSSProperties).fontWeight,
+            fontFamily:
+              (themePaint as React.CSSProperties).fontFamily ??
+              (css.line as React.CSSProperties).fontFamily,
+            letterSpacing:
+              (themePaint as React.CSSProperties).letterSpacing ??
+              (css.line as React.CSSProperties).letterSpacing,
+            lineHeight:
+              (themePaint as React.CSSProperties).lineHeight ??
+              (css.line as React.CSSProperties).lineHeight,
             WebkitTextStroke: (themePaint as React.CSSProperties).WebkitTextStroke,
             paintOrder: (themePaint as React.CSSProperties).paintOrder,
             display: 'inline-block',
@@ -1143,7 +1242,7 @@ if (blockFx.includes('punchIn')) {
           const wordAnim = mark?.anim ?? defAnim;
           // Edit mode still runs entrance on the spoken word so Preview/Edit match.
           const wordEnterT = isActive
-            ? entranceProgress(frame, w.fromFrame, plan.fps)
+            ? entranceProgress(frame, w.fromFrame, plan.fps, wordAnim)
             : 1;
 
           const style: React.CSSProperties = { ...base };
@@ -1253,9 +1352,34 @@ if (blockFx.includes('punchIn')) {
               {emoji ? <span className="emoji-burst">{emoji}</span> : null}
             </span>
           );
-        })}
+  };
+
+  // Two z-layers for placed words: a BEHIND word (mark.behind) paints UNDER
+  // the subject cutout (the composition's cutout layer sits at z 6); a FRONT
+  // word paints over it (z 11). The row block stays at z 10 — a word goes
+  // behind only when the user sends it there (right-click → Behind).
+  const placedLayer = (
+    list: typeof freePlacedAbs,
+    z: number,
+  ): React.ReactNode =>
+    list.length > 0 ? (
+      <div style={{ ...placedContainerStyle, zIndex: z }}>
+        {list.map(renderPlacedWord)}
       </div>
     ) : null;
+
+  const absOverlay = (
+    <>
+      {placedLayer(
+        freePlacedAbs.filter(({ w }) => w.mark?.behind === true),
+        5,
+      )}
+      {placedLayer(
+        freePlacedAbs.filter(({ w }) => w.mark?.behind !== true),
+        11,
+      )}
+    </>
+  );
 
 
 
@@ -1308,7 +1432,11 @@ return (
               display: 'inline-block',
               position: 'relative',
             };
-            const stackBuildHide = isBuildStack && frame < w.fromFrame;
+            // "Show all words" (the opt-in toggle) lifts the build-stack hide so
+            // a not-yet-spoken word is visible to drag. Default Edit keeps the
+            // build-stack reveal (words appear as spoken) — the SAME visibility
+            // as Preview/render, so Edit no longer scatters the whole card.
+            const stackBuildHide = isBuildStack && !showAllWords && frame < w.fromFrame;
             if (stackBuildHide) {
               base.opacity = 0;
             }
@@ -1340,7 +1468,7 @@ return (
 
             const wordAnim = mark?.anim ?? defAnim;
             const wordEnterT = isActive
-              ? entranceProgress(frame, w.fromFrame, plan.fps)
+              ? entranceProgress(frame, w.fromFrame, plan.fps, wordAnim)
               : 1;
 
             // Compose the transform: entrance anim + optional mark scale.
@@ -1446,7 +1574,23 @@ return (
               const isGradFill = !!(style as Record<string, unknown>)['backgroundImage'];
               if (isGradFill) {
                 return (
-                  <span key={`${idx}-${w.text}`} data-caption-word={idx} style={{ display: 'inline-block', position: 'relative' }}>
+                  <span
+                    key={`${idx}-${w.text}`}
+                    data-caption-word={idx}
+                    style={{
+                      display: 'inline-block',
+                      position: 'relative',
+                      // Carry the scale/entrance transform AND the build-stack
+                      // hide onto the gradient shell — both were dropped here, so
+                      // an fx word couldn't scale, and a shine/gradient word
+                      // showed on screen before its turn (the hide was lost).
+                      transform: style.transform,
+                      transformOrigin:
+                        (style.transformOrigin as string) ?? 'center center',
+                      opacity:
+                        typeof style.opacity === 'number' ? style.opacity : undefined,
+                    }}
+                  >
                     {renderGradientWord(text, style, emoji, tail)}
                   </span>
                 );

@@ -22,7 +22,12 @@ const RemotionPreview = dynamic(() => import('./RemotionPreview'), { ssr: false 
 /** Caption placement, shared by BOTH preview branches so neither can lose it. */
 const CaptionDragLayer = dynamic(() => import('./CaptionDragLayer'), { ssr: false });
 const WordDragLayer = dynamic(() => import('./WordDragLayer'), { ssr: false });
-import { freePlaceWordsFrom } from './WordDragLayer';
+import {
+  freePlaceWordsFrom,
+  WordContextMenu,
+  type WordPlace,
+  type WordStylePatch,
+} from './WordDragLayer';
 // The media-cue transform box — same overlay pattern, mounted in both previews.
 const CueDragLayer = dynamic(() => import('./CueDragLayer'), { ssr: false });
 
@@ -48,6 +53,7 @@ import {
   Clapperboard,
   Copy,
   Film,
+  FileText,
   GitFork,
   Layers,
   Library,
@@ -105,6 +111,8 @@ import {
 import { spriteCellStyle } from '@/lib/mothermode/reel/sceneCuts';
 import { CaptionGallery } from './CaptionGallery';
 import { SubtitlePanel } from './SubtitlePanel';
+import ScriptLabPanel from './ScriptLabPanel';
+import { transcriptForProject } from '@/lib/mothermode/reel/scriptLab';
 import ThumbnailLabSheet from './ThumbnailLabSheet';
 import RenderPanel from './RenderPanel';
 import RenderButton from './RenderButton';
@@ -140,8 +148,9 @@ import {
   reelDurationSec,
   splitClipAt,
   timelineErrors,
+  transitionOverlapSec,
 } from '@/lib/mothermode/reel/timeline';
-import { makeClipId, WORD_FONTS, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
+import { makeClipId, WORD_FONTS, REEL_TRANSITIONS, type ReelMediaCue, type ReelOverlayClip, type ReelTransition, type ReelTransitionType } from '@/lib/mothermode/reel/types';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -487,6 +496,12 @@ function SpriteStrip({ url, durSec, className }: { url: string; durSec: number; 
 // Timeline strip
 // ---------------------------------------------------------------------------
 
+/** Seam glyphs on the strip: crossfade ◐, whip ≫, zoom ◎ (the top-left dot). */
+const TRANSITION_GLYPH: Record<ReelTransitionType, string> = {
+  crossfade: '◐',
+  whip: '≫',
+  zoom: '◎',
+};
 
 function TimelineStrip({
   clips,
@@ -498,6 +513,7 @@ function TimelineStrip({
   onScrubIn,
   onLeftTrim,
   onKeyMove,
+  onTransition,
   pxPerSec,
 }: {
 
@@ -513,6 +529,8 @@ function TimelineStrip({
   onLeftTrim?: (clip: ReelClip, inSec: number) => void;
   /** R15: drag a keyframe diamond to re-time it. */
   onKeyMove?: (clip: ReelClip, keyIndex: number, tSec: number) => void;
+  /** Scene transitions: set/clear the transition INTO a clip (the seam before it). */
+  onTransition?: (id: string, transitionIn: ReelTransition | null) => void;
   /** R12: fixed px/sec so trimming one scene never re-lays-out the others. */
   pxPerSec: number;
 }) {
@@ -552,9 +570,68 @@ function TimelineStrip({
                 : 'border-white/10 hover:border-white/25 bg-neutral-900/60',
             )}
 
-            style={{ width: Math.max(52, eff * pxPerSec) }}
+            style={{
+              // PERCENTAGE of total time — the strip is ALWAYS exactly page-width.
+              // The old `Math.max(52, eff * pxPerSec)` PIXEL width is why a long
+              // clip blew the timeline thousands of px past the right edge of the
+              // screen and shoved the preview off with it. Now each scene takes its
+              // share of the 100%-wide strip (eff / total), so a 3-min video just
+              // crams more scenes into the SAME page-width — the timeline never
+              // grows. (The trim/keyframe drag handlers read the block's real
+              // rendered px width at drag time, so they still resolve seconds
+              // correctly.) minWidth keeps a sliver visible for a tiny scene.
+              width: `${(eff / Math.max(total, 0.001)) * 100}%`,
+              minWidth: 40,
+            }}
             title={`${c.name} — ${fmtSec(eff)}`}
           >
+            {/* Scene transition seam: the top-left dot edits the transition INTO
+                this scene. Click cycles off → crossfade → whip → zoom → off;
+                right-click cycles the duration 0.3 → 0.5 → 0.8s. The plan
+                overlaps the two scenes by that many frames and the composition
+                blends them frame-exactly (preview and MP4 agree). */}
+            {i > 0 && onTransition && (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!c.transitionIn) {
+                    onTransition(c.id, { type: REEL_TRANSITIONS[0], durationSec: 0.4 });
+                    return;
+                  }
+                  const idx = REEL_TRANSITIONS.indexOf(c.transitionIn.type);
+                  if (idx < 0 || idx === REEL_TRANSITIONS.length - 1) {
+                    onTransition(c.id, null); // past the last style → back to a hard cut
+                  } else {
+                    onTransition(c.id, { ...c.transitionIn, type: REEL_TRANSITIONS[idx + 1] });
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!c.transitionIn) return;
+                  const d = c.transitionIn.durationSec;
+                  onTransition(c.id, {
+                    ...c.transitionIn,
+                    durationSec: d >= 0.8 ? 0.3 : d >= 0.5 ? 0.8 : 0.5,
+                  });
+                }}
+                className={clsx(
+                  'absolute left-0.5 top-0.5 z-40 flex h-4 w-4 items-center justify-center rounded-full border text-[8px] font-bold leading-none shadow transition-opacity',
+                  c.transitionIn
+                    ? 'border-brass bg-brass text-ink'
+                    : 'border-white/30 bg-black/70 text-white/60 opacity-0 group-hover:opacity-100',
+                )}
+                title={
+                  c.transitionIn
+                    ? `${c.transitionIn.type} · ${c.transitionIn.durationSec}s — click: next style · right-click: duration · (past zoom: off)`
+                    : 'Scene transition — click: crossfade · whip · zoom · right-click: duration'
+                }
+              >
+                {c.transitionIn ? TRANSITION_GLYPH[c.transitionIn.type] : '⇄'}
+              </button>
+            )}
             {/* R14 live drag bubble: exact seconds while trimming */}
             {live != null && (
               <div className="pointer-events-none absolute inset-x-0 top-0 z-30 whitespace-nowrap bg-brass px-1.5 py-0.5 text-center text-[9px] font-bold text-ink">
@@ -696,11 +773,127 @@ function TimelineStrip({
   );
 }
 
-/** Timeline seconds where clip `index` starts (sum of effective durations before it). */
+/**
+ * Timeline seconds where clip `index` starts. Transition-aware: each seam's
+ * overlap pulls the start earlier by that many seconds — the SAME frame space
+ * buildRenderPlan produces, so a word's absolute time on the Remotion stage
+ * (and every seek/scrub target) agrees with the plan instead of drifting
+ * right by the cumulative overlaps. No transitions anywhere = the old sum.
+ */
 function timelineStartOf(clips: ReelClip[], index: number): number {
   let t = 0;
-  for (let i = 0; i < index && i < clips.length; i += 1) t += effectiveClipDuration(clips[i]);
-  return t;
+  for (let i = 0; i < index && i < clips.length; i += 1) {
+    t += effectiveClipDuration(clips[i]);
+    // The seam BEFORE clip i+1 overlaps into clip i's tail — clip i+1 starts
+    // that much earlier, so the running total shrinks by the overlap.
+    if (i + 1 < clips.length) t -= transitionOverlapSec(clips[i + 1], clips[i]);
+  }
+  return Math.max(0, t);
+}
+
+/**
+ * Map a caption-layer `data-caption-word` index on the REMOTION preview back to
+ * the clip's own captions index. The layer numbers words in the TIMELINE-merged
+ * plan list (all clips concatenated, trim-cut words dropped by shiftWords); the
+ * editor writes marks per-clip. Without this a right-click on clip 2's word
+ * styled clip 1's word. The edit stage numbers per-clip already (its
+ * StageCaptions gets the clip's own word list), so only the Remotion surface
+ * needs the walk.
+ */
+function clipWordIndexFromPlanIndex(
+  proj: ReelProject,
+  planIdx: number,
+): { clipId: string; index: number } | null {
+  let rest = planIdx;
+  for (const clip of proj.clips) {
+    const ws = proj.captions[clip.id] ?? [];
+    const trimStart = clip.trimStartSec ?? 0;
+    const effSec = effectiveClipDuration(clip);
+    // The surviving-word list mirrors shiftWords' drop rule exactly.
+    const surviving: number[] = [];
+    for (let i = 0; i < ws.length; i += 1) {
+      const w = ws[i];
+      const ls = w.start - trimStart;
+      const le = w.end - trimStart;
+      if (le <= 0 || ls >= effSec || !w.word.trim()) continue;
+      surviving.push(i);
+    }
+    if (rest < surviving.length) return { clipId: clip.id, index: surviving[rest] };
+    rest -= surviving.length;
+  }
+  return null;
+}
+
+/**
+ * The inverse of clipWordIndexFromPlanIndex: a clip's own captions index → the
+ * index the Remotion layer paints on the glyph (the timeline-merged plan list).
+ * The WordDragLayer's hit boxes look glyphs up by this, so they land on the
+ * RIGHT word on a multi-clip or trimmed reel.
+ */
+function planWordIndexFromClipIndex(
+  proj: ReelProject,
+  clipId: string,
+  clipIndex: number,
+): number | null {
+  let planOffset = 0;
+  for (const clip of proj.clips) {
+    const ws = proj.captions[clip.id] ?? [];
+    const trimStart = clip.trimStartSec ?? 0;
+    const effSec = effectiveClipDuration(clip);
+    // The surviving-word list mirrors shiftWords' drop rule exactly.
+    const surviving: number[] = [];
+    for (let i = 0; i < ws.length; i += 1) {
+      const w = ws[i];
+      const ls = w.start - trimStart;
+      const le = w.end - trimStart;
+      if (le <= 0 || ls >= effSec || !w.word.trim()) continue;
+      surviving.push(i);
+    }
+    if (clip.id === clipId) {
+      const pos = surviving.indexOf(clipIndex);
+      return pos < 0 ? null : planOffset + pos;
+    }
+    planOffset += surviving.length;
+  }
+  return null;
+}
+
+/**
+ * Map a WordStylePatch (the word context menu's edit) onto a ReelWordMark
+ * patch for applyWordMark. `undefined` deletes the key there, so a clearStyle
+ * patch lists every style key explicitly. Shared by the three menu mounts —
+ * the mapping used to be hand-copied at each and drifted.
+ */
+function wordStylePatchToMark(
+  partial: WordStylePatch,
+): Partial<import('@/lib/mothermode/reel/types').ReelWordMark> {
+  if (partial.clearStyle) {
+    // Keep placement + card + behind; drop the visual style fields.
+    return {
+      anim: undefined,
+      color: undefined,
+      scale: undefined,
+      fx: undefined,
+      fxColor: undefined,
+      fxColor2: undefined,
+      ambient: undefined,
+      font: undefined,
+      hidden: undefined,
+    };
+  }
+  const patch: Partial<import('@/lib/mothermode/reel/types').ReelWordMark> = {};
+  if ('anim' in partial) patch.anim = partial.anim || undefined;
+  if ('scale' in partial && typeof partial.scale === 'number') {
+    patch.scale = partial.scale;
+  }
+  if ('color' in partial) patch.color = partial.color || undefined;
+  if ('fx' in partial) patch.fx = partial.fx || undefined;
+  if ('fxColor' in partial) patch.fxColor = partial.fxColor || undefined;
+  if ('fxColor2' in partial) patch.fxColor2 = partial.fxColor2 || undefined;
+  if ('ambient' in partial) patch.ambient = partial.ambient || undefined;
+  if ('font' in partial) patch.font = partial.font || undefined;
+  if ('hidden' in partial) patch.hidden = partial.hidden || undefined;
+  return patch;
 }
 
 /** The scrub ruler above the strip: zoom-aware ticks + clip-boundary notches + click/drag to seek. */
@@ -983,6 +1176,7 @@ function StageCaptions({
   preset = 'karaoke',
   overrides,
   freePlaceEdit = false,
+  showAllWords = false,
 }: {
   /** The clip's words, in CLIP-LOCAL source seconds (what project.captions holds). */
   words: ReelWord[];
@@ -994,6 +1188,8 @@ function StageCaptions({
   overrides?: CaptionOverrides;
   /** Edit mode: show every free-placed word (not just the spoken one). */
   freePlaceEdit?: boolean;
+  /** Edit mode opt-in: show EVERY card word (off = just the on-screen page). */
+  showAllWords?: boolean;
 }) {
   const def = resolveCaptionStyle(captionDefFor(preset), overrides);
   const layout = captionLayoutFor(def, overrides);
@@ -1023,8 +1219,9 @@ function StageCaptions({
       captionLayout: layout,
       powerWords: overrides?.powerWords ?? [],
       freePlaceEdit,
+      showAllWords,
     }),
-    [words, fps, stageW, def, layout, overrides?.powerWords, freePlaceEdit],
+    [words, fps, stageW, def, layout, overrides?.powerWords, freePlaceEdit, showAllWords],
   );
 
   return <CaptionLayerFrame plan={plan} frame={Math.round(timeSec * fps)} />;
@@ -2914,7 +3111,7 @@ function ScheduleSheet({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'clips' | 'captions' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes' | 'clone';
+type Tab = 'clips' | 'captions' | 'scripts' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes' | 'clone';
 
 /** R6a Board shot: one line of the story — prompt + footage, in order. */
 interface BoardShot {
@@ -3053,6 +3250,20 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const [wordScaleLocal, setWordScaleLocal] = useState<Record<number, number>>({});
   /** Free-place stack: Edit shows all card words + handles; Preview = karaoke timing. */
   const [stackEditMode, setStackEditMode] = useState(false);
+  /** Edit mode opt-in: show EVERY word on the card (off = just the on-screen
+   *  page, same as Preview — the default, so Edit no longer scatters the card). */
+  const [showAllCardWords, setShowAllCardWords] = useState(false);
+  /** The canvas right-click word menu (Preview mode): which word + where the
+   *  glyph's centre sits (frame %, y from bottom) so free-place/behind pin it
+   *  exactly there instead of teleporting it. */
+  const [wordCtxMenu, setWordCtxMenu] = useState<{
+    clipId: string;
+    index: number;
+    clientX: number;
+    clientY: number;
+    xPct: number;
+    yPct: number;
+  } | null>(null);
   const [autoTranscribeOnImport, setAutoTranscribeOnImport] = useState(true);
 
   /* edit-mode auto-pause — only when ENTERING edit, never on first mount. */
@@ -3084,6 +3295,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const wordSfxInput = useRef<HTMLInputElement>(null);
   /** The Reel Cue Autopilot run (the gated recipe) starting up. */
   const [cueAutopilotBusy, setCueAutopilotBusy] = useState(false);
+  /** Caption-behind-the-speaker: a card's background removal is in flight. */
+  const [behindBusy, setBehindBusy] = useState(false);
   /** Content Hub generated-video picker state (the bridge in). */
   const [hubOpen, setHubOpen] = useState(false);
   const [hubPieces, setHubPieces] = useState<ContentPiece[] | null>(null);
@@ -3116,6 +3329,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     thumbT?: number;
   } | null>(null);
   const [playing, setPlaying] = useState(false);
+  /** Set when the stage <video> fires onError — the file can't decode in the
+   *  browser (HEVC/ProRes/.mov). Shown ON the stage so "uploads but shows
+   *  nothing" stops being a silent black box. */
+  const [stageVideoError, setStageVideoError] = useState<string | null>(null);
   /** R26: per-reel target-length override (null = the post type's platform default). */
   const [targetOverride, setTargetOverride] = useState<number | null>(null);
   const stripScrollRef = useRef<HTMLDivElement>(null);
@@ -3984,9 +4201,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
    * (past fit the track overflows and scrolls, as before).
    */
   const pxPerSec = useMemo(() => {
-    const base = 36 * zoom;
-    if (total <= 0 || stripWidth <= 0) return base;
-    return Math.max(base, stripWidth / total);
+    // FIT-TO-SCREEN: the timeline fills the visible strip width, never wider.
+    // The old `Math.max(36 * zoom, stripWidth / total)` had a 36px/sec FLOOR —
+    // a 152s clip forced ≥5472px, blowing the strip (and the whole stage column)
+    // thousands of px past the right edge of the screen. Now the strip is exactly
+    // screen-width at zoom 1 (stripWidth / total), and the zoom slider only zooms
+    // IN from fit (past 1 the track overflows and scrolls, as intended).
+    if (total <= 0 || stripWidth <= 0) return 36 * zoom;
+    return (stripWidth / total) * zoom;
   }, [zoom, total, stripWidth]);
   const errors = useMemo(() => (project ? timelineErrors(project) : []), [project]);
   const selected = project?.clips.find((c) => c.id === selectedClip) ?? null;
@@ -4069,6 +4291,35 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewSrc, stageClip?.id]);
+
+  // DIAGNOSTIC: after the stage settles, dump the video element's real state.
+  // "Uploads but shows nothing" with no onError means the element mounted and
+  // the blob loaded — so the question becomes WHERE it is and whether it has
+  // size. This logs the bounding box + readyState + dimensions so we stop
+  // guessing. Remove once the blank-stage cause is confirmed.
+  useEffect(() => {
+    if (!previewSrc) return;
+    const t = window.setTimeout(() => {
+      const v = previewRef.current;
+      const box = v?.getBoundingClientRect();
+      // eslint-disable-next-line no-console
+      console.log('[reel-stage]', {
+        src: previewSrc.slice(0, 40),
+        isBlob: previewSrc.startsWith('blob:'),
+        stageBox: { w: stageBox.w, h: stageBox.h },
+        videoMounted: !!v,
+        videoBox: box ? { w: Math.round(box.width), h: Math.round(box.height), x: Math.round(box.x), y: Math.round(box.y) } : null,
+        readyState: v?.readyState,
+        videoSize: v ? { w: v.videoWidth, h: v.videoHeight } : null,
+        error: v?.error ? v.error.code : null,
+        paused: v?.paused,
+        currentTime: v?.currentTime,
+      });
+    }, 800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewSrc, stageBox.w, stageBox.h]);
+
   /** R25: the overlay (b-roll) layer currently under the clock, if any. */
   const overlayHit = useMemo(() => {
     for (const o of project?.overlays ?? []) {
@@ -4576,6 +4827,22 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     return Math.max(0.5, (w ? w.end - w.start : 0.4) + (cue.holdSec ?? 1.0));
   }
 
+  /** Is the cue's image actually ON SCREEN at the playhead? The drag box shows
+   *  only then (it used to pin to the selected cue forever). Window = the
+   *  trigger word's span + the hold, in timeline seconds. */
+  function cueOnScreen(cue: ReelMediaCue): boolean {
+    if (!project) return false;
+    const clipIdx = project.clips.findIndex((c) => c.id === cue.clipId);
+    if (clipIdx < 0) return false;
+    const w = project.captions[cue.clipId]?.[cue.wordIndex];
+    if (!w) return false;
+    const clipStart = timelineStartOf(project.clips, clipIdx);
+    const trimStart = project.clips[clipIdx].trimStartSec ?? 0;
+    const from = clipStart + Math.max(0, w.start - trimStart);
+    const to = clipStart + Math.max(0.1, w.end - trimStart) + (cue.holdSec ?? 1.0);
+    return playheadSec >= from - 0.05 && playheadSec <= to;
+  }
+
   /** Patch one cue's fields and persist (the same save path as attach). */
   async function patchCue(id: string, partial: Partial<ReelMediaCue>) {
     if (!project) return;
@@ -4619,9 +4886,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   async function applyWordMark(
     index: number,
     partial: Partial<import('@/lib/mothermode/reel/types').ReelWordMark>,
+    clipIdOverride?: string,
   ) {
-    if (!project || !currentClip) return;
-    const words = (project.captions[currentClip.id] ?? []).map((w, i) => {
+    const clipId = clipIdOverride ?? currentClip?.id;
+    if (!project || !clipId) return;
+    const words = (project.captions[clipId] ?? []).map((w, i) => {
       if (i !== index) return w;
       // undefined in partial means "clear this field" (spread alone keeps old).
       const next: Record<string, unknown> = { ...(w.mark ?? {}) };
@@ -4636,10 +4905,300 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     });
     const updated: ReelProject = {
       ...project,
-      captions: { ...project.captions, [currentClip.id]: words },
+      captions: { ...project.captions, [clipId]: words },
     };
     setProject(updated);
     await post({ action: 'save', project: updated });
+  }
+
+  /**
+   * Right-click a caption word ON THE CANVAS (Preview mode — Edit mode's
+   * WordDragLayer owns right-click there). The caption glyphs carry
+   * data-caption-word; the menu offers Free-place / Remove placement /
+   * Behind the subject + the full style editor (the shared WordContextMenu).
+   */
+  /**
+   * THE free-place drag — press any caption word on the canvas and move it.
+   * Always available (Preview AND Edit), no mode toggle needed. It drives off
+   * the SAME hit-resolution as the right-click menu (closest + elementsFromPoint
+   * + clipWordIndexFromPlanIndex), NOT the drag layer's measured boxes — so it
+   * works even when those boxes don't render. The drag is RELATIVE to where you
+   * grabbed the word, so it never jumps to your pointer.
+   */
+  /**
+   * Reset the current scene's caption words to the clean theme — strips EVERY
+   * per-word mark (free-place x/y, fx, color, scale, anim, ambient, font, hide,
+   * behind, card). The reel's preset + captionOverrides are untouched; this is
+   * the "undo all my fp edits" escape hatch.
+   */
+  async function resetCaptionWords() {
+    if (!project || !currentClip) return;
+    const all = project.captions[currentClip.id] ?? [];
+    // Scope to the words ON the current timestamp — the page showing at the
+    // playhead — not the whole scene. Compute the page from the active word +
+    // the layout's page size (wordsPerRow × rows).
+    const clipIdx = Math.max(
+      0,
+      project.clips.findIndex((c) => c.id === currentClip.id),
+    );
+    const clipSec = Math.max(0, playheadSec - timelineStartOf(project.clips, clipIdx));
+    let activeIdx = 0;
+    for (let i = 0; i < all.length; i += 1) {
+      if (clipSec < all[i].start) break;
+      activeIdx = i;
+    }
+    const wpr = project.captionOverrides?.wordsPerRow ?? 3;
+    const rowCount = project.captionOverrides?.rows ?? 1;
+    const pageSize = Math.max(1, wpr * rowCount);
+    const pageFrom = Math.floor(activeIdx / pageSize) * pageSize;
+    const pageEnd = Math.min(all.length, pageFrom + pageSize);
+    const inPage = new Set<number>();
+    for (let i = pageFrom; i < pageEnd; i += 1) inPage.add(i);
+    // Strip the marks on JUST this page's words; every other word keeps its edit.
+    const words = all.map((w, i) =>
+      inPage.has(i) ? { word: w.word, start: w.start, end: w.end } : w,
+    );
+    const updated: ReelProject = {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: words },
+    };
+    setProject(updated);
+    setWordPlaceLocal({});
+    setWordScaleLocal({});
+    setFxWords(new Set());
+    setFxTarget(null);
+    await post({ action: 'save', project: updated });
+    setNote('Reset the words on this timestamp to the clean theme.');
+  }
+
+  function onCaptionWordPointerDown(e: React.PointerEvent, surface: 'remotion' | 'stage') {
+    if (!project || !ccOn) return;
+    // Word drag is a PER-WORD-mode (Edit) gesture. In default mode the block
+    // box owns the drag — "edit captions always on, edit per word is the toggle".
+    if (!stackEditMode) return;
+    if (e.button !== 0) return; // left press drags; right press opens the menu
+    // Resolve the caption glyph under the pointer (see onCaptionWordContextMenu).
+    let t = (e.target as HTMLElement | null)?.closest?.(
+      '[data-caption-word]',
+    ) as HTMLElement | null;
+    if (!t && typeof document !== 'undefined') {
+      for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+        const hit = (el as HTMLElement).closest?.(
+          '[data-caption-word]',
+        ) as HTMLElement | null;
+        if (hit) {
+          t = hit;
+          break;
+        }
+      }
+    }
+    if (!t) return; // not on a word → let the video / other UI handle the press
+    const rawIdx = Number(t.getAttribute('data-caption-word'));
+    if (!Number.isInteger(rawIdx) || rawIdx < 0) return;
+    // The Remotion layer numbers words in the TIMELINE-merged plan list; the
+    // edit stage numbers per-clip. Resolve to (clipId, per-clip index).
+    let clipId: string | null = null;
+    let index = rawIdx;
+    if (surface === 'stage') {
+      clipId = stageClip?.id ?? currentClip?.id ?? null;
+    } else {
+      const hit = clipWordIndexFromPlanIndex(project, rawIdx);
+      if (hit) {
+        clipId = hit.clipId;
+        index = hit.index;
+      }
+    }
+    if (!clipId) return;
+    const clipWords = project.captions[clipId] ?? [];
+    if (index >= clipWords.length) return;
+
+    // A press on a word selects it; a DRAG free-places + moves it.
+    e.preventDefault();
+    e.stopPropagation();
+    setFxMode(true);
+    setFxTarget(index);
+    setFxWords(new Set([index]));
+    setSelectedClip(clipId);
+
+    const frame = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const glyph = t.getBoundingClientRect();
+    // The word's CURRENT centre in frame % (y from the bottom).
+    const startCX = ((glyph.left + glyph.width / 2 - frame.left) / Math.max(1, frame.width)) * 100;
+    const startCY = (1 - (glyph.top + glyph.height / 2 - frame.top) / Math.max(1, frame.height)) * 100;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    let last = { xPct: startCX, yPct: startCY };
+
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (!moved && dx * dx + dy * dy < 25) return; // 5px deadzone — a click ≠ a drag
+      if (!moved) {
+        moved = true;
+        setStackEditMode(true); // a drag enters Edit so the word shows as placed
+      }
+      last = {
+        xPct: Math.max(2, Math.min(98, startCX + (dx / Math.max(1, frame.width)) * 100)),
+        yPct: Math.max(2, Math.min(98, startCY - (dy / Math.max(1, frame.height)) * 100)),
+      };
+      setWordPlaceLocal((prev) => ({ ...prev, [index]: last }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (moved) {
+        const finalPos = last;
+        setWordPlaceLocal((prev) => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+        void applyWordMark(index, { xPct: finalPos.xPct, yPct: finalPos.yPct }, clipId);
+        setNote('Placed — drag any word to move it; right-click it for styles.');
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  function onCaptionWordContextMenu(e: React.MouseEvent, surface: 'remotion' | 'stage') {
+    if (!project || !ccOn || stackEditMode) return;
+    // The caption words are hit-testable (the <style> on the root sets
+    // pointer-events:auto), but the block-move drag box (z-30) and the
+    // composition's pointer-events-none root can sit between the click and the
+    // glyph. Resolve the word under the cursor from the FULL hit stack, not
+    // just the event's top target — so right-click works on the word whether it
+    // lands on the glyph itself or on the drag box over it.
+    let t = (e.target as HTMLElement | null)?.closest?.(
+      '[data-caption-word]',
+    ) as HTMLElement | null;
+    if (!t && typeof document !== 'undefined') {
+      for (const el of document.elementsFromPoint(e.clientX, e.clientY)) {
+        const hit = (el as HTMLElement).closest?.(
+          '[data-caption-word]',
+        ) as HTMLElement | null;
+        if (hit) {
+          t = hit;
+          break;
+        }
+      }
+    }
+    if (!t) return; // not on a word → the browser's default menu
+    const rawIdx = Number(t.getAttribute('data-caption-word'));
+    if (!Number.isInteger(rawIdx) || rawIdx < 0) return;
+    // The Remotion layer numbers words in the TIMELINE-merged plan list; the
+    // edit stage numbers per-clip. Resolve to (clipId, per-clip index).
+    let clipId: string | null = null;
+    let index = rawIdx;
+    if (surface === 'stage') {
+      clipId = stageClip?.id ?? currentClip?.id ?? null;
+    } else {
+      const hit = clipWordIndexFromPlanIndex(project, rawIdx);
+      if (hit) {
+        clipId = hit.clipId;
+        index = hit.index;
+      }
+    }
+    if (!clipId) return;
+    const words = project.captions[clipId] ?? [];
+    if (index >= words.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // The glyph's CURRENT centre in frame % (y from the bottom) — free-place
+    // and behind pin the word exactly where it sits, so neither teleports it.
+    const frame = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const r = t.getBoundingClientRect();
+    const xPct = Math.max(
+      2,
+      Math.min(98, ((r.left + r.width / 2 - frame.left) / Math.max(1, frame.width)) * 100),
+    );
+    const yPct = Math.max(
+      2,
+      Math.min(98, (1 - (r.top + r.height / 2 - frame.top) / Math.max(1, frame.height)) * 100),
+    );
+    setWordCtxMenu({ clipId, index, clientX: e.clientX, clientY: e.clientY, xPct, yPct });
+    setFxMode(true);
+    setFxTarget(index);
+    setFxWords(new Set([index]));
+  }
+
+  /** Free-place the word exactly where it sits, then open Edit so it drags. */
+  function freePlaceWord(clipId: string, index: number, xPct: number, yPct: number) {
+    void applyWordMark(index, { xPct, yPct }, clipId);
+    setStackEditMode(true);
+    setFxMode(false);
+    setWordCtxMenu(null);
+    setNote('Free-placed — drag the word on the canvas; its corner scales it. Preview toggles back.');
+  }
+
+  /**
+   * Exit free-place Edit (the Preview toggle): flush any in-flight drag
+   * offsets still only in local state, then SAVE — so leaving Edit never
+   * silently drops a placement and the user never wonders if it kept.
+   */
+  function exitStackEdit() {
+    const clipId = currentClip?.id;
+    const pendingPlace = wordPlaceLocal;
+    const pendingScale = wordScaleLocal;
+    setWordPlaceLocal({});
+    setWordScaleLocal({});
+    setStackEditMode(false);
+    setFxMode(false);
+    if (!project || !clipId) return;
+    const hasPending =
+      Object.keys(pendingPlace).length > 0 || Object.keys(pendingScale).length > 0;
+    const words = (project.captions[clipId] ?? []).map((w, i) => {
+      const loc = pendingPlace[i];
+      const sc = pendingScale[i];
+      if (!loc && typeof sc !== 'number') return w;
+      return {
+        ...w,
+        mark: {
+          ...(w.mark ?? {}),
+          ...(loc ? { xPct: loc.xPct, yPct: loc.yPct } : {}),
+          ...(typeof sc === 'number' ? { scale: sc } : {}),
+        },
+      };
+    });
+    const updated: ReelProject = {
+      ...project,
+      captions: { ...project.captions, [clipId]: words },
+    };
+    setProject(updated);
+    void post({ action: 'save', project: updated }).then(() => {
+      if (hasPending) setNote('Placement saved.');
+    });
+  }
+
+  /** Drop the word's placement (and a behind flag) — it flows back into the row. */
+  function removeWordPlace(clipId: string, index: number) {
+    void applyWordMark(index, { xPct: undefined, yPct: undefined, behind: undefined }, clipId);
+    setWordCtxMenu(null);
+  }
+
+  /**
+   * Toggle the behind-the-subject z. Behind needs the word OUT of the row
+   * flow (the row block is ONE z-layer, so a per-word z inside it can't reach
+   * the cutout): an un-placed word is first pinned where it sits.
+   */
+  function toggleWordBehind(clipId: string, index: number, xPct: number, yPct: number) {
+    const w = (project?.captions[clipId] ?? [])[index];
+    if (!w) return;
+    if (w.mark?.behind) {
+      void applyWordMark(index, { behind: undefined }, clipId);
+    } else {
+      const placed =
+        typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
+      void applyWordMark(
+        index,
+        { ...(placed ? {} : { xPct, yPct }), behind: true },
+        clipId,
+      );
+    }
+    setWordCtxMenu(null);
   }
 
   /** Merge a mark patch onto every picked word and persist (the subtitle
@@ -4788,6 +5347,80 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   }
 
   /** Whisper the current clip and store word timings for the karaoke layer. */
+
+  /**
+   * Caption behind the speaker, for a WINDOW (a caption card's timing — the
+   * bria model caps at 60s, so the card's span, not the whole clip, is what
+   * gets processed). The route trims [fromSec, toSec] of the source clip
+   * (ffmpeg worker), removes the background (fal, default bria = cheapest),
+   * and the result lands as a REAL LAYER on the overlay lane — a duplicate of
+   * the scene with the background removed, on top. You see it on the
+   * timeline, drag to re-time it, × to remove it.
+   *
+   * The z-stack (the composition): clip → a `behind`-marked word (z 5) → THE
+   * CUTOUT (z 6) → the caption block (z 10) → front free-placed words (z 11).
+   * So a word goes UNDER the subject when you right-click it → Behind, and
+   * every other word stays in front.
+   *
+   * fromSec/toSec arrive in the clip's SOURCE seconds (the SubtitlePanel's
+   * word timings). The layer's timeline window = the clip's timeline start +
+   * (source window − the clip's in-point).
+   */
+  async function captionBehindSpeaker(fromSec: number, toSec: number, model?: string) {
+    const clip = currentClip;
+    if (!project || !clip || behindBusy) return;
+    setBehindBusy(true);
+    setNote('Removing the background for this line — trimming the window, then the subject…');
+    try {
+      const res = await fetch('/api/admin/reel-bg-remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: clip.url,
+          fromSec,
+          toSec,
+          autoZoom: true,
+          ...(model ? { model } : {}),
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok || !json?.success || typeof json.url !== 'string') {
+        throw new Error(typeof json?.error === 'string' ? json.error : `Background removal failed (${res.status})`);
+      }
+      // The layer's TIMELINE window: the clip's start + (source window − in-point).
+      const clipStart = project.clips
+        .slice(0, project.clips.findIndex((c) => c.id === clip.id))
+        .reduce((s, c) => s + Math.max(0, c.durationSec - (c.trimEndSec ?? 0) - (c.trimStartSec ?? 0)), 0);
+      const trimStart = clip.trimStartSec ?? 0;
+      const winFrom = clipStart + Math.max(0, fromSec - trimStart);
+      const winTo = clipStart + Math.max(0.1, toSec - trimStart);
+      // A REAL overlay-lane entry (isCutout) — visible on the timeline's
+      // violet lane, re-timeable (drag), removable (×). It replaces the
+      // invisible cutouts[] window, which nothing could re-time or remove.
+      const overlay: ReelOverlayClip = {
+        id: makeClipId(),
+        name: `Cutout · ${clip.name}`.slice(0, 60),
+        url: json.url,
+        durationSec: Math.max(0.1, Math.round((winTo - winFrom) * 10) / 10),
+        trimEndSec: 0,
+        offsetSec: Math.round(winFrom * 10) / 10,
+        isCutout: true,
+      };
+      const updated: ReelProject = {
+        ...project,
+        overlays: [...(project.overlays ?? []), overlay],
+      };
+      setProject(updated);
+      await post({ action: 'save', project: updated });
+      setNote(
+        'Cutout layer added on the violet lane (drag to re-time, × to remove). Now right-click a caption word on the canvas → Behind the subject.',
+      );
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Background removal failed');
+    } finally {
+      setBehindBusy(false);
+    }
+  }
 
   async function transcribeCurrentClip() {
     const clip = currentClip;
@@ -5500,6 +6133,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
   return (
     <div className="flex h-full flex-col">
+      {/* Caption words are hit-testable so right-click opens the word menu.
+          The Remotion composition root is pointer-events-none and the placed
+          words carry pointerEvents:'none' inline — without this a right-click
+          on a caption falls through to the <video> and the browser pops its
+          save-video menu. (The Edit-mode WordDragLayer's hit boxes sit above
+          the words at z-30, so they still win there.) */}
+      <style>{`[data-caption-word]{pointer-events:auto!important}`}</style>
       {/* top bar */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-bone/10 px-4">
         <Link
@@ -5694,6 +6334,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   ['clone', 'Clone', PersonStanding],
                   ['clips', 'Scenes', Film],
                   ['captions', 'Captions', Mic],
+                  ['scripts', 'Scripts', FileText],
                   ['board', 'Board', LayoutList],
                   ['director', 'Director', Clapperboard],
                   ['scoreboard', 'Board', Trophy],
@@ -5730,6 +6371,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   {tab === 'clone' && 'AI Clone'}
                   {tab === 'clips' && 'Scenes'}
                   {tab === 'captions' && 'Captions'}
+                  {tab === 'scripts' && 'Script Lab'}
                   {tab === 'board' && 'The Board'}
                   {tab === 'director' && 'Director'}
                   {tab === 'scoreboard' && 'Scoreboard'}
@@ -6144,6 +6786,21 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                 </div>
               )}
 
+              {tab === 'scripts' && (
+                <ScriptLabPanel
+                  transcript={transcriptForProject(project)}
+                  theme={project.name}
+                  transcribing={busy}
+                  onTranscribe={() => void transcribeCurrentClip()}
+                  onUseAsVoiceover={(text) => {
+                    setVoText(text);
+                    setTab('clips');
+                    setNote('Script loaded into the voiceover box — hit Voiceover to generate it.');
+                  }}
+                  onNote={setNote}
+                />
+              )}
+
               {tab === 'captions' && (
                 <div className="flex h-full min-h-0 flex-col gap-2">
                   {/* R20: the subtitle word track as a FIRST-CLASS editor.
@@ -6207,6 +6864,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         ? new Set(fxTarget != null ? [fxTarget] : [])
                         : fxWords
                     }
+                    onBehind={(fromSec, toSec) => void captionBehindSpeaker(fromSec, toSec)}
+                    behindBusy={behindBusy}
                   />
                   </div>
                   {/* MEDIA CUES — image fly-ins keyed to spoken words (the
@@ -6353,14 +7012,29 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               >
                                 🖼 "{project.captions[c.clipId]?.[c.wordIndex]?.word ?? c.wordIndex}"
                                 <button
-                                  onClick={() =>
-                                    setCueStyleEditId((v) => (v === c.id ? null : c.id))
-                                  }
+                                  onClick={() => {
+                                    const opening = cueStyleEditId !== c.id;
+                                    setCueStyleEditId(opening ? c.id : null);
+                                    if (opening) {
+                                      // Seek to the cue's word so the image (and
+                                      // its drag box) appear on the canvas.
+                                      const w = project.captions[c.clipId]?.[c.wordIndex];
+                                      const clipIdx = project.clips.findIndex((x) => x.id === c.clipId);
+                                      if (w && clipIdx >= 0) {
+                                        const trimStart = project.clips[clipIdx].trimStartSec ?? 0;
+                                        seekTimeline(
+                                          timelineStartOf(project.clips, clipIdx) +
+                                            Math.max(0, w.start - trimStart) +
+                                            0.01,
+                                        );
+                                      }
+                                    }
+                                  }}
                                   className={clsx(
                                     'text-violet-300/60 hover:text-violet-100',
                                     (c.style || c.motion) && 'text-violet-300',
                                   )}
-                                  title="Style + motion for this fly-in"
+                                  title="Style + motion for this fly-in (seeks to it on the canvas)"
                                 >
                                   ⚙
                                 </button>
@@ -6975,6 +7649,27 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       overrides={project.captionOverrides}
                       onPick={(def) => void setCaptionStyle(def.id as CaptionPreset)}
                       onCustomize={(patchOv) => void setCaptionOverrides(patchOv)}
+                      onApplyTransition={(type) => {
+                        // A creator pack's seam transition: set it on EVERY
+                        // boundary (null = hard cuts). The first scene has no
+                        // seam before it, so it never carries one.
+                        patch({
+                          clips: project.clips.map((c, i) => {
+                            if (i === 0) return c;
+                            if (!type) {
+                              const next = { ...c };
+                              delete next.transitionIn;
+                              return next;
+                            }
+                            return { ...c, transitionIn: { type, durationSec: 0.4 } };
+                          }),
+                        });
+                        setNote(
+                          type
+                            ? `${type} on every seam — adjust any boundary on the timeline.`
+                            : 'Hard cuts on every seam.',
+                        );
+                      }}
                     onResetOverrides={() => {
                       void (async () => {
                         if (!project) return;
@@ -8154,7 +8849,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
             )}
             <div className="flex min-h-0 flex-1">
               {/* stage column: target strip on top, preview + timeline */}
-              <div className="grid min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] p-4 pr-2">
+              {/* overflow-hidden + min-w-0: the timeline strip below can be
+                  thousands of px wide (total * pxPerSec). Without a hard clip on
+                  the column, that width bleeds UP into the flex-centered stage and
+                  shoves the video off the right edge of the screen (the "blank"
+                  stage — the video was loaded fine, just at x≈3000). Clip the
+                  column so the stage centers within the VISIBLE width. */}
+              <div className="grid min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 pr-2">
               <div className="mb-2 flex shrink-0 items-center justify-center gap-2">
                 <button
                   onClick={() => setGeneStrip((v) => !v)}
@@ -8218,7 +8919,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   )}
                 </div>
               </div>
-              <div ref={stageRef} className="flex min-h-0 items-center justify-center overflow-hidden">
+              {/* relative + flex centering: the video is centered INSIDE a box that
+                  is itself capped to the column's visible width. The timeline strip
+                  below can be thousands of px wide (total * pxPerSec) and was
+                  inflating the column, dragging the flex-centered video off the
+                  right edge (x≈3000 = the "blank" stage). w-full + min-w-0 +
+                  overflow-hidden pin the stage to the VISIBLE width so the video
+                  always centers where you can see it. */}
+              <div ref={stageRef} className="flex min-h-0 w-full min-w-0 items-center justify-center overflow-hidden">
 
                 {/* R10 variant gene strip — the gene flow, always beside the canvas (hideable) */}
                 {geneStrip && (
@@ -8327,6 +9035,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   <div
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
+                    onContextMenu={(e) => onCaptionWordContextMenu(e, 'remotion')}
+                    onPointerDown={(e) => onCaptionWordPointerDown(e, 'remotion')}
                   >
                     {(!project || project.clips.length === 0) && (
                       <div
@@ -8371,6 +9081,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
                         playheadSec={playheadSec}
                         freePlaceEdit={stackEditMode}
+                        showAllWords={stackEditMode && showAllCardWords}
                       />
                     {uploadJob && (
                       <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
@@ -8391,16 +9102,19 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
                     {/* Free-place stack Edit/Preview — only when card has placed words */}
                     {currentClip &&
-                      (project.captions[currentClip.id] ?? []).some(
-                        (w) =>
-                          w.mark?.card?.freePlace === true ||
-                          (typeof w.mark?.xPct === 'number' &&
-                            typeof w.mark?.yPct === 'number'),
-                      ) && (
+                      (project.captions[currentClip.id] ?? []).length > 0 && (
                         <div
                           data-stack-edit-toggle
                           className="pointer-events-auto absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full border border-white/15 bg-black/70 p-0.5 text-[10px] shadow-lg backdrop-blur"
                         >
+                          <button
+                            type="button"
+                            onClick={() => void resetCaptionWords()}
+                            className="rounded-full px-1.5 py-1 text-[11px] leading-none text-white/50 hover:text-red-300"
+                            title="Reset caption edits — clear every free-place position + per-word style on this scene, back to the clean theme"
+                          >
+                            ↺
+                          </button>
                           <button
                             type="button"
                             className={
@@ -8412,9 +9126,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               setStackEditMode(true);
                               setFxMode(false);
                             }}
-                            title="Edit: show every word in this section — click to move / style"
+                            title="Words: edit each word on its own — drag to move, corner to scale, right-click for styles"
                           >
-                            Edit
+                            Words
                           </button>
                           <button
                             type="button"
@@ -8423,14 +9137,28 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                                 ? 'rounded-full bg-white/15 px-2.5 py-1 font-semibold text-white'
                                 : 'rounded-full px-2.5 py-1 text-white/70 hover:text-white'
                             }
-                            onClick={() => {
-                              setStackEditMode(false);
-                              setFxMode(false);
-                            }}
-                            title="Preview this section with karaoke timing"
+                            onClick={exitStackEdit}
+                            title="Preview this section with karaoke timing (saves the placement)"
                           >
                             Preview
                           </button>
+                          {/* Edit mode opt-in: show EVERY word on the card.
+                              Off (default) = just the on-screen page, same as
+                              Preview — so Edit no longer scatters the card. */}
+                          {stackEditMode && (
+                            <button
+                              type="button"
+                              className={
+                                showAllCardWords
+                                  ? 'rounded-full bg-violet-500 px-2.5 py-1 font-semibold text-white'
+                                  : 'rounded-full px-2.5 py-1 text-white/50 hover:text-white'
+                              }
+                              onClick={() => setShowAllCardWords((v) => !v)}
+                              title="Show every word on this card (off = just the words on screen, same as Preview)"
+                            >
+                              all
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -8442,15 +9170,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       Object.values(project.captions ?? {}).some((w) => (w?.length ?? 0) > 0) && (
                         <>
                           {/* stack-edit: hide box when free-place */}
-                        {!(() => {
-                        if (!currentClip) return false;
-                        const ws = project.captions[currentClip.id] ?? [];
-                        return ws.some(
-                          (w) =>
-                            typeof w.mark?.xPct === 'number' &&
-                            typeof w.mark?.yPct === 'number',
-                        );
-                      })() && (
+                        {!stackEditMode && (
                         <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
@@ -8479,8 +9199,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           className="absolute inset-0 z-[25]"
                           style={{ pointerEvents: 'auto', cursor: 'default' }}
                           onPointerDown={(e) => {
+                            // Block the video toggle, but let the press BUBBLE to
+                            // the stage container so a word drag still starts.
                             e.preventDefault();
-                            e.stopPropagation();
                           }}
                           onClick={(e) => {
                             e.preventDefault();
@@ -8522,23 +9243,20 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                               ? Array.from(fxWords)[0]
                               : null
                           }
+                          mapGlyphIndex={(i) =>
+                            currentClip
+                              ? planWordIndexFromClipIndex(project, currentClip.id, i) ?? i
+                              : i
+                          }
                           onSelect={(index) => {
+                            // Select WITHOUT seeking — clicking a word to edit it
+                            // must not move the playhead. The word is already on
+                            // screen; a seek flips the visible page (Edit shows
+                            // just the on-screen page now) and reads as "it jumped
+                            // back and showed the words before it".
                             setFxMode(true);
                             setFxTarget(index);
                             setFxWords(new Set([index]));
-                            if (currentClip && project) {
-                              const w = (project.captions[currentClip.id] ?? [])[index];
-                              if (w) {
-                                const start = timelineStartOf(
-                                  project.clips,
-                                  Math.max(
-                                    0,
-                                    project.clips.findIndex((c) => c.id === currentClip.id),
-                                  ),
-                                );
-                                seekTimeline(start + w.start + 0.01);
-                              }
-                            }
                           }}
                           onMove={(index, xPct, yPct) => {
                             setWordPlaceLocal((prev) => ({
@@ -8566,46 +9284,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, { scale });
                           }}
                           onStyle={(index, partial) => {
-                            if (partial.clearStyle) {
-                              // Keep placement + card; drop visual style fields.
-                              void applyWordMark(index, {
-                                anim: undefined,
-                                color: undefined,
-                                scale: undefined,
-                                fx: undefined,
-                                fxColor: undefined,
-                                fxColor2: undefined,
-                                ambient: undefined,
-                                font: undefined,
-                                hidden: undefined,
-                              });
-                              return;
-                            }
-                            const patch: Partial<
-                              import('@/lib/mothermode/reel/types').ReelWordMark
-                            > = {};
-                            if ('anim' in partial) patch.anim = partial.anim || undefined;
-                            if ('scale' in partial && typeof partial.scale === 'number') {
-                              patch.scale = partial.scale;
-                            }
-                            if ('color' in partial) {
-                              patch.color = partial.color || undefined;
-                            }
-                            if ('fx' in partial) patch.fx = partial.fx || undefined;
-                            if ('fxColor' in partial) {
-                              patch.fxColor = partial.fxColor || undefined;
-                            }
-                            if ('fxColor2' in partial) {
-                              patch.fxColor2 = partial.fxColor2 || undefined;
-                            }
-                            if ('ambient' in partial) {
-                              patch.ambient = partial.ambient || undefined;
-                            }
-                            if ('font' in partial) patch.font = partial.font || undefined;
-                            if ('hidden' in partial) {
-                              patch.hidden = partial.hidden || undefined;
-                            }
-                            void applyWordMark(index, patch);
+                            void applyWordMark(index, wordStylePatchToMark(partial));
+                          }}
+                          onRemovePlace={(index) => {
+                            if (currentClip) removeWordPlace(currentClip.id, index);
+                          }}
+                          onToggleBehind={(index, x, y) => {
+                            if (currentClip) toggleWordBehind(currentClip.id, index, x, y);
                           }}
                         />
                         </>
@@ -8619,56 +9304,67 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         shows while a cue's style editor is open, even outside
                         the cue's window — it marks where the fly-in lands. */}
                     {(() => {
-                      // Same always-visible rule as the style editor: the drag
-                      // box shows for the cue the editor is editing — the ⚙
-                      // pick when set, else the clip's first cue. Hiding it
-                      // behind the ⚙ toggle is what made it "gone".
                       const clipCues = (project.mediaCues ?? []).filter(
                         (x) => x.clipId === currentClip?.id,
                       );
-                      const cue =
-                        clipCues.find((x) => x.id === cueStyleEditId) ?? clipCues[0];
-                      if (!cue) return null;
-                      const sx = cue.style?.xPct ?? 60;
-                      const sy = cue.style?.yPct ?? 16;
-                      const sw = cue.style?.widthPct ?? 34;
-                      return (
-                        <CueDragLayer
-                          xPct={cueDragLocal?.xPct ?? sx}
-                          yPct={cueDragLocal?.yPct ?? sy}
-                          widthPct={cueDragLocal?.widthPct ?? sw}
-                          src={cue.url}
-                          word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
-                          onMove={(x, y) =>
-                            setCueDragLocal({
-                              xPct: x,
-                              yPct: y,
-                              widthPct: cueDragLocal?.widthPct ?? sw,
-                            })
-                          }
-                          onCommit={(x, y) => {
-                            setCueDragLocal(null);
-                            void patchCueStyle(cue.id, { xPct: x, yPct: y });
-                          }}
-                          onResize={(w) =>
-                            setCueDragLocal({
-                              xPct: cueDragLocal?.xPct ?? sx,
-                              yPct: cueDragLocal?.yPct ?? sy,
-                              widthPct: w,
-                            })
-                          }
-                          onResizeCommit={(w) => {
-                            setCueDragLocal(null);
-                            void patchCueStyle(cue.id, { widthPct: w });
-                          }}
-                        />
-                      );
+                      // The drag box shows ONLY while the cue's image is actually
+                      // on screen at the playhead — it used to pin to the selected
+                      // cue forever. Click the box to grab + select that cue; the
+                      // ⚙ editor auto-seeks to the word so the image appears.
+                      const onScreen = clipCues.filter((c) => cueOnScreen(c));
+                      if (!onScreen.length) return null;
+                      return onScreen.map((cue) => {
+                        const sx = cue.style?.xPct ?? 60;
+                        const sy = cue.style?.yPct ?? 16;
+                        const sw = cue.style?.widthPct ?? 34;
+                        const local = cue.id === cueStyleEditId ? cueDragLocal : null;
+                        return (
+                          <CueDragLayer
+                            key={cue.id}
+                            xPct={local?.xPct ?? sx}
+                            yPct={local?.yPct ?? sy}
+                            widthPct={local?.widthPct ?? sw}
+                            src={cue.url}
+                            word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
+                            onSelect={() => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal(null);
+                            }}
+                            onMove={(x, y) => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal({
+                                xPct: x,
+                                yPct: y,
+                                widthPct: local?.widthPct ?? sw,
+                              });
+                            }}
+                            onCommit={(x, y) => {
+                              setCueDragLocal(null);
+                              void patchCueStyle(cue.id, { xPct: x, yPct: y });
+                            }}
+                            onResize={(w) => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal({
+                                xPct: local?.xPct ?? sx,
+                                yPct: local?.yPct ?? sy,
+                                widthPct: w,
+                              });
+                            }}
+                            onResizeCommit={(w) => {
+                              setCueDragLocal(null);
+                              void patchCueStyle(cue.id, { widthPct: w });
+                            }}
+                          />
+                        );
+                      });
                     })()}
                   </div>
                 ) : previewSrc ? (
                   <div
                     className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
                     style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
+                    onContextMenu={(e) => onCaptionWordContextMenu(e, 'stage')}
+                    onPointerDown={(e) => onCaptionWordPointerDown(e, 'stage')}
                   >
 
                     {/* Upload feedback lives ON the stage - the sidebar is not where
@@ -8723,7 +9419,19 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         if (swappingRef.current) return; // a src swap, not a user pause
                         if (clockRef.current.playing && !swappingRef.current) stopClock();
                       }}
+                      onError={(e) => {
+                        // A blob <video> that can't decode the file (HEVC/ProRes/.mov
+                        // Chrome can't play) lands here with a MEDIA_ERR — this is the
+                        // "uploads but shows nothing" case. Surface it on the stage.
+                        const err = e.currentTarget.error;
+                        setStageVideoError(
+                          err
+                            ? `This file can't play in the browser (code ${err.code}). Re-export it as H.264 MP4.`
+                            : 'This file cannot play in the browser.',
+                        );
+                      }}
                       onLoadedMetadata={(e) => {
+                        setStageVideoError(null);
                         swappingRef.current = false;
                         const el = e.currentTarget;
                         const pending = pendingSeekRef.current;
@@ -8740,6 +9448,23 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         }
                       }}
                     />
+                    {/* The codec failure, ON the stage. A blob <video> that can't
+                        decode the file (HEVC/ProRes/.mov Chrome can't play) fires
+                        onError and renders black — this turns that silent black
+                        into a readable message. */}
+                    {stageVideoError && (
+                      <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-black/85 p-6 text-center">
+                        <p className="text-[12px] font-semibold text-red-300">
+                          This video can't play in the browser
+                        </p>
+                        <p className="max-w-[280px] text-[10px] leading-relaxed text-bone/60">
+                          {stageVideoError}
+                        </p>
+                        <p className="text-[9px] text-bone/35">
+                          Re-export it as H.264 MP4 (the universal web codec) and upload again.
+                        </p>
+                      </div>
+                    )}
                     {/* R25 overlay (b-roll) layer — picture-in-picture, clock-synced, muted. */}
                     {overlayHit && (
                       <video
@@ -8747,8 +9472,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         data-clip-url=""
                         muted
                         playsInline
-                        className="absolute bottom-3 right-3 z-10 w-[30%] rounded-lg border border-white/25 object-cover shadow-xl"
-                        style={{ aspectRatio: '16/9' }}
+                        className={
+                          overlayHit.isCutout
+                            ? 'absolute inset-0 z-[6] h-full w-full object-cover'
+                            : 'absolute bottom-3 right-3 z-10 w-[30%] rounded-lg border border-white/25 object-cover shadow-xl'
+                        }
+                        style={overlayHit.isCutout ? undefined : { aspectRatio: '16/9' }}
                         onLoadedMetadata={(e) => {
                           const p = pendingOvSeekRef.current;
                           if (p != null) {
@@ -8779,7 +9508,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       stageClip &&
                       (project.captions[stageClip.id]?.length ?? 0) > 0 && (
                         <>
-                          <div className="pointer-events-none absolute inset-0 z-20">
+                          {/* No z on this wrapper — it used to pin z-20, which
+                              trapped the caption layer's inner z's (behind z 5 /
+                              block z 10 / front z 11) inside its own stacking
+                              context, so a behind word could never duck under
+                              the cutout video (z 6) on this stage. Bare wrapper
+                              = the layer's z's join the global stack, same as
+                              the Remotion composition. */}
+                          <div className="pointer-events-none absolute inset-0">
                             <StageCaptions
                               words={(projectWithWordPlace ?? project).captions[stageClip.id] ?? []}
                               timeSec={previewTime + (stageClip.trimStartSec ?? 0)}
@@ -8791,15 +9527,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           {/* Placement uses the SAME puck as the Remotion branch, so
                               dragging behaves identically on both previews. */}
                         {/* stack-edit: hide box when free-place */}
-                        {!(() => {
-                        if (!currentClip) return false;
-                        const ws = project.captions[currentClip.id] ?? [];
-                        return ws.some(
-                          (w) =>
-                            typeof w.mark?.xPct === 'number' &&
-                            typeof w.mark?.yPct === 'number',
-                        );
-                      })() && (
+                        {!stackEditMode && (
                         <CaptionDragLayer
                           xPct={project.captionOverrides?.xPct ?? 50}
                           yPct={project.captionOverrides?.positionPct ?? 12}
@@ -8881,46 +9609,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             void applyWordMark(index, { scale });
                           }}
                           onStyle={(index, partial) => {
-                            if (partial.clearStyle) {
-                              // Keep placement + card; drop visual style fields.
-                              void applyWordMark(index, {
-                                anim: undefined,
-                                color: undefined,
-                                scale: undefined,
-                                fx: undefined,
-                                fxColor: undefined,
-                                fxColor2: undefined,
-                                ambient: undefined,
-                                font: undefined,
-                                hidden: undefined,
-                              });
-                              return;
-                            }
-                            const patch: Partial<
-                              import('@/lib/mothermode/reel/types').ReelWordMark
-                            > = {};
-                            if ('anim' in partial) patch.anim = partial.anim || undefined;
-                            if ('scale' in partial && typeof partial.scale === 'number') {
-                              patch.scale = partial.scale;
-                            }
-                            if ('color' in partial) {
-                              patch.color = partial.color || undefined;
-                            }
-                            if ('fx' in partial) patch.fx = partial.fx || undefined;
-                            if ('fxColor' in partial) {
-                              patch.fxColor = partial.fxColor || undefined;
-                            }
-                            if ('fxColor2' in partial) {
-                              patch.fxColor2 = partial.fxColor2 || undefined;
-                            }
-                            if ('ambient' in partial) {
-                              patch.ambient = partial.ambient || undefined;
-                            }
-                            if ('font' in partial) patch.font = partial.font || undefined;
-                            if ('hidden' in partial) {
-                              patch.hidden = partial.hidden || undefined;
-                            }
-                            void applyWordMark(index, patch);
+                            void applyWordMark(index, wordStylePatchToMark(partial));
+                          }}
+                          onRemovePlace={(index) => {
+                            if (currentClip) removeWordPlace(currentClip.id, index);
+                          }}
+                          onToggleBehind={(index, x, y) => {
+                            if (currentClip) toggleWordBehind(currentClip.id, index, x, y);
                           }}
                         />
                         )}
@@ -8930,50 +9625,59 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         overlay, same numbers, so placement agrees across both
                         previews by construction. */}
                     {(() => {
-                      // Same always-visible rule as the style editor: the drag
-                      // box shows for the cue the editor is editing — the ⚙
-                      // pick when set, else the clip's first cue. Hiding it
-                      // behind the ⚙ toggle is what made it "gone".
                       const clipCues = (project.mediaCues ?? []).filter(
                         (x) => x.clipId === currentClip?.id,
                       );
-                      const cue =
-                        clipCues.find((x) => x.id === cueStyleEditId) ?? clipCues[0];
-                      if (!cue) return null;
-                      const sx = cue.style?.xPct ?? 60;
-                      const sy = cue.style?.yPct ?? 16;
-                      const sw = cue.style?.widthPct ?? 34;
-                      return (
-                        <CueDragLayer
-                          xPct={cueDragLocal?.xPct ?? sx}
-                          yPct={cueDragLocal?.yPct ?? sy}
-                          widthPct={cueDragLocal?.widthPct ?? sw}
-                          src={cue.url}
-                          word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
-                          onMove={(x, y) =>
-                            setCueDragLocal({
-                              xPct: x,
-                              yPct: y,
-                              widthPct: cueDragLocal?.widthPct ?? sw,
-                            })
-                          }
-                          onCommit={(x, y) => {
-                            setCueDragLocal(null);
-                            void patchCueStyle(cue.id, { xPct: x, yPct: y });
-                          }}
-                          onResize={(w) =>
-                            setCueDragLocal({
-                              xPct: cueDragLocal?.xPct ?? sx,
-                              yPct: cueDragLocal?.yPct ?? sy,
-                              widthPct: w,
-                            })
-                          }
-                          onResizeCommit={(w) => {
-                            setCueDragLocal(null);
-                            void patchCueStyle(cue.id, { widthPct: w });
-                          }}
-                        />
-                      );
+                      // The drag box shows ONLY while the cue's image is actually
+                      // on screen at the playhead — it used to pin to the selected
+                      // cue forever. Click the box to grab + select that cue; the
+                      // ⚙ editor auto-seeks to the word so the image appears.
+                      const onScreen = clipCues.filter((c) => cueOnScreen(c));
+                      if (!onScreen.length) return null;
+                      return onScreen.map((cue) => {
+                        const sx = cue.style?.xPct ?? 60;
+                        const sy = cue.style?.yPct ?? 16;
+                        const sw = cue.style?.widthPct ?? 34;
+                        const local = cue.id === cueStyleEditId ? cueDragLocal : null;
+                        return (
+                          <CueDragLayer
+                            key={cue.id}
+                            xPct={local?.xPct ?? sx}
+                            yPct={local?.yPct ?? sy}
+                            widthPct={local?.widthPct ?? sw}
+                            src={cue.url}
+                            word={project.captions[cue.clipId]?.[cue.wordIndex]?.word ?? ''}
+                            onSelect={() => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal(null);
+                            }}
+                            onMove={(x, y) => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal({
+                                xPct: x,
+                                yPct: y,
+                                widthPct: local?.widthPct ?? sw,
+                              });
+                            }}
+                            onCommit={(x, y) => {
+                              setCueDragLocal(null);
+                              void patchCueStyle(cue.id, { xPct: x, yPct: y });
+                            }}
+                            onResize={(w) => {
+                              setCueStyleEditId(cue.id);
+                              setCueDragLocal({
+                                xPct: local?.xPct ?? sx,
+                                yPct: local?.yPct ?? sy,
+                                widthPct: w,
+                              });
+                            }}
+                            onResizeCommit={(w) => {
+                              setCueDragLocal(null);
+                              void patchCueStyle(cue.id, { widthPct: w });
+                            }}
+                          />
+                        );
+                      });
                     })()}
 
                     {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
@@ -9210,8 +9914,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       stayed at scale: the playhead sat PAST the trimmed block.
                       Now both use the same reference, so they always agree. */}
                   <div
-                    className="relative"
-                    style={{ width: Math.max(total * pxPerSec, 1) }}
+                    className="relative w-full"
+                    style={{
+                      // PAGE-WIDTH, ALWAYS. The scenes inside are %-of-total-time,
+                      // so the track is simply 100% of the visible strip — a 3-min
+                      // video crams more scenes into the SAME width instead of
+                      // growing thousands of px and shoving the preview off-screen.
+                      // (Zoom now only re-scales the SCENE widths via pxPerSec; the
+                      // strip itself stays put and scrolls if scenes overflow.)
+                      width: '100%',
+                    }}
                   >
                     <TimeRuler
                       totalSec={total}
@@ -9279,6 +9991,22 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     onScrubIn={scrubToIn}
                     onLeftTrim={(c, s) => void leftTrimAt(c, s)}
                     onKeyMove={(c, ki, t) => setMotionKey(c, ki, { t })}
+                    onTransition={(id, t) => {
+                      // The seam picker: set/clear the transition INTO a clip.
+                      // Undo-safe via patch; the plan + preview pick it up on
+                      // the next render pass.
+                      patch({
+                        clips: project.clips.map((c) => {
+                          if (c.id !== id) return c;
+                          if (!t) {
+                            const next = { ...c };
+                            delete next.transitionIn;
+                            return next;
+                          }
+                          return { ...c, transitionIn: t };
+                        }),
+                      });
+                    }}
                   />
 
                   {/* R25 OVERLAY (b-roll) LAYERS lane — drag a block to re-time it */}
@@ -9722,6 +10450,74 @@ const [cueDragLocal, setCueDragLocal] = useState<{
           onClose={() => setBulkOpen(false)}
         />
       )}
+      {/* The canvas right-click word menu (Preview mode — Edit mode's
+          WordDragLayer owns right-click there). Free-place / Remove placement /
+          Behind the subject + the full per-word style editor. */}
+      {wordCtxMenu &&
+        project &&
+        (() => {
+          const words = project.captions[wordCtxMenu.clipId] ?? [];
+          const w = words[wordCtxMenu.index];
+          if (!w) return null;
+          const placed =
+            typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
+          const selected: WordPlace = {
+            index: wordCtxMenu.index,
+            xPct: w.mark?.xPct ?? wordCtxMenu.xPct,
+            yPct: w.mark?.yPct ?? wordCtxMenu.yPct,
+            label: w.word,
+            placed,
+            behind: w.mark?.behind === true,
+            scale: w.mark?.scale,
+            anim: w.mark?.anim,
+            color: w.mark?.color,
+            fx: w.mark?.fx,
+            fxColor: w.mark?.fxColor,
+            fxColor2: w.mark?.fxColor2,
+            ambient: w.mark?.ambient,
+            font: w.mark?.font,
+            hidden: w.mark?.hidden,
+          };
+          return (
+            <WordContextMenu
+              clientX={wordCtxMenu.clientX}
+              clientY={wordCtxMenu.clientY}
+              selected={selected}
+              onApply={(partial) =>
+                void applyWordMark(
+                  wordCtxMenu.index,
+                  wordStylePatchToMark(partial),
+                  wordCtxMenu.clipId,
+                )
+              }
+              onClose={() => setWordCtxMenu(null)}
+              onFreePlace={
+                placed
+                  ? undefined
+                  : () =>
+                      freePlaceWord(
+                        wordCtxMenu.clipId,
+                        wordCtxMenu.index,
+                        wordCtxMenu.xPct,
+                        wordCtxMenu.yPct,
+                      )
+              }
+              onRemovePlace={
+                placed
+                  ? () => removeWordPlace(wordCtxMenu.clipId, wordCtxMenu.index)
+                  : undefined
+              }
+              onToggleBehind={() =>
+                toggleWordBehind(
+                  wordCtxMenu.clipId,
+                  wordCtxMenu.index,
+                  wordCtxMenu.xPct,
+                  wordCtxMenu.yPct,
+                )
+              }
+            />
+          );
+        })()}
     </div>
   );
 }

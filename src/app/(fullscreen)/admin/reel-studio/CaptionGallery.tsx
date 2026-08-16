@@ -16,6 +16,7 @@ import { Check, SlidersHorizontal, Zap } from 'lucide-react';
 import {
   CAPTION_STYLE_DEFS,
   captionCssFor,
+  captionDefFor,
   resolveCaptionStyle,
   EDITOR_PACKS,
   CAPTION_ANIMS,
@@ -191,6 +192,7 @@ export function CaptionGallery({
   onPick,
   onCustomize,
   onResetOverrides,
+  onApplyTransition,
 
   words = [],
   clipName = '',
@@ -201,6 +203,11 @@ export function CaptionGallery({
   onCustomize: (patch: Partial<CaptionOverrides>) => void;
   /** Clear every caption override back to the preset defaults. */
   onResetOverrides?: () => void;
+  /**
+   * A pack's seam transition: set it on every boundary (null = hard cuts).
+   * The page owns the clips, so the gallery hands the choice up.
+   */
+  onApplyTransition?: (type: import('@/lib/mothermode/reel/types').ReelTransitionType | null) => void;
   /** R20: the current scene's word track (shown as a timestamped subtitle list). */
   words?: { word: string; start: number; end: number }[];
   clipName?: string;
@@ -208,6 +215,17 @@ export function CaptionGallery({
   const [filter, setFilter] = useState<CaptionTag | 'all'>('all');
   const [customizing, setCustomizing] = useState(false);
   const [subsOpen, setSubsOpen] = useState(false);
+  /** Saved custom themes (named looks) — persisted in localStorage, shown under Custom. */
+  const [customThemes, setCustomThemes] = useState<{ name: string; presetId: string; overrides: CaptionOverrides }[]>(() => {
+    try {
+      const raw = localStorage.getItem('reel-studio:custom-caption-themes');
+      return raw ? (JSON.parse(raw) as { name: string; presetId: string; overrides: CaptionOverrides }[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [themeName, setThemeName] = useState('');
 
   const defs = useMemo(
     () =>
@@ -217,11 +235,37 @@ export function CaptionGallery({
     [filter],
   );
 
-  const activeDef = resolveCaptionStyle(
-    CAPTION_STYLE_DEFS.find((d) => d.id === currentPreset) ??
-      CAPTION_STYLE_DEFS.find((d) => d.id === 'karaoke')!,
-    overrides,
-  );
+  /** Save the current look (preset + overrides) as a named custom theme. */
+  function saveCustomTheme() {
+    const name = themeName.trim();
+    if (!name) return;
+    const next = [
+      ...customThemes.filter((t) => t.name !== name),
+      { name, presetId: String(currentPreset), overrides: { ...(overrides ?? {}) } },
+    ].slice(0, 24);
+    setCustomThemes(next);
+    try {
+      localStorage.setItem('reel-studio:custom-caption-themes', JSON.stringify(next));
+    } catch {
+      /* private mode */
+    }
+    setSavingTheme(false);
+    setThemeName('');
+  }
+
+  /** Apply a saved custom theme: its preset + its overrides. */
+  function applyCustomTheme(t: { name: string; presetId: string; overrides: CaptionOverrides }) {
+    const def = CAPTION_STYLE_DEFS.find((d) => d.id === t.presetId);
+    if (def) onPick(def);
+    onCustomize(t.overrides);
+  }
+
+  // Resolve the current preset through captionDefFor so a LEGACY id (karaoke,
+  // beast, hormozi, minimal) maps to its def — otherwise the selected tile never
+  // highlights because currentPreset ('karaoke') never equals a def id
+  // ('kelly-neon'). This is the "selected on the panel shows on the preview" sync.
+  const activeDef = resolveCaptionStyle(captionDefFor(currentPreset), overrides);
+  const activeDefId = activeDef.id;
   const posPct = overrides?.positionPct ?? 12;
   const sizePx = overrides?.sizePx ?? 18;
   const wordsPerRow = overrides?.wordsPerRow ?? activeDef.wordsPerLine;
@@ -255,17 +299,57 @@ export function CaptionGallery({
         <span className="ml-auto text-[9px] text-bone/25">{defs.length} looks</span>
       </div>
 
-      {/* the 3-col tile grid */}
+      {/* the 3-col tile grid — selected = the RESOLVED def id, so a legacy
+          currentPreset ('karaoke') highlights its mapped def, and the preview's
+          current look is the one that's lit. This is the panel↔preview sync. */}
       <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-1.5 overflow-y-auto pr-0.5">
         {defs.map((d) => (
           <PresetTile
             key={d.id}
             def={d}
-            selected={currentPreset === d.id}
+            selected={activeDefId === d.id}
             onPick={() => onPick(d)}
           />
         ))}
       </div>
+
+      {/* CUSTOM themes — named looks you saved, each with a live visual. */}
+      {customThemes.length > 0 && (
+        <div className="shrink-0 rounded-xl border border-bone/10 bg-bone/[0.03] px-2 py-1.5">
+          <div className="mb-1 text-[9px] font-bold uppercase tracking-wide text-bone/50">
+            Custom themes
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {customThemes.map((t) => {
+              const def = CAPTION_STYLE_DEFS.find((d) => d.id === t.presetId);
+              const css = def ? captionCssFor(resolveCaptionStyle(def, t.overrides)) : null;
+              return (
+                <button
+                  key={t.name}
+                  onClick={() => applyCustomTheme(t)}
+                  title={`Apply "${t.name}"`}
+                  className="group relative flex h-14 flex-col items-center justify-center overflow-hidden rounded-lg border border-bone/10 bg-neutral-950 transition-all hover:border-bone/30"
+                >
+                  {css ? (
+                    <span
+                      className="pointer-events-none flex items-baseline gap-1 px-1 leading-none"
+                      style={{ fontFamily: css.fontFamily }}
+                    >
+                      <span style={{ ...css.word, fontSize: 12 }}>Aa</span>
+                      <span style={{ ...css.active, fontSize: 12 }}>Bb</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-bone/40">Aa</span>
+                  )}
+                  <span className="pointer-events-none mt-0.5 max-w-full truncate px-1 text-[8px] font-semibold text-bone/50">
+                    {t.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* R17c Customize ▸ (Submagic's bottom bar as real controls) */}
       <div className="shrink-0 rounded-xl border border-bone/10 bg-bone/[0.03]">
@@ -331,8 +415,32 @@ export function CaptionGallery({
                   max={3}
                   onChange={(n) => onCustomize({ rows: n })}
                 />
+                {/* PHRASE rows: each row is a natural speech phrase (punctuation /
+                    timing gap), not a fixed wordsPerRow chunk — the organic
+                    "kinda random, not 2-words-2-rows" rhythm. */}
+                <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <span className="text-[10px] text-bone/55">Phrase rows</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCustomize({
+                        rowMode: (overrides?.rowMode ?? 'fixed') === 'phrase' ? 'fixed' : 'phrase',
+                      })
+                    }
+                    className={clsx(
+                      'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                      (overrides?.rowMode ?? 'fixed') === 'phrase'
+                        ? 'bg-brass text-ink'
+                        : 'border border-bone/15 text-bone/45 hover:bg-bone/10',
+                    )}
+                    title="Each row is a natural speech phrase (breaks on punctuation or a pause) instead of a fixed word count — the organic, kinda-random rhythm"
+                  >
+                    {(overrides?.rowMode ?? 'fixed') === 'phrase' ? 'On' : 'Off'}
+                  </button>
+                </div>
                 <p className="text-[8px] leading-relaxed text-bone/25">
                   1 word/row = the punchy Submagic beat. 2 rows = current + next line.
+                  Phrase rows = each row is a spoken phrase, not a fixed count.
                 </p>
               </div>
               {/* spacing: letters + words (the "space it out" dials) */}
@@ -793,6 +901,9 @@ export function CaptionGallery({
                       const def = CAPTION_STYLE_DEFS.find((d) => d.id === pack.presetId);
                       if (def) onPick(def);
                       if (pack.overrides) onCustomize(pack.overrides);
+                      // The pack's seam transition rides the one-click look
+                      // (null clears the seams — hard cuts are a look too).
+                      onApplyTransition?.(pack.transition ?? null);
                     }}
                     className="rounded-full border border-bone/15 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/55 hover:bg-bone/10 hover:text-bone"
                   >
@@ -807,22 +918,56 @@ export function CaptionGallery({
 
             
             
-            {/* Reset every dial back to the active preset */}
-            {onResetOverrides && (
-              <div className="flex items-center justify-between rounded-md border border-bone/10 bg-ink/40 px-2 py-1.5">
-                <span className="text-[9px] text-bone/45">
-                  Custom look applied
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onResetOverrides()}
-                  className="rounded-full border border-bone/20 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/60 hover:bg-bone/10 hover:text-bone"
-                  title="Clear all caption overrides and restore the preset defaults"
-                >
-                  Reset to defaults
-                </button>
-              </div>
-            )}
+            {/* Save the current look as a named custom theme + reset. */}
+            <div className="space-y-1.5 rounded-md border border-bone/10 bg-ink/40 px-2 py-1.5">
+              {savingTheme ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoFocus
+                    value={themeName}
+                    onChange={(e) => setThemeName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveCustomTheme();
+                      if (e.key === 'Escape') setSavingTheme(false);
+                    }}
+                    placeholder="Name this look…"
+                    className="min-w-0 flex-1 rounded border border-bone/15 bg-ink px-2 py-1 text-[10px] text-bone outline-none placeholder:text-bone/25"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveCustomTheme}
+                    disabled={!themeName.trim()}
+                    className="rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase text-ink disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSavingTheme(true)}
+                    className="rounded-full bg-brass px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink hover:brightness-110"
+                    title="Save the current preset + overrides as a named custom theme"
+                  >
+                    Save as theme
+                  </button>
+                  {onResetOverrides && (
+                    <button
+                      type="button"
+                      onClick={() => onResetOverrides()}
+                      className="rounded-full border border-bone/20 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bone/60 hover:bg-bone/10 hover:text-bone"
+                      title="Clear all caption overrides and restore the preset defaults"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-[8px] leading-relaxed text-bone/25">
+                Saved themes show under "Custom themes" above with a live visual.
+              </p>
+            </div>
 
 
             {/* Stack + visibility */}
@@ -1308,6 +1453,28 @@ export function CaptionGallery({
                     }
                     className="w-full accent-brass"
                   />
+                  {/* SPREAD: how far the shadow reaches (0 = tight, 1 = long soft drop). */}
+                  {(overrides?.dropShadow ?? 0) > 0 && (
+                    <div className="mt-1.5">
+                      <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Shadow reach</span>
+                        <span className="text-brass/80">
+                          {Math.round((overrides?.dropShadowSpread ?? 0.5) * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={Math.round((overrides?.dropShadowSpread ?? 0.5) * 100)}
+                        onChange={(e) =>
+                          onCustomize({ dropShadowSpread: Number(e.target.value) / 100 })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
@@ -1327,11 +1494,40 @@ export function CaptionGallery({
                         outerGlow: {
                           strength: Number(e.target.value) / 100,
                           color: overrides?.outerGlow?.color,
+                          spread: overrides?.outerGlow?.spread,
                         },
                       })
                     }
                     className="w-full accent-brass"
                   />
+                  {/* SPREAD: how far the glow feathers out (0 = tight halo, 1 = wide bloom). */}
+                  {(overrides?.outerGlow?.strength ?? 0) > 0 && (
+                    <div className="mt-1.5">
+                      <div className="mb-0.5 flex items-center justify-between text-[9px] font-semibold text-bone/40">
+                        <span>Glow reach</span>
+                        <span className="text-brass/80">
+                          {Math.round((overrides?.outerGlow?.spread ?? 0.5) * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={Math.round((overrides?.outerGlow?.spread ?? 0.5) * 100)}
+                        onChange={(e) =>
+                          onCustomize({
+                            outerGlow: {
+                              strength: overrides?.outerGlow?.strength ?? 0.55,
+                              color: overrides?.outerGlow?.color,
+                              spread: Number(e.target.value) / 100,
+                            },
+                          })
+                        }
+                        className="w-full accent-brass"
+                      />
+                    </div>
+                  )}
                   <div className="mt-1.5 flex items-center gap-2">
                     <span className="text-[9px] text-bone/40">Glow color</span>
                     <input

@@ -38,6 +38,10 @@ export type WordPlace = {
   ambient?: 'float' | 'wiggle';
   font?: string;
   hidden?: boolean;
+  /** True when the word carries real xPct/yPct marks (vs an estimated slot). */
+  placed?: boolean;
+  /** True when the word renders UNDER the subject cutout layer. */
+  behind?: boolean;
 };
 
 /** Partial mark fields the context menu can write. */
@@ -161,6 +165,9 @@ export default function WordDragLayer({
   onScale,
   onScaleCommit,
   onStyle,
+  onRemovePlace,
+  onToggleBehind,
+  mapGlyphIndex,
 }: {
   words: WordPlace[];
   selectedIndex: number | null;
@@ -170,6 +177,23 @@ export default function WordDragLayer({
   onScale?: (index: number, scale: number) => void;
   onScaleCommit?: (index: number, scale: number) => void;
   onStyle?: (index: number, partial: WordStylePatch) => void;
+  /** Drop the word's x/y placement (it flows back into the caption row). */
+  onRemovePlace?: (index: number) => void;
+  /**
+   * Toggle the behind-the-subject z for the word. The measured glyph centre
+   * rides along so an un-placed word can be pinned where it sits first.
+   */
+  onToggleBehind?: (index: number, xPct: number, yPct: number) => void;
+  /**
+   * Maps the clip's own captions index → the painted glyph's
+   * `data-caption-word` index. The Remotion preview numbers words in the
+   * TIMELINE-MERGED plan list (all clips concatenated, trim-cut words dropped);
+   * the editor numbers per-clip. Without this the hit boxes land on the WRONG
+   * glyphs on a multi-clip or trimmed reel — "highlighting words that aren't on
+   * screen and you can't select the ones that are". The Edit stage numbers
+   * per-clip, so it leaves this unset (identity).
+   */
+  mapGlyphIndex?: (clipIndex: number) => number;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const lastRef = useRef<{ index: number; x: number; y: number } | null>(null);
@@ -191,24 +215,6 @@ export default function WordDragLayer({
       y: Math.max(2, Math.min(98, y)),
     };
   }, []);
-
-  useEffect(() => {
-    if (!menu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenu(null);
-    };
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest?.('[data-word-ctx-menu]')) return;
-      setMenu(null);
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('mousedown', onDown);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('mousedown', onDown);
-    };
-  }, [menu]);
 
   const startDrag = (index: number, e: React.PointerEvent) => {
     if (e.button === 2) return;
@@ -308,8 +314,6 @@ export default function WordDragLayer({
     setMenu(null);
   };
 
-  if (!words.length) return null;
-
   const selected = words.find((w) => w.index === selectedIndex) ?? null;
 
 
@@ -319,23 +323,51 @@ export default function WordDragLayer({
     if (!frame) return;
     const root = frame.parentElement;
     if (!root) return;
-    const next: Record<number, { left: number; top: number; width: number; height: number }> = {};
-    const fr = frame.getBoundingClientRect();
-    for (const w of words) {
-      const el = root.querySelector(
-        `[data-caption-word="${w.index}"]`,
-      ) as HTMLElement | null;
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      next[w.index] = {
-        left: ((r.left - fr.left) / Math.max(1, fr.width)) * 100,
-        top: ((r.top - fr.top) / Math.max(1, fr.height)) * 100,
-        width: (r.width / Math.max(1, fr.width)) * 100,
-        height: (r.height / Math.max(1, fr.height)) * 100,
-      };
-    }
-    setGlyphBox(next);
-  }, [words, selectedIndex]);
+    const measure = () => {
+      const next: Record<number, { left: number; top: number; width: number; height: number }> = {};
+      const fr = frame.getBoundingClientRect();
+      for (const w of words) {
+        // Look the glyph up by the PAINTED index (plan index on the Remotion
+        // surface via mapGlyphIndex, the per-clip index on the Edit stage).
+        const glyphIdx = mapGlyphIndex ? mapGlyphIndex(w.index) : w.index;
+        const el = root.querySelector(
+          `[data-caption-word="${glyphIdx}"]`,
+        ) as HTMLElement | null;
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        // Skip a zero-size glyph — a word mid-swap (or an fx word's empty
+        // shell) measures 0×0, and a 0×0 box is ungrabbable.
+        if (r.width < 1 || r.height < 1) continue;
+        next[w.index] = {
+          left: ((r.left - fr.left) / Math.max(1, fr.width)) * 100,
+          top: ((r.top - fr.top) / Math.max(1, fr.height)) * 100,
+          width: (r.width / Math.max(1, fr.width)) * 100,
+          height: (r.height / Math.max(1, fr.height)) * 100,
+        };
+      }
+      setGlyphBox(next);
+    };
+    measure();
+    // The Remotion Player re-renders the frame ASYNC after a seek. Measuring
+    // only synchronously read the PRE-seek glyphs (or nothing), so after moving
+    // the playhead the boxes vanished — "it's no longer selectable". Re-measure
+    // on the next frame AND after a beat, once the Player has painted.
+    const raf = requestAnimationFrame(measure);
+    const t = window.setTimeout(measure, 120);
+    // Re-measure when the player RESIZES (gene-strip toggle, window resize,
+    // aspect change). The boxes are %-of-frame, so a resized frame leaves them
+    // stale — "the player got smaller and the scale box outline stopped working".
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => measure())
+        : null;
+    if (ro) ro.observe(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      ro?.disconnect();
+    };
+  }, [words, selectedIndex, mapGlyphIndex]);
 
   /* arrow-nudge */
   useEffect(() => {
@@ -361,6 +393,10 @@ export default function WordDragLayer({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedIndex, words, onMove, onCommit]);
+
+  // Hooks all ran above — only THEN may we bail (an early return before the
+  // effects changed the hook count between renders and React threw).
+  if (!words.length) return null;
 
   return (
     <div
@@ -388,6 +424,12 @@ export default function WordDragLayer({
         const sc = w.scale && w.scale > 0 ? w.scale : 1;
         // Generous hit target — theme glyphs are large; a tight box is ungrabbable.
         const g = glyphBox[w.index];
+        // ONLY box a word that's actually painted on screen right now (a
+        // measured glyph). No glyph → no box — placed or not. This is the rule:
+        // "only the words showing where I stopped the playhead are editable."
+        // An off-page word (even a placed one) is reached by scrubbing to it or
+        // toggling "all" (which paints the current card's words so they box).
+        if (!g) return null;
         const boxStyle: React.CSSProperties = g
           ? {
               left: `${g.left}%`,
@@ -459,240 +501,351 @@ export default function WordDragLayer({
       )}
 
       {menu && selected && menu.index === selected.index && onStyle && (
-        <div
-          data-word-ctx-menu
-          className="pointer-events-auto fixed z-50 max-h-[min(480px,78vh)] w-[260px] overflow-y-auto rounded-xl border border-white/12 bg-ink/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/5 backdrop-blur-md"
-          style={{
-            left: Math.min(menu.clientX, (typeof window !== 'undefined' ? window.innerWidth : 800) - 220),
-            top: Math.min(menu.clientY, (typeof window !== 'undefined' ? window.innerHeight : 600) - 360),
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="mb-1.5 truncate border-b border-white/8 px-2 pb-1.5 text-[10px] font-semibold tracking-wide text-brass">
-            {selected.label}
-          </div>
+        <WordContextMenu
+          clientX={menu.clientX}
+          clientY={menu.clientY}
+          selected={selected}
+          onApply={(p) => apply(menu.index, p)}
+          onClose={() => setMenu(null)}
+          onRemovePlace={
+            selected.placed && onRemovePlace
+              ? () => {
+                  onRemovePlace(menu.index);
+                  setMenu(null);
+                }
+              : undefined
+          }
+          onToggleBehind={
+            onToggleBehind
+              ? () => {
+                  // Pin an un-placed word where it sits (the measured glyph
+                  // centre) so "behind" never teleports it across the frame.
+                  const g = glyphBox[menu.index];
+                  const cx = g ? g.left + g.width / 2 : selected.xPct;
+                  const cy = g ? 100 - (g.top + g.height / 2) : selected.yPct;
+                  onToggleBehind(menu.index, cx, cy);
+                  setMenu(null);
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
 
-          {/* Entrance */}
-          <Section label="Entrance">
-            <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
-              {ANIM_MENU.map((a) => {
-                const active = (selected.anim || '') === (a.id || '');
-                return (
-                  <Chip
-                    key={a.label}
-                    active={active}
-                    onClick={() =>
-                      apply(menu.index, { anim: a.id || undefined })
-                    }
-                  >
-                    {a.label}
-                  </Chip>
-                );
-              })}
-            </div>
-          </Section>
+/**
+ * The word context menu — right-click a caption word to reach it.
+ *
+ * Mounted in TWO places: inside the WordDragLayer in Edit mode (right-click a
+ * hit box), and at the page level in Preview mode (right-click the caption
+ * glyph itself — the layer's data-caption-word span). The place actions
+ * (Free-place / Remove placement / Behind the subject) render only when the
+ * caller wires them; the style sections are the full per-word editor.
+ */
+export function WordContextMenu({
+  clientX,
+  clientY,
+  selected,
+  onApply,
+  onClose,
+  onFreePlace,
+  onRemovePlace,
+  onToggleBehind,
+}: {
+  clientX: number;
+  clientY: number;
+  selected: WordPlace;
+  onApply: (partial: WordStylePatch) => void;
+  onClose: () => void;
+  /** Shown when the word is NOT placed yet: pin it where it sits + edit it. */
+  onFreePlace?: () => void;
+  /** Shown when the word IS placed: drop the x/y — it flows back into the row. */
+  onRemovePlace?: () => void;
+  /** Toggle the behind-the-subject z for this word. */
+  onToggleBehind?: () => void;
+}) {
+  // Close on Escape / any outside press. The menu owns this — it used to live
+  // in the drag layer, which meant no menu could open without the layer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[data-word-ctx-menu]')) return;
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onDown);
+    };
+  }, [onClose]);
 
-          {/* Scale */}
-          <Section label="Scale">
-            <div className="flex gap-0.5 px-0.5">
-              {SCALE_PRESETS.map((s) => {
-                const sc =
-                  selected.scale && selected.scale > 0 ? selected.scale : 1;
-                const active = Math.abs(sc - s.v) < 0.05;
-                return (
-                  <button
-                    key={s.label}
-                    type="button"
-                    className={clsx(
-                      'flex-1 rounded py-1 text-[10px] font-semibold',
-                      active
-                        ? 'bg-brass/25 text-brass'
-                        : 'text-white/75 hover:bg-white/10',
-                    )}
-                    onClick={() => apply(menu.index, { scale: s.v })}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
+  const apply = (partial: WordStylePatch) => {
+    onApply(partial);
+    onClose();
+  };
 
-          {/* Color */}
-          <Section label="Color">
-            <div className="flex flex-wrap gap-1 px-1">
-              {COLOR_PRESETS.map((c) => {
-                const active =
-                  (selected.color || '').toLowerCase() === c.c.toLowerCase() ||
-                  (!selected.color && !c.c);
-                return (
-                  <button
-                    key={c.label}
-                    type="button"
-                    title={c.label}
-                    className={clsx(
-                      'h-5 w-5 rounded-full border',
-                      active
-                        ? 'border-brass ring-1 ring-brass/60'
-                        : 'border-white/25',
-                    )}
-                    style={{
-                      background: c.c || 'linear-gradient(135deg,#444,#222)',
-                    }}
-                    onClick={() =>
-                      apply(menu.index, { color: c.c || undefined })
-                    }
-                  />
-                );
-              })}
-            </div>
-          </Section>
+  return (
+    <div
+      data-word-ctx-menu
+      className="pointer-events-auto fixed z-50 max-h-[min(480px,78vh)] w-[260px] overflow-y-auto rounded-xl border border-white/12 bg-ink/95 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/5 backdrop-blur-md"
+      style={{
+        left: Math.min(clientX, (typeof window !== 'undefined' ? window.innerWidth : 800) - 220),
+        top: Math.min(clientY, (typeof window !== 'undefined' ? window.innerHeight : 600) - 360),
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="mb-1.5 truncate border-b border-white/8 px-2 pb-1.5 text-[10px] font-semibold tracking-wide text-brass">
+        {selected.label}
+      </div>
 
-          {/* FX */}
-          <Section label="Effect">
-            <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
-              {FX_MENU.map((f) => {
-                const active = (selected.fx || '') === (f.id || '');
-                return (
-                  <Chip
-                    key={f.label}
-                    active={active}
-                    onClick={() => {
-                      if (!f.id) {
-                        apply(menu.index, {
-                          fx: undefined,
-                          fxColor: undefined,
-                          fxColor2: undefined,
-                        });
-                      } else if (f.id === 'gradient') {
-                        // Default gold gradient if none set
-                        apply(menu.index, {
-                          fx: 'gradient',
-                          fxColor: selected.fxColor || '#F5C542',
-                          fxColor2: selected.fxColor2 || '#FFF3C4',
-                        });
-                      } else {
-                        apply(menu.index, { fx: f.id });
-                      }
-                    }}
-                  >
-                    {f.label}
-                  </Chip>
-                );
-              })}
-            </div>
-          </Section>
-
-          {/* Gradient presets — always visible so one click applies gradient fill */}
-          <Section label="Gradient fill">
-            <div className="grid grid-cols-2 gap-0.5">
-              {GRADIENT_PRESETS.map((g) => {
-                const active =
-                  selected.fx === 'gradient' &&
-                  (selected.fxColor || '').toLowerCase() === g.a.toLowerCase() &&
-                  (selected.fxColor2 || '').toLowerCase() === g.b.toLowerCase();
-                return (
-                  <button
-                    key={g.label}
-                    type="button"
-                    className={clsx(
-                      'flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px]',
-                      active
-                        ? 'bg-brass/25 text-brass'
-                        : 'text-white/75 hover:bg-white/10',
-                    )}
-                    onClick={() =>
-                      apply(menu.index, {
-                        fx: 'gradient',
-                        fxColor: g.a,
-                        fxColor2: g.b,
-                      })
-                    }
-                  >
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-sm border border-white/20"
-                      style={{
-                        background: `linear-gradient(135deg, ${g.a}, ${g.b})`,
-                      }}
-                    />
-                    {g.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
-
-          {/* Ambient */}
-          <Section label="Ambient">
-            <div className="flex gap-0.5 px-0.5">
-              {AMBIENT_MENU.map((a) => {
-                const active = (selected.ambient || '') === (a.id || '');
-                return (
-                  <button
-                    key={a.label}
-                    type="button"
-                    className={clsx(
-                      'flex-1 rounded py-1 text-[10px] font-semibold',
-                      active
-                        ? 'bg-brass/25 text-brass'
-                        : 'text-white/75 hover:bg-white/10',
-                    )}
-                    onClick={() =>
-                      apply(menu.index, {
-                        ambient: a.id || undefined,
-                      })
-                    }
-                  >
-                    {a.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Section>
-
-          {/* Font */}
-          <Section label="Font">
-            <div className="grid max-h-20 grid-cols-2 gap-0.5 overflow-y-auto">
-              {FONT_MENU.map((f) => {
-                const active = (selected.font || '') === (f.id || '');
-                return (
-                  <Chip
-                    key={f.id || 'def'}
-                    active={active}
-                    onClick={() =>
-                      apply(menu.index, { font: f.id || undefined })
-                    }
-                  >
-                    <span style={f.id ? { fontFamily: f.id } : undefined}>
-                      {f.label}
-                    </span>
-                  </Chip>
-                );
-              })}
-            </div>
-          </Section>
-
-          {/* Actions */}
-          <div className="mt-1 flex flex-col gap-0.5 border-t border-white/10 pt-1">
+      {/* Place actions — the right-click reach for free-place + behind. */}
+      {(onFreePlace || onRemovePlace || onToggleBehind) && (
+        <div className="mb-1.5 flex flex-col gap-0.5 border-b border-white/8 pb-1.5">
+          {!selected.placed && onFreePlace && (
             <button
               type="button"
-              className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
-              onClick={() => apply(menu.index, { clearStyle: true })}
+              className="rounded px-1.5 py-1 text-left text-[10px] font-semibold text-brass hover:bg-brass/10"
+              onClick={onFreePlace}
             >
-              Clear styles
+              Free-place this word
             </button>
+          )}
+          {selected.placed && onRemovePlace && (
             <button
               type="button"
-              className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
-              onClick={() =>
-                apply(menu.index, { hidden: !selected.hidden })
-              }
+              className="rounded px-1.5 py-1 text-left text-[10px] font-semibold text-brass hover:bg-brass/10"
+              onClick={onRemovePlace}
             >
-              {selected.hidden ? 'Unhide word' : 'Hide word'}
+              Remove placement (back to the row)
             </button>
-          </div>
+          )}
+          {onToggleBehind && (
+            <button
+              type="button"
+              className="rounded px-1.5 py-1 text-left text-[10px] font-semibold text-brass hover:bg-brass/10"
+              onClick={onToggleBehind}
+            >
+              {selected.behind ? 'Bring in front of the subject' : 'Behind the subject'}
+            </button>
+          )}
         </div>
       )}
+
+      {/* Entrance */}
+      <Section label="Entrance">
+        <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
+          {ANIM_MENU.map((a) => {
+            const active = (selected.anim || '') === (a.id || '');
+            return (
+              <Chip
+                key={a.label}
+                active={active}
+                onClick={() => apply({ anim: a.id || undefined })}
+              >
+                {a.label}
+              </Chip>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Scale */}
+      <Section label="Scale">
+        <div className="flex gap-0.5 px-0.5">
+          {SCALE_PRESETS.map((s) => {
+            const sc = selected.scale && selected.scale > 0 ? selected.scale : 1;
+            const active = Math.abs(sc - s.v) < 0.05;
+            return (
+              <button
+                key={s.label}
+                type="button"
+                className={clsx(
+                  'flex-1 rounded py-1 text-[10px] font-semibold',
+                  active
+                    ? 'bg-brass/25 text-brass'
+                    : 'text-white/75 hover:bg-white/10',
+                )}
+                onClick={() => apply({ scale: s.v })}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Color */}
+      <Section label="Color">
+        <div className="flex flex-wrap gap-1 px-1">
+          {COLOR_PRESETS.map((c) => {
+            const active =
+              (selected.color || '').toLowerCase() === c.c.toLowerCase() ||
+              (!selected.color && !c.c);
+            return (
+              <button
+                key={c.label}
+                type="button"
+                title={c.label}
+                className={clsx(
+                  'h-5 w-5 rounded-full border',
+                  active
+                    ? 'border-brass ring-1 ring-brass/60'
+                    : 'border-white/25',
+                )}
+                style={{
+                  background: c.c || 'linear-gradient(135deg,#444,#222)',
+                }}
+                onClick={() => apply({ color: c.c || undefined })}
+              />
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* FX */}
+      <Section label="Effect">
+        <div className="grid max-h-24 grid-cols-2 gap-0.5 overflow-y-auto">
+          {FX_MENU.map((f) => {
+            const active = (selected.fx || '') === (f.id || '');
+            return (
+              <Chip
+                key={f.label}
+                active={active}
+                onClick={() => {
+                  if (!f.id) {
+                    apply({
+                      fx: undefined,
+                      fxColor: undefined,
+                      fxColor2: undefined,
+                    });
+                  } else if (f.id === 'gradient') {
+                    // Default gold gradient if none set
+                    apply({
+                      fx: 'gradient',
+                      fxColor: selected.fxColor || '#F5C542',
+                      fxColor2: selected.fxColor2 || '#FFF3C4',
+                    });
+                  } else {
+                    apply({ fx: f.id });
+                  }
+                }}
+              >
+                {f.label}
+              </Chip>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Gradient presets — always visible so one click applies gradient fill */}
+      <Section label="Gradient fill">
+        <div className="grid grid-cols-2 gap-0.5">
+          {GRADIENT_PRESETS.map((g) => {
+            const active =
+              selected.fx === 'gradient' &&
+              (selected.fxColor || '').toLowerCase() === g.a.toLowerCase() &&
+              (selected.fxColor2 || '').toLowerCase() === g.b.toLowerCase();
+            return (
+              <button
+                key={g.label}
+                type="button"
+                className={clsx(
+                  'flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px]',
+                  active
+                    ? 'bg-brass/25 text-brass'
+                    : 'text-white/75 hover:bg-white/10',
+                )}
+                onClick={() =>
+                  apply({
+                    fx: 'gradient',
+                    fxColor: g.a,
+                    fxColor2: g.b,
+                  })
+                }
+              >
+                <span
+                  className="h-3 w-3 shrink-0 rounded-sm border border-white/20"
+                  style={{
+                    background: `linear-gradient(135deg, ${g.a}, ${g.b})`,
+                  }}
+                />
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Ambient */}
+      <Section label="Ambient">
+        <div className="flex gap-0.5 px-0.5">
+          {AMBIENT_MENU.map((a) => {
+            const active = (selected.ambient || '') === (a.id || '');
+            return (
+              <button
+                key={a.label}
+                type="button"
+                className={clsx(
+                  'flex-1 rounded py-1 text-[10px] font-semibold',
+                  active
+                    ? 'bg-brass/25 text-brass'
+                    : 'text-white/75 hover:bg-white/10',
+                )}
+                onClick={() =>
+                  apply({
+                    ambient: a.id || undefined,
+                  })
+                }
+              >
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Font */}
+      <Section label="Font">
+        <div className="grid max-h-20 grid-cols-2 gap-0.5 overflow-y-auto">
+          {FONT_MENU.map((f) => {
+            const active = (selected.font || '') === (f.id || '');
+            return (
+              <Chip
+                key={f.id || 'def'}
+                active={active}
+                onClick={() => apply({ font: f.id || undefined })}
+              >
+                <span style={f.id ? { fontFamily: f.id } : undefined}>
+                  {f.label}
+                </span>
+              </Chip>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Actions */}
+      <div className="mt-1 flex flex-col gap-0.5 border-t border-white/10 pt-1">
+        <button
+          type="button"
+          className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
+          onClick={() => apply({ clearStyle: true })}
+        >
+          Clear styles
+        </button>
+        <button
+          type="button"
+          className="rounded px-1.5 py-1 text-left text-[10px] text-white/70 hover:bg-white/10"
+          onClick={() => apply({ hidden: !selected.hidden })}
+        >
+          {selected.hidden ? 'Unhide word' : 'Hide word'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -768,29 +921,45 @@ export function freePlaceWordsFrom(
       }
     }
   }
-  // Mixed free-place: words with x/y but NO card. Build a synthetic list.
+  // Mixed free-place: no phrase card. Surface EVERY word so any on-screen word
+  // is editable in Edit mode — this used to return only the already-placed
+  // ones, so only those were ever grabbable ("only two words on the entire
+  // thing I can edit"). Un-placed words get an estimated slot; the drag layer's
+  // glyph gate shows a box only for the ones actually painted right now.
   if (!cardId) {
-    const placed = all
-      .map((w, i) => ({ w, i }))
-      .filter(
-        ({ w }) =>
-          typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number',
-      );
-    if (!placed.length) return [];
-    return placed.map(({ w, i }) => ({
-      index: i,
-      xPct: w.mark!.xPct as number,
-      yPct: w.mark!.yPct as number,
-      label: w.word,
-      scale: w.mark?.scale,
-      anim: w.mark?.anim,
-      color: w.mark?.color,
-      fx: w.mark?.fx,
-      fxColor: w.mark?.fxColor,
-      fxColor2: w.mark?.fxColor2,
-      font: w.mark?.font,
-      hidden: w.mark?.hidden,
-    }));
+    // Only build the list once at least one word is placed (the Edit toggle's
+    // own gate) — before that there's nothing to free-place edit.
+    const anyPlaced = all.some(
+      (w) => typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number',
+    );
+    if (!anyPlaced) return [];
+    const estimates = captionLineLayout(all.length, {
+      wordsPerRow: layout?.wordsPerRow ?? 3,
+      baseXPct: layout?.xPct ?? 50,
+      baseYPct: layout?.positionPct ?? 12,
+    });
+    return all.map((w, i) => {
+      const placed =
+        typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number';
+      const est = estimates[i] ?? { xPct: 50, yPct: 12 };
+      return {
+        index: i,
+        xPct: placed ? (w.mark!.xPct as number) : est.xPct,
+        yPct: placed ? (w.mark!.yPct as number) : est.yPct,
+        label: w.word,
+        scale: w.mark?.scale,
+        anim: w.mark?.anim,
+        color: w.mark?.color,
+        fx: w.mark?.fx,
+        fxColor: w.mark?.fxColor,
+        fxColor2: w.mark?.fxColor2,
+        ambient: w.mark?.ambient,
+        font: w.mark?.font,
+        hidden: w.mark?.hidden,
+        placed,
+        behind: w.mark?.behind === true,
+      };
+    });
   }
 
   // Collect card word indexes in order
@@ -841,6 +1010,9 @@ export function freePlaceWordsFrom(
       ambient: w.mark?.ambient,
       font: w.mark?.font,
       hidden: w.mark?.hidden,
+      placed:
+        typeof w.mark?.xPct === 'number' && typeof w.mark?.yPct === 'number',
+      behind: w.mark?.behind === true,
     });
   });
   return out;
