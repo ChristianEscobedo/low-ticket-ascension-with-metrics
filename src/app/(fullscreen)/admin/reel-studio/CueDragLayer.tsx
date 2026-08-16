@@ -201,8 +201,12 @@ export default function CueDragLayer({
   return (
     // inset-0 makes this element exactly the frame, so getBoundingClientRect()
     // is the cue's coordinate space. pointer-events-none keeps the Player's own
-    // controls clickable everywhere except the box itself.
-    <div ref={frameRef} className="pointer-events-none absolute inset-0 z-30">
+    // controls clickable everywhere except the box itself. z-20 (NOT z-30): the
+    // word drag layer rides at z-30, and the cue box must NOT swallow the word
+    // hit-areas when both are on screen — "I can't grab the text while the image
+    // is showing". The cue's own box is still fully draggable; it just loses the
+    // tie to the words, which is the right call (you place words more than cues).
+    <div ref={frameRef} className="pointer-events-none absolute inset-0 z-20">
       {/* Measures the real aspect so the box wraps the card, not a guess. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

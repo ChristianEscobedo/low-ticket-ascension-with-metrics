@@ -430,12 +430,19 @@ export default function WordDragLayer({
         // An off-page word (even a placed one) is reached by scrubbing to it or
         // toggling "all" (which paints the current card's words so they box).
         if (!g) return null;
+        // The hit box is the measured glyph PADDED — a short word ("a", "I")
+        // measures a sliver, and a sliver is ungrabbable ("the words are not
+        // easy to grab"). Pad ~1.2% of frame each side and floor the box at
+        // 6% × 5% so every word is a real target, without overlapping the
+        // next word's box enough to matter (the topmost wins the press).
+        const PAD_X = 1.2;
+        const PAD_Y = 1.0;
         const boxStyle: React.CSSProperties = g
           ? {
-              left: `${g.left}%`,
-              top: `${g.top}%`,
-              width: `${Math.max(g.width, 4)}%`,
-              height: `${Math.max(g.height, 3)}%`,
+              left: `${g.left - PAD_X}%`,
+              top: `${g.top - PAD_Y}%`,
+              width: `${Math.max(g.width + PAD_X * 2, 6)}%`,
+              height: `${Math.max(g.height + PAD_Y * 2, 5)}%`,
               transform: 'none',
             }
           : {

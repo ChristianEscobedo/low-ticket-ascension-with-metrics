@@ -326,8 +326,14 @@ export function CaptionEditSurface({
           preview that matches the render. It shows ONLY while the cue's
           image is actually on screen at the playhead. */}
       {(() => {
+        // Key on the clip that's ACTUALLY on screen (the stage clip), not the
+        // inspector selection — the image flies in on the playing scene, so the
+        // drag box has to ride the same one. Keying on the selected clip showed
+        // the box on the WRONG scene (and it looked like it "stayed on" when the
+        // playhead moved on). stageClip first; currentClip is the fallback.
+        const liveClipId = stageClip?.id ?? currentClip?.id;
         const clipCues = (project.mediaCues ?? []).filter(
-          (x) => x.clipId === currentClip?.id,
+          (x) => x.clipId === liveClipId,
         );
         // The drag box shows ONLY while the cue's image is actually
         // on screen at the playhead — it used to pin to the selected
