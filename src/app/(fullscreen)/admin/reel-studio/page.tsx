@@ -130,6 +130,7 @@ import {
   type ClonePlan,
 } from '@/lib/mothermode/reel/clone';
 import { cloneSceneName } from '@/lib/mothermode/reel/cloneGenerate';
+import type { GiphySticker } from '@/utils/integrations/giphy';
 
 
 import {
@@ -3098,6 +3099,11 @@ export default function ReelStudioPage() {
   const [cueAiPrompt, setCueAiPrompt] = useState('');
   const [cueAiBusy, setCueAiBusy] = useState(false);
   const cueImageInput = useRef<HTMLInputElement>(null);
+  /** GIPHY sticker source for the cue picker: search → a transparent sticker
+   *  attaches as the cue's image (the <img>/<Gif> render). */
+  const [stickerQuery, setStickerQuery] = useState('');
+  const [stickerResults, setStickerResults] = useState<GiphySticker[] | null>(null);
+  const [stickerBusy, setStickerBusy] = useState(false);
   /** Which attached cue's style editor is open (by cue id; null = closed). */
 const [cueStyleEditId, setCueStyleEditId] = useState<string | null>(null);
 // Live drag state for the cue being styled — LOCAL only while dragging
@@ -4573,6 +4579,34 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     ]);
     setCuePickerWord(null);
     setNote('Image fly-in attached — it renders in the Remotion preview and the MP4.');
+  }
+
+  /** Cue source: GIPHY stickers — search → a transparent sticker attaches as
+   *  the fly-in's image. Attaches the STILL (the static frame — in sync in
+   *  preview + render); the animated <Gif> branch is the scoped follow-up. */
+  async function searchStickers() {
+    const q = stickerQuery.trim();
+    if (!q || stickerBusy) return;
+    setStickerBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/reel-stickers?q=${encodeURIComponent(q)}`);
+      const j = (await res.json()) as {
+        success?: boolean;
+        stickers?: GiphySticker[];
+        error?: string;
+      };
+      if (!res.ok || !j.success) {
+        setError(j.error || 'Sticker search failed.');
+        setStickerResults([]);
+        return;
+      }
+      setStickerResults(j.stickers ?? []);
+    } catch {
+      setStickerResults([]);
+    } finally {
+      setStickerBusy(false);
+    }
   }
 
   /** Auto-proposal: match strong transcript words to library images. */
@@ -6489,6 +6523,45 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             generate
                           </button>
                         </div>
+                        {/* the GIPHY sticker source — search → a transparent
+                            sticker attaches as the fly-in's image (the STILL,
+                            in sync in preview + render; the animated <Gif>
+                            branch is the scoped follow-up) */}
+                        <div className="mb-1.5 flex items-center gap-1">
+                          <input
+                            value={stickerQuery}
+                            onChange={(e) => setStickerQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void searchStickers();
+                            }}
+                            placeholder="or search GIPHY stickers (fire, arrow, 100…)"
+                            className="min-w-0 flex-1 rounded border border-violet-400/25 bg-ink px-1.5 py-1 text-[9px] text-bone/80 outline-none placeholder:text-bone/25"
+                          />
+                          <button
+                            onClick={() => void searchStickers()}
+                            disabled={stickerBusy || !stickerQuery.trim()}
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-400/40 px-1.5 py-1 text-[9px] font-semibold text-violet-200/90 hover:bg-violet-500/15 disabled:opacity-40"
+                            title="Search GIPHY stickers — transparent glyphs that attach as the fly-in"
+                          >
+                            {stickerBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                            stickers
+                          </button>
+                        </div>
+                        {stickerResults && stickerResults.length > 0 && (
+                          <div className="mb-1.5 grid max-h-28 grid-cols-4 gap-1 overflow-y-auto">
+                            {stickerResults.slice(0, 24).map((s) => (
+                              <button
+                                key={s.id}
+                                onClick={() => void attachCue(s.stillUrl)}
+                                title={s.title}
+                                className="overflow-hidden rounded border border-violet-400/20 bg-[repeating-conic-gradient(#1c1c1c_0%_25%,#262626_0%_50%)] bg-[length:12px_12px] hover:border-violet-400"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={s.stillUrl} alt={s.title} className="h-12 w-full object-contain" loading="lazy" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {cueAssets === null ? (
                           <p className="flex items-center gap-1.5 px-1 py-2 text-[10px] text-bone/40">
                             <Loader2 className="h-3 w-3 animate-spin" /> Loading library…
