@@ -230,6 +230,21 @@ export default function SystemsPanel({
 
   return (
     <div className="space-y-3">
+      {/* The system map — the whole thing as a node graph (pages, the emails
+          each step fires, the ads/content feeding traffic in), on its own
+          fullscreen canvas. */}
+      <Link
+        href="/admin/system-map"
+        className={`${CARD} group flex items-center gap-3 px-4 py-3 transition-colors hover:border-brass/40`}
+      >
+        <span className="font-medium text-bone">System map</span>
+        <span className="text-[11px] text-bone/40">
+          the whole system as a graph — pages, emails, and the traffic feeding them
+        </span>
+        <span className="ml-auto text-brass transition-transform group-hover:translate-x-0.5">
+          Open the map →
+        </span>
+      </Link>
       <p className="text-sm text-bone/50">
         {summary.systems} system{summary.systems === 1 ? '' : 's'} · {summary.complete}{' '}
         complete

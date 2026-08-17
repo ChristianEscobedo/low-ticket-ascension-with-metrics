@@ -1,0 +1,109 @@
+/**
+ * The System Map builder (src/lib/mothermode/systemMap.ts) — the graph shape
+ * + the layout geometry, so the canvas page stays a dumb renderer.
+ */
+import { describe, it, expect } from 'vitest';
+import {
+  buildSystemMap,
+  type SystemMapInput,
+} from '@/lib/mothermode/systemMap';
+
+const funnel: SystemMapInput['funnels'][number] = {
+  id: 'f1',
+  slug: 'mindshift',
+  name: 'Mindshift',
+  status: 'published',
+  kind: 'sales',
+  metrics: { views: 1200, leads: 300, checkouts: 40, purchases: 12, revenueCents: 32400 },
+  pages: [
+    { key: 'optin', label: 'Opt-in', metric: '300 leads', href: '/admin/sales-funnels?funnel=f1', liveHref: '/funnel/mindshift' },
+    { key: 'checkout', label: 'Checkout', metric: '40 checkouts', href: '/admin/sales-funnels?funnel=f1', liveHref: '/funnel/mindshift/checkout' },
+    { key: 'success', label: 'Success', metric: '12 sales', href: '/admin/sales-funnels?funnel=f1', liveHref: '/funnel/mindshift/success' },
+  ],
+  emails: [
+    { event: 'on opt-in', pageKey: 'optin', kitId: 'k1', kitName: 'Welcome seq', kitStatus: 'active', emailCount: 5, href: '/admin/email-marketing?kit=k1' },
+  ],
+};
+
+const input: SystemMapInput = {
+  funnels: [funnel],
+  links: [
+    { id: 'l1', funnelId: 'f1', optinFunnelId: null, funnelPage: 'optin', pieceId: 'p1', label: 'Bio link', shortCode: 'abc', clicks: 87, source: 'instagram' },
+    { id: 'l2', funnelId: 'f1', optinFunnelId: null, funnelPage: null, pieceId: null, label: 'Story link', shortCode: 'def', clicks: 12, source: 'tiktok' },
+    { id: 'l3', funnelId: null, optinFunnelId: null, funnelPage: null, pieceId: null, label: 'Unrelated', shortCode: null, clicks: 0, source: '' },
+  ],
+  content: [
+    { id: 'p1', title: 'The hook reel', platform: 'instagram', format: 'reel', kind: 'paid', href: '/admin/planner' },
+  ],
+};
+
+const map = buildSystemMap(input);
+const node = (id: string) => map.nodes.find((n) => n.id === id);
+const edge = (from: string, to: string) =>
+  map.edges.find((e) => e.from === from && e.to === to);
+
+describe('buildSystemMap', () => {
+  it('builds the funnel + its page spine, with the rollup metrics on the funnel', () => {
+    const f = node('funnel:f1');
+    expect(f).toBeDefined();
+    expect(f!.kind).toBe('funnel');
+    expect(f!.status).toBe('built'); // published → built
+    expect(f!.metrics).toContain('12 sales');
+    expect(f!.metrics).toContain('$324');
+    // every page is a node, edged off the funnel
+    for (const key of ['optin', 'checkout', 'success']) {
+      expect(node(`page:f1:${key}`)).toBeDefined();
+      expect(edge('funnel:f1', `page:f1:${key}`)).toBeDefined();
+    }
+  });
+
+  it('lands the email kit on the page its event fires on', () => {
+    const email = node('email:f1:on opt-in');
+    expect(email).toBeDefined();
+    expect(email!.lane).toBe('nurture');
+    expect(email!.metrics).toContain('5 emails');
+    // 'on opt-in' fires on the optin page — the edge goes there, not the funnel
+    expect(edge('page:f1:optin', 'email:f1:on opt-in')).toBeDefined();
+  });
+
+  it('routes a link to its funnel_page, and the content carrying it feeds the link', () => {
+    // l1 points at the optin page
+    expect(edge('link:l1', 'page:f1:optin')).toBeDefined();
+    // l2 names no page → falls to the funnel node
+    expect(edge('link:l2', 'funnel:f1')).toBeDefined();
+    // the content piece carrying l1 feeds it (traffic → links)
+    const piece = node('content:p1');
+    expect(piece).toBeDefined();
+    expect(piece!.lane).toBe('traffic');
+    expect(piece!.metrics).toContain('ad'); // kind 'paid' marks the ad
+    expect(edge('content:p1', 'link:l1')).toBeDefined();
+    // l3 belongs to no funnel — it never enters the graph
+    expect(node('link:l3')).toBeUndefined();
+  });
+
+  it('lays the four lanes out left→right with no two nodes sharing a position', () => {
+    const laneX = Object.fromEntries(map.lanes.map((l) => [l.key, l.x]));
+    expect(laneX.traffic).toBeLessThan(laneX.links);
+    expect(laneX.links).toBeLessThan(laneX.pages);
+    expect(laneX.pages).toBeLessThan(laneX.nurture);
+    // every node sits in its own lane's column
+    for (const n of map.nodes) expect(n.x).toBe(laneX[n.lane]);
+    // no overlap
+    const positions = new Set(map.nodes.map((n) => `${n.x},${n.y}`));
+    expect(positions.size).toBe(map.nodes.length);
+    // the canvas bounds contain every node
+    expect(map.width).toBeGreaterThan(laneX.nurture);
+    expect(map.height).toBeGreaterThan(Math.max(...map.nodes.map((n) => n.y)));
+  });
+
+  it('a draft funnel reads draft, and an unpublished funnel gets no live link', () => {
+    const draft = buildSystemMap({
+      funnels: [{ ...funnel, id: 'f2', status: 'draft', pages: [], emails: [] }],
+      links: [],
+      content: [],
+    });
+    const f = draft.nodes.find((n) => n.id === 'funnel:f2');
+    expect(f!.status).toBe('draft');
+    expect(f!.liveHref).toBeUndefined();
+  });
+});
