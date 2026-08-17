@@ -65,12 +65,15 @@ import {
   type SystemMapAnalysis,
 } from '@/lib/mothermode/systemMapAnalysis';
 import type { SystemBlueprint } from '@/lib/mothermode/blueprint';
+import type { SystemMapLeak } from '@/lib/mothermode/systemMapAnalysis';
 import BlueprintCreatePanel from './BlueprintCreatePanel';
+import NodePeekPanel from './NodePeekPanel';
+import MapChatDock from './MapChatDock';
 
 // ---------------------------------------------------------------------------
-// The UI context — the page provides the focus/collapse + blueprint handlers,
-// the node card consumes them (keeps the React Flow node data clean of
-// callbacks).
+// The UI context — the page provides the focus/collapse + blueprint + inspect
+// handlers, the node card consumes them (keeps the React Flow node data clean
+// of callbacks).
 // ---------------------------------------------------------------------------
 
 const SystemMapUiContext = createContext<{
@@ -83,6 +86,8 @@ const SystemMapUiContext = createContext<{
   rejectBlueprint: (blueprintId: string) => void;
   /** True while a blueprint approve/reject is in flight. */
   blueprintBusy: boolean;
+  /** Open a node's peek panel (the "expand to see it" read). */
+  inspectNode: (node: SystemMapNode) => void;
 }>({
   collapsed: new Set(),
   toggleCollapse: () => {},
@@ -91,7 +96,9 @@ const SystemMapUiContext = createContext<{
   approveBlueprint: () => {},
   rejectBlueprint: () => {},
   blueprintBusy: false,
+  inspectNode: () => {},
 });
+
 
 
 // ---------------------------------------------------------------------------
@@ -126,18 +133,16 @@ function SystemNodeCard({ data }: NodeProps) {
   const isFocused = funnelId != null && ui.focusedId === funnelId;
   return (
     <div
-      onClick={() => !isBlueprint && node.href && router.push(node.href)}
+      onClick={() => ui.inspectNode(node)}
       title={
         isBlueprint
           ? `${node.label} — a proposed node, built on approve`
-          : node.href
-            ? `${node.label} — open in its editor`
-            : node.label
+          : `${node.label} — click to inspect`
       }
-      className={`w-[240px] rounded-xl border bg-ink/95 px-3 py-2 shadow-lg transition-colors ${KIND_ACCENT[node.kind]} ${
+      className={`w-[240px] cursor-pointer rounded-xl border bg-ink/95 px-3 py-2 shadow-lg transition-colors ${KIND_ACCENT[node.kind]} ${
         isBlueprint
           ? 'border-dashed opacity-90 hover:bg-bone/[0.06]'
-          : 'cursor-pointer hover:bg-bone/10'
+          : 'hover:bg-bone/10'
       }`}
     >
       {/* the edges attach left (in) + right (out) — traffic flows left→right */}
@@ -261,6 +266,8 @@ export default function SystemMapPage() {
   const [createOpen, setCreateOpen] = useState(false);
   /** True while a blueprint approve/reject is in flight. */
   const [blueprintBusy, setBlueprintBusy] = useState(false);
+  /** The node being inspected (the peek panel). null = closed. */
+  const [selectedNode, setSelectedNode] = useState<SystemMapNode | null>(null);
 
   // Load the input once; read the initial focus from ?funnel=<id>.
   useEffect(() => {
@@ -385,10 +392,41 @@ export default function SystemMapPage() {
       rejectBlueprint: (blueprintId: string) =>
         void decideBlueprint(blueprintId, 'reject'),
       blueprintBusy,
+      inspectNode: (node: SystemMapNode) => setSelectedNode(node),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [collapsed, focusId, router, blueprintBusy],
   );
+
+  // The chat's "Draft the fix" — hand the worst leak to the blueprint creator
+  // (the optimization mode), then refresh the pending overlay.
+  const onDraftFix = async (leak: SystemMapLeak) => {
+    const funnel = input?.funnels.find((f) => f.id === leak.funnelId);
+    const pageKey = leak.nodeId.split(':').pop() || 'checkout';
+    try {
+      const res = await fetch('/api/admin/system-map/blueprint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'propose',
+          mode: 'optimization',
+          parentFunnelId: leak.funnelId,
+          kind: funnel?.kind ?? 'sales',
+          leakPageKey: pageKey,
+          leakLabel: leak.label,
+          leakEdgeId: leak.edgeId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Propose failed');
+      setNotice('Fix drafted — review the pending blueprint on the canvas and approve to build.');
+      await loadBlueprints();
+      window.setTimeout(() => setNotice(null), 6000);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Propose failed');
+      window.setTimeout(() => setNotice(null), 6000);
+    }
+  };
 
 
   const { nodes, edges } = useMemo(() => {
@@ -623,10 +661,24 @@ export default function SystemMapPage() {
               window.setTimeout(() => setNotice(null), 6000);
             }}
           />
+          {/* the node peek — click a node and it expands into the detail
+              panel (what it is, its metrics, the way in) */}
+          <NodePeekPanel
+            node={selectedNode}
+            onClose={() => setSelectedNode(null)}
+          />
+          {/* the AI chat that sees the map — read-only Q&A, with a "draft the
+              fix" handoff into the blueprint creator when there's a leak */}
+          <MapChatDock
+            input={input}
+            analysis={analysis}
+            onDraftFix={(leak) => void onDraftFix(leak)}
+          />
         </div>
       </div>
     </SystemMapUiContext.Provider>
   );
 }
+
 
 

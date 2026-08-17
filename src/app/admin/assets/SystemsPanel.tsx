@@ -156,43 +156,59 @@ function Bucket({
 function SystemCard({ system }: { system: AssetSystem }) {
   const [open, setOpen] = useState(false);
   const unassigned = system.id === UNASSIGNED_SYSTEM_ID;
+  // The map deep-links to this system's funnel (the focus view). A system with
+  // a funnel gets a "Map →" button opening its subgraph on the canvas.
+  const mapFunnelId = system.funnels[0]?.id ?? null;
 
   return (
     <div className={CARD}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left"
-      >
-        <span className="text-bone/30">{open ? '▾' : '▸'}</span>
-        <span className="font-medium text-bone">{system.label}</span>
-        <span className="text-[11px] text-bone/40">{system.total} assets</span>
-        {system.rollup.leads > 0 ? (
-          <Figure label="Leads" value={system.rollup.leads.toLocaleString()} />
-        ) : null}
-        {system.rollup.purchases > 0 ? (
-          <Figure label="Sales" value={system.rollup.purchases.toLocaleString()} />
-        ) : null}
-        {system.rollup.revenueCents > 0 ? (
-          <Figure
-            label="Revenue"
-            value={money(system.rollup.revenueCents)}
-            tone="text-emerald-300"
-          />
-        ) : null}
+      <div className="flex w-full flex-wrap items-center gap-3 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-3 text-left"
+        >
+          <span className="text-bone/30">{open ? '▾' : '▸'}</span>
+          <span className="font-medium text-bone">{system.label}</span>
+          <span className="text-[11px] text-bone/40">{system.total} assets</span>
+          {system.rollup.leads > 0 ? (
+            <Figure label="Leads" value={system.rollup.leads.toLocaleString()} />
+          ) : null}
+          {system.rollup.purchases > 0 ? (
+            <Figure label="Sales" value={system.rollup.purchases.toLocaleString()} />
+          ) : null}
+          {system.rollup.revenueCents > 0 ? (
+            <Figure
+              label="Revenue"
+              value={money(system.rollup.revenueCents)}
+              tone="text-emerald-300"
+            />
+          ) : null}
+        </button>
 
-        {unassigned ? (
-          <span className="ml-auto text-[11px] text-bone/40">
-            Not attributed to an offer or funnel — open each asset to assign it
-          </span>
-        ) : system.missing.length > 0 ? (
-          <span className="ml-auto text-[11px] text-brass/80">
-            Missing: {system.missing.map((m) => SYSTEM_BUCKETS.find((b) => b.id === m)?.label).join(', ')}
-          </span>
-        ) : (
-          <span className="ml-auto text-[11px] text-emerald-300">Complete</span>
-        )}
-      </button>
+        <span className="ml-auto flex items-center gap-3">
+          {/* Open just this system on the System Map (the focus view). */}
+          {mapFunnelId ? (
+            <Link
+              href={`/admin/system-map?funnel=${mapFunnelId}`}
+              className="rounded-md border border-brass/40 px-2 py-0.5 text-[11px] font-semibold text-brass hover:bg-brass/10"
+            >
+              Map →
+            </Link>
+          ) : null}
+          {unassigned ? (
+            <span className="text-[11px] text-bone/40">
+              Not attributed to an offer or funnel — open each asset to assign it
+            </span>
+          ) : system.missing.length > 0 ? (
+            <span className="text-[11px] text-brass/80">
+              Missing: {system.missing.map((m) => SYSTEM_BUCKETS.find((b) => b.id === m)?.label).join(', ')}
+            </span>
+          ) : (
+            <span className="text-[11px] text-emerald-300">Complete</span>
+          )}
+        </span>
+      </div>
 
       {open ? (
         <div className="pb-2">
