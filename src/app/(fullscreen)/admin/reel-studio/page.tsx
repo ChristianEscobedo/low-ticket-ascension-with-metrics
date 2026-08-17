@@ -131,6 +131,7 @@ import {
 } from '@/lib/mothermode/reel/clone';
 import { cloneSceneName } from '@/lib/mothermode/reel/cloneGenerate';
 import type { GiphySticker } from '@/utils/integrations/giphy';
+import type { PexelsClip } from '@/utils/integrations/pexels';
 
 
 import {
@@ -3529,6 +3530,11 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   }
 
   const [overlayUrl, setOverlayUrl] = useState('');
+  /** Pexels b-roll source for the overlay lane: search → a stock clip attaches
+   *  as an overlay at the playhead (no Seedance render, no upload). */
+  const [brollQuery, setBrollQuery] = useState('');
+  const [brollResults, setBrollResults] = useState<PexelsClip[] | null>(null);
+  const [brollBusy, setBrollBusy] = useState(false);
 
   async function addOverlayByUrl() {
     const url = overlayUrl.trim();
@@ -3549,6 +3555,43 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     patch({ overlays: [...(project.overlays ?? []), o] });
     setOverlayUrl('');
     setNote(`Overlay layer added at ${fmtSec(o.offsetSec)} — drag it on the violet lane.`);
+  }
+
+  /** Pexels b-roll: search → a stock clip attaches as an overlay at the playhead. */
+  async function searchBroll() {
+    const q = brollQuery.trim();
+    if (!q || brollBusy) return;
+    setBrollBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/reel-broll?q=${encodeURIComponent(q)}`);
+      const j = (await res.json()) as { success?: boolean; clips?: PexelsClip[]; error?: string };
+      if (!res.ok || !j.success) {
+        setError(j.error || 'B-roll search failed.');
+        setBrollResults([]);
+        return;
+      }
+      setBrollResults(j.clips ?? []);
+    } catch {
+      setBrollResults([]);
+    } finally {
+      setBrollBusy(false);
+    }
+  }
+
+  /** A picked Pexels clip becomes an overlay at the playhead (the violet lane). */
+  function addBrollOverlay(c: PexelsClip) {
+    if (!project) return;
+    const o: ReelOverlayClip = {
+      id: makeClipId(),
+      name: (brollQuery.trim() || 'B-roll').slice(0, 60),
+      url: c.videoUrl,
+      durationSec: c.durationSec || 5,
+      trimEndSec: 0,
+      offsetSec: Math.round(clockRef.current.t * 10) / 10,
+    };
+    patch({ overlays: [...(project.overlays ?? []), o] });
+    setNote(`B-roll added at ${fmtSec(o.offsetSec)} — drag it on the violet lane.`);
   }
 
   async function save(): Promise<ReelProject | null> {
@@ -6327,6 +6370,46 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         + layer
                       </button>
                     </div>
+                    {/* Pexels b-roll: search → a stock clip attaches as an
+                        overlay at the playhead (no Seedance render, no upload). */}
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <input
+                        value={brollQuery}
+                        onChange={(e) => setBrollQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void searchBroll();
+                        }}
+                        placeholder="or search Pexels b-roll (city, money, gym…)"
+                        className="min-w-0 flex-1 rounded-lg border border-violet-500/25 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
+                      />
+                      <button
+                        onClick={() => void searchBroll()}
+                        disabled={brollBusy || !brollQuery.trim()}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-500/40 px-2 py-1.5 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/15 disabled:opacity-40"
+                        title="Search Pexels stock videos — a clip attaches as an overlay at the playhead"
+                      >
+                        {brollBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                        search
+                      </button>
+                    </div>
+                    {brollResults && brollResults.length > 0 && (
+                      <div className="mt-1.5 grid max-h-32 grid-cols-3 gap-1 overflow-y-auto">
+                        {brollResults.slice(0, 12).map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => addBrollOverlay(c)}
+                            title={`${fmtSec(c.durationSec)} — add as an overlay at the playhead`}
+                            className="group relative overflow-hidden rounded border border-violet-400/20 hover:border-violet-400"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={c.thumbUrl} alt="" className="h-14 w-full object-cover" loading="lazy" />
+                            <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[8px] font-semibold text-white/90">
+                              {fmtSec(c.durationSec)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <p className="mt-1 text-[9px] leading-relaxed text-violet-200/40">
                       Plays picture-in-picture over the main track at the playhead. Drag it on the
                       violet lane to re-time. (Compose burn-in for layers lands next round.)
