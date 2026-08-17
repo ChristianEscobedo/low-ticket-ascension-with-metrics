@@ -212,7 +212,7 @@ export default function NodePeekPanel({
   const platform =
     node.kind === 'content' ? canonicalPlatform(node.sub.split(' · ')[0] ?? '') : null;
   return (
-    <div className="absolute right-0 top-0 z-20 flex h-full w-[440px] flex-col border-l border-bone/10 bg-ink/98 shadow-2xl">
+    <div className="absolute right-0 top-0 z-20 flex h-full w-[440px] flex-col border-l border-bone/10 bg-ink shadow-2xl">
       <div className="flex items-start justify-between gap-2 border-b border-bone/10 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2.5">
           {/* the platform brand icon on a content node */}

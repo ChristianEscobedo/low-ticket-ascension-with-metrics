@@ -135,7 +135,7 @@ export default function MapChatDock({
         type="button"
         onClick={() => onToggle(true)}
         title="Ask the map — the AI chat that sees the whole system"
-        className="absolute right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border-y border-l border-brass/50 bg-ink/95 px-2 py-4 text-brass shadow-lg hover:bg-brass/15"
+        className="absolute right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border-y border-l border-brass/50 bg-ink px-2 py-4 text-brass shadow-lg hover:bg-brass/15"
       >
         <MessageSquare className="h-4 w-4" />
         <span
@@ -150,7 +150,7 @@ export default function MapChatDock({
 
   // Open: the full-height right sheet.
   return (
-    <div className="absolute right-0 top-0 z-30 flex h-full w-[360px] flex-col border-l border-bone/15 bg-ink/98 shadow-2xl">
+    <div className="absolute right-0 top-0 z-30 flex h-full w-[360px] flex-col border-l border-bone/15 bg-ink shadow-2xl">
       <div className="flex shrink-0 items-center justify-between border-b border-bone/10 px-4 py-3">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-bone">
           <MessageSquare className="h-3.5 w-3.5 text-brass" /> Ask the map

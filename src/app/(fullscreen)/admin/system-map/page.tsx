@@ -74,6 +74,8 @@ import type { SystemMapLeak } from '@/lib/mothermode/systemMapAnalysis';
 import BlueprintCreatePanel from './BlueprintCreatePanel';
 import NodePeekPanel from './NodePeekPanel';
 import MapChatDock from './MapChatDock';
+import { PlatformIcon } from '@/components/mothermode/content/PlatformIcon';
+import { canonicalPlatform } from '@/lib/mothermode/planner/platformGlyph';
 
 // ---------------------------------------------------------------------------
 // The UI context — the page provides the focus/collapse + blueprint + inspect
@@ -154,6 +156,10 @@ function SystemNodeCard({ data }: NodeProps) {
   const funnelId = node.kind === 'funnel' ? node.id.slice('funnel:'.length) : null;
   const isCollapsed = funnelId ? ui.collapsed.has(funnelId) : false;
   const isFocused = funnelId != null && ui.focusedId === funnelId;
+  // A content node shows its platform's brand mark (Instagram, TikTok…) when
+  // the platform is known — the sub is "platform · format".
+  const contentPlatform =
+    node.kind === 'content' ? canonicalPlatform(node.sub.split(' · ')[0] ?? '') : null;
   return (
     <div
       onClick={() => ui.inspectNode(node)}
@@ -172,11 +178,16 @@ function SystemNodeCard({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-bone/30" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-bone/30" />
       <div className="flex items-center gap-2">
-        {/* the kind icon tile — the node's type at a glance */}
+        {/* the kind icon tile — a content node shows its platform's brand
+            mark (Instagram, TikTok…); the rest show the kind icon */}
         <span
           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${KIND_TILE[node.kind]}`}
         >
-          {KIND_ICON[node.kind]}
+          {contentPlatform ? (
+            <PlatformIcon platform={contentPlatform} className="h-4 w-4" />
+          ) : (
+            KIND_ICON[node.kind]
+          )}
         </span>
         {STATUS_GLYPH[node.status]}
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-bone/90">

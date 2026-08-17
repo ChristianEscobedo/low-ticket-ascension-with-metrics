@@ -173,7 +173,7 @@ export default function BlueprintCreatePanel({
     'w-full rounded-lg border border-bone/15 bg-ink px-2.5 py-2 text-xs text-bone/90 outline-none focus:border-brass/50';
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-noir/70 p-4">
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-noir/80 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border border-bone/15 bg-ink p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-base font-semibold text-bone">
