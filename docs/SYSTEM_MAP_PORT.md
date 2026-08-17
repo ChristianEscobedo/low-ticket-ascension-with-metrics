@@ -63,6 +63,22 @@ No URL parsing, no guessing:
   live link.
 - `npx tsc --noEmit` — clean.
 
+## The analysis engine (the strategy's step 1, shipped)
+
+`src/lib/mothermode/systemMapAnalysis.ts` — `analyzeSystemMap(input)` turns the
+funnel records' step counts into a **conversion rate per edge** (the metrics
+that matter live on the connections, not the nodes): opt-in (leads/views),
+checkout (checkouts/leads), purchase (purchases/checkouts), each riding the
+builder's `funnel→page` edge id so the page can color it. Each edge grades on
+the **performance axis** (good/ok/bad, per-step thresholds) — never the node
+cards' build axis. The **leak detector** finds each funnel's worst
+underperforming edge (enough volume to be meaningful, never crying wolf on a
+healthy funnel) and ranks them worst-first; the header's "Biggest leak" badge
+focuses that funnel on click. Pure, no new queries (it reads the same
+`SystemMapInput`), unit-tested (`tests/lib/system-map-analysis.test.ts`, 4
+passing). The page colors a graded edge by its health and leaves an ungraded
+one the quiet default.
+
 ## Notes / follow-ups
 
 - **`@xyflow/react` is a new dependency** (the user named React Flow; a

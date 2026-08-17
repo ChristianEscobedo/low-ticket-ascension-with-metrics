@@ -55,6 +55,11 @@ import {
   type SystemMapInput,
   type SystemMapNode,
 } from '@/lib/mothermode/systemMap';
+import {
+  analyzeSystemMap,
+  EDGE_HEALTH_COLOR,
+  type SystemMapAnalysis,
+} from '@/lib/mothermode/systemMapAnalysis';
 
 // ---------------------------------------------------------------------------
 // The UI context — the page provides the focus/collapse handlers, the node
@@ -210,6 +215,18 @@ export default function SystemMapPage() {
     })();
   }, []);
 
+  // The analysis engine — the edge conversion rates + the leak detector, over
+  // the same input (pure, no refetch). The edges color by PERFORMANCE health
+  // (good/ok/bad) — never the node cards' build axis.
+  const analysis: SystemMapAnalysis | null = useMemo(
+    () => (input ? analyzeSystemMap(input) : null),
+    [input],
+  );
+  const edgeHealth = useMemo(
+    () => new Map((analysis?.edgeRates ?? []).map((e) => [e.edgeId, e.health])),
+    [analysis],
+  );
+
   // The graph builds + lays out CLIENT-SIDE — focus/collapse re-layout
   // instantly, no refetch.
   const map: SystemMap | null = useMemo(
@@ -257,15 +274,26 @@ export default function SystemMapPage() {
           draggable: true,
         }),
       ),
-      edges: map.edges.map((e) => ({
-        id: e.id,
-        source: e.from,
-        target: e.to,
-        type: 'smoothstep',
-        style: { stroke: 'rgba(235,230,220,0.18)', strokeWidth: 1.5 },
-      })),
+      edges: map.edges.map((e) => {
+        const health = edgeHealth.get(e.id);
+        return {
+          id: e.id,
+          source: e.from,
+          target: e.to,
+          type: 'smoothstep',
+          // A graded edge colors by its conversion health; an ungraded one
+          // stays the quiet default.
+          style: health
+            ? { stroke: EDGE_HEALTH_COLOR[health], strokeWidth: 2 }
+            : { stroke: 'rgba(235,230,220,0.18)', strokeWidth: 1.5 },
+        };
+      }),
     };
-  }, [map]);
+  }, [map, edgeHealth]);
+
+  // The headline: the worst leak across every system (the operator's morning
+  // answer). Clicking it focuses that funnel.
+  const topLeak = analysis?.leaks[0] ?? null;
 
   const focusedFunnel = focusId
     ? input?.funnels.find((f) => f.id === focusId)
@@ -303,6 +331,19 @@ export default function SystemMapPage() {
             <span className="text-[10px] text-bone/50">
               viewing <span className="font-semibold text-brass/90">{focusedFunnel.name}</span>
             </span>
+          )}
+          {/* The headline: the biggest leak across every system — the
+              operator's morning answer. Clicking it focuses that funnel. */}
+          {topLeak && (
+            <button
+              type="button"
+              onClick={() => ui.focusFunnel(topLeak.funnelId)}
+              title={`${topLeak.funnelName} — ${topLeak.label} is the weakest connection. Open that system.`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-2.5 py-1.5 text-[10px] font-semibold text-red-300 hover:bg-red-400/20"
+            >
+              Biggest leak: {topLeak.funnelName} · {topLeak.label}{' '}
+              {Math.round(topLeak.rate * 100)}%
+            </button>
           )}
           {map && (
             <span className="ml-auto text-[10px] text-bone/30">
