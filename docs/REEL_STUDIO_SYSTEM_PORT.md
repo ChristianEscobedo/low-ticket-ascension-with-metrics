@@ -1,6 +1,23 @@
 # Reel Studio — System Port
 
-> **2026-08-17 (latest) — animated GIPHY stickers (the `<Gif>` branch):** the
+> **2026-08-17 (latest) — the cue drag box tracks the playing frame + no
+> attach blink:** two cue-UX fixes on the Remotion preview. (1) The drag/move
+> outline used to stay on after the image flew out: the Player free-runs on
+> its own controls, so `playheadSec` went stale while it played and
+> `cueOnScreen` never re-evaluated. `RemotionPreview` now writes the Player's
+> frame back to the studio clock via the `frameupdate` event (the new
+> `onFrameSec` prop) — the box shows only while the image is actually on
+> screen, and the timeline playhead + subtitle highlight follow the Player
+> too (the seek effect never fights it: the reported frame IS the seek
+> target). (2) Attaching an image right after a refresh blanked the stage
+> briefly: the cold `<Img>`/`<Gif>` mount `delayRender`s the Player until the
+> fetch resolves. `attachCue` now warms the browser cache (`img.decode`,
+> capped 1.5s, best-effort) BEFORE the plan rebuild, and a project-load
+> effect prefetches every cue's URL (the same pattern as the sprite
+> filmstrip prefetch). Preview-only — the worker never runs this code.
+> tsc clean. Commit: f543f1f.
+>
+> **2026-08-17 — animated GIPHY stickers (the `<Gif>` branch):** the
 > sticker pick now attaches the GIF with `animated: true` on the cue, and the
 > cue renderer swaps its `<Img>` for Remotion's `<Gif>` — frame-driven (it
 > decodes the GIF and shows the frame for the current `useCurrentFrame()`), so
@@ -13,7 +30,12 @@
 > motion. A cue without the flag (a library image, an upload) still renders
 > the static `<Img>`. Guards: tests/lib/media-cues.test.ts (+4 — the flag's
 > save/load round-trip, the plan passthrough, the branch pinned in BOTH
-> composition copies).
+> composition copies). **Deploy note:** the Railway worker image must be
+> rebuilt to pick up `@remotion/gif` + the `<Gif>` branch (the Dockerfile's
+> `npm ci` reads the updated lockfile) — until then an animated cue burns as
+> a static first frame (the old `<Img>` path), never a crash. No worker env
+> changes: GIPHY_API_KEY is read only by the Next search route, and the GIF
+> decodes in the worker's headless Chrome (no new system packages).
 >
 > **2026-08-16 — GIPHY stickers + Pexels b-roll (the media layer):**
 > two new pickers, both free-API and key-server-side. **GIPHY stickers** — the
