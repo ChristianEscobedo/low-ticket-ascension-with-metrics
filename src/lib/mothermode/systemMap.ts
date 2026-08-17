@@ -416,6 +416,43 @@ export function buildSystemMap(
       FUNNEL_BAND_GAP;
   }
 
+  // ——— The unlinked content ———
+  // Every planner piece maps here, linked or not. A piece no tracked link
+  // references yet stands alone in the traffic lane (its peek offers "create
+  // a link") — this is what makes the social posts actually show on the map,
+  // instead of only the ones already wired in.
+  const unlinked = input.content.filter(
+    (c) => !nodes.some((n) => n.id === `content:${c.id}`),
+  );
+  if (unlinked.length > 0) {
+    let y = bandTop;
+    for (const piece of unlinked) {
+      const attr = input.contentMetrics?.[piece.id];
+      nodes.push({
+        id: `content:${piece.id}`,
+        kind: 'content',
+        lane: 'traffic',
+        label: piece.title || 'Untitled',
+        sub: [piece.platform, piece.format].filter(Boolean).join(' · '),
+        metrics: [
+          piece.kind === 'paid' ? 'ad' : '',
+          attr && attr.sales > 0 ? money(attr.revenueCents) : '',
+          attr && attr.sales > 0 ? count(attr.sales, 'sale') : '',
+          attr && attr.sales === 0 && attr.leads > 0 ? count(attr.leads, 'lead') : '',
+          'not linked',
+        ].filter(Boolean),
+        status: 'built',
+        href: piece.href,
+        pieceId: piece.pieceId,
+        offerSlug: piece.offerSlug,
+        x: LANE_X.traffic,
+        y,
+      });
+      y += NODE_H + NODE_GAP_Y;
+    }
+    bandTop = y + FUNNEL_BAND_GAP;
+  }
+
   // ——— The pending blueprint overlay ———
   // Each proposed blueprint renders as a band below the real systems, its
   // nodes 'pending' (the page draws them dashed) until approve materializes

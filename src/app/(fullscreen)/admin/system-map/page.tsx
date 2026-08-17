@@ -752,6 +752,7 @@ export default function SystemMapPage() {
             node={chatOpen ? null : selectedNode}
             map={map}
             onClose={() => setSelectedNode(null)}
+            onChanged={() => void loadInput()}
           />
           {/* the AI chat that sees the map — a full-height sheet on the right
               edge. Read-only Q&A, with a "draft the fix" handoff into the

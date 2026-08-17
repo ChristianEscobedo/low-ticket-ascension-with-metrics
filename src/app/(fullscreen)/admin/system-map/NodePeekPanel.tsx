@@ -151,6 +151,102 @@ function NodeVisual({ node }: { node: SystemMapNode }) {
   return null;
 }
 
+/** A content node's action: create the tracked link that wires it into a
+    funnel (content → link → page), so its clicks and sales count. Detects
+    when it's already linked. */
+function ContentActions({
+  node,
+  map,
+  onChanged,
+}: {
+  node: SystemMapNode;
+  map: SystemMap | null;
+  onChanged?: () => void;
+}) {
+  const [funnelId, setFunnelId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  // The content_plan row id rides the node id (`content:<id>`) — the link's
+  // piece_id stores it.
+  const pieceRowId = node.id.slice('content:'.length);
+  // Detection: a content → link edge means it's already wired in.
+  const linkedCount = map
+    ? map.edges.filter((e) => e.from === node.id && e.to.startsWith('link:')).length
+    : 0;
+  const funnels = map ? map.nodes.filter((n) => n.kind === 'funnel') : [];
+
+  if (linkedCount > 0) {
+    return (
+      <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] text-emerald-300">
+        Linked — this post already feeds {linkedCount} tracked link
+        {linkedCount === 1 ? '' : 's'}.
+      </p>
+    );
+  }
+
+  const create = async () => {
+    if (!funnelId || busy) return;
+    setBusy(true);
+    setDone(null);
+    try {
+      const res = await fetch('/api/admin/mothermode-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createLink',
+          pieceId: pieceRowId,
+          funnelId,
+          label: node.label,
+          utmSource: node.sub.split(' · ')[0] || '',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Create failed');
+      setDone('Link created — this post now feeds the funnel.');
+      onChanged?.();
+    } catch (e) {
+      setDone(e instanceof Error ? e.message : 'Create failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-bone/40">
+        Not linked yet
+      </p>
+      <p className="mt-0.5 text-[10px] leading-relaxed text-bone/45">
+        A tracked link wires this post into a funnel — content → link → page —
+        so its clicks and sales count.
+      </p>
+      <div className="mt-2 flex items-center gap-1.5">
+        <select
+          value={funnelId}
+          onChange={(e) => setFunnelId(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-bone/15 bg-ink px-2 py-1.5 text-[10px] text-bone/90 outline-none focus:border-brass/50"
+        >
+          <option value="">Points at…</option>
+          {funnels.map((f) => (
+            <option key={f.id} value={f.id.slice('funnel:'.length)}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => void create()}
+          disabled={!funnelId || busy}
+          className="shrink-0 rounded-lg border border-brass/50 bg-brass/15 px-2.5 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/25 disabled:opacity-40"
+        >
+          {busy ? 'Creating…' : 'Create the link'}
+        </button>
+      </div>
+      {done && <p className="mt-1.5 text-[10px] text-bone/60">{done}</p>}
+    </div>
+  );
+}
+
 /** The node's connections — what feeds it, what it feeds. */
 function Connections({
   node,
@@ -200,11 +296,14 @@ export default function NodePeekPanel({
   node,
   map,
   onClose,
+  onChanged,
 }: {
   node: SystemMapNode | null;
   /** The map, so the peek can show the node's connections. */
   map?: SystemMap | null;
   onClose: () => void;
+  /** Refetch the map after an action writes (a link created). */
+  onChanged?: () => void;
 }) {
   if (!node) return null;
   const isBlueprint = !!node.blueprintId;
@@ -261,6 +360,14 @@ export default function NodePeekPanel({
                 {m}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* the content node's action — create the tracked link that wires it
+            into a funnel (detects when it's already linked) */}
+        {!isBlueprint && node.kind === 'content' && (
+          <div className="mt-3">
+            <ContentActions node={node} map={map ?? null} onChanged={onChanged} />
           </div>
         )}
 
