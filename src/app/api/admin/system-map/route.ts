@@ -302,6 +302,9 @@ export async function GET() {
       format: c.format ?? '',
       kind: c.kind ?? '',
       href: '/admin/planner',
+      // The catalog piece id + the offer — the peek renders the real post.
+      pieceId: c.pieceId ?? undefined,
+      offerSlug: c.offerSlug || undefined,
     }));
 
     // The route returns the INPUT; the page builds + lays out the graph

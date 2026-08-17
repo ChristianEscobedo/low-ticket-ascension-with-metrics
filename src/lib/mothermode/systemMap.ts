@@ -92,6 +92,9 @@ export interface SystemMapContentInput {
   /** 'paid' marks an ad; anything else is organic content. */
   kind: string;
   href: string;
+  /** The catalog piece id + the offer — the peek renders the real post from them. */
+  pieceId?: string;
+  offerSlug?: string;
 }
 
 export interface SystemMapInput {
@@ -138,6 +141,9 @@ export interface SystemMapNode {
   blueprintId?: string;
   /** True on the blueprint's anchor node (its funnel) — where approve/reject lives. */
   blueprintAnchor?: boolean;
+  /** A content node's catalog piece id + offer — the peek renders the real post. */
+  pieceId?: string;
+  offerSlug?: string;
 }
 
 
@@ -388,6 +394,8 @@ export function buildSystemMap(
               ].filter(Boolean),
               status: 'built',
               href: piece.href,
+              pieceId: piece.pieceId,
+              offerSlug: piece.offerSlug,
               x: LANE_X.traffic,
               y: place('traffic'),
             });
