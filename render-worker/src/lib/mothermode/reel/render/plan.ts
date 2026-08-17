@@ -133,6 +133,12 @@ export interface RenderMediaCue {
   src: string;
   fromFrame: number;
   durationInFrames: number;
+  /**
+   * Animated sticker (a GIF): the composition renders Remotion's <Gif>
+   * (frame-driven — preview === render) instead of the static <Img>.
+   * Copied verbatim from the project cue.
+   */
+  animated?: boolean;
   /** The trigger word (for logs/debugging). */
   wordText: string;
   /** Per-cue look (size/position/frame), copied verbatim from the project. */
@@ -296,6 +302,7 @@ export function shiftMediaCues(
         ...(cue.style ? { style: cue.style } : {}),
         ...(cue.motion && cue.motion.length >= 2 ? { motion: cue.motion } : {}),
         ...(cue.sfx ? { sfx: cue.sfx } : {}),
+        ...(cue.animated === true ? { animated: true } : {}),
       });
     }
     // The cursor IS the next clip's start: advance from the (overlapped)

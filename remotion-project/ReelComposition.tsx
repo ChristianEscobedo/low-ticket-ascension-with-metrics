@@ -13,6 +13,7 @@
  * per build context. Edit it in one place and copy it over — they must agree.
  */
 import React from 'react';
+import { Gif } from '@remotion/gif';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
 import { CaptionLayer } from './CaptionLayer';
 import type { RenderClip, RenderMediaCue, RenderPlan } from '../src/lib/mothermode/reel/render/plan';
@@ -216,6 +217,18 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
     : '';
 
   const borderPx = style.borderPx ?? 0;
+  // The shared look — the animated <Gif> and the static <Img> wear the SAME
+  // box (size/radius/shadow/border), so a sticker never changes shape when it
+  // moves.
+  const mediaStyle: React.CSSProperties = {
+    width: '100%',
+    display: 'block',
+    borderRadius: style.radiusPx ?? 16,
+    boxShadow: style.shadow === false ? 'none' : '0 12px 40px rgba(0,0,0,0.55)',
+    ...(borderPx > 0 && style.borderColor
+      ? { border: `${borderPx}px solid ${style.borderColor}` }
+      : {}),
+  };
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
       <div
@@ -236,18 +249,16 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
             : `translateY(${((1 - e) * 40).toFixed(1)}px) scale(${(0.82 + e * 0.18).toFixed(3)})${ambientTf}`,
         }}
       >
-        <Img
-          src={cue.src}
-          style={{
-            width: '100%',
-            display: 'block',
-            borderRadius: style.radiusPx ?? 16,
-            boxShadow: style.shadow === false ? 'none' : '0 12px 40px rgba(0,0,0,0.55)',
-            ...(borderPx > 0 && style.borderColor
-              ? { border: `${borderPx}px solid ${style.borderColor}` }
-              : {}),
-          }}
-        />
+        {cue.animated ? (
+          // The animated sticker: Remotion's <Gif> decodes the GIF and shows
+          // the frame for the CURRENT frame — frame math, never a CSS clock —
+          // so the animation is identical in the preview Player and in
+          // renderMedia (which screenshots one frame at a time). The entrance/
+          // exit/motion transforms above apply to the wrapper either way.
+          <Gif src={cue.src} style={mediaStyle} fit="contain" />
+        ) : (
+          <Img src={cue.src} style={mediaStyle} />
+        )}
       </div>
     </AbsoluteFill>
   );

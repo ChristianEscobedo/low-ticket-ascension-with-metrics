@@ -4610,23 +4610,35 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     void loadCueAssets();
   }
 
-  /** Picker pick: attach the image to the pending word. One cue per word (re-pick replaces). */
-  async function attachCue(url: string) {
+  /** Picker pick: attach the image to the pending word. One cue per word (re-pick replaces).
+   *  `animated` marks a GIF sticker — the cue renders through Remotion's
+   *  frame-driven <Gif> (preview === render) instead of the static <Img>. */
+  async function attachCue(url: string, opts?: { animated?: boolean }) {
     if (!project || !currentClip || cuePickerWord == null) return;
     const rest = (project.mediaCues ?? []).filter(
       (c) => !(c.clipId === currentClip.id && c.wordIndex === cuePickerWord),
     );
     await saveMediaCues([
       ...rest,
-      { id: makeClipId(), clipId: currentClip.id, wordIndex: cuePickerWord, url },
+      {
+        id: makeClipId(),
+        clipId: currentClip.id,
+        wordIndex: cuePickerWord,
+        url,
+        ...(opts?.animated ? { animated: true } : {}),
+      },
     ]);
     setCuePickerWord(null);
-    setNote('Image fly-in attached — it renders in the Remotion preview and the MP4.');
+    setNote(
+      opts?.animated
+        ? 'Animated sticker attached — it plays in the Remotion preview and burns into the MP4.'
+        : 'Image fly-in attached — it renders in the Remotion preview and the MP4.',
+    );
   }
 
   /** Cue source: GIPHY stickers — search → a transparent sticker attaches as
-   *  the fly-in's image. Attaches the STILL (the static frame — in sync in
-   *  preview + render); the animated <Gif> branch is the scoped follow-up. */
+   *  the fly-in's image. The pick attaches the GIF with `animated` set, so the
+   *  cue renders through the frame-driven <Gif> branch (preview === render). */
   async function searchStickers() {
     const q = stickerQuery.trim();
     if (!q || stickerBusy) return;
@@ -6607,9 +6619,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           </button>
                         </div>
                         {/* the GIPHY sticker source — search → a transparent
-                            sticker attaches as the fly-in's image (the STILL,
-                            in sync in preview + render; the animated <Gif>
-                            branch is the scoped follow-up) */}
+                            sticker attaches as the fly-in's image. The pick
+                            attaches the GIF with `animated`, so the cue plays
+                            through the frame-driven <Gif> branch (preview ===
+                            render); the tile previews the animated WebP. */}
                         <div className="mb-1.5 flex items-center gap-1">
                           <input
                             value={stickerQuery}
@@ -6635,12 +6648,14 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                             {stickerResults.slice(0, 24).map((s) => (
                               <button
                                 key={s.id}
-                                onClick={() => void attachCue(s.stillUrl)}
-                                title={s.title}
+                                onClick={() => void attachCue(s.gifUrl, { animated: true })}
+                                title={`${s.title} — animated sticker`}
                                 className="overflow-hidden rounded border border-violet-400/20 bg-[repeating-conic-gradient(#1c1c1c_0%_25%,#262626_0%_50%)] bg-[length:12px_12px] hover:border-violet-400"
                               >
+                                {/* the animated WebP plays in the tile, so the
+                                    pick shows the motion it will render with */}
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={s.stillUrl} alt={s.title} className="h-12 w-full object-contain" loading="lazy" />
+                                <img src={s.webpUrl} alt={s.title} className="h-12 w-full object-contain" loading="lazy" />
                               </button>
                             ))}
                           </div>

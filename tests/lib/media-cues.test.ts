@@ -326,3 +326,80 @@ describe('suggestCuesForWords: deterministic proposals', () => {
     expect(proposals).toHaveLength(0);
   });
 });
+
+describe('media cues: animated stickers (the <Gif> branch)', () => {
+  const GIF = 'https://media.giphy.com/media/abc123/giphy.gif';
+
+  it('the animated flag survives the save → load round-trip', () => {
+    const json = projectToJson({
+      clips: [clip('a')],
+      audio: null,
+      captions: { a: WORDS },
+      mediaCues: [{ id: 'c1', clipId: 'a', wordIndex: 1, url: GIF, animated: true }],
+    });
+    const normalized = normalizeProjectJson(json);
+    expect(normalized.mediaCues?.[0]).toMatchObject({ id: 'c1', animated: true, url: GIF });
+  });
+
+  it('a missing/false flag normalizes away (the static <Img> path stays the default)', () => {
+    const normalized = normalizeProjectJson({
+      clips: [clip('a')],
+      captions: { a: WORDS },
+      mediaCues: [
+        { id: 'c1', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png' },
+        { id: 'c2', clipId: 'a', wordIndex: 2, url: GIF, animated: false },
+        { id: 'c3', clipId: 'a', wordIndex: 0, url: GIF, animated: 'yes' },
+      ],
+    });
+    expect(normalized.mediaCues).toHaveLength(3);
+    for (const c of normalized.mediaCues ?? []) {
+      expect('animated' in c).toBe(false);
+    }
+  });
+
+  it('the flag reaches the render plan verbatim (the composition reads cue.animated)', () => {
+    const cues = shiftMediaCues(
+      {
+        clips: [clip('a')],
+        captions: { a: WORDS },
+        mediaCues: [{ id: 'c1', clipId: 'a', wordIndex: 1, url: GIF, animated: true }],
+      },
+      30,
+    );
+    expect(cues).toHaveLength(1);
+    expect(cues[0]).toMatchObject({ src: GIF, animated: true, wordText: 'money' });
+    // …and a static cue plans without the key at all.
+    const staticCue = shiftMediaCues(
+      {
+        clips: [clip('a')],
+        captions: { a: WORDS },
+        mediaCues: [{ id: 'c2', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png' }],
+      },
+      30,
+    );
+    expect('animated' in staticCue[0]).toBe(false);
+  });
+
+  it('the composition renders the <Gif> branch for an animated cue (both copies)', () => {
+    // The frame-driven <Gif> is what makes preview === render for a moving
+    // sticker; this pins the branch so a refactor can't silently drop it back
+    // to a frozen <Img> of the GIF's first frame.
+    const { readFileSync } = require('node:fs');
+    const { join } = require('node:path');
+    const app = readFileSync(join(__dirname, '..', '..', 'remotion-project', 'ReelComposition.tsx'), 'utf8');
+    const worker = readFileSync(
+      join(__dirname, '..', '..', 'render-worker', 'remotion-project', 'ReelComposition.tsx'),
+      'utf8',
+    );
+    for (const [name, src] of [['app', app], ['worker', worker]] as const) {
+      expect(src.includes("from '@remotion/gif'"), `${name} imports @remotion/gif`).toBe(true);
+      expect(src.includes('cue.animated'), `${name} branches on cue.animated`).toBe(true);
+      expect(src.includes('<Gif src={cue.src}'), `${name} renders <Gif> for the animated cue`).toBe(
+        true,
+      );
+    }
+    // The two compositions must stay byte-identical — the worker's is what
+    // burns the MP4.
+    expect(worker).toBe(app);
+  });
+});

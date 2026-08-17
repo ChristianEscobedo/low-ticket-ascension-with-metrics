@@ -5,8 +5,13 @@
 > next initiative — the media layer that makes a reel feel produced, not
 > assembled. Five features, in the order that unblocks the most.
 
-> **Status (2026-08-16):** #1 (stickers) + #2 (Pexels b-roll) SHIPPED —
-> commits 7404a6d + 35856b0, tsc clean, 6+5 tests green. #3 (the SFX picker)
+> **Status (2026-08-17):** #1 (stickers) + #2 (Pexels b-roll) SHIPPED —
+> commits 7404a6d + 35856b0, and the **animated `<Gif>` branch shipped
+> 2026-08-17** (the sticker pick attaches the GIF with `animated: true` on the
+> cue; the MediaCueLayer renders Remotion's frame-driven `<Gif>` — preview ===
+> render; `@remotion/gif` in the root app + the worker's package.json +
+> lockfile; tsc clean, 18 cue tests (4 new) + 6 giphy + the vendor parity
+> green). #3 (the SFX picker)
 > is already wired — the Word FX panel + the fly-in style editor both read the
 > Media Library's audio + upload new ones; the curated built-in pack needs
 > hosted sound files. #4 (progress bar) + #5 (Ken Burns) are next.
@@ -54,11 +59,14 @@ re-timeable, rides the motion presets — the existing cue system).
   a result grid + click-to-add. Adding writes a media cue (`type: 'image'`,
   the sticker URL) at the playhead on the overlay lane — the SAME path as any
   fly-in, so drag/re-time/motion/z all just work.
-- **Static vs animated** — a **static** sticker (the WebP still) renders in the
-  cue's existing `<img>` today. An **animated** one (the GIF) renders through a
-  new `<Gif>` branch in the cue renderer (see §0 — frame-driven, works in
-  preview + render). The cue gets `animated?: boolean` so the renderer picks
-  `<Gif>` vs `<img>`; the worker's Docker image adds `@remotion/gif`.
+- **Static vs animated** — **SHIPPED 2026-08-17.** The pick attaches the GIF
+  with `animated: true` on the cue; the cue renderer swaps its `<Img>` for
+  Remotion's `<Gif>` (see §0 — frame-driven, preview === render).
+  `animated?: boolean` rides `ReelMediaCue` → `normalizeMediaCues` →
+  `shiftMediaCues` → `RenderMediaCue` → the `MediaCueLayer` branch;
+  `@remotion/gif` is in the root app + the worker's package.json/lockfile. A
+  cue without the flag (a library image, an upload) still renders the static
+  `<Img>`.
 - **Glyph use-case** — small emphasis stickers (an arrow, a "100", a fire) that
   sit next to a caption word. Same cue, smaller scale, a motion preset.
 

@@ -26,6 +26,9 @@ importers:
       '@remotion/cli':
         specifier: ^4.0.505
         version: 4.0.505(@swc/helpers@0.5.5)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      '@remotion/gif':
+        specifier: 4.0.505
+        version: 4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@remotion/lambda':
         specifier: ^4.0.505
         version: 4.0.505(@remotion/bundler@4.0.505(@swc/helpers@0.5.5)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@swc/helpers@0.5.5)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
@@ -1193,6 +1196,12 @@ packages:
     resolution: {integrity: sha512-9NSzLa9aMnAN/M3P0EUT1mnhC1EtVR2UUACwOf8eehZgFnxc0nCdhwx4TMS9UubpY7vH81bTl7xq60/BPvBDBQ==}
     cpu: [x64]
     os: [win32]
+
+  '@remotion/gif@4.0.505':
+    resolution: {integrity: sha512-J5J+paGR2ZIenmCn2I++7/Rs8LOrzzsvJ4CC3r+EDiRsSYROl+3A/AuCxCd39L4V0okFdSRHltrJZxYtBNJ8nw==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@remotion/lambda-client@4.0.505':
     resolution: {integrity: sha512-rfWPY4XazW+fG7FKVwhtxhEJ9E7k9tNiwGEZZIYgqBAZvGQs7BE9RaBkyEM3A7jXVJLDSOpf0T21g6G1FaBJLg==}
@@ -6451,6 +6460,12 @@ snapshots:
 
   '@remotion/compositor-win32-x64-msvc@4.0.505':
     optional: true
+
+  '@remotion/gif@4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      remotion: 4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
   '@remotion/lambda-client@4.0.505': {}
 
