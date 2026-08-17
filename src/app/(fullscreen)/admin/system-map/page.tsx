@@ -52,6 +52,11 @@ import {
   Plus,
   Check,
   X,
+  Layers,
+  FileText,
+  Mail,
+  Link2,
+  Clapperboard,
 } from 'lucide-react';
 import {
   buildSystemMap,
@@ -119,6 +124,24 @@ const STATUS_GLYPH = {
   pending: <CircleDashed className="h-3 w-3 text-bone/40" />,
 } as const;
 
+// The kind icon tile — each node type gets a distinct icon in a tinted tile,
+// so the map reads at a glance (funnel / page / email / link / content).
+const KIND_ICON: Record<SystemMapNode['kind'], React.ReactNode> = {
+  funnel: <Layers className="h-3.5 w-3.5" />,
+  page: <FileText className="h-3.5 w-3.5" />,
+  email: <Mail className="h-3.5 w-3.5" />,
+  link: <Link2 className="h-3.5 w-3.5" />,
+  content: <Clapperboard className="h-3.5 w-3.5" />,
+};
+
+const KIND_TILE: Record<SystemMapNode['kind'], string> = {
+  funnel: 'bg-brass/20 text-brass',
+  page: 'bg-bone/15 text-bone/70',
+  email: 'bg-violet-400/20 text-violet-300',
+  link: 'bg-sky-400/20 text-sky-300',
+  content: 'bg-emerald-400/20 text-emerald-300',
+};
+
 function SystemNodeCard({ data }: NodeProps) {
   const node = data as unknown as SystemMapNode;
   const router = useRouter();
@@ -148,7 +171,13 @@ function SystemNodeCard({ data }: NodeProps) {
       {/* the edges attach left (in) + right (out) — traffic flows left→right */}
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-bone/30" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-bone/30" />
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
+        {/* the kind icon tile — the node's type at a glance */}
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${KIND_TILE[node.kind]}`}
+        >
+          {KIND_ICON[node.kind]}
+        </span>
         {STATUS_GLYPH[node.status]}
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-bone/90">
           {node.label}
