@@ -5,9 +5,11 @@
 > next initiative — three features, in the order that unblocks the most.
 
 The editing canvas is in a good place: a two-level model (Preview = move/scale
-the whole caption block; Words = per-word edit), direct press-drag on words,
-fx that scale + respect timing, two-way caption-card sync. These three are the
-next "feels premium" jump.
+the whole caption block; Words = per-word edit), and — as of the 2026-08-16
+free-place overhaul — you drag the REAL caption glyph (a rAF loop owns its
+transform for the drag, the entrance settles in edit mode, a placed word stays
+visible while its page is current, the arrow-nudge moves free, reset strips
+the whole scene, the toast floats). These three are the next "feels premium" jump.
 
 ---
 
