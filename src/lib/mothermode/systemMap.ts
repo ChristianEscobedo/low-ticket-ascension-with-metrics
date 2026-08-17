@@ -186,20 +186,43 @@ function statusOf(status: string): SystemMapNode['status'] {
   return status === 'published' || status === 'active' ? 'built' : 'draft';
 }
 
+/** The build options — the page drives these client-side (no refetch). */
+export interface BuildSystemMapOptions {
+  /** When set, only this funnel's subgraph builds (the individual view). */
+  focusFunnelId?: string;
+  /** A funnel whose id is in the set renders only its funnel node — its
+   *  pages/emails/links/content are skipped and the band collapses. Default:
+   *  everything expanded (the full view). */
+  collapsed?: ReadonlySet<string>;
+}
+
 /**
  * Build + lay out the system map. Funnels each get a horizontal band; within
  * the band the funnel + its pages stack in the Pages lane, its links in
  * Links, the content carrying those links in Traffic, and its email kits in
  * Nurture. Edges: content → link → page, funnel → page, page → email.
+ *
+ * `opts.focusFunnelId` builds only that funnel's subgraph (the individual
+ * view); `opts.collapsed` renders a funnel as just its funnel node.
  */
-export function buildSystemMap(input: SystemMapInput): SystemMap {
+export function buildSystemMap(
+  input: SystemMapInput,
+  opts: BuildSystemMapOptions = {},
+): SystemMap {
   const nodes: SystemMapNode[] = [];
   const edges: SystemMapEdge[] = [];
   const contentById = new Map(input.content.map((c) => [c.id, c]));
 
+  // The individual view: only the focused funnel's subgraph builds.
+  const funnels = opts.focusFunnelId
+    ? input.funnels.filter((f) => f.id === opts.focusFunnelId)
+    : input.funnels;
+
   let bandTop = FIRST_NODE_Y;
 
-  for (const funnel of input.funnels) {
+  for (const funnel of funnels) {
+    // A collapsed funnel renders only its funnel node — the band is one card.
+    const isCollapsed = opts.collapsed?.has(funnel.id) ?? false;
     // The per-lane y cursor for THIS funnel's band — each lane stacks
     // independently, and the band is as tall as its fullest lane.
     const laneY: Record<SystemMapLane, number> = {
@@ -239,6 +262,9 @@ export function buildSystemMap(input: SystemMapInput): SystemMap {
       y: place('pages'),
     });
 
+    // A collapsed funnel stops at its funnel node — the pages/emails/links/
+    // content (and their edges) only build when it's expanded.
+    if (!isCollapsed) {
     // — the page spine (funnel → each page) —
     const pageNodeId = (key: string) => `page:${funnel.id}:${key}`;
     for (const page of funnel.pages) {
@@ -337,6 +363,7 @@ export function buildSystemMap(input: SystemMapInput): SystemMap {
         }
       }
     }
+    } // !isCollapsed
 
     // The next funnel's band starts below this one's fullest lane.
     bandTop =

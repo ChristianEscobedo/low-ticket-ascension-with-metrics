@@ -96,6 +96,29 @@ describe('buildSystemMap', () => {
     expect(map.height).toBeGreaterThan(Math.max(...map.nodes.map((n) => n.y)));
   });
 
+  it('focus builds only that funnel\'s subgraph', () => {
+    const two: SystemMapInput = {
+      ...input,
+      funnels: [funnel, { ...funnel, id: 'f2', name: 'Other', pages: [], emails: [] }],
+    };
+    const focused = buildSystemMap(two, { focusFunnelId: 'f2' });
+    // only f2's nodes — f1's spine/links/content never build
+    expect(focused.nodes.every((n) => n.id.startsWith('funnel:f2') || n.id.includes(':f2:'))).toBe(true);
+    expect(focused.nodes.some((n) => n.id === 'funnel:f2')).toBe(true);
+    expect(focused.nodes.some((n) => n.id === 'funnel:f1')).toBe(false);
+  });
+
+  it('a collapsed funnel renders only its funnel node, and its edges drop', () => {
+    const collapsedMap = buildSystemMap(input, { collapsed: new Set(['f1']) });
+    // only the funnel node — no pages, emails, links, or content
+    expect(collapsedMap.nodes.map((n) => n.id)).toEqual(['funnel:f1']);
+    expect(collapsedMap.edges).toEqual([]);
+    // the default (no opts) still builds the full graph — the full view is unchanged
+    const full = buildSystemMap(input);
+    expect(full.nodes.length).toBeGreaterThan(1);
+    expect(full.edges.length).toBeGreaterThan(0);
+  });
+
   it('a draft funnel reads draft, and an unpublished funnel gets no live link', () => {
     const draft = buildSystemMap({
       funnels: [{ ...funnel, id: 'f2', status: 'draft', pages: [], emails: [] }],

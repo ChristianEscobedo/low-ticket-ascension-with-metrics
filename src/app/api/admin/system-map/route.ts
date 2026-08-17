@@ -17,11 +17,11 @@ import { listFunnelsForAdmin as listOptinFunnels } from '@/lib/mothermode/optin/
 import { listKitsForAdmin } from '@/lib/mothermode/email/store';
 import { listUtmLinks } from '@/lib/mothermode/planner/links';
 import { listContentPlan } from '@/lib/mothermode/planner/store';
-import {
-  buildSystemMap,
-  type SystemMapContentInput,
-  type SystemMapFunnelInput,
-  type SystemMapLinkInput,
+import type {
+  SystemMapContentInput,
+  SystemMapFunnelInput,
+  SystemMapLinkInput,
+  SystemMapInput,
 } from '@/lib/mothermode/systemMap';
 import type { SalesFunnelRecord, SalesEmailEvent } from '@/lib/mothermode/sales/types';
 import type { OptinFunnelRecord } from '@/lib/mothermode/optin/types';
@@ -259,8 +259,11 @@ export async function GET() {
       href: '/admin/planner',
     }));
 
-    const map = buildSystemMap({ funnels, links: mapLinks, content: mapContent });
-    return NextResponse.json({ success: true, map });
+    // The route returns the INPUT; the page builds + lays out the graph
+    // client-side (the builder is pure, no server imports), so expand /
+    // collapse / focus re-layout instantly with no refetch.
+    const input: SystemMapInput = { funnels, links: mapLinks, content: mapContent };
+    return NextResponse.json({ success: true, input });
   } catch (e) {
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : 'System map failed' },
