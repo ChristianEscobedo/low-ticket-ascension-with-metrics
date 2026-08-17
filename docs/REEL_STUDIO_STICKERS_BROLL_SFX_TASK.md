@@ -5,6 +5,12 @@
 > next initiative — the media layer that makes a reel feel produced, not
 > assembled. Five features, in the order that unblocks the most.
 
+> **Status (2026-08-16):** #1 (stickers) + #2 (Pexels b-roll) SHIPPED —
+> commits 7404a6d + 35856b0, tsc clean, 6+5 tests green. #3 (the SFX picker)
+> is already wired — the Word FX panel + the fly-in style editor both read the
+> Media Library's audio + upload new ones; the curated built-in pack needs
+> hosted sound files. #4 (progress bar) + #5 (Ken Burns) are next.
+
 The editing canvas is in a good place. The next "feels premium" jump is the
 **media layer**: a reaction sticker at the right beat, a stock b-roll cutaway
 without a Seedance render, a whoosh on the slam, a progress bar keeping the

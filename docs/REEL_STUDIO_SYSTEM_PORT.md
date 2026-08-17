@@ -1,5 +1,21 @@
 # Reel Studio — System Port
 
+> **2026-08-16 (latest) — GIPHY stickers + Pexels b-roll (the media layer):**
+> two new pickers, both free-API and key-server-side. **GIPHY stickers** — the
+> cue picker's new "stickers" source: search GIPHY (fire, arrow, 100…) and a
+> transparent sticker attaches as the fly-in's image.
+> `src/utils/integrations/giphy.ts` (the search, normalized — the still is the
+> full-res `original_still`) → `/api/admin/reel-stickers` → the picker in
+> page.tsx. The cue renders the STILL (in sync in preview + render); the
+> animated `<Gif>` branch is the scoped follow-up (frame-driven, never a CSS
+> clock). **Pexels b-roll** — the overlay lane's new "search Pexels" row:
+> search stock videos and a clip attaches as an overlay at the playhead (no
+> Seedance render, no upload). `src/utils/integrations/pexels.ts` (picks the
+> ≤1920 HD file, never a 4K monster) → `/api/admin/reel-broll` → the picker.
+> Both read a free key (GIPHY_API_KEY / PEXELS_API_KEY) and say so when
+> missing. Guards: tests/lib/giphy.test.ts (6) + pexels.test.ts (5). Commits:
+> 7404a6d, 35856b0.
+>
 > **2026-08-16 (latest) — the caption free-place overhaul (drag the REAL
 > word):** the per-word editor no longer drags an invisible hit box over a
 > separate paint — you drag the painted glyph itself. `onCaptionWordPointerDown`
