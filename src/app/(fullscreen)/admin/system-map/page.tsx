@@ -379,6 +379,12 @@ export default function SystemMapPage() {
             <ArrowLeftCircle className="h-3.5 w-3.5" /> Asset Hub
           </Link>
           <h1 className="font-display text-lg font-semibold text-bone">System map</h1>
+          <Link
+            href="/admin/buyer-journey"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-bone/15 px-2.5 py-1.5 text-xs text-bone/60 hover:bg-bone/10"
+          >
+            Buyer journeys →
+          </Link>
           {focusedFunnel ? (
             <button
               type="button"
