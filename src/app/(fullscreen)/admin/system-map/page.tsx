@@ -739,6 +739,7 @@ export default function SystemMapPage() {
               edge with the chat sheet — the chat hides it while open. */}
           <NodePeekPanel
             node={chatOpen ? null : selectedNode}
+            map={map}
             onClose={() => setSelectedNode(null)}
           />
           {/* the AI chat that sees the map — a full-height sheet on the right

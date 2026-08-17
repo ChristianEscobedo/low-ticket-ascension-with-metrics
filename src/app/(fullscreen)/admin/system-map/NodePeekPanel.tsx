@@ -1,19 +1,25 @@
 'use client';
 
 /**
- * The node peek — click a node on the System Map and it opens into a
- * right-side panel showing the REAL thing, not a description of it: a page or
+ * The node peek — click a node on the System Map and it opens into a wide
+ * right-side sheet showing the REAL thing, not a description of it: a page or
  * funnel renders the live page itself (an iframe), a content node renders the
  * actual social post (the Content Hub's platform preview + the final-cut
- * video), an email node renders the actual email's styled HTML. The wiring
- * diagram letting you inspect a single part — and see it — without leaving
- * the canvas.
+ * video), an email node renders the actual email's styled HTML. Below the
+ * visual: the node's connections (what feeds it, what it feeds) and its
+ * details. The wiring diagram letting you inspect a single part — and see it
+ * — without leaving the canvas.
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { X, ExternalLink, Eye, Loader2 } from 'lucide-react';
-import type { SystemMapNode } from '@/lib/mothermode/systemMap';
+import { X, ExternalLink, Eye, Loader2, ArrowDown, ArrowUp } from 'lucide-react';
+import type { SystemMap, SystemMapNode } from '@/lib/mothermode/systemMap';
 import { PlanPiecePreview } from '@/components/mothermode/planner/PlanPiecePreview';
+import { PlatformIcon } from '@/components/mothermode/content/PlatformIcon';
+import {
+  canonicalPlatform,
+  platformLabel,
+} from '@/lib/mothermode/planner/platformGlyph';
 
 const KIND_LABEL: Record<SystemMapNode['kind'], string> = {
   funnel: 'Funnel',
@@ -29,13 +35,13 @@ const STATUS_LABEL: Record<SystemMapNode['status'], string> = {
   pending: 'Proposed — builds on approve',
 };
 
-/** A page/funnel renders the live page itself, scaled to fit the panel. */
+/** A page/funnel renders the live page itself, scaled to fit the sheet. */
 function LivePageFrame({ href, label }: { href: string; label: string }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-bone/15 bg-white">
+    <div className="overflow-hidden rounded-xl border border-bone/15 bg-white shadow-inner">
       <div
         className="pointer-events-none origin-top-left"
-        style={{ width: '1000px', height: '560px', transform: 'scale(0.268)' }}
+        style={{ width: '1200px', height: '700px', transform: 'scale(0.32)' }}
       >
         <iframe
           src={href}
@@ -44,7 +50,7 @@ function LivePageFrame({ href, label }: { href: string; label: string }) {
           tabIndex={-1}
         />
       </div>
-      <p className="bg-ink px-2 py-1 text-[9px] text-bone/40">
+      <p className="bg-ink px-3 py-1.5 text-[9px] text-bone/40">
         The live page — read-only here; open it to interact.
       </p>
     </div>
@@ -89,7 +95,7 @@ function EmailVisual({ node }: { node: SystemMapNode }) {
 
   if (!kitId || failed) {
     return (
-      <p className="rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-[10px] text-bone/45">
+      <p className="rounded-xl border border-bone/10 bg-bone/[0.03] px-3 py-2.5 text-[10px] text-bone/45">
         Open the sequence in Email Marketing to read the emails.
       </p>
     );
@@ -102,21 +108,21 @@ function EmailVisual({ node }: { node: SystemMapNode }) {
     );
   }
   return (
-    <div className="overflow-hidden rounded-lg border border-bone/15 bg-white">
+    <div className="overflow-hidden rounded-xl border border-bone/15 bg-white shadow-inner">
       <iframe
         srcDoc={html}
         title={node.label}
         sandbox=""
-        className="h-[300px] w-full border-0 bg-white"
+        className="h-[340px] w-full border-0 bg-white"
       />
-      <p className="bg-ink px-2 py-1 text-[9px] text-bone/40">
+      <p className="bg-ink px-3 py-1.5 text-[9px] text-bone/40">
         The first email in the sequence, as it lands in an inbox.
       </p>
     </div>
   );
 }
 
-/** The real thing, per kind — the peek's star. */
+/** The real thing, per kind — the peek's star. Never a blank frame. */
 function NodeVisual({ node }: { node: SystemMapNode }) {
   // A page or a published funnel renders the live page itself.
   if ((node.kind === 'page' || node.kind === 'funnel') && node.liveHref) {
@@ -125,7 +131,7 @@ function NodeVisual({ node }: { node: SystemMapNode }) {
   // A content node renders the actual post (the platform preview + the video).
   if (node.kind === 'content' && node.pieceId) {
     return (
-      <div className="overflow-hidden rounded-lg border border-bone/15 bg-noir px-1 py-1">
+      <div className="overflow-hidden rounded-xl border border-bone/15 bg-noir px-1 py-1">
         <PlanPiecePreview pieceId={node.pieceId} offerSlug={node.offerSlug ?? ''} />
       </div>
     );
@@ -134,28 +140,96 @@ function NodeVisual({ node }: { node: SystemMapNode }) {
   if (node.kind === 'email') {
     return <EmailVisual node={node} />;
   }
+  // A draft page/funnel (no live page yet) or a link says so plainly.
+  if ((node.kind === 'page' || node.kind === 'funnel') && !node.liveHref) {
+    return (
+      <p className="rounded-xl border border-bone/10 bg-bone/[0.03] px-3 py-2.5 text-[10px] text-bone/45">
+        Not live yet — publish the funnel to see the real page here.
+      </p>
+    );
+  }
   return null;
+}
+
+/** The node's connections — what feeds it, what it feeds. */
+function Connections({
+  node,
+  map,
+}: {
+  node: SystemMapNode;
+  map: SystemMap | null;
+}) {
+  if (!map) return null;
+  const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  const feeders = map.edges.filter((e) => e.to === node.id).map((e) => byId.get(e.from)).filter(Boolean) as SystemMapNode[];
+  const feeds = map.edges.filter((e) => e.from === node.id).map((e) => byId.get(e.to)).filter(Boolean) as SystemMapNode[];
+  if (feeders.length === 0 && feeds.length === 0) return null;
+  const Row = ({ n, dir }: { n: SystemMapNode; dir: 'in' | 'out' }) => (
+    <div className="flex items-center gap-2 py-1 text-[11px] text-bone/70">
+      {dir === 'in' ? (
+        <ArrowDown className="h-3 w-3 shrink-0 text-emerald-300/70" />
+      ) : (
+        <ArrowUp className="h-3 w-3 shrink-0 text-sky-300/70" />
+      )}
+      <span className="truncate">{n.label}</span>
+      <span className="ml-auto shrink-0 text-[9px] uppercase tracking-wide text-bone/30">
+        {KIND_LABEL[n.kind]}
+      </span>
+    </div>
+  );
+  return (
+    <div className="mt-4 border-t border-bone/10 pt-3">
+      <p className="text-[10px] uppercase tracking-wide text-bone/40">Connections</p>
+      {feeders.length > 0 && (
+        <p className="mt-2 text-[9px] uppercase tracking-wide text-bone/30">Fed by</p>
+      )}
+      {feeders.map((n) => (
+        <Row key={`in-${n.id}`} n={n} dir="in" />
+      ))}
+      {feeds.length > 0 && (
+        <p className="mt-2 text-[9px] uppercase tracking-wide text-bone/30">Feeds</p>
+      )}
+      {feeds.map((n) => (
+        <Row key={`out-${n.id}`} n={n} dir="out" />
+      ))}
+    </div>
+  );
 }
 
 export default function NodePeekPanel({
   node,
+  map,
   onClose,
 }: {
   node: SystemMapNode | null;
+  /** The map, so the peek can show the node's connections. */
+  map?: SystemMap | null;
   onClose: () => void;
 }) {
   if (!node) return null;
   const isBlueprint = !!node.blueprintId;
+  // The content node's platform → the brand icon (the sub is "platform · format").
+  const platform =
+    node.kind === 'content' ? canonicalPlatform(node.sub.split(' · ')[0] ?? '') : null;
   return (
-    <div className="absolute right-0 top-0 z-20 flex h-full w-[320px] flex-col border-l border-bone/10 bg-ink/98 shadow-2xl">
-      <div className="flex items-start justify-between gap-2 border-b border-bone/10 px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-[9px] uppercase tracking-widest text-bone/40">
-            {KIND_LABEL[node.kind]}
-          </p>
-          <h3 className="mt-0.5 truncate text-sm font-semibold text-bone">
-            {node.label}
-          </h3>
+    <div className="absolute right-0 top-0 z-20 flex h-full w-[440px] flex-col border-l border-bone/10 bg-ink/98 shadow-2xl">
+      <div className="flex items-start justify-between gap-2 border-b border-bone/10 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {/* the platform brand icon on a content node */}
+          {platform && (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bone/[0.08]">
+              <PlatformIcon platform={platform} className="h-4 w-4" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-widest text-bone/40">
+              {KIND_LABEL[node.kind]}
+              {platform ? ` · ${platformLabel(node.sub.split(' · ')[0])}` : ''}
+            </p>
+            <h3 className="mt-0.5 truncate text-sm font-semibold text-bone">
+              {node.label}
+            </h3>
+          </div>
         </div>
         <button
           type="button"
@@ -166,16 +240,12 @@ export default function NodePeekPanel({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {/* the real thing — the live page, the actual post, the real email */}
-        {!isBlueprint && (
-          <div className="mb-3">
-            <NodeVisual node={node} />
-          </div>
-        )}
+        {!isBlueprint && <NodeVisual node={node} />}
 
         {node.sub && (
-          <p className="text-[10px] uppercase tracking-wide text-bone/35">
+          <p className="mt-3 text-[10px] uppercase tracking-wide text-bone/35">
             {node.sub}
           </p>
         )}
@@ -193,6 +263,9 @@ export default function NodePeekPanel({
             ))}
           </div>
         )}
+
+        {/* the connections — what feeds this node, what it feeds */}
+        {!isBlueprint && <Connections node={node} map={map ?? null} />}
 
         <p className="mt-4 border-t border-bone/10 pt-3 text-[10px] uppercase tracking-wide text-bone/40">
           Status
@@ -218,7 +291,7 @@ export default function NodePeekPanel({
 
       {/* the way in — open it in its editor, or view it live */}
       {!isBlueprint && (node.href || node.liveHref) && (
-        <div className="space-y-2 border-t border-bone/10 px-4 py-3">
+        <div className="space-y-2 border-t border-bone/10 px-5 py-4">
           {node.href && (
             <Link
               href={node.href}
