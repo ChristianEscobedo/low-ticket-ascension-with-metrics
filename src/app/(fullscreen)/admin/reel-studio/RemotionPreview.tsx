@@ -70,6 +70,7 @@ export default function RemotionPreview({
   aspect = 'vertical',
   fps = DEFAULT_FPS,
   playheadSec,
+  onFrameSec,
 }: {
   project: Pick<
     ReelProject,
@@ -88,6 +89,13 @@ export default function RemotionPreview({
    * of them invisible to the ruler.
    */
   playheadSec?: number;
+  /**
+   * The Player's frame written BACK to the studio clock (seconds). The Player
+   * has its own transport (controls), so without this it free-runs while it
+   * plays and playheadSec goes stale — anything gated on the playhead (the
+   * cue drag box's on-screen gate) stuck ON after the image flew out.
+   */
+  onFrameSec?: (sec: number) => void;
   freePlaceEdit?: boolean;
   /** Edit mode opt-in: show EVERY card word (not just the on-screen page). */
   showAllWords?: boolean;
@@ -166,6 +174,33 @@ export default function RemotionPreview({
     } catch {
       /* not mounted yet */
     }
+  }, [plan]);
+
+  /**
+   * Write the Player's frame back to the studio clock. The Player has its own
+   * transport (controls), so without this it free-runs: playheadSec froze at
+   * the last timeline scrub while the video played on, and anything gated on
+   * the playhead — the cue drag box's on-screen gate — stuck ON after the
+   * image flew out. The seek effect above never fights this: the frame the
+   * Player reports IS the seek target, so |cur − target| = 0 and no seek
+   * fires. The callback rides a ref so the listener attaches once per mount,
+   * not on every page re-render.
+   */
+  const onFrameSecRef = useRef(onFrameSec);
+  onFrameSecRef.current = onFrameSec;
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !plan) return;
+    const onFrame = (e: { detail?: { frame?: unknown } }) => {
+      const cb = onFrameSecRef.current;
+      if (!cb) return;
+      const frame = e.detail?.frame;
+      if (typeof frame === 'number' && Number.isFinite(frame)) {
+        cb(Math.round((frame / plan.fps) * 100) / 100);
+      }
+    };
+    p.addEventListener('frameupdate', onFrame as never);
+    return () => p.removeEventListener('frameupdate', onFrame as never);
   }, [plan]);
 
   if (!plan) {

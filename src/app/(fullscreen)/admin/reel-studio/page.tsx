@@ -3344,6 +3344,19 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, project?.clips.length]);
 
+  // Warm the cue images on project load (same pattern as the sprite prefetch
+  // above) — after a refresh the first attach's plan rebuild would re-fetch
+  // them cold, and a cold <Img>/<Gif> mount delayRenders the Player (the
+  // stage blanks until it resolves).
+  useEffect(() => {
+    if (!project) return;
+    for (const c of project.mediaCues ?? []) {
+      const img = new Image();
+      img.src = c.url;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.mediaCues?.length]);
+
 
   // Deep-link bridge: /admin/reel-studio?reel=<id> opens that reel on the
   // Clone tab (the twins page's "New video" lands here).
@@ -4610,11 +4623,37 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     void loadCueAssets();
   }
 
+  /**
+   * The Remotion Player's frame, written back into the studio clock. The
+   * Player has its own transport (controls), so without this it free-runs
+   * while it plays and playheadSec goes stale — the cue drag box's on-screen
+   * gate (cueOnScreen) stuck ON after the image flew out. The seek effect in
+   * RemotionPreview never fights this: the reported frame IS the seek target.
+   */
+  const onPlayerFrame = useCallback((sec: number) => {
+    setPlayheadSec(sec);
+  }, []);
+
   /** Picker pick: attach the image to the pending word. One cue per word (re-pick replaces).
    *  `animated` marks a GIF sticker — the cue renders through Remotion's
    *  frame-driven <Gif> (preview === render) instead of the static <Img>. */
   async function attachCue(url: string, opts?: { animated?: boolean }) {
     if (!project || !currentClip || cuePickerWord == null) return;
+    // Warm the browser cache BEFORE the plan rebuild mounts the <Img>/<Gif> —
+    // after a refresh the file isn't fetched yet (the sticker tile previews the
+    // WebP, not the GIF), and a cold mount delayRenders the Player, which
+    // blanks the whole stage until it resolves. Best-effort and capped — a
+    // slow or failed warm never blocks the attach.
+    try {
+      const img = new Image();
+      img.src = url;
+      await Promise.race([
+        img.decode().catch(() => {}),
+        new Promise((r) => setTimeout(r, 1500)),
+      ]);
+    } catch {
+      /* the cue still attaches */
+    }
     const rest = (project.mediaCues ?? []).filter(
       (c) => !(c.clipId === currentClip.id && c.wordIndex === cuePickerWord),
     );
@@ -8766,6 +8805,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         project={projectWithWordPlace ?? project}
                         aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
                         playheadSec={playheadSec}
+                        onFrameSec={onPlayerFrame}
                         freePlaceEdit={stackEditMode}
                         showAllWords={stackEditMode && showAllCardWords}
                       />
