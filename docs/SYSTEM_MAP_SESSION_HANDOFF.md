@@ -19,6 +19,31 @@
   node's crosshair focuses one system (`?funnel=<id>`, "← All systems" back);
   its chevron collapses it to just the funnel card. 7 builder tests green
   (`tests/lib/system-map.test.ts`), tsc clean.
+- `ca3768f` — **the System Blueprint Creator**: "Create a blueprint" drafts a
+  whole system (funnel + emails + links + content) as a *pending* subgraph on
+  the canvas, from research / an optimization (the leak detector's output) / a
+  clone variant. The drafters (`blueprint.ts`) are pure; the skills
+  (`research/skills/blueprint.ts`) materialize only on approve — the gated
+  pattern. `system_blueprints` table + `blueprintStore.ts` + the
+  `/api/admin/system-map/blueprint` route (propose/approve/reject) + the
+  builder's `pendingBlueprints` overlay + the create panel. 18 tests green
+  (`tests/lib/blueprint.test.ts`). Port: `docs/SYSTEM_BLUEPRINT_CREATOR_PORT.md`.
+- `8719ace` — **deep-links + the node peek + the AI chat**: each system on the
+  Asset Hub's Systems tab gets a "Map →" button opening its focused subgraph.
+  Clicking a node expands it into a detail peek (`NodePeekPanel.tsx`). A
+  read-only AI chat docks at the corner (`MapChatDock.tsx` +
+  `/api/admin/system-map/chat`), grounded in the live graph (funnels + edge
+  rates + leaks), with a "draft the fix" handoff into the blueprint creator.
+
+## Where to pick up (the strategy's §14 order)
+
+Shipped: edge metrics + the leak detector (1), the first write path (3), the
+blueprint creator + the AI chat (4, partially), the node peek. **Next:**
+step 2 — **live state + a time range** (poll the graph so the numbers tick; a
+date-range selector that re-colors the edges by the period). Then step 5 (the
+variant tree as a proper canvas) and step 6 (watch triggers reporting into the
+map). The analysis engine reads all-time counts today — a period-aware read is
+the seam for step 2.
 
 ## The architecture to keep
 
