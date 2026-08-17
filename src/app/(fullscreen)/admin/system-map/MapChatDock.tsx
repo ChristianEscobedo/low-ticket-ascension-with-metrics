@@ -1,15 +1,17 @@
 'use client';
 
 /**
- * The map's AI chat — docked at the corner, and it SEES the graph. Ask it
- * "why is the checkout leaking?", "which reel made the most", "what should I
- * fix first" — it answers grounded in the live picture (the funnels + their
- * metrics, the conversion rate on every edge, the leaks). Read-only: the chat
- * never edits the graph. When there's a leak, a "Draft the fix" action hands
- * off to the blueprint creator (the gated path) — the chat proposes, the
- * canvas materializes on approval.
+ * The map's AI chat — a full-height sheet docked to the RIGHT edge, and it
+ * SEES the graph. Ask it "why is the checkout leaking?", "which reel made the
+ * most", "what should I fix first" — it answers grounded in the live picture
+ * (the funnels + their metrics, the conversion rate on every edge, the
+ * leaks). Read-only: the chat never edits the graph. When there's a leak, a
+ * "Draft the fix" action hands off to the blueprint creator (the gated path).
+ *
+ * Controlled: the page owns `open` (so clicking a node's peek and opening the
+ * chat don't fight over the right edge).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MessageSquare, X, Loader2, Send, Wrench } from 'lucide-react';
 import type { SystemMapInput } from '@/lib/mothermode/systemMap';
 import type {
@@ -63,26 +65,41 @@ function buildContext(
   return lines.join('\n');
 }
 
+const SUGGESTIONS = [
+  'What should I fix first?',
+  "Where's the biggest leak?",
+  'Which content is making money?',
+];
+
 export default function MapChatDock({
   input,
   analysis,
+  open,
+  onToggle,
   onDraftFix,
 }: {
   input: SystemMapInput | null;
   analysis: SystemMapAnalysis | null;
+  open: boolean;
+  onToggle: (open: boolean) => void;
   /** Hand a leak to the blueprint creator (the gated fix path). */
   onDraftFix: (leak: SystemMapLeak) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const topLeak = analysis?.leaks[0] ?? null;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const ask = async () => {
-    const question = draft.trim();
-    if (!question || busy) return;
-    const next: ChatMessage[] = [...messages, { role: 'user', content: question }];
+  // Keep the latest message in view.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages, busy]);
+
+  const ask = async (question: string) => {
+    const q = question.trim();
+    if (!q || busy) return;
+    const next: ChatMessage[] = [...messages, { role: 'user', content: q }];
     setMessages(next);
     setDraft('');
     setBusy(true);
@@ -111,40 +128,65 @@ export default function MapChatDock({
     }
   };
 
+  // Closed: a slim tab on the right edge that opens the sheet.
   if (!open) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => onToggle(true)}
         title="Ask the map — the AI chat that sees the whole system"
-        className="absolute bottom-4 left-4 z-30 inline-flex items-center gap-1.5 rounded-full border border-brass/50 bg-ink/95 px-3.5 py-2 text-xs font-semibold text-brass shadow-lg hover:bg-brass/15"
+        className="absolute right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-2 rounded-l-xl border-y border-l border-brass/50 bg-ink/95 px-2 py-4 text-brass shadow-lg hover:bg-brass/15"
       >
-        <MessageSquare className="h-3.5 w-3.5" /> Ask the map
+        <MessageSquare className="h-4 w-4" />
+        <span
+          className="text-[10px] font-semibold tracking-widest"
+          style={{ writingMode: 'vertical-rl' }}
+        >
+          ASK THE MAP
+        </span>
       </button>
     );
   }
 
+  // Open: the full-height right sheet.
   return (
-    <div className="absolute bottom-4 left-4 z-30 flex h-[420px] w-[340px] flex-col overflow-hidden rounded-2xl border border-bone/15 bg-ink/98 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-bone/10 px-3.5 py-2.5">
+    <div className="absolute right-0 top-0 z-30 flex h-full w-[360px] flex-col border-l border-bone/15 bg-ink/98 shadow-2xl">
+      <div className="flex shrink-0 items-center justify-between border-b border-bone/10 px-4 py-3">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-bone">
           <MessageSquare className="h-3.5 w-3.5 text-brass" /> Ask the map
         </p>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => onToggle(false)}
           className="rounded p-1 text-bone/40 hover:text-bone"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3.5 py-3">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3"
+      >
         {messages.length === 0 && (
-          <p className="text-[11px] leading-relaxed text-bone/45">
-            I can see the whole system. Ask me what's leaking, which content is
-            making money, or what to fix first.
-          </p>
+          <div>
+            <p className="text-[11px] leading-relaxed text-bone/45">
+              I can see the whole system — the funnels, the conversion rate on
+              every connection, and where it's leaking. Ask me anything.
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => void ask(s)}
+                  className="block w-full rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2 text-left text-[11px] text-bone/60 hover:border-brass/40 hover:text-bone"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((m, i) => (
           <div
@@ -167,11 +209,11 @@ export default function MapChatDock({
 
       {/* the fix path — hand the worst leak to the blueprint creator */}
       {topLeak && (
-        <div className="border-t border-bone/10 px-3.5 py-2">
+        <div className="shrink-0 border-t border-bone/10 px-4 py-2.5">
           <button
             type="button"
             onClick={() => onDraftFix(topLeak)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 text-[10px] font-semibold text-red-300 hover:bg-red-400/20"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-[10px] font-semibold text-red-300 hover:bg-red-400/20"
           >
             <Wrench className="h-3 w-3" /> Draft the fix for the {topLeak.label}{' '}
             leak ({topLeak.funnelName})
@@ -179,21 +221,21 @@ export default function MapChatDock({
         </div>
       )}
 
-      <div className="flex items-center gap-2 border-t border-bone/10 px-3.5 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-t border-bone/10 px-4 py-3">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') void ask();
+            if (e.key === 'Enter') void ask(draft);
           }}
           placeholder="Ask about this map…"
-          className="min-w-0 flex-1 rounded-lg border border-bone/15 bg-noir px-2.5 py-1.5 text-xs text-bone outline-none placeholder:text-bone/30 focus:border-brass/50"
+          className="min-w-0 flex-1 rounded-lg border border-bone/15 bg-noir px-3 py-2 text-xs text-bone outline-none placeholder:text-bone/30 focus:border-brass/50"
         />
         <button
           type="button"
-          onClick={() => void ask()}
+          onClick={() => void ask(draft)}
           disabled={busy || !draft.trim()}
-          className="shrink-0 rounded-lg border border-brass/50 bg-brass/15 p-1.5 text-brass hover:bg-brass/25 disabled:opacity-40"
+          className="shrink-0 rounded-lg border border-brass/50 bg-brass/15 p-2 text-brass hover:bg-brass/25 disabled:opacity-40"
         >
           <Send className="h-3.5 w-3.5" />
         </button>

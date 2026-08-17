@@ -268,6 +268,8 @@ export default function SystemMapPage() {
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   /** The node being inspected (the peek panel). null = closed. */
   const [selectedNode, setSelectedNode] = useState<SystemMapNode | null>(null);
+  /** The "Ask the map" sheet (the right edge). Mutually exclusive with the peek. */
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Load the input once; read the initial focus from ?funnel=<id>.
   useEffect(() => {
@@ -392,7 +394,11 @@ export default function SystemMapPage() {
       rejectBlueprint: (blueprintId: string) =>
         void decideBlueprint(blueprintId, 'reject'),
       blueprintBusy,
-      inspectNode: (node: SystemMapNode) => setSelectedNode(node),
+      // Inspecting a node takes the right edge — close the chat sheet.
+      inspectNode: (node: SystemMapNode) => {
+        setSelectedNode(node);
+        setChatOpen(false);
+      },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [collapsed, focusId, router, blueprintBusy],
@@ -662,16 +668,23 @@ export default function SystemMapPage() {
             }}
           />
           {/* the node peek — click a node and it expands into the detail
-              panel (what it is, its metrics, the way in) */}
+              panel (what it is, its metrics, the way in). It shares the right
+              edge with the chat sheet — the chat hides it while open. */}
           <NodePeekPanel
-            node={selectedNode}
+            node={chatOpen ? null : selectedNode}
             onClose={() => setSelectedNode(null)}
           />
-          {/* the AI chat that sees the map — read-only Q&A, with a "draft the
-              fix" handoff into the blueprint creator when there's a leak */}
+          {/* the AI chat that sees the map — a full-height sheet on the right
+              edge. Read-only Q&A, with a "draft the fix" handoff into the
+              blueprint creator when there's a leak. */}
           <MapChatDock
             input={input}
             analysis={analysis}
+            open={chatOpen}
+            onToggle={(open) => {
+              setChatOpen(open);
+              if (open) setSelectedNode(null);
+            }}
             onDraftFix={(leak) => void onDraftFix(leak)}
           />
         </div>
