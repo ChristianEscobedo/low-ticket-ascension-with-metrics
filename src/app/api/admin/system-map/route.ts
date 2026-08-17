@@ -11,6 +11,7 @@
  * `@/lib/mothermode/systemMap` (pure, unit-tested).
  */
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import { listFunnelsForAdmin as listSalesFunnels } from '@/lib/mothermode/sales/store';
 import { listFunnelsForAdmin as listOptinFunnels } from '@/lib/mothermode/optin/store';
@@ -28,6 +29,48 @@ import type { OptinFunnelRecord } from '@/lib/mothermode/optin/types';
 import type { EmailKitRecord } from '@/lib/mothermode/email/types';
 
 export const dynamic = 'force-dynamic';
+
+const SALES_LEADS = 'mothermode_sales_funnel_leads';
+
+/**
+ * Content→buyer attribution: aggregate the sales leads by the piece that
+ * produced them (the lead carries the piece id in `utm_content`, plus
+ * `purchased` + `purchase_amount_cents`). Returns pieceId → { leads, sales,
+ * revenueCents }. Degrades to {} when the table/columns aren't there yet —
+ * the map just stays quiet on the content nodes.
+ */
+async function contentAttribution(): Promise<
+  Record<string, { leads: number; sales: number; revenueCents: number }>
+> {
+  try {
+    const svc = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    );
+    const { data, error } = await svc
+      .from(SALES_LEADS)
+      .select('utm_content, purchased, purchase_amount_cents')
+      .not('utm_content', 'is', null);
+    if (error || !data) return {};
+    const out: Record<string, { leads: number; sales: number; revenueCents: number }> = {};
+    for (const row of data as Array<Record<string, unknown>>) {
+      const pieceId = typeof row.utm_content === 'string' ? row.utm_content : '';
+      if (!pieceId) continue;
+      const purchased = row.purchased === true;
+      const cents =
+        typeof row.purchase_amount_cents === 'number' ? row.purchase_amount_cents : 0;
+      const cur = (out[pieceId] ??= { leads: 0, sales: 0, revenueCents: 0 });
+      cur.leads += 1;
+      if (purchased) {
+        cur.sales += 1;
+        cur.revenueCents += cents;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 /** The public path for a sales-funnel step (the /funnel/<slug>/… routes). */
 const SALES_STEP_PATH: Record<string, string> = {
@@ -225,13 +268,15 @@ export async function GET() {
   if (!guard.ok) return guard.response;
 
   try {
-    const [salesFunnels, optinFunnels, kits, links, content] = await Promise.all([
-      listSalesFunnels(),
-      listOptinFunnels(),
-      listKitsForAdmin(),
-      listUtmLinks(),
-      listContentPlan(),
-    ]);
+    const [salesFunnels, optinFunnels, kits, links, content, contentMetrics] =
+      await Promise.all([
+        listSalesFunnels(),
+        listOptinFunnels(),
+        listKitsForAdmin(),
+        listUtmLinks(),
+        listContentPlan(),
+        contentAttribution(),
+      ]);
 
     const funnels: SystemMapFunnelInput[] = [
       ...salesFunnels.map((f) => salesToInput(f, kits)),
@@ -262,7 +307,12 @@ export async function GET() {
     // The route returns the INPUT; the page builds + lays out the graph
     // client-side (the builder is pure, no server imports), so expand /
     // collapse / focus re-layout instantly with no refetch.
-    const input: SystemMapInput = { funnels, links: mapLinks, content: mapContent };
+    const input: SystemMapInput = {
+      funnels,
+      links: mapLinks,
+      content: mapContent,
+      contentMetrics,
+    };
     return NextResponse.json({ success: true, input });
   } catch (e) {
     return NextResponse.json(

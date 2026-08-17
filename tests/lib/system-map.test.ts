@@ -119,6 +119,19 @@ describe('buildSystemMap', () => {
     expect(full.edges.length).toBeGreaterThan(0);
   });
 
+  it('a content node carries its buyer attribution — "this reel made $1,240 · 3 sales"', () => {
+    const withAttr = buildSystemMap({
+      ...input,
+      contentMetrics: { p1: { leads: 40, sales: 3, revenueCents: 124000 } },
+    });
+    const piece = withAttr.nodes.find((n) => n.id === 'content:p1');
+    expect(piece!.metrics).toContain('$1,240');
+    expect(piece!.metrics).toContain('3 sales');
+    // a piece with no attribution stays quiet (just its kind chip)
+    const quiet = buildSystemMap(input).nodes.find((n) => n.id === 'content:p1');
+    expect(quiet!.metrics).toEqual(['ad']);
+  });
+
   it('a draft funnel reads draft, and an unpublished funnel gets no live link', () => {
     const draft = buildSystemMap({
       funnels: [{ ...funnel, id: 'f2', status: 'draft', pages: [], emails: [] }],

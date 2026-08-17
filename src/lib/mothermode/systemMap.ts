@@ -96,6 +96,16 @@ export interface SystemMapInput {
   funnels: SystemMapFunnelInput[];
   links: SystemMapLinkInput[];
   content: SystemMapContentInput[];
+  /**
+   * Content→buyer attribution, keyed by piece id: the leads/sales/revenue the
+   * piece produced (the leads carry the piece id in `utm_content` +
+   * `purchased` + `purchase_amount_cents`). The stickiest number on the map —
+   * "this reel made $1,240." Optional; a piece with no attribution stays quiet.
+   */
+  contentMetrics?: Record<
+    string,
+    { leads: number; sales: number; revenueCents: number }
+  >;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,13 +352,21 @@ export function buildSystemMap(
           const contentNodeId = `content:${piece.id}`;
           // A piece can carry several links — one node, several edges.
           if (!nodes.some((n) => n.id === contentNodeId)) {
+            // Content→buyer attribution: "this reel made $1,240 · 3 sales" —
+            // the stickiest number on the map. Quiet when there's none.
+            const attr = input.contentMetrics?.[piece.id];
             nodes.push({
               id: contentNodeId,
               kind: 'content',
               lane: 'traffic',
               label: piece.title || 'Untitled',
               sub: [piece.platform, piece.format].filter(Boolean).join(' · '),
-              metrics: [piece.kind === 'paid' ? 'ad' : ''].filter(Boolean),
+              metrics: [
+                piece.kind === 'paid' ? 'ad' : '',
+                attr && attr.sales > 0 ? money(attr.revenueCents) : '',
+                attr && attr.sales > 0 ? count(attr.sales, 'sale') : '',
+                attr && attr.sales === 0 && attr.leads > 0 ? count(attr.leads, 'lead') : '',
+              ].filter(Boolean),
               status: 'built',
               href: piece.href,
               x: LANE_X.traffic,
