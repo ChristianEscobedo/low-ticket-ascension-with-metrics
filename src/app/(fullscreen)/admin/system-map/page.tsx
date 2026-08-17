@@ -36,6 +36,7 @@ import {
   Position,
   type Node,
   type NodeProps,
+  type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
@@ -192,6 +193,10 @@ export default function SystemMapPage() {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   /** The focus control: the one system on the canvas (null = the full view). */
   const [focusId, setFocusId] = useState<string | null>(null);
+  /** A transient note after a write ("Link re-pointed → Checkout"). */
+  const [notice, setNotice] = useState<string | null>(null);
+  /** True while a re-point PATCH is in flight. */
+  const [saving, setSaving] = useState(false);
 
   // Load the input once; read the initial focus from ?funnel=<id>.
   useEffect(() => {
@@ -291,6 +296,69 @@ export default function SystemMapPage() {
     };
   }, [map, edgeHealth]);
 
+  // ——— The first write path: drag a link onto a page to re-point it ———
+  // Only a link → page/funnel connection is meaningful; anything else is
+  // rejected by isValidConnection. On connect: PATCH, then update the input
+  // locally (the map rebuilds from it — no refetch).
+  // React Flow passes an Edge | Connection; the structural type accepts both.
+  const isValidConnection = (conn: {
+    source?: string | null;
+    target?: string | null;
+  }): boolean =>
+    (conn.source?.startsWith('link:') ?? false) &&
+    ((conn.target?.startsWith('page:') ?? false) ||
+      (conn.target?.startsWith('funnel:') ?? false));
+
+  const onConnect = async (conn: Connection) => {
+    if (!input || saving || !conn.source || !conn.target) return;
+    const linkId = conn.source.slice('link:'.length);
+    // The target node id carries the funnel + page: page:<funnelId>:<pageKey>
+    // or funnel:<funnelId> (the root).
+    let funnelId = '';
+    let funnelPage: string | null = null;
+    if (conn.target.startsWith('page:')) {
+      const rest = conn.target.slice('page:'.length);
+      const cut = rest.indexOf(':');
+      funnelId = rest.slice(0, cut);
+      funnelPage = rest.slice(cut + 1);
+    } else if (conn.target.startsWith('funnel:')) {
+      funnelId = conn.target.slice('funnel:'.length);
+      funnelPage = null;
+    } else {
+      return;
+    }
+    const link = input.links.find((l) => l.id === linkId);
+    const targetLabel = funnelPage ?? 'the funnel root';
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/system-map', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId, funnelId, funnelPage }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Re-point failed');
+      // Optimistic: update the input, the map rebuilds from it.
+      setInput((prev) =>
+        prev
+          ? {
+              ...prev,
+              links: prev.links.map((l) =>
+                l.id === linkId ? { ...l, funnelId, optinFunnelId: null, funnelPage } : l,
+              ),
+            }
+          : prev,
+      );
+      setNotice(`"${link?.label ?? 'Link'}" → ${targetLabel}`);
+      window.setTimeout(() => setNotice(null), 4000);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Re-point failed');
+      window.setTimeout(() => setNotice(null), 5000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // The headline: the worst leak across every system (the operator's morning
   // answer). Clicking it focuses that funnel.
   const topLeak = analysis?.leaks[0] ?? null;
@@ -377,13 +445,21 @@ export default function SystemMapPage() {
               minZoom={0.2}
               maxZoom={1.6}
               proOptions={{ hideAttribution: true }}
-              nodesConnectable={false}
+              nodesConnectable={true}
+              isValidConnection={isValidConnection}
+              onConnect={onConnect}
               deleteKeyCode={null}
               colorMode="dark"
             >
               <Background gap={24} size={1} color="rgba(235,230,220,0.05)" />
               <Controls showInteractive={false} />
             </ReactFlow>
+          )}
+          {/* the write-path feedback — a transient note after a re-point */}
+          {notice && (
+            <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-brass/40 bg-ink/95 px-3 py-1.5 text-[11px] font-semibold text-bone/90 shadow-lg">
+              {saving ? 'Saving…' : notice}
+            </div>
           )}
         </div>
       </div>

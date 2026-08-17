@@ -16,7 +16,7 @@ import { requireAdminRoute } from '@/utils/courses/admin-route-guard';
 import { listFunnelsForAdmin as listSalesFunnels } from '@/lib/mothermode/sales/store';
 import { listFunnelsForAdmin as listOptinFunnels } from '@/lib/mothermode/optin/store';
 import { listKitsForAdmin } from '@/lib/mothermode/email/store';
-import { listUtmLinks } from '@/lib/mothermode/planner/links';
+import { listUtmLinks, updateUtmLinkTarget } from '@/lib/mothermode/planner/links';
 import { listContentPlan } from '@/lib/mothermode/planner/store';
 import type {
   SystemMapContentInput,
@@ -317,6 +317,43 @@ export async function GET() {
   } catch (e) {
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : 'System map failed' },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * PATCH /api/admin/system-map — the map's first write path: re-point a link at
+ * a different funnel page (drag a link onto a page on the canvas).
+ *
+ * Body: { linkId, funnelId, funnelPage }. `funnelPage: null` re-points at the
+ * funnel root. The store throws on failure (the admin half's policy) — a
+ * silent mis-point is the wrong default.
+ */
+export async function PATCH(request: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
+  try {
+    const body = (await request.json()) as {
+      linkId?: string;
+      funnelId?: string;
+      funnelPage?: string | null;
+    };
+    if (!body.linkId || !body.funnelId) {
+      return NextResponse.json(
+        { success: false, error: 'linkId and funnelId are required' },
+        { status: 400 },
+      );
+    }
+    await updateUtmLinkTarget(body.linkId, {
+      funnelId: body.funnelId,
+      funnelPage: body.funnelPage ?? null,
+    });
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: e instanceof Error ? e.message : 'Re-point failed' },
       { status: 500 },
     );
   }

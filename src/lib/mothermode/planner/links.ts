@@ -414,6 +414,29 @@ export async function deleteUtmLink(id: string): Promise<void> {
   if (error) throw new Error(`deleteUtmLink failed: ${error.message}`);
 }
 
+/**
+ * Re-point a link at a different funnel page — the System Map's first write
+ * path (drag a link onto a page on the canvas). Sets `funnel_id` +
+ * `funnel_page`; clears `optin_funnel_id` because the two are mutually
+ * exclusive (the DB CHECK). `funnelPage: null` re-points at the funnel root.
+ * The admin half throws — a silent mis-point is the wrong default.
+ */
+export async function updateUtmLinkTarget(
+  id: string,
+  target: { funnelId: string; funnelPage: string | null },
+): Promise<void> {
+  const { error } = await (serviceClient() as any)
+    .from(UTM_LINKS)
+    .update({
+      funnel_id: target.funnelId,
+      funnel_page: target.funnelPage ?? '',
+      optin_funnel_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (error) throw new Error(`updateUtmLinkTarget failed: ${error.message}`);
+}
+
 /** Per-link click detail beyond the hot counter. */
 export interface LinkClickStats {
   /** Human clicks in the window. Excludes bots, so it agrees with click_count. */

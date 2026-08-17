@@ -85,10 +85,16 @@ one the quiet default.
   pannable map is its use case). The house's two earlier canvases (the funnel
   flow + the email flow) predate it and are custom — this is the first
   React Flow surface.
-- **v1 is read-only + click-through.** Editing on the canvas (rewiring a
-  connection, reassigning a link's page) needs a mutation endpoint per source
-  table — the same reason the Systems panel reads and routes instead of
-  writing. That's the follow-up.
+- **The first write path shipped: drag a link onto a page to re-point it.**
+  React Flow's `onConnect` (gated by `isValidConnection` — only a
+  link → page/funnel connection is meaningful) → `PATCH /api/admin/system-map`
+  → `updateUtmLinkTarget` (the links store's new function — sets `funnel_id` +
+  `funnel_page`, clears `optin_funnel_id` per the DB CHECK, and throws on
+  failure per the admin half's policy) → the page updates the input locally
+  and the map rebuilds (no refetch), with a transient note confirming the
+  re-point. The map is a tool now, not just a report. The next write paths
+  (drag content onto a link, a kit onto a step) follow the same shape — one
+  mutation endpoint per source table.
 - The content node's editor href is `/admin/planner` for every piece in v1
   (the planner board owns the cards); a reel deep-link (`/admin/reel-studio?reel=<id>`)
   is the refinement when a piece is a video.
