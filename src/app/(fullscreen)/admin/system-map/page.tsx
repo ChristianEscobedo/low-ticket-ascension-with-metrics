@@ -270,28 +270,47 @@ export default function SystemMapPage() {
   const [selectedNode, setSelectedNode] = useState<SystemMapNode | null>(null);
   /** The "Ask the map" sheet (the right edge). Mutually exclusive with the peek. */
   const [chatOpen, setChatOpen] = useState(false);
+  /** Live state: poll the graph so the numbers tick (a dashboard, not a diagram). */
+  const [live, setLive] = useState(false);
+
+  // The input loader — the graph's data. Reused by the mount, the live poll,
+  // and the blueprint approve refetch.
+  const loadInput = async (): Promise<SystemMapInput | null> => {
+    try {
+      const res = await fetch('/api/admin/system-map', { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load the system map');
+      setInput(json.input as SystemMapInput);
+      return json.input as SystemMapInput;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load the system map');
+      return null;
+    }
+  };
 
   // Load the input once; read the initial focus from ?funnel=<id>.
   useEffect(() => {
     void (async () => {
+      const loaded = await loadInput();
+      if (!loaded) return;
       try {
-        const res = await fetch('/api/admin/system-map', { cache: 'no-store' });
-        const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load the system map');
-        setInput(json.input as SystemMapInput);
-        try {
-          const f = new URL(window.location.href).searchParams.get('funnel');
-          if (f && (json.input as SystemMapInput).funnels.some((x) => x.id === f)) {
-            setFocusId(f);
-          }
-        } catch {
-          /* malformed URL — the full view */
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load the system map');
+        const f = new URL(window.location.href).searchParams.get('funnel');
+        if (f && loaded.funnels.some((x) => x.id === f)) setFocusId(f);
+      } catch {
+        /* malformed URL — the full view */
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The live poll — when on, refetch every 30s. The builder is pure + instant,
+  // so a rebuild is cheap; the metrics + edge colors tick with the real numbers.
+  useEffect(() => {
+    if (!live) return;
+    const t = window.setInterval(() => void loadInput(), 30_000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
 
   // Load the pending blueprints (the overlay). Re-run after a propose /
   // approve / reject so the canvas reflects the blueprint's lifecycle.
@@ -606,6 +625,25 @@ export default function SystemMapPage() {
               {Math.round(topLeak.rate * 100)}%
             </button>
           )}
+          {/* Live state — poll the graph so the numbers tick. A dashboard,
+              not a diagram. */}
+          <button
+            type="button"
+            onClick={() => setLive((v) => !v)}
+            title={live ? 'Live — refreshing every 30s. Click to pause.' : 'Go live — refresh the numbers every 30s.'}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${
+              live
+                ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-300'
+                : 'border-bone/15 text-bone/50 hover:bg-bone/10'
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                live ? 'animate-pulse bg-emerald-400' : 'bg-bone/30'
+              }`}
+            />
+            {live ? 'Live' : 'Go live'}
+          </button>
           {map && (
             <span className="ml-auto text-[10px] text-bone/30">
               {map.nodes.length} nodes · {map.edges.length} connections
