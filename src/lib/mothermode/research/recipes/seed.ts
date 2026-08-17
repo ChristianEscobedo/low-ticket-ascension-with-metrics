@@ -667,6 +667,39 @@ export const RECIPE_SEEDS: RecipeSeed[] = [
     ],
   },
   {
+    slug: 'system-blueprint',
+    name: 'System Blueprint',
+    description:
+      'Draft the source material for a System Map blueprint: the offer decision (gated), the nurture outline, and the launch content. The artifacts it produces are what "Create a blueprint → From research" aims at the map — the blueprint creator assembles them into the connected subgraph (funnel + emails + links + content) as a pending overlay for approval. Strategist (gate) → email → copy.',
+    budgetEstCents: 200,
+    steps: [
+      {
+        expert: 'strategist',
+        instruction:
+          'Decide the offer this system sells, from the brief and our numbers. Pick the ONE promise the evidence supports best, the mechanism that delivers it in one sitting, the price point, and 3-5 angles. Save an offer-brief artifact with the exact documented structure — this becomes the blueprint\'s funnel + pages. Brief goal: {input}',
+        inputFrom: 'brief',
+        outputArtifact: 'offer-brief',
+        gate: 'approve',
+      },
+      {
+        expert: 'email',
+        instruction:
+          'Write the nurture sequence for this offer: 4-5 emails from opt-in to the ask, subject lines from the research language, one job per email, campaignType nurture-to-offer. Save an email-outline artifact with the exact documented structure — this becomes the blueprint\'s nurture node. Offer brief:\n\n{input}',
+        inputFrom: 'previous',
+        outputArtifact: 'email-outline',
+        gate: 'auto',
+      },
+      {
+        expert: 'copy',
+        instruction:
+          'Plan the launch content that feeds this system: 5-7 posts across instagram and tiktok, hooks pulled from the research language verbatim, one paid angle. Save a content-plan artifact with the exact documented items structure — these become the blueprint\'s content + link nodes. The offer and its sequence:\n\n{input}',
+        inputFrom: 'previous',
+        outputArtifact: 'content-plan',
+        gate: 'auto',
+      },
+    ],
+  },
+  {
     slug: 'lead-magnet-reel-day',
     name: 'Lead Magnet Reel Day',
     description:

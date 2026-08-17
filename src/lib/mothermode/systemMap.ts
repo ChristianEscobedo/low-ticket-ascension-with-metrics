@@ -21,10 +21,12 @@
  * below; this module builds + LAYS OUT the graph (x/y per node) so the page
  * is a dumb renderer and the geometry is unit-testable.
  */
+import type { BlueprintNodeKind, SystemBlueprint } from './blueprint';
 
 // ---------------------------------------------------------------------------
 // Input (the route maps DB records into these — small, so tests stay small)
 // ---------------------------------------------------------------------------
+
 
 export interface SystemMapFunnelInput {
   id: string;
@@ -132,7 +134,12 @@ export interface SystemMapNode {
   /** The layout, computed by the builder — the page never positions a node. */
   x: number;
   y: number;
+  /** Set on a pending-blueprint overlay node: the blueprint it belongs to. */
+  blueprintId?: string;
+  /** True on the blueprint's anchor node (its funnel) — where approve/reject lives. */
+  blueprintAnchor?: boolean;
 }
+
 
 export interface SystemMapEdge {
   id: string;
@@ -204,7 +211,19 @@ export interface BuildSystemMapOptions {
    *  pages/emails/links/content are skipped and the band collapses. Default:
    *  everything expanded (the full view). */
   collapsed?: ReadonlySet<string>;
+  /** Pending blueprints to overlay (a blueprint-in-progress), each rendered
+   *  as a dashed band below the real systems, materialized only on approve. */
+  pendingBlueprints?: SystemBlueprint[];
 }
+
+/** A blueprint node's lane, from its kind (the builder owns the lanes). */
+function laneForBlueprintKind(kind: BlueprintNodeKind): SystemMapLane {
+  if (kind === 'content') return 'traffic';
+  if (kind === 'link') return 'links';
+  if (kind === 'email') return 'nurture';
+  return 'pages'; // funnel + page
+}
+
 
 /**
  * Build + lay out the system map. Funnels each get a horizontal band; within
@@ -386,6 +405,69 @@ export function buildSystemMap(
     // The next funnel's band starts below this one's fullest lane.
     bandTop =
       Math.max(laneY.traffic, laneY.links, laneY.pages, laneY.nurture) +
+      FUNNEL_BAND_GAP;
+  }
+
+  // ——— The pending blueprint overlay ———
+  // Each proposed blueprint renders as a band below the real systems, its
+  // nodes 'pending' (the page draws them dashed) until approve materializes
+  // them. A blueprint is a NEW system, so it overlays regardless of the
+  // focus/collapse view; the variant-of edge to its parent funnel only draws
+  // when the parent is on the canvas.
+  for (const bp of opts.pendingBlueprints ?? []) {
+    const bpLaneY: Record<SystemMapLane, number> = {
+      traffic: bandTop,
+      links: bandTop,
+      pages: bandTop,
+      nurture: bandTop,
+    };
+    const placeBp = (lane: SystemMapLane): number => {
+      const y = bpLaneY[lane];
+      bpLaneY[lane] += NODE_H + NODE_GAP_Y;
+      return y;
+    };
+    const bpNodeId = (key: string) => `blueprint:${bp.id}:${key}`;
+    // The anchor (the funnel node, else the first) carries approve/reject.
+    const anchorKey =
+      bp.nodes.find((n) => n.kind === 'funnel')?.key ?? bp.nodes[0]?.key;
+    for (const n of bp.nodes) {
+      const lane = laneForBlueprintKind(n.kind);
+      nodes.push({
+        id: bpNodeId(n.key),
+        kind: n.kind,
+        lane,
+        label: n.label,
+        sub: n.sub,
+        metrics: n.metrics,
+        status: 'pending',
+        blueprintId: bp.id,
+        blueprintAnchor: n.key === anchorKey,
+        x: LANE_X[lane],
+        y: placeBp(lane),
+      });
+    }
+    for (const n of bp.nodes) {
+      for (const to of n.linksTo) {
+        edges.push({
+          id: `e:${bpNodeId(n.key)}->${bpNodeId(to)}`,
+          from: bpNodeId(n.key),
+          to: bpNodeId(to),
+        });
+      }
+    }
+    // The variant-of edge: a clone/optimization descends from its parent.
+    if (bp.source.parentFunnelId && anchorKey) {
+      const parentId = `funnel:${bp.source.parentFunnelId}`;
+      if (nodes.some((n) => n.id === parentId)) {
+        edges.push({
+          id: `e:${parentId}->${bpNodeId(anchorKey)}`,
+          from: parentId,
+          to: bpNodeId(anchorKey),
+        });
+      }
+    }
+    bandTop =
+      Math.max(bpLaneY.traffic, bpLaneY.links, bpLaneY.pages, bpLaneY.nurture) +
       FUNNEL_BAND_GAP;
   }
 
