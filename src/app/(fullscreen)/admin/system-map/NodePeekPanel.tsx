@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { X, ExternalLink, Eye, Loader2, ArrowDown, ArrowUp } from 'lucide-react';
 import type { SystemMap, SystemMapNode } from '@/lib/mothermode/systemMap';
+import type { SourcePerformance } from '@/lib/mothermode/systemMapAnalysis';
 import { PlanPiecePreview } from '@/components/mothermode/planner/PlanPiecePreview';
 import { PlatformIcon } from '@/components/mothermode/content/PlatformIcon';
 import {
@@ -426,6 +427,40 @@ function PublishAction({
   );
 }
 
+/** A funnel node's by-source breakdown: which post/link/platform is actually
+    worth it — each source's own clicks → leads → sales → conversion, ranked
+    best-first. The answer to "which of the twelve posts is working." */
+function BySource({ sources }: { sources: SourcePerformance[] }) {
+  if (sources.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-bone/40">
+        By source — what's feeding it
+      </p>
+      <div className="mt-2 space-y-1.5">
+        {sources.map((s) => (
+          <div key={s.linkId} className="flex items-baseline gap-2 text-[10px]">
+            <span className="min-w-0 flex-1 truncate text-bone/80">{s.label}</span>
+            <span className="shrink-0 text-bone/40">{s.platform}</span>
+            <span className="shrink-0 text-bone/60">
+              {s.clicks.toLocaleString()} clicks
+            </span>
+            <span className="shrink-0 text-bone/60">{s.leads} leads</span>
+            <span className="shrink-0 font-semibold text-bone/90">{s.sales} sales</span>
+            <span className="shrink-0 font-semibold text-brass">
+              {s.clicks > 0 ? `${Math.round(s.conversionRate * 100)}%` : '—'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[9px] leading-relaxed text-bone/35">
+        Each source's own clicks → leads → sales, ranked best-first. The % is
+        sales per click.
+      </p>
+    </div>
+  );
+}
+
 /** The node's connections — what feeds it, what it feeds. */
 function Connections({
   node,
@@ -474,12 +509,15 @@ function Connections({
 export default function NodePeekPanel({
   node,
   map,
+  sources,
   onClose,
   onChanged,
 }: {
   node: SystemMapNode | null;
   /** The map, so the peek can show the node's connections. */
   map?: SystemMap | null;
+  /** The by-source conversion (per funnel) — the funnel node's breakdown. */
+  sources?: Record<string, SourcePerformance[]> | null;
   onClose: () => void;
   /** Refetch the map after an action writes (a link created). */
   onChanged?: () => void;
@@ -547,6 +585,12 @@ export default function NodePeekPanel({
           <div className="mt-3">
             <FunnelActions node={node} onChanged={onChanged} />
           </div>
+        )}
+
+        {/* the funnel node's by-source breakdown — which post/link/platform
+            feeding it is actually worth it (each source's own funnel) */}
+        {!isBlueprint && node.kind === 'funnel' && (
+          <BySource sources={sources?.[node.id.slice('funnel:'.length)] ?? []} />
         )}
 
         {/* the content node's actions — create the tracked link that wires it

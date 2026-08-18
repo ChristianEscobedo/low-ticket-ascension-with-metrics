@@ -66,8 +66,10 @@ import {
 } from '@/lib/mothermode/systemMap';
 import {
   analyzeSystemMap,
+  bySource,
   EDGE_HEALTH_COLOR,
   type SystemMapAnalysis,
+  type SourcePerformance,
 } from '@/lib/mothermode/systemMapAnalysis';
 import type { SystemBlueprint } from '@/lib/mothermode/blueprint';
 import type { SystemMapLeak } from '@/lib/mothermode/systemMapAnalysis';
@@ -424,6 +426,12 @@ export default function SystemMapPage() {
     () => (input ? analyzeSystemMap(input) : null),
     [input],
   );
+  // The by-source conversion — each funnel's traffic broken down by the
+  // post/link/platform feeding it. The funnel node's peek shows it.
+  const sources: Record<string, SourcePerformance[]> | null = useMemo(
+    () => (input ? bySource(input) : null),
+    [input],
+  );
   const edgeHealth = useMemo(
     () => new Map((analysis?.edgeRates ?? []).map((e) => [e.edgeId, e.health])),
     [analysis],
@@ -764,6 +772,7 @@ export default function SystemMapPage() {
           <NodePeekPanel
             node={chatOpen ? null : selectedNode}
             map={map}
+            sources={sources}
             onClose={() => setSelectedNode(null)}
             onChanged={() => void loadInput()}
           />
