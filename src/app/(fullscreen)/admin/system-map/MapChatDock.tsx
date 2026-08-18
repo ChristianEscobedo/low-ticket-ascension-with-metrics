@@ -12,16 +12,29 @@
  * chat don't fight over the right edge).
  */
 import { useEffect, useRef, useState } from 'react';
-import { MessageSquare, X, Loader2, Send, Wrench } from 'lucide-react';
+import {
+  MessageSquare,
+  X,
+  Loader2,
+  Send,
+  Wrench,
+  Sparkles,
+  ChevronDown,
+  Check,
+} from 'lucide-react';
 import type { SystemMapInput } from '@/lib/mothermode/systemMap';
 import type {
   SystemMapAnalysis,
   SystemMapLeak,
 } from '@/lib/mothermode/systemMapAnalysis';
+import { ResponseStream } from '@/components/mothermode/ResponseStream';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  /** The reasoning trace (what it read, the leaks it found) + how long it took. */
+  trace?: string[];
+  thinkingMs?: number;
 }
 
 const money = (cents: number) =>
@@ -71,6 +84,99 @@ const SUGGESTIONS = [
   'Which content is making money?',
 ];
 
+/** The trace, grounded in the actual map context — what the chat read. */
+function buildTrace(
+  input: SystemMapInput | null,
+  analysis: SystemMapAnalysis | null,
+): string[] {
+  const steps: string[] = [];
+  if (input) {
+    steps.push(
+      `Read ${input.funnels.length} funnel${input.funnels.length === 1 ? '' : 's'} + ${input.content.length} post${input.content.length === 1 ? '' : 's'}`,
+    );
+  }
+  if (analysis) {
+    steps.push(
+      `Compared ${analysis.edgeRates.length} connection${analysis.edgeRates.length === 1 ? '' : 's'}`,
+    );
+    steps.push(
+      analysis.leaks.length > 0
+        ? `Found ${analysis.leaks.length} leak${analysis.leaks.length === 1 ? '' : 's'} — worst: ${analysis.leaks[0].label}`
+        : 'No leaks — every edge is performing',
+    );
+  }
+  steps.push('Drafted the answer');
+  return steps;
+}
+
+/** The chat's reasoning trace — "Thinking…" while it works, settling to
+ *  "Thought for N seconds" with the expandable step list (what it read, the
+ *  leaks it found). Grounded in the actual map context, not a canned script. */
+function ThinkingTrace({
+  steps,
+  working,
+  thinkingMs,
+}: {
+  steps: string[];
+  working: boolean;
+  thinkingMs?: number;
+}) {
+  const [expanded, setExpanded] = useState(working);
+  // Settle closed a beat after it finishes.
+  useEffect(() => {
+    if (working) {
+      setExpanded(true);
+      return;
+    }
+    const t = window.setTimeout(() => setExpanded(false), 1400);
+    return () => window.clearTimeout(t);
+  }, [working]);
+  const seconds =
+    thinkingMs != null ? Math.max(1, Math.round(thinkingMs / 1000)) : 0;
+  return (
+    <div className="mr-6">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[10px] font-medium text-bone/50 hover:bg-bone/[0.06]"
+      >
+        <Sparkles
+          className={`h-3 w-3 ${working ? 'animate-pulse text-brass' : 'text-bone/40'}`}
+        />
+        {working ? (
+          <span className="animate-pulse">Thinking…</span>
+        ) : (
+          <span>Thought for {seconds}s</span>
+        )}
+        <ChevronDown
+          className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="ml-[7px] mt-1 flex flex-col gap-1 border-l border-bone/10 py-0.5 pl-3">
+          {steps.map((s, i) => {
+            const isCurrent = working && i === steps.length - 1;
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 text-[10px] text-bone/45"
+              >
+                {isCurrent ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin text-brass" />
+                ) : (
+                  <Check className="h-2.5 w-2.5 text-bone/30" />
+                )}
+                <span>{s}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MapChatDock({
   input,
   analysis,
@@ -103,6 +209,9 @@ export default function MapChatDock({
     setMessages(next);
     setDraft('');
     setBusy(true);
+    const start = Date.now();
+    // The trace, grounded in the actual map context (what it read, the leaks).
+    const trace = buildTrace(input, analysis);
     try {
       const res = await fetch('/api/admin/system-map/chat', {
         method: 'POST',
@@ -114,13 +223,23 @@ export default function MapChatDock({
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Chat failed');
-      setMessages([...next, { role: 'assistant', content: json.answer }]);
+      setMessages([
+        ...next,
+        {
+          role: 'assistant',
+          content: json.answer,
+          trace,
+          thinkingMs: Date.now() - start,
+        },
+      ]);
     } catch (e) {
       setMessages([
         ...next,
         {
           role: 'assistant',
           content: e instanceof Error ? e.message : 'Something went wrong.',
+          trace,
+          thinkingMs: Date.now() - start,
         },
       ]);
     } finally {
@@ -189,21 +308,34 @@ export default function MapChatDock({
           </div>
         )}
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={`rounded-xl px-3 py-2 text-[11px] leading-relaxed ${
-              m.role === 'user'
-                ? 'ml-6 bg-brass/15 text-bone'
-                : 'mr-6 bg-bone/[0.06] text-bone/80'
-            }`}
-          >
-            {m.content}
+          <div key={i}>
+            {/* the assistant's reasoning trace, above its answer */}
+            {m.role === 'assistant' && m.trace && (
+              <ThinkingTrace
+                steps={m.trace}
+                working={false}
+                thinkingMs={m.thinkingMs}
+              />
+            )}
+            <div
+              className={`rounded-xl px-3 py-2 text-[11px] leading-relaxed ${
+                m.role === 'user'
+                  ? 'ml-6 bg-brass/15 text-bone'
+                  : 'mr-6 bg-bone/[0.06] text-bone/80'
+              }`}
+            >
+              {/* the answer streams in word-by-word */}
+              {m.role === 'assistant' ? (
+                <ResponseStream textStream={m.content} />
+              ) : (
+                m.content
+              )}
+            </div>
           </div>
         ))}
+        {/* while it works: the live "Thinking…" trace */}
         {busy && (
-          <div className="mr-6 flex items-center gap-1.5 rounded-xl bg-bone/[0.06] px-3 py-2 text-[11px] text-bone/50">
-            <Loader2 className="h-3 w-3 animate-spin" /> Reading the map…
-          </div>
+          <ThinkingTrace steps={buildTrace(input, analysis)} working={true} />
         )}
       </div>
 
