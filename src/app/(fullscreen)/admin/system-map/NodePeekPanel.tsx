@@ -43,7 +43,8 @@ function LivePageFrame({ href, label }: { href: string; label: string }) {
   // as "cut off" with white space below.
   const SCALE = 0.4;
   const PAGE_W = 1000;
-  const PAGE_H = 720;
+  // Tall enough to show ~2 folds — the headline AND the opt-in below it.
+  const PAGE_H = 1400;
   return (
     <div className="overflow-hidden rounded-xl border border-bone/15 bg-white shadow-inner">
       <div
