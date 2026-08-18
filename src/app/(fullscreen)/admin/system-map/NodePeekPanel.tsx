@@ -37,14 +37,15 @@ const STATUS_LABEL: Record<SystemMapNode['status'], string> = {
 
 /** A page/funnel renders the live page itself, scaled to fit the sheet. */
 function LivePageFrame({ href, label }: { href: string; label: string }) {
-  // Render the page at a desktop width, scaled to fit the sheet. The outer
-  // box's height is the SCALED height — transform doesn't change the layout
-  // box, so without it the box stays the full page height and the page reads
-  // as "cut off" with white space below.
-  const SCALE = 0.4;
-  const PAGE_W = 1000;
-  // Tall enough to show ~2 folds — the headline AND the opt-in below it.
-  const PAGE_H = 1400;
+  // Render the page at a DESKTOP width (1280 — above the page's `lg`
+  // breakpoint, so the two-column layout holds: headline left, opt-in right),
+  // scaled to fit the sheet. The outer box's height is the SCALED height —
+  // transform doesn't change the layout box, so without it the box stays the
+  // full page height and the page reads as "cut off" with white space below.
+  const PAGE_W = 1280;
+  const SCALE = 400 / PAGE_W; // fit the sheet's ~400px content width
+  // Tall enough to show ~2 folds — the headline AND the opt-in beside it.
+  const PAGE_H = 1600;
   return (
     <div className="overflow-hidden rounded-xl border border-bone/15 bg-white shadow-inner">
       <div
