@@ -365,6 +365,67 @@ function ContentActions({
   );
 }
 
+/** A content node's publish action: post it to its platform through Outstand
+    (the unified social-publishing integration). Publishes on an explicit
+    click; the result (or "connect Outstand first") shows inline. */
+function PublishAction({
+  node,
+  onChanged,
+}: {
+  node: SystemMapNode;
+  onChanged?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const pieceId = node.pieceId ?? node.id.slice('content:'.length);
+
+  const publish = async () => {
+    if (busy) return;
+    setBusy(true);
+    setDone(null);
+    try {
+      const res = await fetch('/api/admin/outstand-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pieceId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Publish failed');
+      setDone(
+        json.post?.scheduled
+          ? 'Scheduled — Outstand will post it at the set time.'
+          : 'Published — it\'s live on the platform.',
+      );
+      onChanged?.();
+    } catch (e) {
+      setDone(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-bone/40">
+        Publish it
+      </p>
+      <p className="mt-0.5 text-[10px] leading-relaxed text-bone/45">
+        Post this to its platform through Outstand — no exporting, no posting
+        by hand.
+      </p>
+      <button
+        type="button"
+        onClick={() => void publish()}
+        disabled={busy}
+        className="mt-2 w-full rounded-lg border border-brass/50 bg-brass/15 px-3 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/25 disabled:opacity-40"
+      >
+        {busy ? 'Publishing…' : 'Publish with Outstand'}
+      </button>
+      {done && <p className="mt-1.5 text-[10px] text-bone/60">{done}</p>}
+    </div>
+  );
+}
+
 /** The node's connections — what feeds it, what it feeds. */
 function Connections({
   node,
@@ -488,11 +549,13 @@ export default function NodePeekPanel({
           </div>
         )}
 
-        {/* the content node's action — create the tracked link that wires it
-            into a funnel (detects when it's already linked) */}
+        {/* the content node's actions — create the tracked link that wires it
+            into a funnel (detects when it's already linked), and publish it to
+            its platform through Outstand */}
         {!isBlueprint && node.kind === 'content' && (
-          <div className="mt-3">
+          <div className="mt-3 space-y-2">
             <ContentActions node={node} map={map ?? null} onChanged={onChanged} />
+            <PublishAction node={node} onChanged={onChanged} />
           </div>
         )}
 
