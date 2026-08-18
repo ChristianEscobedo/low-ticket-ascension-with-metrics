@@ -1,6 +1,17 @@
 # Task: Outstand publishing — post to every platform from the app
 
-**Status:** designed, ready to build. **Build it fresh off this brief.**
+**Status:** mostly built. Done: the integration (the `outstand` provider + the
+API-key card on the Integrations page), the `outstandPublish` client, the
+`/api/admin/outstand-publish` route (a piece → Outstand → marked published with
+the post id), and the System Map's content-node peek ("Publish with Outstand").
+**Remaining:** the planner's SchedulePanel — the pre-existing GHL publish flow
+(the state picker, the date, the GHL account chooser). Add a "Publish with
+Outstand" option there: a `publishWithOutstand` handler that POSTs
+`{ pieceId: piece.id, content: summary }` to `/api/admin/outstand-publish`
+(`piece.id` is the content_plan row id the route looks up) and shows the result
+in the existing `result` state, as a button below the GHL send button. A
+provider choice (GHL vs. Outstand) is the cleaner end state; the minimal
+addition is the button.
 
 ## The goal
 
