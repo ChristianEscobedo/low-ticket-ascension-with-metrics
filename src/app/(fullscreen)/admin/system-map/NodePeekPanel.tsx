@@ -510,6 +510,7 @@ export default function NodePeekPanel({
   node,
   map,
   sources,
+  trend,
   onClose,
   onChanged,
 }: {
@@ -518,6 +519,11 @@ export default function NodePeekPanel({
   map?: SystemMap | null;
   /** The by-source conversion (per funnel) — the funnel node's breakdown. */
   sources?: Record<string, SourcePerformance[]> | null;
+  /** The trend (per funnel) — the delta vs. the latest prior day. */
+  trend?: Record<
+    string,
+    { day: string; views: number; leads: number; sales: number; revenueCents: number }
+  > | null;
   onClose: () => void;
   /** Refetch the map after an action writes (a link created). */
   onChanged?: () => void;
@@ -586,6 +592,28 @@ export default function NodePeekPanel({
             <FunnelActions node={node} onChanged={onChanged} />
           </div>
         )}
+
+        {/* the funnel node's trend — today vs. the latest prior day (the
+            metrics moving, not just the cumulative total) */}
+        {!isBlueprint && node.kind === 'funnel' && (() => {
+          const t = trend?.[node.id.slice('funnel:'.length)];
+          if (!t) return null;
+          const parts = [
+            t.views !== 0 ? `${t.views > 0 ? '+' : ''}${t.views} views` : '',
+            t.leads !== 0 ? `${t.leads > 0 ? '+' : ''}${t.leads} leads` : '',
+            t.sales !== 0 ? `${t.sales > 0 ? '+' : ''}${t.sales} sales` : '',
+            t.revenueCents !== 0
+              ? `${t.revenueCents > 0 ? '+' : ''}$${(t.revenueCents / 100).toFixed(0)}`
+              : '',
+          ].filter(Boolean);
+          if (parts.length === 0) return null;
+          return (
+            <p className="mt-2 text-[10px] text-bone/50">
+              <span className="font-semibold text-emerald-300/80">vs. {t.day}:</span>{' '}
+              {parts.join(' · ')}
+            </p>
+          );
+        })()}
 
         {/* the funnel node's by-source breakdown — which post/link/platform
             feeding it is actually worth it (each source's own funnel) */}

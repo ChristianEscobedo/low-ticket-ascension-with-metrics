@@ -302,6 +302,11 @@ const nodeTypes = { systemNode: SystemNodeCard };
 export default function SystemMapPage() {
   const router = useRouter();
   const [input, setInput] = useState<SystemMapInput | null>(null);
+  /** The latest prior day's snapshot (per funnel) — the trend's baseline. */
+  const [priorDay, setPriorDay] = useState<Record<
+    string,
+    { day: string; views: number; leads: number; checkouts: number; purchases: number; revenueCents: number }
+  > | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** The depth control: which funnels are collapsed to just their card. */
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -334,6 +339,7 @@ export default function SystemMapPage() {
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load the system map');
       setInput(json.input as SystemMapInput);
+      setPriorDay(json.priorDay ?? null);
       return json.input as SystemMapInput;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load the system map');
@@ -432,6 +438,28 @@ export default function SystemMapPage() {
     () => (input ? bySource(input) : null),
     [input],
   );
+  // The trend — each funnel's delta vs. the latest prior day (today's counts
+  // minus the snapshot). The funnel node's peek shows it. Empty until there's
+  // a prior day to compare against (the clock started with the first snapshot).
+  const trend = useMemo(() => {
+    if (!input || !priorDay) return null;
+    const out: Record<
+      string,
+      { day: string; views: number; leads: number; sales: number; revenueCents: number }
+    > = {};
+    for (const f of input.funnels) {
+      const prior = priorDay[f.id];
+      if (!prior) continue;
+      out[f.id] = {
+        day: prior.day,
+        views: f.metrics.views - prior.views,
+        leads: f.metrics.leads - prior.leads,
+        sales: f.metrics.purchases - prior.purchases,
+        revenueCents: f.metrics.revenueCents - prior.revenueCents,
+      };
+    }
+    return out;
+  }, [input, priorDay]);
   const edgeHealth = useMemo(
     () => new Map((analysis?.edgeRates ?? []).map((e) => [e.edgeId, e.health])),
     [analysis],
@@ -773,6 +801,7 @@ export default function SystemMapPage() {
             node={chatOpen ? null : selectedNode}
             map={map}
             sources={sources}
+            trend={trend}
             onClose={() => setSelectedNode(null)}
             onChanged={() => void loadInput()}
           />
