@@ -169,6 +169,74 @@ function NodeVisual({ node }: { node: SystemMapNode }) {
   return null;
 }
 
+/** A draft funnel's action: publish it (a status-only flip — never the
+    upsert, which would clobber the content). Detects when it's already live. */
+function FunnelActions({
+  node,
+  onChanged,
+}: {
+  node: SystemMapNode;
+  onChanged?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const funnelId = node.id.slice('funnel:'.length);
+  // The funnel kind rides the sub ("Sales funnel" / "Optin funnel") → the route.
+  const route = node.sub.toLowerCase().includes('optin')
+    ? '/api/admin/mothermode-optin'
+    : '/api/admin/mothermode-sales';
+
+  // Live already — nothing to do.
+  if (node.status === 'built') {
+    return (
+      <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] text-emerald-300">
+        Live — this funnel is published.
+      </p>
+    );
+  }
+
+  const publish = async () => {
+    if (busy) return;
+    setBusy(true);
+    setDone(null);
+    try {
+      const res = await fetch(route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish', id: funnelId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Publish failed');
+      setDone('Published — this funnel is live.');
+      onChanged?.();
+    } catch (e) {
+      setDone(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-amber-300/80">
+        A draft — not live yet
+      </p>
+      <p className="mt-0.5 text-[10px] leading-relaxed text-bone/45">
+        Publish it to make the page live at its URL.
+      </p>
+      <button
+        type="button"
+        onClick={() => void publish()}
+        disabled={busy}
+        className="mt-2 w-full rounded-lg border border-brass/50 bg-brass/15 px-3 py-1.5 text-[10px] font-semibold text-brass hover:bg-brass/25 disabled:opacity-40"
+      >
+        {busy ? 'Publishing…' : 'Publish this funnel'}
+      </button>
+      {done && <p className="mt-1.5 text-[10px] text-bone/60">{done}</p>}
+    </div>
+  );
+}
+
 /** A content node's action: create the tracked link that wires it into a
     funnel (content → link → page), so its clicks and sales count. Detects
     when it's already linked. */
@@ -410,6 +478,13 @@ export default function NodePeekPanel({
                 {m}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* the funnel node's action — publish a draft (detects when it's live) */}
+        {!isBlueprint && node.kind === 'funnel' && (
+          <div className="mt-3">
+            <FunnelActions node={node} onChanged={onChanged} />
           </div>
         )}
 

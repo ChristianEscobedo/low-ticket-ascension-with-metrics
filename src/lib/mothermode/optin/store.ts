@@ -132,6 +132,22 @@ export interface UpsertFunnelInput {
 }
 
 
+/**
+ * Publish/unpublish an opt-in funnel — a STATUS-ONLY update (never the
+ * upsert, which rebuilds the whole row and would clobber the content). The
+ * map's "Publish this funnel" calls this.
+ */
+export async function setFunnelStatus(
+  id: string,
+  status: OptinFunnelStatus,
+): Promise<void> {
+  const { error } = await (serviceClient() as any)
+    .from(FUNNELS)
+    .update({ status })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function upsertFunnel(input: UpsertFunnelInput): Promise<OptinFunnelRecord> {
   const row: Record<string, unknown> = {
     slug: input.slug,

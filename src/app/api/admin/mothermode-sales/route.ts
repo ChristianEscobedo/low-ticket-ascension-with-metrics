@@ -5,6 +5,7 @@ import {
   duplicateFunnel,
   listFunnelsForAdmin,
   listLeadsForAdmin,
+  setFunnelStatus,
   upsertFunnel,
 } from '@/lib/mothermode/sales/store';
 import { toSalesFunnelStatus } from '@/lib/mothermode/sales/types';
@@ -49,6 +50,17 @@ export async function POST(request: NextRequest) {
   const action = String(body.action ?? 'save');
 
   try {
+    // Publish/unpublish — a status-only flip (never the upsert, which would
+    // clobber the content). The System Map's "Publish this funnel" calls this.
+    if (action === 'publish') {
+      const id = String(body.id ?? '');
+      if (!id) {
+        return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 });
+      }
+      await setFunnelStatus(id, 'published');
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'duplicate') {
       const id = String(body.id ?? '');
       if (!id) {

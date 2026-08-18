@@ -149,6 +149,23 @@ export interface UpsertSalesFunnelInput {
   updatedBy?: string | null;
 }
 
+/**
+ * Publish/unpublish a funnel — a STATUS-ONLY update. Never the upsert for
+ * this: `upsertFunnel` rebuilds the whole row from its input, so a partial
+ * call would clobber the funnel's content. The map's "Publish this funnel"
+ * calls this.
+ */
+export async function setFunnelStatus(
+  id: string,
+  status: SalesFunnelStatus,
+): Promise<void> {
+  const { error } = await (serviceClient() as any)
+    .from(FUNNELS)
+    .update({ status })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function upsertFunnel(
   input: UpsertSalesFunnelInput,
 ): Promise<SalesFunnelRecord> {
