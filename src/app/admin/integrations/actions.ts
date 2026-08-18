@@ -20,7 +20,8 @@ const VALID_PROVIDERS: IntegrationProvider[] = [
   'email',
   'monid',
   'rapidapi',
-  'apify'
+  'apify',
+  'outstand'
 ];
 
 // Secret-bearing config keys are write-only: a blank submission preserves the
@@ -99,7 +100,8 @@ const CONFIG_KEYS: Record<IntegrationProvider, readonly string[]> = {
     'endpoint_youtube'
   ],
   rapidapi: ['api_key', 'amazon_host', 'engine'],
-  apify: ['api_token', 'reviews_actor']
+  apify: ['api_token', 'reviews_actor'],
+  outstand: ['api_key']
 };
 
 export async function saveIntegrationAction(formData: FormData) {

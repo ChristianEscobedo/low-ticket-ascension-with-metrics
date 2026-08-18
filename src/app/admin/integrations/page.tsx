@@ -16,7 +16,8 @@ import type {
   EmailConfig,
   MonidConfig,
   RapidApiConfig,
-  ApifyConfig
+  ApifyConfig,
+  OutstandConfig
 } from '@/utils/integrations/types';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ export default async function IntegrationsPage() {
     monid,
     rapidapi,
     apify,
+    outstand,
     user,
     resendHealth
   ] = await Promise.all([
@@ -47,6 +49,7 @@ export default async function IntegrationsPage() {
     getIntegration<MonidConfig>('monid'),
     getIntegration<RapidApiConfig>('rapidapi'),
     getIntegration<ApifyConfig>('apify'),
+    getIntegration<OutstandConfig>('outstand'),
     getUser(supabase),
     getResendWebhookHealth()
   ]);
@@ -67,6 +70,7 @@ export default async function IntegrationsPage() {
   const monidMask = maskConfig(asCfg(monid?.config), ['api_key']);
   const rapidapiMask = maskConfig(asCfg(rapidapi?.config), ['api_key']);
   const apifyMask = maskConfig(asCfg(apify?.config), ['api_token']);
+  const outstandMask = maskConfig(asCfg(outstand?.config), ['api_key']);
 
   return (
     <div>
@@ -198,6 +202,43 @@ export default async function IntegrationsPage() {
           initialConfig={mainAppMask.safeConfig}
           secretStatus={mainAppMask.secretStatus}
         />
+      </div>
+
+      <div className="mt-10">
+        <div className="text-xs uppercase tracking-[0.25em] text-brass/80 font-semibold mb-2">
+          Publishing
+        </div>
+        <h2 className="font-display text-xl font-semibold tracking-tight mb-2">
+          Social publishing
+        </h2>
+        <p className="text-sm text-bone/60 max-w-2xl mb-4">
+          Publish + schedule posts to the connected social accounts from inside
+          the app — the planner's publish flow and the System Map's content
+          peek post through it.
+        </p>
+        <div className="space-y-4">
+          <IntegrationCard
+            provider="outstand"
+            title="Outstand (social publishing)"
+            description="One key publishes + schedules posts across X, LinkedIn, Instagram, Facebook, Threads, TikTok, YouTube, Pinterest, and more. The planner's publish flow and the System Map's content-node peek post through it."
+            badge={{ label: 'Live', tone: 'live' }}
+            fields={[
+              {
+                key: 'api_key',
+                label: 'Outstand API key',
+                type: 'password',
+                placeholder: 'paste the key from your Outstand dashboard',
+                helper: 'outstand.so → your dashboard → API keys.'
+              }
+            ]}
+            initialEnabled={outstand?.enabled ?? false}
+            initialEvents={outstand?.events ?? []}
+            initialConfig={outstandMask.safeConfig}
+            secretStatus={outstandMask.secretStatus}
+            hideEventsFilter
+            hideTestButton
+          />
+        </div>
       </div>
 
       <div className="mt-10">

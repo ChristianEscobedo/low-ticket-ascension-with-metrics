@@ -13,7 +13,8 @@ export type IntegrationProvider =
   | 'rapidapi'
   | 'apify'
   | 'assemblyai'
-  | 'elevenlabs';
+  | 'elevenlabs'
+  | 'outstand';
 
 
 export const PAGE_TYPES = ['fe', 'oto1', 'oto2', 'oto3', 'oto4'] as const;
@@ -116,6 +117,16 @@ export interface RapidApiConfig {
 export interface ApifyConfig {
   api_token?: string;
   reviews_actor?: string;
+}
+
+/**
+ * Outstand (outstand.so) — the unified social-publishing API. One key
+ * publishes + schedules posts across X, LinkedIn, Instagram, Facebook,
+ * Threads, TikTok, YouTube, Pinterest, and more. The planner's publish flow
+ * and the System Map's content-node peek publish through it.
+ */
+export interface OutstandConfig {
+  api_key?: string;
 }
 
 export interface IntegrationRow<TConfig = Record<string, unknown>> {
