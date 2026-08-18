@@ -278,6 +278,38 @@ export const SchedulePanel: React.FC<{
     }
   };
 
+  // Publish through Outstand instead — the unified social-publishing
+  // integration (the Integrations page holds the key). Posts the caption to
+  // the piece's platform; the route marks the piece published with the
+  // Outstand post id.
+  const publishWithOutstand = async () => {
+    if (busy) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/outstand-publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pieceId: piece.id, content: summary }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Publish failed');
+      setResult({
+        ok: true,
+        msg: json.post?.scheduled
+          ? 'Scheduled with Outstand — it will post at the set time.'
+          : "Published with Outstand — it's live on the platform.",
+      });
+    } catch (e) {
+      setResult({
+        ok: false,
+        msg: e instanceof Error ? e.message : 'Could not reach Outstand',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-10 text-sm text-ink/55">
@@ -478,6 +510,23 @@ export const SchedulePanel: React.FC<{
             : state === 'scheduled'
               ? 'Schedule post'
               : 'Publish now'}
+      </button>
+
+      {/* Publish through Outstand instead of GHL — the unified social-
+          publishing integration (the Integrations page holds the key). It
+          posts the caption to the piece's platform; no GHL account needed. */}
+      <button
+        type="button"
+        onClick={publishWithOutstand}
+        disabled={busy || summary.trim() === ''}
+        className="inline-flex items-center gap-2 rounded-full border border-mode/40 px-4 py-2 text-sm font-semibold text-mode hover:bg-mode/10 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Send className="h-4 w-4" />
+        )}
+        Publish with Outstand
       </button>
 
       {/* A disabled button with no stated reason is indistinguishable from a
