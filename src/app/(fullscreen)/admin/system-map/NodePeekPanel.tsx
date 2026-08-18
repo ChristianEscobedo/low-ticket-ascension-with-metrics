@@ -169,18 +169,49 @@ function ContentActions({
   // The content_plan row id rides the node id (`content:<id>`) — the link's
   // piece_id stores it.
   const pieceRowId = node.id.slice('content:'.length);
-  // Detection: a content → link edge means it's already wired in.
-  const linkedCount = map
-    ? map.edges.filter((e) => e.from === node.id && e.to.startsWith('link:')).length
-    : 0;
+  // Detection: a content → link edge means it already has its own link.
+  const linkedIds = map
+    ? map.edges.filter((e) => e.from === node.id && e.to.startsWith('link:')).map((e) => e.to)
+    : [];
   const funnels = map ? map.nodes.filter((n) => n.kind === 'funnel') : [];
 
-  if (linkedCount > 0) {
+  // The post HAS its own link — show the tracked URL it carries, with a copy
+  // button. This is the post's link, not a separate thing it connects to.
+  if (linkedIds.length > 0) {
+    const linkNode = map?.nodes.find((n) => n.id === linkedIds[0]);
+    const code = linkNode?.label.match(/\/go\/(\S+)/)?.[1] ?? null;
+    const url =
+      code && typeof window !== 'undefined'
+        ? `${window.location.origin}/go/${code}`
+        : null;
     return (
-      <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-[10px] text-emerald-300">
-        Linked — this post already feeds {linkedCount} tracked link
-        {linkedCount === 1 ? '' : 's'}.
-      </p>
+      <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2.5">
+        <p className="text-[10px] uppercase tracking-wide text-emerald-300/80">
+          This post's tracked link
+        </p>
+        {url ? (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <code className="min-w-0 flex-1 truncate rounded bg-ink px-2 py-1.5 text-[10px] text-emerald-200">
+              {url}
+            </code>
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard?.writeText(url)}
+              className="shrink-0 rounded border border-emerald-400/40 px-2 py-1.5 text-[9px] font-semibold text-emerald-300 hover:bg-emerald-400/20"
+            >
+              Copy
+            </button>
+          </div>
+        ) : (
+          <p className="mt-1 text-[10px] text-emerald-300">
+            This post has {linkedIds.length} tracked link{linkedIds.length === 1 ? '' : 's'}.
+          </p>
+        )}
+        <p className="mt-1.5 text-[9px] leading-relaxed text-bone/40">
+          Share this URL in the post — everyone who taps it lands on the funnel,
+          and the clicks and sales count back to this post.
+        </p>
+      </div>
     );
   }
 
@@ -214,11 +245,12 @@ function ContentActions({
   return (
     <div className="rounded-lg border border-bone/10 bg-bone/[0.03] px-3 py-2.5">
       <p className="text-[10px] uppercase tracking-wide text-bone/40">
-        Not linked yet
+        No link yet
       </p>
       <p className="mt-0.5 text-[10px] leading-relaxed text-bone/45">
-        A tracked link wires this post into a funnel — content → link → page —
-        so its clicks and sales count.
+        Give this post its own tracked link — the URL you share in it. Everyone
+        who taps it lands on the funnel you pick, and the clicks count back to
+        this post.
       </p>
       <div className="mt-2 flex items-center gap-1.5">
         <select
