@@ -37,18 +37,34 @@ const STATUS_LABEL: Record<SystemMapNode['status'], string> = {
 
 /** A page/funnel renders the live page itself, scaled to fit the sheet. */
 function LivePageFrame({ href, label }: { href: string; label: string }) {
+  // Render the page at a desktop width, scaled to fit the sheet. The outer
+  // box's height is the SCALED height — transform doesn't change the layout
+  // box, so without it the box stays the full page height and the page reads
+  // as "cut off" with white space below.
+  const SCALE = 0.4;
+  const PAGE_W = 1000;
+  const PAGE_H = 720;
   return (
     <div className="overflow-hidden rounded-xl border border-bone/15 bg-white shadow-inner">
       <div
-        className="pointer-events-none origin-top-left"
-        style={{ width: '1200px', height: '700px', transform: 'scale(0.32)' }}
+        className="relative w-full overflow-hidden"
+        style={{ height: `${PAGE_H * SCALE}px` }}
       >
-        <iframe
-          src={href}
-          title={label}
-          className="h-full w-full border-0"
-          tabIndex={-1}
-        />
+        <div
+          className="pointer-events-none absolute left-0 top-0 origin-top-left"
+          style={{
+            width: `${PAGE_W}px`,
+            height: `${PAGE_H}px`,
+            transform: `scale(${SCALE})`,
+          }}
+        >
+          <iframe
+            src={href}
+            title={label}
+            className="h-full w-full border-0"
+            tabIndex={-1}
+          />
+        </div>
       </div>
       <p className="bg-ink px-3 py-1.5 text-[9px] text-bone/40">
         The live page — read-only here; open it to interact.
