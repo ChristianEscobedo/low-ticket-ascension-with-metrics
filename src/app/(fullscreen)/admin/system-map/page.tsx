@@ -95,6 +95,8 @@ const SystemMapUiContext = createContext<{
   blueprintBusy: boolean;
   /** Open a node's peek panel (the "expand to see it" read). */
   inspectNode: (node: SystemMapNode) => void;
+  /** Expand a funnel's traffic cluster (the "+N more" node clicked). */
+  expandTraffic: (funnelId: string) => void;
 }>({
   collapsed: new Set(),
   toggleCollapse: () => {},
@@ -104,6 +106,7 @@ const SystemMapUiContext = createContext<{
   rejectBlueprint: () => {},
   blueprintBusy: false,
   inspectNode: () => {},
+  expandTraffic: () => {},
 });
 
 
@@ -162,11 +165,17 @@ function SystemNodeCard({ data }: NodeProps) {
     node.kind === 'content' ? canonicalPlatform(node.sub.split(' · ')[0] ?? '') : null;
   return (
     <div
-      onClick={() => ui.inspectNode(node)}
+      onClick={() =>
+        node.clusterFunnel
+          ? ui.expandTraffic(node.clusterFunnel)
+          : ui.inspectNode(node)
+      }
       title={
         isBlueprint
           ? `${node.label} — a proposed node, built on approve`
-          : `${node.label} — click to inspect`
+          : node.clusterFunnel
+            ? `${node.label} — click to expand`
+            : `${node.label} — click to inspect`
       }
       className={`w-[240px] cursor-pointer rounded-xl border bg-ink/95 px-3 py-2 shadow-lg transition-colors ${KIND_ACCENT[node.kind]} ${
         isBlueprint
@@ -312,6 +321,8 @@ export default function SystemMapPage() {
   const [chatOpen, setChatOpen] = useState(false);
   /** Live state: poll the graph so the numbers tick (a dashboard, not a diagram). */
   const [live, setLive] = useState(false);
+  /** A funnel whose traffic cluster is expanded (all its content shows). */
+  const [expandTrafficFor, setExpandTrafficFor] = useState<string | null>(null);
 
   // The input loader — the graph's data. Reused by the mount, the live poll,
   // and the blueprint approve refetch.
@@ -427,9 +438,10 @@ export default function SystemMapPage() {
             focusFunnelId: focusId ?? undefined,
             collapsed,
             pendingBlueprints: blueprints,
+            expandTrafficFor: expandTrafficFor ?? undefined,
           })
         : null,
-    [input, focusId, collapsed, blueprints],
+    [input, focusId, collapsed, blueprints, expandTrafficFor],
   );
 
   const ui = useMemo(
@@ -458,6 +470,7 @@ export default function SystemMapPage() {
         setSelectedNode(node);
         setChatOpen(false);
       },
+      expandTraffic: (funnelId: string) => setExpandTrafficFor(funnelId),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [collapsed, focusId, router, blueprintBusy],

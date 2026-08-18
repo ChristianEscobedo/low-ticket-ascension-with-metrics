@@ -144,6 +144,9 @@ export interface SystemMapNode {
   /** A content node's catalog piece id + offer — the peek renders the real post. */
   pieceId?: string;
   offerSlug?: string;
+  /** A traffic-cluster node ("+N more posts feed this") — the funnel it expands. */
+  clusterFunnel?: string;
+  clusterCount?: number;
 }
 
 
@@ -184,6 +187,9 @@ const NODE_GAP_Y = 22;
 const FUNNEL_BAND_GAP = 56;
 const LANE_TITLE_Y = 0;
 const FIRST_NODE_Y = 56;
+/** Many feeders to one page: a funnel shows this many content pieces, then
+ *  collapses the overflow into a "+N more" cluster node (expands on click). */
+const TRAFFIC_CAP = 3;
 
 const LANE_TITLES: Record<SystemMapLane, string> = {
   traffic: 'Traffic — ads · content · videos',
@@ -220,6 +226,9 @@ export interface BuildSystemMapOptions {
   /** Pending blueprints to overlay (a blueprint-in-progress), each rendered
    *  as a dashed band below the real systems, materialized only on approve. */
   pendingBlueprints?: SystemBlueprint[];
+  /** A funnel whose traffic cluster is expanded (all its content shows, no
+   *  "+N more" node). Set when the cluster is clicked. */
+  expandTrafficFor?: string;
 }
 
 /** A blueprint node's lane, from its kind (the builder owns the lanes). */
@@ -350,6 +359,11 @@ export function buildSystemMap(
     const funnelLinks = input.links.filter(
       (l) => l.funnelId === funnel.id || l.optinFunnelId === funnel.id,
     );
+    // Many feeders to one page: cap the traffic lane at TRAFFIC_CAP content
+    // nodes; the overflow collapses into a "+N more" cluster node (unless this
+    // funnel's cluster is expanded).
+    let trafficAdded = 0;
+    let trafficOverflow = 0;
     for (const link of funnelLinks) {
       const linkNodeId = `link:${link.id}`;
       nodes.push({
@@ -375,38 +389,70 @@ export function buildSystemMap(
         const piece = contentById.get(link.pieceId);
         if (piece) {
           const contentNodeId = `content:${piece.id}`;
-          // A piece can carry several links — one node, several edges.
-          if (!nodes.some((n) => n.id === contentNodeId)) {
-            // Content→buyer attribution: "this reel made $1,240 · 3 sales" —
-            // the stickiest number on the map. Quiet when there's none.
-            const attr = input.contentMetrics?.[piece.id];
-            nodes.push({
-              id: contentNodeId,
-              kind: 'content',
-              lane: 'traffic',
-              label: piece.title || 'Untitled',
-              sub: [piece.platform, piece.format].filter(Boolean).join(' · '),
-              metrics: [
-                piece.kind === 'paid' ? 'ad' : '',
-                attr && attr.sales > 0 ? money(attr.revenueCents) : '',
-                attr && attr.sales > 0 ? count(attr.sales, 'sale') : '',
-                attr && attr.sales === 0 && attr.leads > 0 ? count(attr.leads, 'lead') : '',
-              ].filter(Boolean),
-              status: 'built',
-              href: piece.href,
-              pieceId: piece.pieceId,
-              offerSlug: piece.offerSlug,
-              x: LANE_X.traffic,
-              y: place('traffic'),
+          const alreadyAdded = nodes.some((n) => n.id === contentNodeId);
+          // Past the cap, a NEW piece collapses into the cluster node instead
+          // of stacking (unless this funnel's cluster is expanded).
+          const capped =
+            !alreadyAdded &&
+            opts.expandTrafficFor !== funnel.id &&
+            trafficAdded >= TRAFFIC_CAP;
+          if (capped) {
+            trafficOverflow += 1;
+          } else {
+            // A piece can carry several links — one node, several edges.
+            if (!alreadyAdded) {
+              trafficAdded += 1;
+              // Content→buyer attribution: "this reel made $1,240 · 3 sales" —
+              // the stickiest number on the map. Quiet when there's none.
+              const attr = input.contentMetrics?.[piece.id];
+              nodes.push({
+                id: contentNodeId,
+                kind: 'content',
+                lane: 'traffic',
+                label: piece.title || 'Untitled',
+                sub: [piece.platform, piece.format].filter(Boolean).join(' · '),
+                metrics: [
+                  piece.kind === 'paid' ? 'ad' : '',
+                  attr && attr.sales > 0 ? money(attr.revenueCents) : '',
+                  attr && attr.sales > 0 ? count(attr.sales, 'sale') : '',
+                  attr && attr.sales === 0 && attr.leads > 0 ? count(attr.leads, 'lead') : '',
+                ].filter(Boolean),
+                status: 'built',
+                href: piece.href,
+                pieceId: piece.pieceId,
+                offerSlug: piece.offerSlug,
+                x: LANE_X.traffic,
+                y: place('traffic'),
+              });
+            }
+            edges.push({
+              id: `e:${contentNodeId}->${linkNodeId}`,
+              from: contentNodeId,
+              to: linkNodeId,
             });
           }
-          edges.push({
-            id: `e:${contentNodeId}->${linkNodeId}`,
-            from: contentNodeId,
-            to: linkNodeId,
-          });
         }
       }
+    }
+
+    // The traffic cluster: the overflow collapsed into one "+N more" node.
+    // Clicking it expands the funnel's traffic (the page's expandTrafficFor).
+    if (trafficOverflow > 0) {
+      const clusterId = `cluster:${funnel.id}`;
+      nodes.push({
+        id: clusterId,
+        kind: 'content',
+        lane: 'traffic',
+        label: `+${trafficOverflow} more`,
+        sub: 'posts feed this — click to expand',
+        metrics: [],
+        status: 'built',
+        clusterFunnel: funnel.id,
+        clusterCount: trafficOverflow,
+        x: LANE_X.traffic,
+        y: place('traffic'),
+      });
+      edges.push({ id: `e:${clusterId}->${funnelNodeId}`, from: clusterId, to: funnelNodeId });
     }
     } // !isCollapsed
 
