@@ -174,6 +174,69 @@ export function analyzeSystemMap(input: SystemMapInput): SystemMapAnalysis {
   return { edgeRates, leaks };
 }
 
+// ---------------------------------------------------------------------------
+// By-source conversion — which post/link/platform is actually worth it
+// ---------------------------------------------------------------------------
+
+/** One traffic source's performance feeding a funnel. */
+export interface SourcePerformance {
+  funnelId: string;
+  /** The tracked link the source rides. */
+  linkId: string;
+  /** The source label — the post's title, else the link's label. */
+  label: string;
+  /** The platform (the piece's platform, else the link's utm_source). */
+  platform: string;
+  /** The content piece carrying it (the post), when set. */
+  pieceId: string | null;
+  clicks: number;
+  leads: number;
+  sales: number;
+  revenueCents: number;
+  /** sales / clicks (0 when no clicks). */
+  conversionRate: number;
+}
+
+/**
+ * Break each funnel's traffic down by source: every link feeding it, with its
+ * own clicks → leads → sales → conversion, ranked best-first. The answer to
+ * "which of the twelve posts is actually worth it." Rides the existing
+ * content→buyer attribution (`contentMetrics`, keyed by the piece id) — a link
+ * with no attributed piece shows its clicks and zero leads/sales. Pure: no
+ * server imports, unit-tested.
+ */
+export function bySource(
+  input: SystemMapInput,
+): Record<string, SourcePerformance[]> {
+  const contentById = new Map(input.content.map((c) => [c.id, c]));
+  const out: Record<string, SourcePerformance[]> = {};
+  for (const link of input.links) {
+    const funnelId = link.funnelId ?? link.optinFunnelId;
+    if (!funnelId) continue;
+    const piece = link.pieceId ? contentById.get(link.pieceId) : undefined;
+    const attr = piece ? input.contentMetrics?.[piece.id] : undefined;
+    const leads = attr?.leads ?? 0;
+    const sales = attr?.sales ?? 0;
+    (out[funnelId] ??= []).push({
+      funnelId,
+      linkId: link.id,
+      label: piece?.title || link.label,
+      platform: piece?.platform || link.source || '',
+      pieceId: link.pieceId,
+      clicks: link.clicks,
+      leads,
+      sales,
+      revenueCents: attr?.revenueCents ?? 0,
+      conversionRate: link.clicks > 0 ? sales / link.clicks : 0,
+    });
+  }
+  // Rank each funnel's sources best-first: sales, then clicks.
+  for (const id of Object.keys(out)) {
+    out[id].sort((a, b) => b.sales - a.sales || b.clicks - a.clicks);
+  }
+  return out;
+}
+
 /** The edge's health color (the page reads this — the performance axis). */
 export const EDGE_HEALTH_COLOR: Record<EdgeHealth, string> = {
   good: 'rgba(52, 211, 153, 0.55)', // emerald
