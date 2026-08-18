@@ -22,8 +22,14 @@ let cache: { at: number; data: ConfigMap } | null = null;
  * event fan-out, so the "Enabled" toggle (built for webhook dispatch) should
  * never gate whether their key is read — a saved-but-unchecked row silently
  * "not persisting" is exactly the bug this rule answers.
+ *
+ * Stripe belongs here: its webhook is INBOUND (Stripe → the app), not an
+ * outbound fan-out the toggle gates, so the secret/publishable/webhook keys
+ * are pure credentials. A saved Stripe key left "disabled" was silently
+ * ignored — the checkout fell back to the env var and reported "not
+ * configured" even though the key was right there in /admin/stripe.
  */
-const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify', 'assemblyai', 'elevenlabs']);
+const ALWAYS_ON_PROVIDERS = new Set(['monid', 'rapidapi', 'apify', 'assemblyai', 'elevenlabs', 'stripe']);
 
 async function loadAll(): Promise<ConfigMap> {
   const now = Date.now();

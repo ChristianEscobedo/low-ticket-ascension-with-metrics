@@ -28,9 +28,9 @@ export default async function StripeAdminPage() {
     getIntegration<StripeConfig>('stripe'),
     getLastWebhookEventAt()
   ]);
-  // Only an enabled row overrides at runtime, matching the resolver semantics.
-  const cfg =
-    (row?.enabled ? (row?.config as StripeConfig | undefined) : undefined) ?? {};
+  // Stripe is a credential-only provider (always-on): the saved keys read
+  // DB-first whenever they're present, no "Enabled" gate. Match the resolver.
+  const cfg = (row?.config as StripeConfig | undefined) ?? {};
   const dbHas = (k: keyof StripeConfig) =>
     Boolean(cfg[k] && String(cfg[k]).trim());
 
@@ -263,10 +263,10 @@ export default async function StripeAdminPage() {
       <div className="mt-8">
         <h2 className="font-display text-xl font-semibold tracking-tight">Runtime keys</h2>
         <p className="text-sm text-bone/60 mt-1 max-w-2xl">
-          Enable this integration and the keys saved here are used at runtime,
-          DB-first, with no redeploy. Leave it disabled to keep running on the
-          STRIPE_* environment variables. Secrets are write-only; a blank field
-          keeps the stored value.
+          The keys saved here are used at runtime, DB-first, with no redeploy —
+          a saved key is the config (no "Enabled" gate). With no key saved, the
+          STRIPE_* environment variables are the fallback. Secrets are
+          write-only; a blank field keeps the stored value.
         </p>
         <div className="mt-4">
           <IntegrationCard
