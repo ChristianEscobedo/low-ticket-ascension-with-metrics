@@ -72,6 +72,76 @@ async function contentAttribution(): Promise<
   }
 }
 
+const METRICS_DAILY = 'system_map_metrics_daily';
+
+/** Snapshot each funnel's rollup counts for today (upsert the day's row), so
+    the map can show the trend. Best-effort — a dead history table never takes
+    the map down. */
+async function snapshotToday(funnels: SystemMapFunnelInput[]): Promise<void> {
+  try {
+    const svc = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    );
+    const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const rows = funnels.map((f) => ({
+      day,
+      funnel_id: f.id,
+      views: f.metrics.views,
+      leads: f.metrics.leads,
+      checkouts: f.metrics.checkouts,
+      purchases: f.metrics.purchases,
+      revenue_cents: f.metrics.revenueCents,
+    }));
+    if (rows.length === 0) return;
+    await svc.from(METRICS_DAILY).upsert(rows, { onConflict: 'day,funnel_id' });
+  } catch {
+    /* a dead history table never takes the map down */
+  }
+}
+
+/** The latest PRIOR day's snapshot, keyed by funnel id — the delta's baseline. */
+async function priorSnapshot(): Promise<
+  Record<
+    string,
+    { day: string; views: number; leads: number; checkouts: number; purchases: number; revenueCents: number }
+  >
+> {
+  try {
+    const svc = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await svc
+      .from(METRICS_DAILY)
+      .select('day, funnel_id, views, leads, checkouts, purchases, revenue_cents')
+      .lt('day', today)
+      .order('day', { ascending: false });
+    if (error || !data) return {};
+    // The latest prior day per funnel (the rows are newest-first).
+    const out: Record<
+      string,
+      { day: string; views: number; leads: number; checkouts: number; purchases: number; revenueCents: number }
+    > = {};
+    for (const row of data as Array<Record<string, unknown>>) {
+      const fid = String(row.funnel_id ?? '');
+      if (!fid || out[fid]) continue; // the first (newest) row per funnel wins
+      out[fid] = {
+        day: String(row.day ?? ''),
+        views: Number(row.views ?? 0),
+        leads: Number(row.leads ?? 0),
+        checkouts: Number(row.checkouts ?? 0),
+        purchases: Number(row.purchases ?? 0),
+        revenueCents: Number(row.revenue_cents ?? 0),
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** The public path for a sales-funnel step (the /funnel/<slug>/… routes). */
 const SALES_STEP_PATH: Record<string, string> = {
   optin: '',
@@ -316,7 +386,11 @@ export async function GET() {
       content: mapContent,
       contentMetrics,
     };
-    return NextResponse.json({ success: true, input });
+    // Start the clock: snapshot today's counts, then read the latest PRIOR
+    // day's — the delta's baseline. Both best-effort; the map works without them.
+    await snapshotToday(funnels);
+    const priorDay = await priorSnapshot();
+    return NextResponse.json({ success: true, input, priorDay });
   } catch (e) {
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : 'System map failed' },
