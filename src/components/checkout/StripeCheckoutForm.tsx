@@ -91,6 +91,18 @@ export const StripeCheckoutForm: React.FC<StripeCheckoutFormProps> = ({
     setIsLoading(true);
     setMessage('');
 
+    // The Payment Element mounts async — a fast click (or a slow Stripe iframe)
+    // submits before it finishes mounting and Stripe throws the IntegrationError
+    // "elements should have a mounted Payment Element". submit() both validates
+    // and waits for the mount; if it errors, surface the message and stop.
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setMessage(submitError.message || 'Check your payment details and try again.');
+      setMessageType('error');
+      setIsLoading(false);
+      return;
+    }
+
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
@@ -124,6 +136,15 @@ export const StripeCheckoutForm: React.FC<StripeCheckoutFormProps> = ({
     if (!stripe || !elements) return;
     setIsLoading(true);
     setMessage('');
+    // Same mount race as the card path — submit() first so a wallet tap before
+    // the Payment Element finishes mounting can't throw the IntegrationError.
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setMessage(submitError.message || 'Check your payment details and try again.');
+      setMessageType('error');
+      setIsLoading(false);
+      return;
+    }
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {

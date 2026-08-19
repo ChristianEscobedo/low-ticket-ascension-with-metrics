@@ -116,6 +116,17 @@ const InnerPaymentForm: React.FC<{
     setIsLoading(true);
     setMessage('');
 
+    // The Payment Element mounts async — a fast click submits before it
+    // finishes mounting and Stripe throws the IntegrationError "elements
+    // should have a mounted Payment Element". submit() validates + waits for
+    // the mount; on error, surface it and stop.
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setMessage(submitError.message || 'Check your payment details and try again.');
+      setIsLoading(false);
+      return;
+    }
+
     const { error, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
