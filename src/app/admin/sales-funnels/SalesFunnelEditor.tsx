@@ -43,6 +43,14 @@ import {
   type UpsellContent,
   type SuccessContent,
   type AccessContent,
+  blankSalesOptin,
+  blankSalesPage,
+  blankVslPage,
+  blankCheckout,
+  blankUpsell,
+  blankSuccess,
+  blankAccess,
+  blankSalesFooter,
 } from '@/lib/mothermode/sales/types';
 import {
   blankSalesAiIntake,
@@ -361,12 +369,15 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     setOfferSlug('brain-dump-system'); setLeadGenSlug(''); setDeliverableSlug(''); setDeliverableKey('');
     setEmailKitId(''); setEmailKitsMap({}); setProductId(''); setViewCount(0); setConversionCount(0);
     setCheckoutCount(0); setPurchaseCount(0); setRevenueCents(0);
-    setOptin(defaultMotherModeSalesOptin()); setSales(defaultMotherModeSalesPage());
-    setVsl(defaultMotherModeVsl()); setCheckout(defaultMotherModeCheckout());
-    setUpsell1(defaultMotherModeUpsell1()); setUpsell2(defaultMotherModeUpsell2());
-    setUpsell3(defaultMotherModeUpsell3()); setUpsell4(defaultMotherModeUpsell4());
-    setSuccessBlock(defaultMotherModeSuccess()); setAccess(defaultMotherModeAccess());
-    setFooter(defaultMotherModeSalesFooter()); setIntake(blankSalesAiIntake());
+    // Blank onboarding: a new funnel starts empty, not with the MotherMode
+    // default copy (that's what "Load MotherMode defaults" is for). The blank
+    // * functions give a clean slate so the user onboards their own offer.
+    setOptin(blankSalesOptin()); setSales(blankSalesPage());
+    setVsl(blankVslPage()); setCheckout(blankCheckout());
+    setUpsell1(blankUpsell()); setUpsell2(blankUpsell());
+    setUpsell3(blankUpsell()); setUpsell4(blankUpsell());
+    setSuccessBlock(blankSuccess()); setAccess(blankAccess());
+    setFooter(blankSalesFooter()); setIntake(blankSalesAiIntake());
     setSlugTouched(false); setError(null); setNotice(null); setTab('build');
   }
 
