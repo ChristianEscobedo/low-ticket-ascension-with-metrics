@@ -469,6 +469,8 @@ export interface SalesFunnelRecord {
   revenueCents: number;
   /** Per-funnel test mode: charge the Stripe TEST keys, not the live ones. */
   testMode: boolean;
+  /** Outbound webhooks — POST the purchase data to each URL on a purchase. */
+  webhooks: string[];
   createdAt: string;
   updatedAt: string;
   updatedBy: string | null;
@@ -534,6 +536,7 @@ export interface SalesFunnelRow {
   upsell4_no: number;
   revenue_cents: number;
   test_mode?: boolean;
+  webhooks?: unknown;
   created_at: string;
   updated_at: string;
   updated_by: string | null;
@@ -1093,6 +1096,7 @@ export function rowToSalesFunnel(row: SalesFunnelRow): SalesFunnelRecord {
     upsell4No: asNumber(row.upsell4_no, 0),
     revenueCents: asNumber(row.revenue_cents, 0),
     testMode: row.test_mode === true,
+    webhooks: asStringArray(row.webhooks),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,

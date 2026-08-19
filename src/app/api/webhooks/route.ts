@@ -9,6 +9,29 @@ import {
   deletePriceRecord,
   recordFunnelPurchase
 } from '@/utils/supabase/admin';
+import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
+import { fireFunnelWebhooks } from '@/lib/mothermode/sales/webhooks';
+
+// Fire the funnel's outbound webhooks (the main app, GHL, Zapier) on a
+// purchase. Fire-and-forget — a dead webhook never blocks the purchase.
+async function firePurchaseWebhooks(p: {
+  funnel_slug?: string | null;
+  customer_email?: string | null;
+  amount_cents?: number | null;
+  product_id?: string | null;
+  page_type?: string | null;
+}) {
+  const slug = p.funnel_slug;
+  if (!slug) return;
+  const funnel = await getFunnelBySlug(slug).catch(() => null);
+  if (!funnel || (funnel.webhooks ?? []).length === 0) return;
+  await fireFunnelWebhooks(funnel, {
+    email: p.customer_email ?? null,
+    productId: p.product_id ?? null,
+    amountCents: p.amount_cents ?? 0,
+    step: p.page_type ?? null,
+  });
+}
 import { dispatchPurchase, dispatchLifecycleEvent } from '@/utils/integrations/dispatch';
 import { sendPurchaseReceipt } from '@/utils/email/receipt';
 import { enrollOnPurchase } from '@/utils/email/sequences/engine';
@@ -181,6 +204,7 @@ export async function POST(req: Request) {
             };
             await recordFunnelPurchase(subPurchase);
             await dispatchPurchase(subPurchase);
+            await firePurchaseWebhooks(subPurchase);
             await sendPurchaseReceipt(subPurchase);
             await enrollOnPurchase(subPurchase);
             await grantCoursesForPurchase({
@@ -211,6 +235,7 @@ export async function POST(req: Request) {
             };
             await recordFunnelPurchase(sessionPurchase);
             await dispatchPurchase(sessionPurchase);
+            await firePurchaseWebhooks(sessionPurchase);
             await sendPurchaseReceipt(sessionPurchase);
             await enrollOnPurchase(sessionPurchase);
             await grantCoursesForPurchase({
@@ -242,6 +267,7 @@ export async function POST(req: Request) {
           };
           await recordFunnelPurchase(piPurchase);
           await dispatchPurchase(piPurchase);
+          await firePurchaseWebhooks(piPurchase);
           await sendPurchaseReceipt(piPurchase);
           await enrollOnPurchase(piPurchase);
           await grantCoursesForPurchase({

@@ -104,6 +104,8 @@ export async function POST(request: NextRequest) {
       footer: body.footer as any,
       // The per-funnel test/live toggle. A boolean writes it; absent preserves it.
       testMode: typeof body.testMode === 'boolean' ? body.testMode : undefined,
+      // The outbound webhooks. An array writes them; absent preserves them.
+      webhooks: Array.isArray(body.webhooks) ? (body.webhooks as string[]) : undefined,
       updatedBy: guard.email,
     });
 

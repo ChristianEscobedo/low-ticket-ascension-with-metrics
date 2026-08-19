@@ -48,7 +48,7 @@ const LEADS = 'mothermode_sales_funnel_leads';
 const EVENTS = 'mothermode_sales_funnel_events';
 
 const FUNNEL_COLUMNS =
-  'id, slug, name, status, offer_slug, lead_gen_slug, deliverable_slug, deliverable_key, email_kit_id, email_kits, product_id, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, success, access, footer, view_count, conversion_count, checkout_count, purchase_count, upsell1_yes, upsell1_no, upsell2_yes, upsell2_no, upsell3_yes, upsell3_no, upsell4_yes, upsell4_no, revenue_cents, test_mode, created_at, updated_at, updated_by';
+  'id, slug, name, status, offer_slug, lead_gen_slug, deliverable_slug, deliverable_key, email_kit_id, email_kits, product_id, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, success, access, footer, view_count, conversion_count, checkout_count, purchase_count, upsell1_yes, upsell1_no, upsell2_yes, upsell2_no, upsell3_yes, upsell3_no, upsell4_yes, upsell4_no, revenue_cents, test_mode, webhooks, created_at, updated_at, updated_by';
 
 const LEAD_COLUMNS =
   'id, funnel_id, email, first_name, status, step_reached, purchased, purchase_amount_cents, utm_source, utm_medium, utm_campaign, referrer, user_agent, ip_hash, metadata, created_at, updated_at';
@@ -148,6 +148,8 @@ export interface UpsertSalesFunnelInput {
   footer: SalesFooterContent;
   /** Per-funnel test mode. Omitted = leave the existing value alone. */
   testMode?: boolean;
+  /** Outbound webhooks. Omitted = leave the existing value alone. */
+  webhooks?: string[];
   updatedBy?: string | null;
 }
 
@@ -202,6 +204,7 @@ export async function upsertFunnel(
   // the upsert rebuilds the row, and a caller that doesn't know about the
   // toggle (the blueprint creator) must not reset it.
   if (input.testMode !== undefined) row.test_mode = input.testMode;
+  if (input.webhooks !== undefined) row.webhooks = input.webhooks;
   if (input.id) row.id = input.id;
 
   if (!input.id) {
