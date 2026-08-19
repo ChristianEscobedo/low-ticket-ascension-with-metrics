@@ -230,6 +230,10 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
   const [showFallbackForm, setShowFallbackForm] = useState(false);
   const [fallbackForm, setFallbackForm] = useState({ firstName: '', lastName: '', email: '' });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The subscription's first period is paying via the plain PI (no card was
+  // on file) — that confirm saves the card; on success, open the
+  // subscription on it before advancing (see handleInlineSuccess).
+  const [pendingSubFirstPeriod, setPendingSubFirstPeriod] = useState(false);
   // The publishable key the PaymentIntent was created with — handed back by
   // /api/create-payment-intent. The card form loads Stripe.js with THIS key:
   // a test-mode PI confirmed against the live pk 400s and never mounts.
@@ -351,6 +355,10 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
           if (typeof inlineData.publishableKey === 'string' && inlineData.publishableKey) {
             setChargePk(inlineData.publishableKey);
           }
+          // requires_payment = no card was on file: this PI collects the
+          // first period AND saves the card — the subscription opens on it
+          // when the confirm succeeds.
+          if (inlineData.status === 'requires_payment') setPendingSubFirstPeriod(true);
           setClientSecret(inlineData.client_secret);
           return;
         }
@@ -433,6 +441,44 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // The card form confirmed. When the subscription's first period just paid
+  // via the plain PI (no card was on file), that confirm saved the card —
+  // open the subscription on it now (the trial carries it to the next
+  // period, so no double charge), THEN advance.
+  const handleInlineSuccess = async () => {
+    if (pendingSubFirstPeriod && customerData) {
+      try {
+        await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: productAmount,
+            currency: 'usd',
+            customer_data: customerData,
+            product_id: productId || 'prod_generic',
+            one_click: true,
+            subscription: true,
+            first_period_paid: true,
+            interval: subscriptionInterval === 'yearly' ? 'year' : 'month',
+            ...(stripePriceId ? { price_id: stripePriceId } : {}),
+            ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
+            ...(funnelStep ? { step: funnelStep } : {}),
+            metadata: {
+              type: 'funnel_upsell',
+              product_id: productId || 'prod_generic',
+              product_name: productName,
+              customer_email: customerData.email,
+              ...paymentMetadata,
+            },
+          }),
+        });
+      } catch {
+        // The first period is paid + recorded; the sub follow-up can retry.
+      }
+    }
+    onSuccess();
   };
 
   if (!isOpen) return null;
@@ -567,7 +613,7 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
               >
                 <InnerPaymentForm
                   customerData={customerData!}
-                  onSuccess={onSuccess}
+                  onSuccess={handleInlineSuccess}
                   productPrice={productPrice}
                   theme={theme}
                 />
