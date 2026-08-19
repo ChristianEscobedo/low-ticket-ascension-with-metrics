@@ -171,6 +171,14 @@ export async function POST(req: Request) {
           break;
         case 'checkout.session.completed':
           const checkoutSession = event.data.object as Stripe.Checkout.Session;
+          // Only this app's checkouts: the checkout route stamps product_id /
+          // page_type. A session with neither is another app on the account.
+          if (
+            !checkoutSession.metadata?.product_id &&
+            !checkoutSession.metadata?.page_type
+          ) {
+            break;
+          }
           if (checkoutSession.mode === 'subscription') {
             const subscriptionId = checkoutSession.subscription;
             await manageSubscriptionStatusChange(
@@ -251,6 +259,16 @@ export async function POST(req: Request) {
           // customer_email, customer_name, one_click + any caller metadata.
           // Insert is idempotent on stripe_event_id.
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
+          // Only this app's charges: /api/create-payment-intent stamps
+          // product_id / page_type in the metadata. A payment intent with
+          // neither is another app on the same Stripe account — skip it (no
+          // purchase record, no receipt, no outbound webhook).
+          if (
+            !paymentIntent.metadata?.product_id &&
+            !paymentIntent.metadata?.page_type
+          ) {
+            break;
+          }
           const piPurchase = {
             stripe_event_id: event.id,
             payment_intent_id: paymentIntent.id,
