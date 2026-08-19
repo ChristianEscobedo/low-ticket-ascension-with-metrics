@@ -24,6 +24,7 @@ function envKey(): string {
 
 async function resolveStripe(funnelSlug?: string): Promise<Stripe | null> {
   let key = '';
+  let mode: string | null = null;
   try {
     const url = funnelSlug
       ? `/api/stripe/publishable-key?funnel=${encodeURIComponent(funnelSlug)}`
@@ -32,11 +33,16 @@ async function resolveStripe(funnelSlug?: string): Promise<Stripe | null> {
     if (res.ok) {
       const data = await res.json();
       key = (data?.publishableKey as string | null) ?? '';
+      mode = (data?.mode as string | null) ?? null;
     }
   } catch {
     // Endpoint unreachable; fall back to the build-time env below.
   }
-  if (!key) key = envKey();
+  // A test-mode funnel with no test pk saved must NOT fall back to the live
+  // env key — the test-mode PaymentIntent can't confirm against it (the
+  // elements/sessions 400). Null here; the charge route errors with the
+  // "save the test publishable key" message before any PI exists.
+  if (!key && mode !== 'test') key = envKey();
   if (!key) return null;
   return loadStripe(key);
 }

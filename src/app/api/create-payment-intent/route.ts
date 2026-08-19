@@ -80,6 +80,21 @@ export async function POST(request: NextRequest) {
     // cached the live one.
     const publishableKey = await getStripePublishableKeyForMode(mode);
 
+    // Never create a PaymentIntent the browser can't confirm. In test mode a
+    // missing test publishable key used to fall back to the LIVE pk — the PI
+    // got created with the test secret, then Stripe.js 400'd on
+    // elements/sessions and the form never mounted. Fail BEFORE the PI exists,
+    // with the fix spelled out.
+    if (mode === 'test' && !publishableKey) {
+      return NextResponse.json(
+        {
+          error:
+            'This funnel is in test mode but no Stripe TEST publishable key is saved. Add the test publishable key (pk_test_…) in /admin/stripe — the card form needs it to confirm the test charge.',
+        },
+        { status: 503 }
+      );
+    }
+
     if (!customer_data?.email) {
       return NextResponse.json(
         { error: 'Missing required field: customer_data.email' },

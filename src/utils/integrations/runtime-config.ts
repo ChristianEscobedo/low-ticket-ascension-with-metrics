@@ -325,10 +325,14 @@ export async function getStripePublishableKey(): Promise<string | null> {
 
 /**
  * The publishable key for a funnel's mode. 'test' reads `publishable_key_test`
- * (then the NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST env), falling back to the
- * live publishable key when no test one is saved. The client loads Stripe.js
- * with this key to confirm a PaymentIntent — a test-mode intent can't confirm
- * against the live pk, so the mode has to follow the charge.
+ * (then the NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST env). The client loads
+ * Stripe.js with this key to confirm a PaymentIntent — a test-mode intent
+ * can't confirm against the live pk, so the mode has to follow the charge.
+ *
+ * NO live fallback in test mode: a missing test pk used to fall back to the
+ * live pk, which is exactly the mismatch that 400s elements/sessions and
+ * leaves the card form unmounted. Null instead — the charge route turns it
+ * into a clear "save the test publishable key" error before any PI exists.
  */
 export async function getStripePublishableKeyForMode(
   mode: 'test' | 'live',
@@ -339,7 +343,7 @@ export async function getStripePublishableKeyForMode(
         'stripe',
         'publishable_key_test',
         process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST,
-      )) ?? (await getStripePublishableKey())
+      )) ?? null
     );
   }
   return getStripePublishableKey();
