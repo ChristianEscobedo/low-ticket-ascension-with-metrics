@@ -283,6 +283,7 @@ export default async function StripeAdminPage() {
               {
                 key: 'publishable_key_test',
                 label: 'Test publishable key — for test-mode funnels',
+                type: 'password',
                 placeholder: 'pk_test_...'
               },
               {

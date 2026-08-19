@@ -32,6 +32,9 @@ const SECRET_KEYS = new Set([
   'secret_key',
   'secret_key_test',
   'webhook_secret',
+  // The test publishable key is write-only too: /admin/stripe masks it, so a
+  // blank field means "keep the stored one", never "clear it".
+  'publishable_key_test',
   'api_key',
   'api_token',
   'resend_api_key',
@@ -63,7 +66,11 @@ function mergeConfig(
       if (v.length > 0) cfg[k] = v;
     } else if (v.length > 0) {
       cfg[k] = v;
-    } else {
+    } else if (raw !== null) {
+      // Submitted blank = an explicit clear. raw === null means the field
+      // isn't on the submitting form at all (e.g. the /admin/integrations
+      // card doesn't render publishable_key_test) — leave the stored value
+      // alone instead of wiping a key another page owns.
       delete cfg[k];
     }
   }
