@@ -1023,7 +1023,21 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <div className="min-w-0"><label className={labelClass}>Name</label><input className={inputClass} value={name} onChange={(e) => { const v = e.target.value; setName(v); if (!slugTouched) setSlug(slugifySalesName(v)); }} placeholder="Brain Dump Sales Funnel" /></div>
             <div className="min-w-0"><label className={labelClass}>Slug (URL)</label><input className={inputClass} value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value); }} placeholder="brain-dump-sales" /></div>
             <div className="min-w-0"><label className={labelClass}>Status</label><select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
-            <label className="flex min-w-0 items-center gap-2 self-end pb-2 text-xs text-bone/70" title="Charge this funnel with the Stripe TEST keys (the 4242 card), not the live ones. Save to persist."><input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} className="h-3.5 w-3.5 accent-brass" />Test mode <span className="text-bone/40">(Stripe test keys)</span></label>
+            <div className="flex min-w-0 items-center gap-2 self-end pb-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={testMode}
+                onClick={() => setTestMode((v) => !v)}
+                title="Charge this funnel with the Stripe TEST keys (the 4242 card), not the live ones. Save to persist."
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${testMode ? 'bg-sky-500' : 'bg-bone/20'}`}
+              >
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs text-bone/70">
+                Test mode {testMode && <span className="font-semibold text-sky-300">(Stripe test keys)</span>}
+              </span>
+            </div>
 
           </div>
           {selectedId && (

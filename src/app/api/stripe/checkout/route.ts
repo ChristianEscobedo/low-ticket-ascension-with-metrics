@@ -51,7 +51,12 @@ export async function POST(request: NextRequest) {
     const mode: 'test' | 'live' = funnel?.testMode ? 'test' : 'live';
     if (!(await getStripeSecretKeyForMode(mode))) {
       return NextResponse.json(
-        { error: 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.' },
+        {
+          error:
+            mode === 'test'
+              ? 'This funnel is in test mode but no Stripe TEST key is saved. Add the test secret key (sk_test_…) in /admin/stripe.'
+              : 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.',
+        },
         { status: 503 }
       );
     }

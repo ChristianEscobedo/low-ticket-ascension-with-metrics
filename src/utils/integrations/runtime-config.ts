@@ -291,12 +291,17 @@ export async function getStripeSecretKeyForMode(
   mode: 'test' | 'live',
 ): Promise<string> {
   if (mode === 'test') {
-    const test = await resolve(
-      'stripe',
-      'secret_key_test',
-      process.env.STRIPE_SECRET_KEY_TEST,
+    // A test-mode funnel must NEVER charge the live key — the whole point is
+    // the 4242 card. No test key saved = empty (the checkout says "save the
+    // test key"), never the live fallback. Charging live when you meant test
+    // is the dangerous surprise.
+    return (
+      (await resolve(
+        'stripe',
+        'secret_key_test',
+        process.env.STRIPE_SECRET_KEY_TEST,
+      )) ?? ''
     );
-    if (test) return test;
   }
   return getStripeSecretKey();
 }
