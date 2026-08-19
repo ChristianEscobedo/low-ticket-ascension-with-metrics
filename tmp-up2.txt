@@ -1,0 +1,17 @@
+181| const UPLOAD_API = '/api/admin/reel-upload-url';
+541| onDrop={() => {
+2961| const [uploadJob, setUploadJob] = useState<{
+3368| insertClipAtPlayhead(clip);
+3533| insertClipAtPlayhead(clip);
+3539| async function addUpload(file: File, kind: 'video' | 'audio') {
+3543| setUploadJob({
+3564| insertClipAtPlayhead(clip);
+3574| setUploadJob((j) => (j ? { ...j, pct: 8, phase: 'Requesting upload slot…' } : j));
+3588| setUploadJob((j) => (j ? { ...j, pct: 10, phase: `Uploading ${file.name}…` } : j));
+3590| setUploadJob((j) => (j ? { ...j, pct: 10 + Math.round(pct * 0.8), phase: `Uploading ${pct}%` } : j));
+3595| setUploadJob((j) => (j ? { ...j, pct: 92, phase: 'Confirming the file is playable…' } : j));
+3631| setUploadJob(null);
+3902| insertClipAtPlayhead(clip);
+5311| function insertClipAtPlayhead(clip: ReelClip) {
+5759| accept="video/mp4,video/webm,video/quicktime"
+7591| accept="video/mp4,video/webm,video/quicktime"

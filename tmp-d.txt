@@ -1,0 +1,90 @@
+2961| const [uploadJob, setUploadJob] = useState<{
+3069| const v = previewRef.current;
+3182| const previewRef = useRef<HTMLVideoElement>(null);
+3184| const pendingSeekRef = useRef<number | null>(null);
+3207| const swappingRef = useRef(false);
+4020| const previewSrc = stageClip?.url || project?.composedUrl || '';
+4070| const v = previewRef.current;
+4073| swappingRef.current = true;
+4075| pendingSeekRef.current = srcLocal;
+4084| if (clockRef.current.playing && v.paused && !swappingRef.current) {
+4141| swappingRef.current = false; // leftover swap must not block play()
+4146| const v = previewRef.current;
+4147| if (v && v.paused && !swappingRef.current) void v.play().catch(() => {});
+4158| const v = previewRef.current;
+5559| disabled={!previewSrc}
+8319| {uploadJob && (
+8322| {uploadJob.phase}
+8327| style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+8331| {uploadJob.name} · {uploadJob.pct}%
+8612| ) : previewSrc ? (
+8622| ref={previewRef}
+8641| if (swappingRef.current) return; // a src swap, not a user pause
+8642| if (clockRef.current.playing && !swappingRef.current) stopClock();
+8645| swappingRef.current = false;
+8647| const pending = pendingSeekRef.current;
+8649| pendingSeekRef.current = null;
+8913| {uploadJob?.blobUrl && (
+8915| src={uploadJob.blobUrl}
+8922| {uploadJob && (
+8924| <p className="mb-1.5 text-[11px] font-semibold text-bone">{uploadJob.phase}</p>
+8928| style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+8997| disabled={!previewSrc}
+9299| const v = previewRef.current;
+9541| {publishOpen && previewSrc && project && (
+9544| videoUrl={project.composedUrl || previewSrc}
+9621| frameUrl={project.composedUrl || previewSrc}
+----- STAGE JSX -----
+      yPct: y,
+                              widthPct: cueDragLocal?.widthPct ?? sw,
+                            })
+                          }
+                          onCommit={(x, y) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { xPct: x, yPct: y });
+                          }}
+                          onResize={(w) =>
+                            setCueDragLocal({
+                              xPct: cueDragLocal?.xPct ?? sx,
+                              yPct: cueDragLocal?.yPct ?? sy,
+                              widthPct: w,
+                            })
+                          }
+                          onResizeCommit={(w) => {
+                            setCueDragLocal(null);
+                            void patchCueStyle(cue.id, { widthPct: w });
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
+                ) : previewSrc ? (
+                  <div
+                    className="relative shrink-0 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-bone/10"
+                    style={{ width: stageBox.w || undefined, height: stageBox.h || undefined }}
+                  >
+
+                    {/* R25: ONE element, driven 100% by the playback clock (no src prop,
+                        no fences — the clock swaps + seeks it; it never decides anything). */}
+                    <video
+
+                      ref={previewRef}
+                      data-clip-url=""
+                      onClick={togglePlay}
+                      style={{
+                        transform: stageClip?.motion
+                          ? motionCssTransform(sampleMotion(stageClip.motion, previewTime))
+                          : undefined,
+                        transformOrigin: 'center',
+                      }}
+                      className={clsx(
+                        'h-full w-full',
+                        fit === 'cover' || stageClip?.motion?.length
+                          ? 'object-cover'
+                          : 'object-contain',
+                      )}
+                      onPlay={() => {
+                        if (!clockRef.current.playing) startClock();
+                      }}
+                      onPause={() => {
+                        if (swappingRef.current) return; // a src swap, not 

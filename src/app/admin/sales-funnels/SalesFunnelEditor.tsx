@@ -145,6 +145,8 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   const [leads] = useState<SalesLeadRecord[]>(initialLeads);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('build');
+  /** Per-funnel test mode: charge the Stripe TEST keys, not the live ones. */
+  const [testMode, setTestMode] = useState(false);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<SalesFunnelStatus>('draft');

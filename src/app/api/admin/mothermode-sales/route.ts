@@ -102,6 +102,8 @@ export async function POST(request: NextRequest) {
 
       access: body.access as any,
       footer: body.footer as any,
+      // The per-funnel test/live toggle. A boolean writes it; absent preserves it.
+      testMode: typeof body.testMode === 'boolean' ? body.testMode : undefined,
       updatedBy: guard.email,
     });
 

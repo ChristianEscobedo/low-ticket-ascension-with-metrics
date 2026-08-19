@@ -1,0 +1,153 @@
+--- 3455-3475 ---
+3455|    * Upload callbacks (duration probe, "storage is ready" swap) resolve seconds
+3456|    * to minutes after `addUpload` was called, by which time the `project` those
+3457|    * closures captured is ancient — it predates the clip we just inserted. The
+3458|    * plain `patchClip` then wrote that stale timeline back, which DELETED the
+3459|    * new scene the instant the upload finished: "Uploaded … (152.9s)" with an
+3460|    * empty player. Reading the live project inside the updater can't go stale.
+3461|    */
+3462|   function patchClipLive(id: string, partial: Partial<ReelClip>) {
+3463|     setProject((p) =>
+3464|       p ? { ...p, clips: p.clips.map((c) => (c.id === id ? { ...c, ...partial } : c)) } : p,
+3465|     );
+3466|   }
+3467| 
+3468|   /** R25 overlay (b-roll) layers: patch one, or add one at the playhead. */
+3469|   function patchOverlay(id: string, partial: Partial<ReelOverlayClip>) {
+3470|     if (!project) return;
+3471|     patch({
+3472|       overlays: (project.overlays ?? []).map((o) => (o.id === id ? { ...o, ...partial } : o)),
+3473|     });
+3474|   }
+3475| 
+--- 4010-4045 ---
+4010|       captions: { ...project.captions, [currentClip.id]: next },
+4011|     };
+4012|   }, [project, currentClip, wordPlaceLocal, wordScaleLocal]);
+4013| 
+4014|   // R25: the STAGE shows the clip under the CLOCK (not the inspector selection).
+4015|   const clockHit = useMemo(
+4016|     () => (project ? clipAtTime(project.clips, playheadSec) : null),
+4017|     [project, playheadSec],
+4018|   );
+4019|   const stageClip = clockHit?.clip ?? null;
+4020|   const previewSrc =
+4021|     stageClip?.url || project?.clips?.[0]?.url || project?.composedUrl || '';
+4022| 
+4023|   /**
+4024|    * PAINT THE STAGE WHEN THE SOURCE CHANGES.
+4025|    *
+4026|    * The <video> has no src prop on purpose - the clock owns it. But the clock
+4027|    * only runs while PLAYING, so a clip that lands while playback is parked
+4028|    * (every upload, every project load) never got a source and the player sat
+4029|    * black. This effect does the one thing the clock cannot: swap + seek the
+4030|    * element the instant the stage URL changes, so an uploaded clip shows up
+4031|    * immediately - and swaps cleanly again when the blob becomes a storage URL.
+4032|    */
+4033|   useEffect(() => {
+4034|     const v = previewRef.current;
+4035|     if (!v || !previewSrc) return;
+4036|     if (v.dataset.clipUrl === previewSrc) return;
+4037|     swappingRef.current = true;
+4038|     v.dataset.clipUrl = previewSrc;
+4039|     pendingSeekRef.current =
+4040|       (stageClip?.trimStartSec ?? 0) + (clockHit?.local ?? 0);
+4041|     v.src = previewSrc;
+4042|     try {
+4043|       v.load();
+4044|     } catch {
+4045|       /* Safari can throw on a same-tick load - the swap still lands */
+--- 2955-2975 ---
+2955| 
+2956| export default function ReelStudioPage() {
+2957|   const [projects, setProjects] = useState<ReelProject[] | null>(null);
+2958|   const [project, setProject] = useState<ReelProject | null>(null);
+2959|   const [tab, setTab] = useState<Tab>('clips');
+2960|   const [busy, setBusy] = useState(false);
+2961|   const [uploadJob, setUploadJob] = useState<{
+2962|     name: string;
+2963|     pct: number;
+2964|     phase: string;
+2965|     blobUrl: string | null;
+2966|   } | null>(null);
+2967|   const [note, setNote] = useState<string | null>(null);
+2968|   const [error, setError] = useState<string | null>(null);
+2969|   const [selectedClip, setSelectedClip] = useState<string | null>(null);
+2970|   const [addUrl, setAddUrl] = useState('');
+2971|   const [voText, setVoText] = useState('');
+2972|   const [brollTopic, setBrollTopic] = useState('');
+2973|   /** R6a the Board (storyboard mode): shots with prompt + footage, persisted per reel. */
+2974|   const [boardShots, setBoardShots] = useState<BoardShot[]>([]);
+2975|   /** Which shot the Hub picker is feeding (null = the picker belongs to add-scene). */
+--- 8930-9000 ---
+8930|                           onResize={(w) =>
+8931|                             setCueDragLocal({
+8932|                               xPct: cueDragLocal?.xPct ?? sx,
+8933|                               yPct: cueDragLocal?.yPct ?? sy,
+8934|                               widthPct: w,
+8935|                             })
+8936|                           }
+8937|                           onResizeCommit={(w) => {
+8938|                             setCueDragLocal(null);
+8939|                             void patchCueStyle(cue.id, { widthPct: w });
+8940|                           }}
+8941|                         />
+8942|                       );
+8943|                     })()}
+8944| 
+8945|                     {/* R8 platform lens chrome (9:16 canvas only — vertical surfaces) */}
+8946|                     {lensMode === 'platform' && aspect === '9:16' && (
+8947|                       <PlatformLensOverlay
+8948|                         brand={postTarget.brand}
+8949|                         title={copyPool?.title ?? project.name}
+8950|                         caption={copyPool?.caption ?? project.name}
+8951|                       />
+8952|                     )}
+8953|                   </div>
+8954| 
+8955|                 ) : (
+8956|                 <div
+8957|                   data-empty-start
+8958|                   className="relative flex shrink-0 flex-col items-center justify-center gap-4 rounded-xl bg-black px-6 py-16 text-center shadow-2xl ring-1 ring-bone/10"
+8959|                   style={{ width: stageBox.w || 360, minHeight: stageBox.h || 480 }}
+8960|                 >
+8961|                   {uploadJob?.blobUrl && (
+8962|                     <video
+8963|                       src={uploadJob.blobUrl}
+8964|                       muted
+8965|                       playsInline
+8966|                       preload="metadata"
+8967|                       className="absolute inset-0 h-full w-full object-contain opacity-40"
+8968|                     />
+8969|                   )}
+8970|                   {uploadJob && (
+8971|                     <div className="absolute inset-x-6 bottom-6 z-10">
+8972|                       <p className="mb-1.5 text-[11px] font-semibold text-bone">{uploadJob.phase}</p>
+8973|                       <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
+8974|                         <div
+8975|                           className="h-full rounded-full bg-brass"
+8976|                           style={{ width: `${Math.max(4, uploadJob.pct)}%` }}
+8977|                         />
+8978|                       </div>
+8979|                     </div>
+8980|                   )}
+8981|                   <p className="text-sm font-semibold text-bone">Start a reel</p>
+8982|                   <p className="max-w-[240px] text-[11px] text-bone/50">
+8983|                     Upload a video or pull one from the media library. Captions can transcribe automatically.
+8984|                   </p>
+8985|                   <div className="flex flex-wrap items-center justify-center gap-2">
+8986|                     <button
+8987|                       type="button"
+8988|                       onClick={() => fileInput.current?.click()}
+8989|                       className="rounded-md bg-brass px-3 py-1.5 text-[11px] font-semibold text-ink"
+8990|                     >
+8991|                       Upload video
+8992|                     </button>
+8993|                     <button
+8994|                       type="button"
+8995|                       onClick={() => {
+8996|                         const tabBtn = document.querySelector('[data-tab="clips"]') as HTMLButtonElement | null;
+8997|                         tabBtn?.click();
+8998|                       }}
+8999|                       className="rounded-md border border-bone/20 px-3 py-1.5 text-[11px] font-semibold text-bone/80 hover:bg-white/5"
+9000|                     >

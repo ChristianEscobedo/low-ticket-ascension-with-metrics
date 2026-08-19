@@ -1,0 +1,157 @@
+===== STAGE SYNC EFFECT @168284 =====
+eys(scales).length > 0;
+    if (!hasLoc) return project;
+    const base = project.captions[currentClip.id] ?? [];
+    const next = base.map((w, i) => {
+      const loc = locals[i];
+      const sc = scales[i];
+      if (!loc && typeof sc !== 'number') return w;
+      return {
+        ...w,
+        mark: {
+          ...(w.mark ?? {}),
+          ...(loc ? { xPct: loc.xPct, yPct: loc.yPct } : {}),
+          ...(typeof sc === 'number' ? { scale: sc } : {}),
+        },
+      };
+    });
+    return {
+      ...project,
+      captions: { ...project.captions, [currentClip.id]: next },
+    };
+  }, [project, currentClip, wordPlaceLocal, wordScaleLocal]);
+
+  // R25: the STAGE shows the clip under the CLOCK (not the inspector selection).
+  const clockHit = useMemo(
+    () => (project ? clipAtTime(project.clips, playheadSec) : null),
+    [project, playheadSec],
+  );
+  const stageClip = clockHit?.clip ?? null;
+  const previewSrc = stageClip?.url || project?.composedUrl || '';
+  /** R25: the overlay (b-roll) layer currently under the clock, if any. */
+  const overlayHit = useMemo(() => {
+    for (const o of project?.overlays ?? []) {
+      if (playheadSec >= o.offsetSec && playheadSec < o.offsetSec + effectiveClipDuration(o)) {
+        return o;
+      }
+    }
+    return null;
+  }, [project?.overlays, playheadSec]);
+
+  /** R26: the effective length budget (per-reel override or the platform default). */
+  const targetLen = targetLengthFor(postTarget);
+  const targetSec = targetOverride ?? targetLen.target;
+
+  /** R3 Hook Score: recomputed on any timeline/caption/vault change — the Compose badge. */
+  const hook = useMemo(
+    () =>
+      project && project.clips.length
+        ? scoreHook({
+            clips: project.clips,
+            captions: project.captions,
+            vaultWinRateByUrl: new Map((vaultAssets ?? []).map((a) => [a.url, a.winRate])),
+          })
+        : null,
+    [project, vaultAssets],
+  );
+
+  // The badge and the Vault tab share the asset list — warm it once a reel is open.
+  useEffect(() => {
+    if (project && vaultAssets === null) void loadVault();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
+  // ------------------------------------------------------------------
+  // R25 playback clock (the ONE authority for time)
+  // ------------------------------------------------------------------
+
+  /**
+   * Hard-sync the video element(s) to timeline-second `t`: swap the source
+   * when the clock crossed into another scene, seek when drift exceeds a
+   * frame or two, and keep the overlay layer on the same beat.
+   */
+  function syncVideoToClock(t: number) {
+    const proj = clockStateRef.current.project;
+    if (!proj) return;
+    const hit = clipAtTime(proj.clips, t);
+    if (!hit) return;
+    const srcLocal = (hit.clip.trimStartSec ?? 0) + hit.local;
+    setPreviewTime(hit.local);
+    const v = previewRef.current;
+    if (v) {
+      if (v.dataset.clipUrl !== hit.clip.url) {
+        swappingRef.current = true;
+        v.dataset.clipUrl = hit.clip.url;
+        pendingSeekRef.current = srcLocal;
+        v.src = hit.clip.url;
+      } else if (Math.abs(v.currentTime - srcLocal) > 0.12) {
+        try {
+          v.currentTime = srcLocal;
+        } catch {
+          /* metadata pending */
+        }
+      }
+      if (clockRef.current.playing && v.paused && !swappingRef.current) {
+        void v.play().catch(() => {});
+      }
+    }
+    // The overlay layer rides the same clock.
+    const ov = overlayRef.current;
+    if (ov) {
+      const o = (proj.overlays ?? []).find(
+        (x) => t >= x.offsetSec && t < x.offsetSec + effectiveClipDuration(x),
+      );
+      if (o) {
+        const ovLocal = (o.trimStartSec ?? 0) + (t - o.offsetSec);
+        if (ov.dataset.clipUrl !== o.url) {
+          ov.dataset.clipUrl = o.url;
+          pendingOvSeekRef.current = ovLocal;
+          ov.src = o.url;
+        } else if (Math.abs(ov.currentTime - ovLocal) > 0.15) {
+          try {
+            ov.currentTime = ovLocal;
+          } catch {
+            /* metadata pending */
+          }
+        }
+        if (clockRef.current.playing && ov.paused) void ov.play().catch(() => {});
+      } else if (!ov.paused) {
+        ov.pause();
+      }
+    }
+  }
+
+  /** The rAF heartbeat: advance the clock, clamp at the end, sync everything. */
+  function clockTick(ts: number) {
+    const c = clockRef.current;
+    const tot = clockStateRef.current.total;
+    if (!c.playing || !clockStateRef.current.project) return;
+    const dt = Math.min(0.1, Math.max(0, (ts - c.lastTs) / 1000)); // tab-switch guard
+    c.lastTs = ts;
+    const t = c.t + dt;
+    if (t >= tot) {
+      c.t = tot;
+      setPlayheadSec(tot);
+      stopClock();
+      return;
+    }
+    c.t = t;
+    setPlayheadSec(t);
+    syncVideoToClock(t);
+    syncAudioAt(t, true);
+    c.raf = requestAnimationFrame(clockTick);
+  }
+
+  function startClock() {
+    const c = clockRef.current;
+    const proj = clockStateRef.current.project;
+    const tot = clockStateRef.current.total;
+    if (!proj || proj.clips.length === 0 || c.playing) return;
+    if (c.t >= tot - 0.01) c.t = 0; // replay from the top when at the end
+    swappingRef.current = false; // leftover swap must not block play()
+    c.playing = true;
+    c.lastTs = performance.now();
+    setPlaying(true);
+    syncVideoToClock(c.t);
+    const v = previewRef.c
+===== x @123607 =====
