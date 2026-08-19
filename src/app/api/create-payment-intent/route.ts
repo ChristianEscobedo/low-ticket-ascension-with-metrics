@@ -172,10 +172,6 @@ export async function POST(request: NextRequest) {
     if (one_click && subscription) {
       const methods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
       const savedCard = methods.data[0];
-      if (!savedCard) {
-        // No card on file — the modal falls back to hosted Checkout.
-        return NextResponse.json({ status: 'needs_card' });
-      }
       // Subscription items need a Price object (price_data with product_data
       // isn't allowed there) — create the price in THIS mode's account first.
       const subPrice = await stripe.prices.create({
@@ -184,31 +180,40 @@ export async function POST(request: NextRequest) {
         recurring: { interval: subInterval },
         product_data: { name: metadata.product_name || 'Subscription' },
       });
+      // A saved card charges immediately (true one-click). No card on file:
+      // still no redirect — the incomplete subscription's invoice PI hands
+      // its client_secret to the modal and the card form collects it inline.
       const sub = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: subPrice.id }],
-        default_payment_method: savedCard.id,
+        ...(savedCard ? { default_payment_method: savedCard.id } : {}),
         payment_behavior: 'default_incomplete',
         expand: ['latest_invoice.payment_intent'],
         metadata: piMetadata,
       });
       // Stamp the invoice's PaymentIntent with the funnel metadata so the
       // webhook's payment_intent.succeeded records the first charge — a
-      // subscription created this way has no checkout.session.
+      // subscription created this way has no checkout.session. The
+      // setup_future_usage opt-in attaches a newly-entered card to the
+      // customer so renewals have something to bill.
       const invoice = sub.latest_invoice as {
         payment_intent?: { id: string; status: string; client_secret: string | null } | string | null;
       } | null;
       const invoicePi = invoice?.payment_intent ?? null;
       const invoicePiId = typeof invoicePi === 'string' ? invoicePi : invoicePi?.id;
       if (invoicePiId) {
-        await stripe.paymentIntents.update(invoicePiId, { metadata: piMetadata }).catch(() => {});
+        await stripe.paymentIntents
+          .update(invoicePiId, { metadata: piMetadata, setup_future_usage: 'off_session' })
+          .catch(() => {});
       }
       if (sub.status === 'active' || sub.status === 'trialing') {
         return NextResponse.json({ status: 'succeeded', subscription_id: sub.id });
       }
-      if (invoicePi && typeof invoicePi === 'object' && invoicePi.status === 'requires_action' && invoicePi.client_secret) {
+      if (invoicePi && typeof invoicePi === 'object' && invoicePi.client_secret) {
+        // requires_action (3DS on the saved card) or requires_payment_method
+        // (no card on file) — either way the modal confirms inline.
         return NextResponse.json({
-          status: 'requires_action',
+          status: invoicePi.status === 'requires_action' ? 'requires_action' : 'requires_payment',
           client_secret: invoicePi.client_secret,
           payment_intent_id: invoicePi.id,
           subscription_id: sub.id,
@@ -216,8 +221,8 @@ export async function POST(request: NextRequest) {
           publishableKey: publishableKey ?? null,
         });
       }
-      // Couldn't confirm inline (e.g. requires_payment_method) — cancel the
-      // incomplete sub so it never bills, and let the modal fall back.
+      // No client secret at all — can't confirm inline. Cancel the
+      // incomplete sub so it never bills; the modal falls back to hosted.
       await stripe.subscriptions.cancel(sub.id).catch(() => {});
       return NextResponse.json({ status: 'needs_card' });
     }
