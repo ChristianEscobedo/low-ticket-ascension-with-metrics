@@ -81,7 +81,11 @@ export async function POST(request: NextRequest) {
       charge.interval === 'year' ? 'year' : charge.interval === 'month' ? 'month' : interval;
 
     let lineItem: Stripe.Checkout.SessionCreateParams.LineItem;
-    if (charge.priceId) {
+    // A synced price id only exists in the mode it was synced in — a live
+    // price id 500s the session create when the funnel is in test mode (the
+    // test account has no such price). In test mode, always build the
+    // price_data line from the resolved amount instead.
+    if (charge.priceId && mode !== 'test') {
       lineItem = { price: charge.priceId, quantity: 1 };
     } else if (charge.amountCents > 0) {
       lineItem = {
