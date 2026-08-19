@@ -352,6 +352,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
 
   function resetToNew() {
     setSelectedId(null); setName(''); setSlug(''); setStatus('draft');
+    setTestMode(false);
     setOfferSlug('brain-dump-system'); setLeadGenSlug(''); setDeliverableSlug(''); setDeliverableKey('');
     setEmailKitId(''); setEmailKitsMap({}); setProductId(''); setViewCount(0); setConversionCount(0);
     setCheckoutCount(0); setPurchaseCount(0); setRevenueCents(0);
@@ -366,6 +367,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
 
   function loadFunnel(f: SalesFunnelRecord) {
     setSelectedId(f.id); setName(f.name); setSlug(f.slug); setStatus(f.status);
+    setTestMode(f.testMode === true);
     setOfferSlug(f.offerSlug ?? ''); setLeadGenSlug(f.leadGenSlug ?? '');
     setDeliverableSlug(f.deliverableSlug ?? ''); setDeliverableKey(f.deliverableKey ?? '');
     setEmailKitId(f.emailKitId ?? ''); setEmailKitsMap(mapFromBindings(f.emailKits, f.emailKitId)); setProductId(f.productId ?? '');
@@ -507,7 +509,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     const effectiveStatus = statusOverride ?? status;
     setBusy('save'); setError(null); setNotice(null);
     try {
-      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer }) });
+      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer, testMode }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Save failed (HTTP ' + res.status + ')');
       const item = data.item as SalesFunnelRecord;
@@ -1021,6 +1023,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <div className="min-w-0"><label className={labelClass}>Name</label><input className={inputClass} value={name} onChange={(e) => { const v = e.target.value; setName(v); if (!slugTouched) setSlug(slugifySalesName(v)); }} placeholder="Brain Dump Sales Funnel" /></div>
             <div className="min-w-0"><label className={labelClass}>Slug (URL)</label><input className={inputClass} value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value); }} placeholder="brain-dump-sales" /></div>
             <div className="min-w-0"><label className={labelClass}>Status</label><select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+            <label className="flex min-w-0 items-center gap-2 self-end pb-2 text-xs text-bone/70" title="Charge this funnel with the Stripe TEST keys (the 4242 card), not the live ones. Save to persist."><input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} className="h-3.5 w-3.5 accent-brass" />Test mode <span className="text-bone/40">(Stripe test keys)</span></label>
 
           </div>
           {selectedId && (
