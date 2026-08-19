@@ -147,6 +147,8 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   const [tab, setTab] = useState<Tab>('build');
   /** Per-funnel test mode: charge the Stripe TEST keys, not the live ones. */
   const [testMode, setTestMode] = useState(false);
+  /** Outbound webhooks — one URL per line; POSTed the purchase data on a sale. */
+  const [webhooks, setWebhooks] = useState('');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<SalesFunnelStatus>('draft');
@@ -353,6 +355,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function resetToNew() {
     setSelectedId(null); setName(''); setSlug(''); setStatus('draft');
     setTestMode(false);
+    setWebhooks('');
     setOfferSlug('brain-dump-system'); setLeadGenSlug(''); setDeliverableSlug(''); setDeliverableKey('');
     setEmailKitId(''); setEmailKitsMap({}); setProductId(''); setViewCount(0); setConversionCount(0);
     setCheckoutCount(0); setPurchaseCount(0); setRevenueCents(0);
@@ -368,6 +371,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function loadFunnel(f: SalesFunnelRecord) {
     setSelectedId(f.id); setName(f.name); setSlug(f.slug); setStatus(f.status);
     setTestMode(f.testMode === true);
+    setWebhooks((f.webhooks ?? []).join('\n'));
     setOfferSlug(f.offerSlug ?? ''); setLeadGenSlug(f.leadGenSlug ?? '');
     setDeliverableSlug(f.deliverableSlug ?? ''); setDeliverableKey(f.deliverableKey ?? '');
     setEmailKitId(f.emailKitId ?? ''); setEmailKitsMap(mapFromBindings(f.emailKits, f.emailKitId)); setProductId(f.productId ?? '');
@@ -509,7 +513,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
     const effectiveStatus = statusOverride ?? status;
     setBusy('save'); setError(null); setNotice(null);
     try {
-      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer, testMode }) });
+      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer, testMode, webhooks: webhooks.split('\n').map((u) => u.trim()).filter(Boolean) }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Save failed (HTTP ' + res.status + ')');
       const item = data.item as SalesFunnelRecord;
@@ -1023,20 +1027,34 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <div className="min-w-0"><label className={labelClass}>Name</label><input className={inputClass} value={name} onChange={(e) => { const v = e.target.value; setName(v); if (!slugTouched) setSlug(slugifySalesName(v)); }} placeholder="Brain Dump Sales Funnel" /></div>
             <div className="min-w-0"><label className={labelClass}>Slug (URL)</label><input className={inputClass} value={slug} onChange={(e) => { setSlugTouched(true); setSlug(e.target.value); }} placeholder="brain-dump-sales" /></div>
             <div className="min-w-0"><label className={labelClass}>Status</label><select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
-            <div className="flex min-w-0 items-center gap-2 self-end pb-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={testMode}
-                onClick={() => setTestMode((v) => !v)}
-                title="Charge this funnel with the Stripe TEST keys (the 4242 card), not the live ones. Save to persist."
-                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${testMode ? 'bg-sky-500' : 'bg-bone/20'}`}
-              >
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </button>
-              <span className="text-xs text-bone/70">
-                Test mode {testMode && <span className="font-semibold text-sky-300">(Stripe test keys)</span>}
-              </span>
+            <div className="min-w-0">
+              <label className={labelClass}>Test mode</label>
+              <div className="flex items-center gap-2.5 rounded-lg border border-bone/15 bg-ink/40 px-3 py-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={testMode}
+                  onClick={() => setTestMode((v) => !v)}
+                  title="Charge this funnel with the Stripe TEST keys (the 4242 card), not the live ones. Save to persist."
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${testMode ? 'bg-sky-500' : 'bg-bone/20'}`}
+                >
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+                <span className="text-xs text-bone/70">
+                  {testMode
+                    ? <span className="font-semibold text-sky-300">Stripe test keys (4242)</span>
+                    : 'Live keys'}
+                </span>
+              </div>
+            </div>
+            <div className="min-w-0 sm:col-span-2">
+              <label className={labelClass}>Webhooks <span className="normal-case text-bone/40">(one URL per line — POSTed the purchase data on a sale: the main app, GHL, Zapier)</span></label>
+              <textarea
+                className={inputClass + ' min-h-[72px] font-mono text-xs'}
+                value={webhooks}
+                onChange={(e) => setWebhooks(e.target.value)}
+                placeholder={'https://hooks.zapier.com/hooks/catch/…\nhttps://your-main-app.com/api/funnel-webhook'}
+              />
             </div>
 
           </div>
