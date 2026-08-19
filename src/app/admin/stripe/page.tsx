@@ -282,9 +282,15 @@ export default async function StripeAdminPage() {
               },
               {
                 key: 'secret_key',
-                label: 'Secret key',
+                label: 'Secret key (live)',
                 type: 'password',
-                placeholder: 'sk_test_... or sk_live_...'
+                placeholder: 'sk_live_...'
+              },
+              {
+                key: 'secret_key_test',
+                label: 'Test secret key — for test-mode funnels',
+                type: 'password',
+                placeholder: 'sk_test_...'
               },
               {
                 key: 'webhook_secret',

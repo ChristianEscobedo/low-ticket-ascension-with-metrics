@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { getStripeClient } from '@/utils/stripe/config';
-import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
+import { getStripeClientForMode } from '@/utils/stripe/config';
+import { getStripeSecretKeyForMode } from '@/utils/integrations/runtime-config';
+import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import {
   pageTypeForStep,
   resolveStepCharge,
@@ -36,19 +37,25 @@ interface Body {
 
 export async function POST(request: NextRequest) {
   try {
-    // Secret key resolves DB-first (enabled `stripe` integration) then env.
-    if (!(await getStripeSecretKey())) {
+    const body = (await request.json()) as Body;
+    const { type, amount, interval = 'month', productName = 'Subscription', email, returnPath, metadata = {} } = body;
+    const funnelSlug = body.funnel_slug || null;
+    const step = body.step || null;
+
+    // The per-funnel test/live toggle: read the funnel's mode, pick the key.
+    // A test-mode funnel charges the Stripe TEST keys (the 4242 card); the
+    // rest charge live. The key resolves DB-first then env, per mode.
+    const funnel = funnelSlug
+      ? await getFunnelBySlug(funnelSlug).catch(() => null)
+      : null;
+    const mode: 'test' | 'live' = funnel?.testMode ? 'test' : 'live';
+    if (!(await getStripeSecretKeyForMode(mode))) {
       return NextResponse.json(
         { error: 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.' },
         { status: 503 }
       );
     }
-    const stripe = await getStripeClient();
-
-    const body = (await request.json()) as Body;
-    const { type, amount, interval = 'month', productName = 'Subscription', email, returnPath, metadata = {} } = body;
-    const funnelSlug = body.funnel_slug || null;
-    const step = body.step || null;
+    const stripe = await getStripeClientForMode(mode);
 
     if (type !== 'generic_subscription') {
       return NextResponse.json({ error: 'Unsupported checkout type' }, { status: 400 });

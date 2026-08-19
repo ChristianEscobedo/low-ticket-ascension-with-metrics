@@ -280,6 +280,27 @@ export async function getStripeSecretKey(): Promise<string> {
   );
 }
 
+/**
+ * The Stripe secret key for a funnel's mode. 'test' reads the test key
+ * (`secret_key_test`, then the STRIPE_SECRET_KEY_TEST env); 'live' (the
+ * default) reads the live key. A test-mode funnel with no test key saved
+ * falls back to the live resolver — better to charge for real than to
+ * silently not charge, and /admin/stripe flags the missing test key.
+ */
+export async function getStripeSecretKeyForMode(
+  mode: 'test' | 'live',
+): Promise<string> {
+  if (mode === 'test') {
+    const test = await resolve(
+      'stripe',
+      'secret_key_test',
+      process.env.STRIPE_SECRET_KEY_TEST,
+    );
+    if (test) return test;
+  }
+  return getStripeSecretKey();
+}
+
 export async function getStripeWebhookSecret(): Promise<string | null> {
   return (
     (await resolve('stripe', 'webhook_secret', process.env.STRIPE_WEBHOOK_SECRET)) ?? null

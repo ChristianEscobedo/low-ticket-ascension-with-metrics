@@ -1,5 +1,8 @@
 import Stripe from 'stripe';
-import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
+import {
+  getStripeSecretKey,
+  getStripeSecretKeyForMode,
+} from '@/utils/integrations/runtime-config';
 
 function buildStripe(secretKey: string): Stripe {
   return new Stripe(secretKey, {
@@ -36,5 +39,25 @@ export async function getStripeClient(): Promise<Stripe> {
   if (cached && cached.key === key) return cached.client;
   const client = buildStripe(key);
   cached = { key, client };
+  return client;
+}
+
+let cachedByMode: Partial<Record<'test' | 'live', { key: string; client: Stripe }>> =
+  {};
+
+/**
+ * A Stripe client for a funnel's mode — 'test' builds from the test key,
+ * 'live' (the default) from the live key. Memoised per mode. The per-funnel
+ * test/live toggle: a test-mode funnel charges the test keys (the 4242 card),
+ * the rest charge live.
+ */
+export async function getStripeClientForMode(
+  mode: 'test' | 'live',
+): Promise<Stripe> {
+  const key = await getStripeSecretKeyForMode(mode);
+  const hit = cachedByMode[mode];
+  if (hit && hit.key === key) return hit.client;
+  const client = buildStripe(key);
+  cachedByMode[mode] = { key, client };
   return client;
 }
