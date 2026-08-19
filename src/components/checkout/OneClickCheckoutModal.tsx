@@ -316,7 +316,48 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
 
     try {
       if (billingType === 'subscription') {
-        // ── Subscription flow: redirect to Stripe Checkout ──
+        // ── One-click first: create the subscription on the buyer's saved
+        // card and confirm right here in the modal — no Stripe redirect. ──
+        const inline = await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: productAmount,
+            currency: 'usd',
+            customer_data: customerData,
+            product_id: productId || 'prod_generic',
+            one_click: true,
+            subscription: true,
+            interval: subscriptionInterval === 'yearly' ? 'year' : 'month',
+            ...(stripePriceId ? { price_id: stripePriceId } : {}),
+            ...(funnelSlug ? { funnel_slug: funnelSlug } : {}),
+            ...(funnelStep ? { step: funnelStep } : {}),
+            metadata: {
+              type: 'funnel_upsell',
+              product_id: productId || 'prod_generic',
+              product_name: productName,
+              customer_email: customerData.email,
+              ...paymentMetadata,
+            },
+          }),
+        });
+        const inlineData = await inline.json().catch(() => ({}));
+        if (inlineData.status === 'succeeded') {
+          onSuccess();
+          return;
+        }
+        if (inlineData.client_secret) {
+          // 3DS / confirmation needed — the StripePaymentForm handles it inline.
+          if (typeof inlineData.publishableKey === 'string' && inlineData.publishableKey) {
+            setChargePk(inlineData.publishableKey);
+          }
+          setClientSecret(inlineData.client_secret);
+          return;
+        }
+        if (inlineData.error) {
+          throw new Error(inlineData.error);
+        }
+        // needs_card: no saved card on file — hosted Checkout collects it.
         const response = await fetch('/api/stripe/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

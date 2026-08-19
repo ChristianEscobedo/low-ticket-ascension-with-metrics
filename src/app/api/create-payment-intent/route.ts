@@ -27,6 +27,9 @@ interface Body {
   customer_data: { firstName: string; lastName: string; email: string };
   product_id: string;
   one_click?: boolean;
+  /** One-click SUBSCRIPTION: create the sub on the saved card, no redirect. */
+  subscription?: boolean;
+  interval?: 'month' | 'year';
   /** Stripe price id for this step — amount is resolved from it when set. */
   price_id?: string;
   /** Funnel identity for attribution + assignment-based price resolution. */
@@ -43,6 +46,8 @@ export async function POST(request: NextRequest) {
       customer_data,
       product_id,
       one_click,
+      subscription,
+      interval,
       price_id,
       funnel_slug,
       step,
@@ -114,6 +119,14 @@ export async function POST(request: NextRequest) {
     });
     const amount = charge.amountCents;
     const currency = charge.currency || body.currency || 'usd';
+    const subInterval: 'month' | 'year' =
+      charge.interval === 'year'
+        ? 'year'
+        : charge.interval === 'month'
+          ? 'month'
+          : interval === 'year'
+            ? 'year'
+            : 'month';
 
     if (typeof amount !== 'number' || amount < 50 || amount > 99999999) {
       return NextResponse.json(
@@ -151,6 +164,63 @@ export async function POST(request: NextRequest) {
       charge_source: charge.source,
       ...metadata,
     };
+
+    // One-click SUBSCRIPTION path: create the subscription on the customer's
+    // saved card right here — the modal confirms inline, no hosted-Checkout
+    // redirect. price_data (never a synced price id) keeps it mode-safe: a
+    // live price id doesn't exist in the test account.
+    if (one_click && subscription) {
+      const methods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+      const savedCard = methods.data[0];
+      if (!savedCard) {
+        // No card on file — the modal falls back to hosted Checkout.
+        return NextResponse.json({ status: 'needs_card' });
+      }
+      // Subscription items need a Price object (price_data with product_data
+      // isn't allowed there) — create the price in THIS mode's account first.
+      const subPrice = await stripe.prices.create({
+        currency,
+        unit_amount: amount,
+        recurring: { interval: subInterval },
+        product_data: { name: metadata.product_name || 'Subscription' },
+      });
+      const sub = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: subPrice.id }],
+        default_payment_method: savedCard.id,
+        payment_behavior: 'default_incomplete',
+        expand: ['latest_invoice.payment_intent'],
+        metadata: piMetadata,
+      });
+      // Stamp the invoice's PaymentIntent with the funnel metadata so the
+      // webhook's payment_intent.succeeded records the first charge — a
+      // subscription created this way has no checkout.session.
+      const invoice = sub.latest_invoice as {
+        payment_intent?: { id: string; status: string; client_secret: string | null } | string | null;
+      } | null;
+      const invoicePi = invoice?.payment_intent ?? null;
+      const invoicePiId = typeof invoicePi === 'string' ? invoicePi : invoicePi?.id;
+      if (invoicePiId) {
+        await stripe.paymentIntents.update(invoicePiId, { metadata: piMetadata }).catch(() => {});
+      }
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        return NextResponse.json({ status: 'succeeded', subscription_id: sub.id });
+      }
+      if (invoicePi && typeof invoicePi === 'object' && invoicePi.status === 'requires_action' && invoicePi.client_secret) {
+        return NextResponse.json({
+          status: 'requires_action',
+          client_secret: invoicePi.client_secret,
+          payment_intent_id: invoicePi.id,
+          subscription_id: sub.id,
+          mode,
+          publishableKey: publishableKey ?? null,
+        });
+      }
+      // Couldn't confirm inline (e.g. requires_payment_method) — cancel the
+      // incomplete sub so it never bills, and let the modal fall back.
+      await stripe.subscriptions.cancel(sub.id).catch(() => {});
+      return NextResponse.json({ status: 'needs_card' });
+    }
 
     // One-click upsell path: try to charge the saved card off-session-style
     // (still on_session, so 3DS prompts inline) without re-collecting a card.
