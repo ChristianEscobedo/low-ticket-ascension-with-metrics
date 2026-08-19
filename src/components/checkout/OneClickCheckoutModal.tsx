@@ -251,6 +251,25 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
         setShowFallbackForm(true);
       }
 
+      // A test-mode funnel with no prior purchase has no saved card — the
+      // one-click charge can't run. Seed a test customer so the 4242 flow is
+      // exercisable on the upsell pages without a real FE purchase first.
+      // Only when the funnel is in test mode (the config-check says so) and
+      // only when no real customer data exists.
+      if (funnelSlug) {
+        fetch(`/api/stripe/config-check?funnel=${encodeURIComponent(funnelSlug)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => {
+            if (j?.funnel?.mode === 'test' && !localStorage.getItem('customerData')) {
+              const testCustomer = { firstName: 'Test', lastName: 'Buyer', email: 'test@example.com' };
+              setCustomerData(testCustomer);
+              localStorage.setItem('customerData', JSON.stringify(testCustomer));
+              setShowFallbackForm(false);
+            }
+          })
+          .catch(() => {});
+      }
+
       // Start countdown timer
       const timer = setInterval(() => {
         setTimeLeft(prev => {
