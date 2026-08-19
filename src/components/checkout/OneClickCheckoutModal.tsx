@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Shield, CheckCircle, AlertCircle, Clock, Lock } from 'lucide-react';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { useStripeConfig } from '@/hooks/useStripeConfig';
+import { useStripeConfig, stripePromiseForKey } from '@/hooks/useStripeConfig';
 
 type ColorTheme = 'amber' | 'violet' | 'mothermode';
 
@@ -230,6 +230,10 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
   const [showFallbackForm, setShowFallbackForm] = useState(false);
   const [fallbackForm, setFallbackForm] = useState({ firstName: '', lastName: '', email: '' });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The publishable key the PaymentIntent was created with — handed back by
+  // /api/create-payment-intent. The card form loads Stripe.js with THIS key:
+  // a test-mode PI confirmed against the live pk 400s and never mounts.
+  const [chargePk, setChargePk] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState({
     minutes: 14,
     seconds: 48
@@ -355,6 +359,9 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
           onSuccess();
           return;
         } else if (data.client_secret) {
+          if (typeof data.publishableKey === 'string' && data.publishableKey) {
+            setChargePk(data.publishableKey);
+          }
           setClientSecret(data.client_secret);
         } else {
           throw new Error(data.error || 'Failed to create payment');
@@ -479,10 +486,10 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
           )}
 
           {/* Stripe Payment Form — shown after payment intent is created */}
-          {clientSecret && stripePromise ? (
+          {clientSecret && (chargePk || stripePromise) ? (
             <div className="mb-5">
               <Elements
-                stripe={stripePromise}
+                stripe={chargePk ? stripePromiseForKey(chargePk) : stripePromise}
                 options={{
                   clientSecret,
                   appearance: {

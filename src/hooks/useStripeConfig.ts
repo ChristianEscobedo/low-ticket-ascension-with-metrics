@@ -50,6 +50,22 @@ function getOrCreate(funnelSlug?: string): Promise<Stripe | null> {
   return promise;
 }
 
+/**
+ * Load Stripe.js with an explicit publishable key — the key the charge was
+ * created with, handed back by /api/create-payment-intent. A test-mode
+ * PaymentIntent confirmed against the live pk 400s in Stripe.js
+ * ("elements/sessions" fails, the card form never mounts), so the key must
+ * follow the charge, not whatever the page loaded first.
+ */
+export function stripePromiseForKey(key: string): Promise<Stripe | null> {
+  const cacheKey = 'explicit:' + key;
+  const hit = stripePromiseByKey.get(cacheKey);
+  if (hit) return hit;
+  const promise = loadStripe(key);
+  stripePromiseByKey.set(cacheKey, promise);
+  return promise;
+}
+
 export function useStripeConfig(funnelSlug?: string) {
   const stripePromise = typeof window !== 'undefined' ? getOrCreate(funnelSlug) : null;
   const configured = !!(

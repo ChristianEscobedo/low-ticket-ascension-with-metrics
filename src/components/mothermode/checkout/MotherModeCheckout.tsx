@@ -7,7 +7,7 @@ import type { MotherModeOffer } from '@/lib/mothermode/types';
 import { ROUTES, STORAGE } from '@/lib/mothermode/brand';
 import { parsePriceToCents } from '@/lib/mothermode/format';
 import { buildPurchaseQuery } from '@/lib/mothermode/purchases';
-import { useStripeConfig } from '@/hooks/useStripeConfig';
+import { useStripeConfig, stripePromiseForKey } from '@/hooks/useStripeConfig';
 import { ContactPaymentCard } from './ContactPaymentCard';
 import { OrderBumps } from './OrderBumps';
 import { OrderSummary } from './OrderSummary';
@@ -68,6 +68,11 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
     email: '',
   });
   const [clientSecret, setClientSecret] = useState('');
+  // The publishable key the PaymentIntent was created with — handed back by
+  // /api/create-payment-intent. The card form loads Stripe.js with THIS key,
+  // not the page-load one: a test-mode PI confirmed against the live pk 400s
+  // in Stripe.js and the form never mounts.
+  const [chargePk, setChargePk] = useState<string | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState('');
   const [selectedBumps, setSelectedBumps] = useState<Record<string, boolean>>({});
@@ -140,6 +145,9 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
         try {
           localStorage.setItem('customerData', JSON.stringify(customerData));
         } catch {}
+        if (typeof data.publishableKey === 'string' && data.publishableKey) {
+          setChargePk(data.publishableKey);
+        }
         setClientSecret(data.client_secret);
       } else {
         setError(data.error || 'Could not start checkout. Please try again.');
@@ -217,7 +225,9 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
               isPreparing={isPreparing}
               error={error}
               onContinue={createPaymentIntent}
-              stripePromise={stripePromise}
+              stripePromise={
+                chargePk ? stripePromiseForKey(chargePk) : stripePromise
+              }
               successUrl={successUrl}
               totalCents={totalCents}
             />

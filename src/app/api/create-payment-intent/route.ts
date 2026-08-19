@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeClientForMode } from '@/utils/stripe/config';
-import { getStripeSecretKeyForMode } from '@/utils/integrations/runtime-config';
+import {
+  getStripePublishableKeyForMode,
+  getStripeSecretKeyForMode,
+} from '@/utils/integrations/runtime-config';
 import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import {
   pageTypeForStep,
@@ -68,6 +71,14 @@ export async function POST(request: NextRequest) {
       );
     }
     const stripe = await getStripeClientForMode(mode);
+
+    // The browser confirms this PaymentIntent with the publishable key for the
+    // SAME mode — a test-mode PI confirmed against the live pk 400s in
+    // Stripe.js ("elements/sessions" fails) and the card form never mounts.
+    // Resolve it here and hand it back so the client loads Stripe.js with the
+    // right key even when its own /api/stripe/publishable-key read raced or
+    // cached the live one.
+    const publishableKey = await getStripePublishableKeyForMode(mode);
 
     if (!customer_data?.email) {
       return NextResponse.json(
@@ -173,6 +184,7 @@ export async function POST(request: NextRequest) {
       // The client loads Stripe.js with the publishable key for THIS mode —
       // a test-mode PaymentIntent can't confirm against the live pk.
       mode,
+      publishableKey: publishableKey ?? null,
     });
   } catch (err) {
     console.error('[create-payment-intent] error', err);
