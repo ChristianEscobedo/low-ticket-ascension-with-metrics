@@ -24,13 +24,28 @@ async function firePurchaseWebhooks(p: {
   const slug = p.funnel_slug;
   if (!slug) return;
   const funnel = await getFunnelBySlug(slug).catch(() => null);
-  if (!funnel || (funnel.webhooks ?? []).length === 0) return;
-  await fireFunnelWebhooks(funnel, {
-    email: p.customer_email ?? null,
-    productId: p.product_id ?? null,
-    amountCents: p.amount_cents ?? 0,
-    step: p.page_type ?? null,
-  });
+  if (!funnel) return;
+  // Per-page webhooks: the page_type maps to the page the purchase happened
+  // on (fe → checkout, oto1 → upsell1, ...). The page's webhooks fire in
+  // addition to the funnel-level ones.
+  const pageWebhooks =
+    p.page_type === 'fe' ? (funnel.checkout.webhooks ?? [])
+    : p.page_type === 'oto1' ? (funnel.upsell1.webhooks ?? [])
+    : p.page_type === 'oto2' ? (funnel.upsell2.webhooks ?? [])
+    : p.page_type === 'oto3' ? (funnel.upsell3.webhooks ?? [])
+    : p.page_type === 'oto4' ? (funnel.upsell4.webhooks ?? [])
+    : [];
+  if ((funnel.webhooks ?? []).length === 0 && pageWebhooks.length === 0) return;
+  await fireFunnelWebhooks(
+    funnel,
+    {
+      email: p.customer_email ?? null,
+      productId: p.product_id ?? null,
+      amountCents: p.amount_cents ?? 0,
+      step: p.page_type ?? null,
+    },
+    pageWebhooks,
+  );
 }
 import { dispatchPurchase, dispatchLifecycleEvent } from '@/utils/integrations/dispatch';
 import { sendPurchaseReceipt } from '@/utils/email/receipt';

@@ -128,6 +128,56 @@ export function NumberField({
   );
 }
 
+/**
+ * Per-page webhooks: a list of webhook URLs, POSTed the purchase data when
+ * this page's event happens (a checkout purchase, an upsell take). A field
+ * per webhook, a remove button, an Add button.
+ */
+export function WebhooksField({
+  value,
+  onChange,
+  hint,
+}: {
+  value: string[] | undefined;
+  onChange: (v: string[]) => void;
+  hint?: string;
+}) {
+  const list = value ?? [];
+  return (
+    <div className="min-w-0">
+      <label className={labelClass}>
+        Webhooks{' '}
+        <span className="normal-case text-bone/40">
+          ({hint ?? 'POSTed the purchase data when this page sells — the main app, GHL, Zapier'})
+        </span>
+      </label>
+      <div className="space-y-2">
+        {list.map((url, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              className={inputClass}
+              value={url}
+              onChange={(e) => onChange(list.map((u, j) => (j === i ? e.target.value : u)))}
+              placeholder="https://hooks.zapier.com/hooks/catch/…"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(list.filter((_, j) => j !== i))}
+              className={btnDanger + ' shrink-0'}
+              title="Remove"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button type="button" onClick={() => onChange([...list, ''])} className={btnGhost}>
+          + Add webhook
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function StatChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-bone/10 bg-ink/50 px-3 py-2">

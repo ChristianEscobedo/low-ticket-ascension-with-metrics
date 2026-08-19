@@ -257,6 +257,8 @@ export interface CheckoutContent {
   timerLabel: string;
   /** Header brand wordmark text on the checkout page. */
   brandLabel: string;
+  /** Outbound webhooks — POST the purchase data to each URL on a checkout purchase. */
+  webhooks?: string[];
 }
 
 /** One feature row in an upsell value stack (JSON-safe; icons reattached at render). */
@@ -332,6 +334,8 @@ export interface UpsellContent {
   yesHref: string;
   guaranteeTitle: string;
   guaranteeBody: string;
+  /** Outbound webhooks — POST the purchase data to each URL on an upsell take. */
+  webhooks?: string[];
 }
 
 /** Event → email kit binding for multi-sequence funnel enrollment. */
@@ -874,6 +878,7 @@ export function normalizeCheckout(raw: unknown): CheckoutContent {
     trialDays: asNumber(o.trialDays, 0),
     timerLabel: asString(o.timerLabel, 'Founding price held for:'),
     brandLabel: asString(o.brandLabel, 'MOTHERMODE'),
+    webhooks: asStringArray(o.webhooks),
   };
 }
 
@@ -936,6 +941,7 @@ export function normalizeUpsell(raw: unknown): UpsellContent {
     yesHref: asString(o.yesHref),
     guaranteeTitle: asString(o.guaranteeTitle),
     guaranteeBody: asString(o.guaranteeBody),
+    webhooks: asStringArray(o.webhooks),
   };
 }
 

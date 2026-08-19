@@ -2,7 +2,7 @@
 
 import type { UpsellContent } from '@/lib/mothermode/sales/types';
 
-import { Area, Collapse, Field, PagePreviewBar, inputClass, selectClass, labelClass, linesToList, listToLines } from './ui';
+import { Area, Collapse, Field, PagePreviewBar, WebhooksField, inputClass, selectClass, labelClass, linesToList, listToLines } from './ui';
 import ProductPicker from './ProductPicker';
 
 /**
@@ -209,6 +209,7 @@ export default function UpsellTab({
           rows={5}
         />
       </Collapse>
+      <WebhooksField value={upsell.webhooks} onChange={(v) => setField('webhooks', v)} hint="POSTed the purchase data on an upsell take — the main app, GHL, Zapier" />
     </section>
   );
 }

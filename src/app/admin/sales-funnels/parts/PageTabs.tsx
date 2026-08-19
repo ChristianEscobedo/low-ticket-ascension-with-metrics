@@ -14,6 +14,7 @@ import {
   NumberField,
   PagePreviewBar,
   RegenerateBar,
+  WebhooksField,
   inputClass, selectClass,
   labelClass,
   linesToList,
@@ -153,6 +154,7 @@ export function CheckoutTab({ checkout, setField, onRegenerate, busy, disabled, 
         </div>
         <NumberField label="Trial days" value={checkout.trialDays} onChange={(v) => setField('trialDays', v)} />
       </div>
+      <WebhooksField value={checkout.webhooks} onChange={(v) => setField('webhooks', v)} hint="POSTed the purchase data on a checkout sale — the main app, GHL, Zapier" />
     </section>
   );
 }

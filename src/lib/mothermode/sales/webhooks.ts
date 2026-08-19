@@ -28,8 +28,12 @@ export async function fireFunnelWebhooks(
     FunnelPurchasePayload,
     'event' | 'funnelSlug' | 'funnelName' | 'purchasedAt'
   >,
+  // Per-page webhooks ride along: the page the purchase happened on (the
+  // checkout, an upsell) carries its own webhooks, fired in addition to the
+  // funnel-level ones.
+  extraUrls: string[] = [],
 ): Promise<void> {
-  const urls = (funnel.webhooks ?? []).filter(
+  const urls = [...(funnel.webhooks ?? []), ...extraUrls].filter(
     (u): u is string => typeof u === 'string' && u.trim().length > 0,
   );
   if (urls.length === 0) return;
