@@ -94,6 +94,9 @@ FORMATTING AND READABILITY (always):
   email is scannable in five seconds.
 - BOLD the 3-6 words or short phrases that carry the meaning, spaced naturally
   through the copy the way a good copywriter does. Do not bold whole sentences.
+- UNDERLINE the one phrase per email that is the single most important idea —
+  the promise, the deadline, the one thing to remember. Mark it by wrapping it
+  in _underscores_. At most one per email; never a whole sentence.
 - Use bullet lists for any run of 3+ parallel points.
 - Place a clear call-to-action BUTTON on its own line where the reader is most
   likely to act. Mark it exactly as [BUTTON: label -> URL] (URL may be a
@@ -457,7 +460,8 @@ scripts.`
     : `Write the full body as PLAIN TEXT. Put the headline on the first line and
 sub-headlines on their own lines. Separate paragraphs with a blank line and keep
 each to 1-3 sentences. Bullet lists are lines that begin with "- ". Mark emphasis
-by wrapping key words in *asterisks*. Keep the [BUTTON: label -> URL] and
+by wrapping key words in *asterisks*; mark the ONE most important idea by
+wrapping it in _underscores_ (at most one per email). Keep the [BUTTON: label -> URL] and
 [IMAGE: description] markers on their own lines. No HTML.`;
 }
 

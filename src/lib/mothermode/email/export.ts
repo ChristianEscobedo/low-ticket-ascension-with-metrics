@@ -95,7 +95,13 @@ function escapeHtml(text: string): string {
  * instead of leaking literal asterisks into the rendered email.
  */
 function inlineEmphasis(escaped: string): string {
-  return escaped.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+  // *asterisks* -> <strong> (the few words that carry the meaning);
+  // _underscores_ -> <u> (the ONE most important idea per email — the
+  // generator's contract marks it that way). Run after escaping so the
+  // markers become real tags instead of leaking literal characters.
+  return escaped
+    .replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
+    .replace(/_([^_\n]+)_/g, '<u>$1</u>');
 }
 
 /** A `[BUTTON: label -> URL]` authoring marker on its own line. */
