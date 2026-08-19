@@ -277,8 +277,13 @@ export default async function StripeAdminPage() {
             fields={[
               {
                 key: 'publishable_key',
-                label: 'Publishable key',
-                placeholder: 'pk_test_... or pk_live_...'
+                label: 'Publishable key (live)',
+                placeholder: 'pk_live_...'
+              },
+              {
+                key: 'publishable_key_test',
+                label: 'Test publishable key — for test-mode funnels',
+                placeholder: 'pk_test_...'
               },
               {
                 key: 'secret_key',

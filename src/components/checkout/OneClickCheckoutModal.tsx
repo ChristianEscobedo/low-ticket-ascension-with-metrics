@@ -210,7 +210,8 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
 }) => {
 
   const theme = COLOR_THEMES[colorTheme];
-  const { stripePromise } = useStripeConfig();
+  // The funnel's mode picks the publishable key (test-mode funnel → test pk).
+  const { stripePromise } = useStripeConfig(funnelSlug);
   const [customerData, setCustomerData] = useState<CustomerData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string>('');

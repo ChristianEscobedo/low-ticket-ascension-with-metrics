@@ -322,3 +322,25 @@ export async function getStripePublishableKey(): Promise<string | null> {
     )) ?? null
   );
 }
+
+/**
+ * The publishable key for a funnel's mode. 'test' reads `publishable_key_test`
+ * (then the NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST env), falling back to the
+ * live publishable key when no test one is saved. The client loads Stripe.js
+ * with this key to confirm a PaymentIntent — a test-mode intent can't confirm
+ * against the live pk, so the mode has to follow the charge.
+ */
+export async function getStripePublishableKeyForMode(
+  mode: 'test' | 'live',
+): Promise<string | null> {
+  if (mode === 'test') {
+    return (
+      (await resolve(
+        'stripe',
+        'publishable_key_test',
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST,
+      )) ?? (await getStripePublishableKey())
+    );
+  }
+  return getStripePublishableKey();
+}

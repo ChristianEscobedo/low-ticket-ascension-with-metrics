@@ -59,7 +59,9 @@ export const MotherModeCheckout: React.FC<MotherModeCheckoutProps> = ({
 
 
 
-  const { stripePromise } = useStripeConfig();
+  // The funnel's mode picks the publishable key: a test-mode funnel loads
+  // Stripe.js with the TEST pk so the test-mode PaymentIntent can confirm.
+  const { stripePromise } = useStripeConfig(funnelSlug);
   const [customerData, setCustomerData] = useState({
     firstName: '',
     lastName: '',

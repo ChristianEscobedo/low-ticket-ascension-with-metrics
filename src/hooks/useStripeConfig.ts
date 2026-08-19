@@ -9,7 +9,10 @@
 
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 
-let globalStripePromise: Promise<Stripe | null> | null = null;
+// The Stripe.js instance is cached PER KEY, not globally — a test-mode funnel
+// resolves the test publishable key (?funnel=<slug> on the endpoint), and a
+// live funnel on the same page session must not reuse it.
+const stripePromiseByKey = new Map<string, Promise<Stripe | null>>();
 
 function envKey(): string {
   return (
@@ -19,10 +22,13 @@ function envKey(): string {
   );
 }
 
-async function resolveStripe(): Promise<Stripe | null> {
+async function resolveStripe(funnelSlug?: string): Promise<Stripe | null> {
   let key = '';
   try {
-    const res = await fetch('/api/stripe/publishable-key', { cache: 'no-store' });
+    const url = funnelSlug
+      ? `/api/stripe/publishable-key?funnel=${encodeURIComponent(funnelSlug)}`
+      : '/api/stripe/publishable-key';
+    const res = await fetch(url, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       key = (data?.publishableKey as string | null) ?? '';
@@ -35,14 +41,17 @@ async function resolveStripe(): Promise<Stripe | null> {
   return loadStripe(key);
 }
 
-function getOrCreate(): Promise<Stripe | null> {
-  if (globalStripePromise) return globalStripePromise;
-  globalStripePromise = resolveStripe();
-  return globalStripePromise;
+function getOrCreate(funnelSlug?: string): Promise<Stripe | null> {
+  const cacheKey = funnelSlug ?? '';
+  const hit = stripePromiseByKey.get(cacheKey);
+  if (hit) return hit;
+  const promise = resolveStripe(funnelSlug);
+  stripePromiseByKey.set(cacheKey, promise);
+  return promise;
 }
 
-export function useStripeConfig() {
-  const stripePromise = typeof window !== 'undefined' ? getOrCreate() : null;
+export function useStripeConfig(funnelSlug?: string) {
+  const stripePromise = typeof window !== 'undefined' ? getOrCreate(funnelSlug) : null;
   const configured = !!(
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE ||
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
@@ -56,5 +65,5 @@ export function useStripeConfig() {
 }
 
 export function resetStripeConfig() {
-  globalStripePromise = null;
+  stripePromiseByKey.clear();
 }

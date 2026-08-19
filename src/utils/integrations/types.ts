@@ -54,7 +54,10 @@ export interface MassConfig {
 
 export interface StripeConfig {
   publishable_key?: string;
+  /** Test-mode publishable key — a test-mode funnel's Stripe.js loads this. */
+  publishable_key_test?: string;
   secret_key?: string;
+  secret_key_test?: string;
   webhook_secret?: string;
 }
 

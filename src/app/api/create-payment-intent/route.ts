@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStripeClient } from '@/utils/stripe/config';
-import { getStripeSecretKey } from '@/utils/integrations/runtime-config';
+import { getStripeClientForMode } from '@/utils/stripe/config';
+import { getStripeSecretKeyForMode } from '@/utils/integrations/runtime-config';
+import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 import {
   pageTypeForStep,
   resolveStepCharge,
@@ -34,15 +35,6 @@ interface Body {
 
 export async function POST(request: NextRequest) {
   try {
-    // Secret key resolves DB-first (enabled `stripe` integration) then env.
-    if (!(await getStripeSecretKey())) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.' },
-        { status: 503 }
-      );
-    }
-    const stripe = await getStripeClient();
-
     const body = (await request.json()) as Body;
     const {
       customer_data,
@@ -53,6 +45,29 @@ export async function POST(request: NextRequest) {
       step,
       metadata = {},
     } = body;
+
+    // The per-funnel test/live toggle: read the funnel's mode, pick the key.
+    // A test-mode funnel charges the Stripe TEST keys (the 4242 card); the
+    // rest charge live. The key resolves DB-first then env, per mode. A
+    // test-mode funnel with no test key saved errors out — it must NEVER
+    // fall back to the live key (charging live when you meant test is the
+    // dangerous surprise).
+    const funnel = funnel_slug
+      ? await getFunnelBySlug(funnel_slug).catch(() => null)
+      : null;
+    const mode: 'test' | 'live' = funnel?.testMode ? 'test' : 'live';
+    if (!(await getStripeSecretKeyForMode(mode))) {
+      return NextResponse.json(
+        {
+          error:
+            mode === 'test'
+              ? 'This funnel is in test mode but no Stripe TEST key is saved. Add the test secret key (sk_test_…) in /admin/stripe.'
+              : 'Stripe is not configured. Set the secret key in /admin/stripe or STRIPE_SECRET_KEY.',
+        },
+        { status: 503 }
+      );
+    }
+    const stripe = await getStripeClientForMode(mode);
 
     if (!customer_data?.email) {
       return NextResponse.json(
@@ -155,9 +170,15 @@ export async function POST(request: NextRequest) {
       status: 'requires_payment',
       client_secret: pi.client_secret,
       payment_intent_id: pi.id,
+      // The client loads Stripe.js with the publishable key for THIS mode —
+      // a test-mode PaymentIntent can't confirm against the live pk.
+      mode,
     });
   } catch (err) {
     console.error('[create-payment-intent] error', err);
-    return NextResponse.json({ error: 'Failed to create payment intent' }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to create payment intent' },
+      { status: 500 }
+    );
   }
 }

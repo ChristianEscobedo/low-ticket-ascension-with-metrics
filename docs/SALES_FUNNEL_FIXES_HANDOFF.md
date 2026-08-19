@@ -24,8 +24,14 @@ The Test mode switch was crammed against the label. The fix: a "Test mode" label
 ### 2. The webhooks per-page — FIXED, on the page tabs
 The webhooks were funnel-level only. Now the checkout + each upsell page carries its own webhooks. **The per-page webhooks are on the page tabs: click the Checkout tab (or an Upsell tab) in the Pages group, and the Webhooks section is at the bottom** (a field per webhook, remove, Add). The funnel-level webhooks on the main settings section are the back-compat fallback (they fire on every sale). The page-level ones fire on that page's sale.
 
-### 3. The test charge hitting the live key — the migration + the key
-The test key persists now (the save + the read-back + the write-only are all fixed). The remaining: **the `test_mode` migration (`supabase/migrations/20261206000000_funnel_test_mode.sql`) has to run on the deploy's database.** If the column doesn't exist, the funnel's `testMode` reads false and the charge hits the live key. Then: save the test secret key in `/admin/stripe`, flip the funnel's Test mode switch, and the 4242 card works.
+### 3. The test charge hitting the live key — FIXED end-to-end (this session)
+The previous sessions fixed the toggle + the hosted-Checkout path (`/api/stripe/checkout`) but **missed the inline PaymentIntent path** — `/api/create-payment-intent` (the FE checkout + the one-click upsells, the charges the user was actually running) always used the LIVE key. And even with the right secret, the browser loaded Stripe.js with the LIVE publishable key, so a test-mode PaymentIntent could never confirm. This session closed both:
+
+- `/api/create-payment-intent` reads the funnel's `testMode` (by `funnel_slug`) and builds the Stripe client with `getStripeClientForMode` — a test-mode funnel creates the PaymentIntent with the TEST secret key, and errors with "save the test key" instead of ever falling back to live.
+- `/api/stripe/publishable-key?funnel=<slug>` resolves the publishable key for the funnel's mode — a new `publishable_key_test` field in `/admin/stripe` (DB-first, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST` env fallback, then the live pk). `useStripeConfig(funnelSlug)` caches Stripe.js per funnel, and both `MotherModeCheckout` + `OneClickCheckoutModal` pass their `funnelSlug` through.
+- The editor's build marker now reads "build test-mode-pk" — if the header shows that, this fix is live.
+
+**Deploy steps:** run the `test_mode` migration, save BOTH test keys in `/admin/stripe` (the test secret `sk_test_…` AND the test publishable `pk_test_…`), flip the funnel's Test mode switch, save the funnel, run the 4242 card.
 
 ### 4. The phantom $10 payment — FIXED
 Another app's charge was hitting the shared Stripe webhook. The webhook now skips any event with no `product_id`/`page_type` metadata. **Delete the existing $10 record from `/admin/purchases`.**
@@ -40,10 +46,10 @@ The user was seeing the same issues across the deploy + a dev server + localhost
 ## The deploy checklist
 
 1. **Run the migrations** on the deploy's database: `20261206000000_funnel_test_mode.sql` (the test_mode column) + `20261207000000_funnel_webhooks.sql` (the webhooks column).
-2. **Save the test secret key** in `/admin/stripe` (it persists now).
-3. **Redeploy** so the latest commits are live.
+2. **Save BOTH test keys** in `/admin/stripe`: the test secret key (`sk_test_…`) AND the test publishable key (`pk_test_…`). The inline checkout needs both — the secret creates the PaymentIntent, the publishable confirms it in the browser.
+3. **Redeploy** so the latest commits are live (the editor header should read "build test-mode-pk").
 4. **Delete the phantom $10 record** from `/admin/purchases`.
-5. Flip a funnel's Test mode switch, run the 4242 card — it charges the test key.
+5. Flip a funnel's Test mode switch, **save the funnel**, run the 4242 card — it charges the test key.
 
 ## Still open (the next batch)
 

@@ -75,7 +75,7 @@ const CONFIG_KEYS: Record<IntegrationProvider, readonly string[]> = {
   ghl: ['api_key', 'location_id', 'tag_prefix', 'workflow_id'],
   mass: ['api_key', 'workspace_id'],
   main_app: ['url', 'secret', 'app_name'],
-  stripe: ['publishable_key', 'secret_key', 'secret_key_test', 'webhook_secret'],
+  stripe: ['publishable_key', 'publishable_key_test', 'secret_key', 'secret_key_test', 'webhook_secret'],
   openai: ['api_key', 'image_model', 'text_model', 'text_provider'],
   anthropic: ['api_key', 'text_model'],
   assemblyai: ['api_key'],

@@ -1032,7 +1032,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
 
         <section className="rounded-xl border border-brass/15 bg-gradient-to-br from-mode-deep/40 to-ink/70 p-4 sm:p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">{selectedId ? 'Edit funnel' : 'New funnel'} <span className="text-bone/30 normal-case">· build 014a79f (per-page webhooks)</span></div>
+<div className="text-xs uppercase tracking-[0.2em] text-brass/80 font-semibold">{selectedId ? 'Edit funnel' : 'New funnel'} <span className="text-bone/30 normal-case">· build test-mode-pk (test mode charges the test keys end-to-end)</span></div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={loadDefaults} disabled={busy !== null} className={btnGhost}>Load MotherMode defaults</button>
               {selectedId && <button type="button" onClick={onDuplicate} disabled={busy !== null} className={btnGhost}>{busy === 'duplicate' ? 'Duplicating' : 'Duplicate'}</button>}
