@@ -1060,7 +1060,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
             <div className="min-w-0"><label className={labelClass}>Status</label><select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value as SalesFunnelStatus)}>{SALES_FUNNEL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
             <div className="min-w-0">
               <label className={labelClass}>Test mode</label>
-              <div className="flex items-center gap-2.5 rounded-lg border border-bone/15 bg-ink/40 px-3 py-2">
+              <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${testMode ? 'border-sky-500/40 bg-sky-500/[0.08]' : 'border-bone/15 bg-ink/40'}`}>
                 <button
                   type="button"
                   role="switch"
@@ -1073,10 +1073,13 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
                 </button>
                 <span className="text-xs text-bone/70">
                   {testMode
-                    ? <span className="font-semibold text-sky-300">Stripe test keys (4242)</span>
+                    ? <span className="font-semibold text-sky-300">Test keys (rk_test / pk_test — 4242)</span>
                     : 'Live keys'}
                 </span>
               </div>
+              <p className="mt-1 text-[11px] text-bone/40">
+                Needs the test keys saved in <a href="/admin/stripe" className="text-brass hover:underline">/admin/stripe</a> — a restricted key (rk_test_…) with PaymentIntents + Customers write, or a full sk_test_…. Save the funnel after flipping.
+              </p>
             </div>
             <div className="min-w-0 sm:col-span-2">
               <label className={labelClass}>Webhooks <span className="normal-case text-bone/40">(POSTed the purchase data on a sale — the main app, GHL, Zapier)</span></label>
