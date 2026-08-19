@@ -115,7 +115,7 @@ export default async function StripeAdminPage() {
   const allOk = status.every((s) => s.ok);
   const stripeMask = maskConfig(
     row?.config as Record<string, unknown> | undefined,
-    ['secret_key', 'secret_key_test', 'webhook_secret']
+    ['secret_key', 'secret_key_test', 'webhook_secret', 'publishable_key_test']
   );
   return (
     <div>
