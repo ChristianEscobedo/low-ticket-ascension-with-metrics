@@ -154,7 +154,19 @@ export function CheckoutTab({ checkout, setField, onRegenerate, busy, disabled, 
         </div>
         <NumberField label="Trial days" value={checkout.trialDays} onChange={(v) => setField('trialDays', v)} />
       </div>
-      <WebhooksField value={checkout.webhooks} onChange={(v) => setField('webhooks', v)} hint="POSTed the purchase data on a checkout sale — the main app, GHL, Zapier" />
+      {/* Per-page webhooks — a labeled group, not a bare field at the bottom
+          of a long form. The user could not find it; the box + the note make
+          it unmissable. */}
+      <div className="rounded-xl border border-brass/25 bg-brass/[0.05] px-3 py-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass/80">
+          Webhooks — this page only
+        </div>
+        <p className="mb-2 text-xs text-bone/50">
+          Fires when the CHECKOUT sale completes. The funnel-level webhooks (the
+          main settings section) fire on every sale; these fire only on this page.
+        </p>
+        <WebhooksField value={checkout.webhooks} onChange={(v) => setField('webhooks', v)} hint="POSTed the purchase data on a checkout sale — the main app, GHL, Zapier" />
+      </div>
     </section>
   );
 }
