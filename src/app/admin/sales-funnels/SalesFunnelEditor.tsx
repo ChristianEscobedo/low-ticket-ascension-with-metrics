@@ -147,8 +147,10 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   const [tab, setTab] = useState<Tab>('build');
   /** Per-funnel test mode: charge the Stripe TEST keys, not the live ones. */
   const [testMode, setTestMode] = useState(false);
-  /** Outbound webhooks — one URL per line; POSTed the purchase data on a sale. */
-  const [webhooks, setWebhooks] = useState('');
+  /** Outbound webhooks — a list of URLs; POSTed the purchase data on a sale. */
+  const [webhooks, setWebhooks] = useState<string[]>([]);
+  const [testingWebhook, setTestingWebhook] = useState<number | null>(null);
+  const [webhookTestNote, setWebhookTestNote] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [status, setStatus] = useState<SalesFunnelStatus>('draft');
@@ -355,7 +357,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function resetToNew() {
     setSelectedId(null); setName(''); setSlug(''); setStatus('draft');
     setTestMode(false);
-    setWebhooks('');
+    setWebhooks([]);
     setOfferSlug('brain-dump-system'); setLeadGenSlug(''); setDeliverableSlug(''); setDeliverableKey('');
     setEmailKitId(''); setEmailKitsMap({}); setProductId(''); setViewCount(0); setConversionCount(0);
     setCheckoutCount(0); setPurchaseCount(0); setRevenueCents(0);
@@ -371,7 +373,7 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function loadFunnel(f: SalesFunnelRecord) {
     setSelectedId(f.id); setName(f.name); setSlug(f.slug); setStatus(f.status);
     setTestMode(f.testMode === true);
-    setWebhooks((f.webhooks ?? []).join('\n'));
+    setWebhooks(f.webhooks ?? []);
     setOfferSlug(f.offerSlug ?? ''); setLeadGenSlug(f.leadGenSlug ?? '');
     setDeliverableSlug(f.deliverableSlug ?? ''); setDeliverableKey(f.deliverableKey ?? '');
     setEmailKitId(f.emailKitId ?? ''); setEmailKitsMap(mapFromBindings(f.emailKits, f.emailKitId)); setProductId(f.productId ?? '');
@@ -509,11 +511,29 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
   function setAccessField<K extends keyof AccessContent>(key: K, value: AccessContent[K]) { setAccess((prev) => ({ ...prev, [key]: value })); }
   function setFooterField<K extends keyof SalesFooterContent>(key: K, value: SalesFooterContent[K]) { setFooter((prev) => ({ ...prev, [key]: value })); }
 
+
+  /** POST a test payload to a webhook URL. Browser-side; CORS-permissive endpoints (Zapier, GHL) accept it. */
+  async function testWebhook(url: string, i: number) {
+    setTestingWebhook(i); setWebhookTestNote(null);
+    try {
+      const res = await fetch(url.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'purchase', test: true, funnelSlug: slug, email: 'test@example.com', amountCents: 2700, purchasedAt: new Date().toISOString() }),
+      });
+      setWebhookTestNote(res.ok ? 'Test sent (HTTP ' + res.status + '). Check the receiving end.' : 'Test failed (HTTP ' + res.status + ').');
+    } catch (e) {
+      setWebhookTestNote('Test failed: ' + (e instanceof Error ? e.message : 'network error') + ' — the endpoint may block browser calls (CORS). It still works server-side on a real sale.');
+    } finally {
+      setTestingWebhook(null);
+    }
+  }
+
   async function onSave(statusOverride?: SalesFunnelStatus) {
     const effectiveStatus = statusOverride ?? status;
     setBusy('save'); setError(null); setNotice(null);
     try {
-      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer, testMode, webhooks: webhooks.split('\n').map((u) => u.trim()).filter(Boolean) }) });
+      const res = await fetch(CRUD_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'save', id: selectedId, name, slug, status: effectiveStatus, offerSlug, leadGenSlug, deliverableSlug, deliverableKey, emailKitId: emailKitId || emailKitsMap.optin || null, emailKits: bindingsFromMap(emailKitsMap), productId: productId || null, optin, sales, vsl, checkout, upsell1, upsell2, upsell3, upsell4, successBlock, access, footer, testMode, webhooks: webhooks.map((u) => u.trim()).filter(Boolean) }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) throw new Error(data?.error || 'Save failed (HTTP ' + res.status + ')');
       const item = data.item as SalesFunnelRecord;
@@ -1048,13 +1068,23 @@ export default function SalesFunnelEditor({ initialFunnels, initialLeads, emailK
               </div>
             </div>
             <div className="min-w-0 sm:col-span-2">
-              <label className={labelClass}>Webhooks <span className="normal-case text-bone/40">(one URL per line — POSTed the purchase data on a sale: the main app, GHL, Zapier)</span></label>
-              <textarea
-                className={inputClass + ' min-h-[72px] font-mono text-xs'}
-                value={webhooks}
-                onChange={(e) => setWebhooks(e.target.value)}
-                placeholder={'https://hooks.zapier.com/hooks/catch/…\nhttps://your-main-app.com/api/funnel-webhook'}
-              />
+              <label className={labelClass}>Webhooks <span className="normal-case text-bone/40">(POSTed the purchase data on a sale — the main app, GHL, Zapier)</span></label>
+              <div className="space-y-2">
+                {webhooks.map((url, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      className={inputClass + ' font-mono text-xs'}
+                      value={url}
+                      onChange={(e) => setWebhooks((prev) => prev.map((u, j) => (j === i ? e.target.value : u)))}
+                      placeholder="https://hooks.zapier.com/hooks/catch/…"
+                    />
+                    <button type="button" onClick={() => testWebhook(url, i)} disabled={!url.trim() || testingWebhook === i} className={btnGhost + ' shrink-0'}>{testingWebhook === i ? 'Testing…' : 'Test'}</button>
+                    <button type="button" onClick={() => setWebhooks((prev) => prev.filter((_, j) => j !== i))} className={btnDanger + ' shrink-0'} title="Remove">×</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setWebhooks((prev) => [...prev, ''])} className={btnGhost}>+ Add webhook</button>
+                {webhookTestNote && <div className="text-xs text-bone/50">{webhookTestNote}</div>}
+              </div>
             </div>
 
           </div>
