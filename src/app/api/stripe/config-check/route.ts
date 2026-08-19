@@ -12,7 +12,7 @@ import { getFunnelBySlug } from '@/lib/mothermode/sales/store';
 // shows whether the deploy is reading the same database row the admin wrote.
 export const dynamic = 'force-dynamic';
 
-function describe(key: string | null | undefined): { prefix: string } {
+function describe(key: string | null | undefined): { prefix: string; last4: string | null; length: number } {
   const k = (key ?? '').trim();
   const prefix =
     k.startsWith('sk_test_') ? 'sk_test'
@@ -21,7 +21,9 @@ function describe(key: string | null | undefined): { prefix: string } {
     : k.startsWith('pk_live_') ? 'pk_live'
     : k ? 'unknown-format'
     : 'missing';
-  return { prefix };
+  // last4 + length: enough to tell "the key I pasted" from "a different key"
+  // without ever returning the key itself.
+  return { prefix, last4: k ? k.slice(-4) : null, length: k.length };
 }
 
 export async function GET(request: NextRequest) {
