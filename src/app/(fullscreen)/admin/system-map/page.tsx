@@ -76,6 +76,7 @@ import type { SystemMapLeak } from '@/lib/mothermode/systemMapAnalysis';
 import BlueprintCreatePanel from './BlueprintCreatePanel';
 import NodePeekPanel from './NodePeekPanel';
 import MapChatDock from './MapChatDock';
+import ComparePanel from './ComparePanel';
 import { PlatformIcon } from '@/components/mothermode/content/PlatformIcon';
 import { canonicalPlatform } from '@/lib/mothermode/planner/platformGlyph';
 
@@ -326,6 +327,8 @@ export default function SystemMapPage() {
   const [selectedNode, setSelectedNode] = useState<SystemMapNode | null>(null);
   /** The "Ask the map" sheet (the right edge). Mutually exclusive with the peek. */
   const [chatOpen, setChatOpen] = useState(false);
+  /** The funnel comparison sheet (two funnels side by side). */
+  const [compareOpen, setCompareOpen] = useState(false);
   /** Live state: poll the graph so the numbers tick (a dashboard, not a diagram). */
   const [live, setLive] = useState(false);
   /** A funnel whose traffic cluster is expanded (all its content shows). */
@@ -671,6 +674,15 @@ export default function SystemMapPage() {
           >
             <Plus className="h-3.5 w-3.5" /> Create a blueprint
           </button>
+          {/* The funnel comparison: two funnels side by side (the A/B read). */}
+          <button
+            type="button"
+            onClick={() => setCompareOpen(true)}
+            title="Compare two funnels side by side"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-bone/15 px-2.5 py-1.5 text-xs text-bone/60 hover:bg-bone/10"
+          >
+            Compare
+          </button>
           {blueprints.length > 0 && (
             <span
               title={`${blueprints.length} blueprint${blueprints.length === 1 ? '' : 's'} awaiting approval on the canvas`}
@@ -818,6 +830,9 @@ export default function SystemMapPage() {
             }}
             onDraftFix={(leak) => void onDraftFix(leak)}
           />
+          {/* the funnel comparison — two funnels side by side, with the
+              delta. The A/B read the clone-variant blueprint sets up. */}
+          <ComparePanel input={input} open={compareOpen} onClose={() => setCompareOpen(false)} />
         </div>
       </div>
     </SystemMapUiContext.Provider>
