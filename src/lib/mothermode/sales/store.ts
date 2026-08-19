@@ -1,4 +1,4 @@
-/**
+ /**
  * MotherMode Sales Funnel store. Service-role only (bypasses RLS).
  * Public pages and capture go through API routes that call these helpers
  * after validation — never from the browser with the anon key.
