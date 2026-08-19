@@ -3,7 +3,13 @@
 Spec: `EMAIL_MARKETING_KIT_TASK.md`. Status: **BUILT** (round 5: +6 ascension
 frameworks and the prompt-bank recipe wiring, spec
 `PROMPT_BANK_EMAIL_ROUND_TASK.md`; round 6: deep event nurtures + the HTML
-output guarantee, spec `EMAIL_HTML_AND_DEEP_EVENT_NURTURES_TASK.md`).
+output guarantee, spec `EMAIL_HTML_AND_DEEP_EVENT_NURTURES_TASK.md`; round 7:
+the underline steering — the generator's contract marks the ONE most
+important idea per email (the promise, the deadline, the one thing to
+remember) by wrapping it in `_underscores_`, and the renderer turns it into a
+real `<u>`. Bold stays the 3-6 meaning-carrying words; the underline is the
+single idea. The copy reads designed, not a wall of text. The renderer rule
+lives in `export.ts` next to the `*bold*` → `<strong>` pass).
 
 The Email Marketing Kit is the campaign-producing sibling of the Lead Gen /
 High Ticket / Community kits. From a short intake plus one or more attached

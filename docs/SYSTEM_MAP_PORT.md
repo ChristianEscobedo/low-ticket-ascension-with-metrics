@@ -79,6 +79,40 @@ focuses that funnel on click. Pure, no new queries (it reads the same
 passing). The page colors a graded edge by its health and leaves an ungraded
 one the quiet default.
 
+## The panels (the map's second wave)
+
+The canvas grew four sheets around the graph — all client panels on
+`page.tsx`, all reading the same `SystemMapInput`:
+
+- **The node peek** (`NodePeekPanel.tsx`) — clicking a node opens its detail:
+  the metrics, the editor href, and the per-funnel "by source" breakdown
+  (each feeding post/link with its own clicks → leads → sales → conversion %,
+  gated to sources with enough volume to be meaningful — the same gate the
+  leak detector uses).
+- **The compare panel** (`ComparePanel.tsx`) — pick two funnels, see them
+  side by side: views, leads, sales, the conversion rate, the revenue, with
+  the leader highlighted per row. The A/B read the clone-variant blueprint
+  sets up ("is the new funnel actually beating the old one").
+- **The chat dock** (`MapChatDock.tsx`) — the research agent docked on the
+  map, so "why is this edge leaking" is a conversation with the graph in
+  context, not a copy-paste into another tool.
+- **The blueprint creator** (`BlueprintCreatePanel.tsx`) — a proposed system
+  (a subgraph) lands on the canvas for approval; the leak detector's "Biggest
+  leak" badge is the entry point. Full detail in
+  `SYSTEM_BLUEPRINT_CREATOR_PORT.md` (the `system_blueprints` table,
+  migration `20261204000000`).
+
+**Trends:** the page polls the graph so the numbers tick (a dashboard, not a
+diagram), and a daily snapshot starts the history clock — the delta on a node
+is honest about only having "since we started" until a prior day exists to
+compare against.
+
+**The buyer journey** (`/admin/buyer-journey`,
+`src/lib/mothermode/buyerJourney.ts`, `/api/admin/buyer-journey`) is the
+companion read: the individual buyer's path through the steps (the map is the
+aggregate; the journey is the person). Unit-tested in
+`tests/lib/buyer-journey.test.ts`.
+
 ## Notes / follow-ups
 
 - **`@xyflow/react` is a new dependency** (the user named React Flow; a
