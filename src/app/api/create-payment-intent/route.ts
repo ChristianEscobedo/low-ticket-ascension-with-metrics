@@ -176,8 +176,18 @@ export async function POST(request: NextRequest) {
     // subscription opens with a trial carrying it to the next period — no
     // double charge.
     if (one_click && subscription) {
-      const methods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
-      const savedCard = methods.data[0];
+      const cards = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+      let savedCard: (typeof cards.data)[number] | undefined = cards.data[0];
+      // Test-mode rehearsal: no card on file yet — attach Stripe's test Visa
+      // so the one-click path is exercisable without a prior purchase.
+      // (Live mode never auto-attaches; a live buyer with no card gets the
+      // card form below.)
+      if (!savedCard && mode === 'test') {
+        savedCard = await stripe.paymentMethods
+          .attach('pm_card_visa', { customer: customerId })
+          .then((pm) => pm)
+          .catch(() => undefined);
+      }
       if (savedCard) {
         // Subscription items need a Price object — create it in THIS mode's
         // account (a synced live price id doesn't exist in the test one).
@@ -237,13 +247,21 @@ export async function POST(request: NextRequest) {
     // One-click upsell path: try to charge the saved card off-session-style
     // (still on_session, so 3DS prompts inline) without re-collecting a card.
     if (one_click) {
-      const methods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
-      if (methods.data[0]) {
+      const cards = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+      let savedCard: (typeof cards.data)[number] | undefined = cards.data[0];
+      // Same test-mode rehearsal convenience as the subscription path above.
+      if (!savedCard && mode === 'test') {
+        savedCard = await stripe.paymentMethods
+          .attach('pm_card_visa', { customer: customerId })
+          .then((pm) => pm)
+          .catch(() => undefined);
+      }
+      if (savedCard) {
         const pi = await stripe.paymentIntents.create({
           amount,
           currency,
           customer: customerId,
-          payment_method: methods.data[0].id,
+          payment_method: savedCard.id,
           receipt_email: customer_data.email,
           confirm: true,
           off_session: false,
