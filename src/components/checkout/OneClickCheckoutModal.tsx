@@ -437,7 +437,9 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
       }
     } catch (error) {
       console.error('Error processing payment:', error);
-      setError('Payment failed. Please try again.');
+      // Surface the server's reason when there is one (a key-permissions
+      // error names the exact fix); the generic line only for opaque failures.
+      setError(error instanceof Error && error.message ? error.message : 'Payment failed. Please try again.');
     } finally {
       setIsProcessing(false);
     }

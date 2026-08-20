@@ -33,9 +33,10 @@ but Test is how you safely rehearse a full purchase.
 
 > **Tighter security (optional but recommended):** instead of the full
 > `sk_live_...` secret, you can create a **restricted key** (`rk_live_...`) with
-> just **PaymentIntents: Write** and **Customers: Write** permissions
-> (Developers → API keys → "Create restricted key"). The platform only needs
-> those two.
+> just **PaymentIntents: Write**, **Customers: Write**, and **Prices: Write**
+> permissions (Developers → API keys → "Create restricted key"). The platform
+> only needs those three (Prices is how the one-click subscription upsell
+> creates the mode-local price).
 
 ### Step 3: Connect the webhook (so sales get recorded)
 
@@ -75,10 +76,11 @@ Do this once, before showing any funnel to a real buyer.
 4. Save. The readiness panel should show all rows green.
 
 > If you used a restricted key for live, make the test one restricted too
-> (`rk_test_...`) with the same two permissions: **PaymentIntents: Write** and
-> **Customers: Write**. A restricted key *without* those permissions is the
-> #1 cause of the "no TEST key is saved" error at checkout — the key saves
-> fine but Stripe refuses to create the charge.
+> (`rk_test_...`) with the same three permissions: **PaymentIntents: Write**,
+> **Customers: Write**, and **Prices: Write**. A restricted key *without* those
+> permissions is the #1 cause of the "no TEST key is saved" / "Permission
+> denied" errors at checkout — the key saves fine but Stripe refuses to create
+> the charge.
 
 ### Step 5: Flip a funnel into Test mode
 
@@ -115,6 +117,7 @@ When you're happy with the rehearsal:
 | Symptom | The cause | The fix |
 |---|---|---|
 | "No TEST key is saved" at checkout, but you saved it | The test key is a restricted key missing **PaymentIntents: Write** or **Customers: Write** | Edit the restricted key's permissions in Stripe, or use the full `sk_test_...` |
+| "Permission denied… does not have the required permissions… Prices Write" on an upsell | The restricted key is missing **Prices: Write** (the one-click subscription creates a mode-local price) | Add Prices: Write to the key at the link in the error, or use the full `sk_test_...` / `sk_live_...` |
 | The card form never appears (a spinner or blank box) | The browser loaded the wrong publishable key (live pk against a test charge) | Make sure the **Test publishable key** field is filled in on /admin/stripe — the checkout reads it automatically once saved |
 | "Stripe not configured" even though keys are saved | The page cached the old state | Hard-refresh /admin/stripe; the readiness panel re-reads the database on load |
 | A weird charge you never made shows in /admin/purchases | An old bug let other apps' charges leak in through the shared webhook — **fixed** | Just delete the record in /admin/purchases; new foreign charges are ignored automatically |
