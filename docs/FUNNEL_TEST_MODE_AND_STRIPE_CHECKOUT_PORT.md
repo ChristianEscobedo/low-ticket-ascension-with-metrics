@@ -31,15 +31,18 @@
 2. **The one-click subscription** (same route, `subscription: true`) — the
    subscription upsell charges inline, no hosted-Checkout redirect. The route
    creates a **mode-local Price** (`prices.create` — never the synced live
-   price id, which doesn't exist in the test account), opens the subscription
-   on the buyer's saved card (`default_payment_method`), and stamps the
-   invoice's PaymentIntent with the funnel metadata (so the webhook records
-   the first charge — a subscription created this way has no
-   checkout.session) plus `setup_future_usage: 'off_session'` (a newly
-   entered card attaches to the customer for renewals). Returns `succeeded` /
-   `requires_action` (3DS confirms inline) / `requires_payment` (no card on
-   file — the modal's PaymentElement collects it inline) / `needs_card` (no
-   client secret at all — the only remaining hosted-Checkout fallback).
+   price id, which doesn't exist in the test account) and opens the
+   subscription on the buyer's saved card (`default_payment_method`); the
+   invoice's PaymentIntent gets the funnel metadata stamped so the webhook
+   records the first charge (a subscription created this way has no
+   checkout.session). **No card on file:** the first period pays through the
+   proven plain-PI path (the FE checkout's own flow — the webhook records
+   it, `setup_future_usage` saves the card), and when that confirm succeeds
+   the modal quietly re-calls with `first_period_paid: true` — the
+   subscription opens on the just-saved card with a **trial carrying it to
+   the next period**, so no double charge. (The invoice-PI confirm path was
+   dropped: on the current Stripe API the sub sat "incomplete" and the
+   charge never recorded.)
 3. **`/api/stripe/checkout`** — hosted subscription Checkout. Mode-aware
    secret; in test mode the line item builds from the resolved amount
    (`price_data`), never the synced live price id.
@@ -54,6 +57,19 @@ test-mode card only exists in the test account, which is exactly the
 isolation the toggle promises. The card form in the modal is the
 no-card-on-file fallback (a buyer who skipped the FE checkout); it collects
 the card inline, no redirect.
+
+**The test-mode rehearsal convenience:** a test-mode funnel whose customer
+has no saved card gets Stripe's test Visa (`pm_card_visa`) attached
+automatically and billed — the 4242 rehearsal is check-the-box, click, done
+on every upsell, no prior purchase needed. Live mode never auto-attaches.
+
+**The wiring chain (verified end to end):** `MotherModeCheckout` passes
+`funnel_slug` + `step: 'checkout'` and writes `customerData` to localStorage
+on success → the upsell routes (`/funnel/[slug]/upsell*`) render
+`UpsellPage`, which passes `funnelSlug={funnel.slug}` +
+`funnelStep={upsellKey}` down to the modal → the modal reads localStorage
+and POSTs with the funnel identity → the route resolves the mode, the
+customer (by email, in the mode's account), and the saved card.
 
 ## The persistence fix (the test publishable key actually saves)
 
@@ -83,6 +99,12 @@ phantom purchase.
   mode switch, save, run the FE checkout with 4242 4242 4242 4242, then click
   through the upsells — one-time upsells bill the saved card on confirm, the
   subscription upsell opens inline, and /admin/purchases records each step.
+  Skip the FE purchase and the upsells still click through — test mode
+  attaches the test Visa when no card is on file.
+- The restricted-key recipe needs **PaymentIntents, Customers, AND Prices —
+  all Write** (the one-click subscription creates a mode-local Price; an
+  `rk_` key without `plan_write` 500s with "Permission denied"). The modal
+  surfaces the server's real error, so a permissions failure names its fix.
 
 ## Port order
 
