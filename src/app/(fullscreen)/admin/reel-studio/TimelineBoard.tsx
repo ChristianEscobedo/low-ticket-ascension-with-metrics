@@ -372,6 +372,11 @@ export default function TimelineBoard({
   const dragIndex = useRef<number | null>(null);
   const [liveTrim, setLiveTrim] = useState<{ id: string; trim: number } | null>(null);
   const [liveHold, setLiveHold] = useState<{ id: string; hold: number } | null>(null);
+  // Ref mirror — the drag's pointerup closure comes from the pointerdown
+  // render (liveHold was null then), so reading the STATE in onDragEnd never
+  // saw the drag's value and the hold commit never fired. The ref is live.
+  const liveHoldRef = useRef<{ id: string; hold: number } | null>(null);
+  liveHoldRef.current = liveHold;
 
   // Snap targets for block drags: 0, every scene boundary, the end, the playhead
   // (the same magnet the ruler has — a drag near an edge lands ON it).
@@ -684,7 +689,8 @@ export default function TimelineBoard({
                   : undefined
               }
               onDragEnd={() => {
-                if (liveHold?.id === b.id && onCueHold) onCueHold(b.id, liveHold.hold);
+                const held = liveHoldRef.current;
+                if (held?.id === b.id && onCueHold) onCueHold(b.id, held.hold);
                 setLiveHold(null);
               }}
             >

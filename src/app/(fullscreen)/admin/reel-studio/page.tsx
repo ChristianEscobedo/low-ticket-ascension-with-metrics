@@ -4103,6 +4103,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     const proj = clockStateRef.current.project;
     const tot = clockStateRef.current.total;
     if (!proj || proj.clips.length === 0 || c.playing) return;
+    // REMOTION MODE: the Player owns playback — flip the prop instead of
+    // running the rAF clock on top of it (the "timeline play is slow" drag).
+    if (previewMode === 'remotion' && !stageIsBlob) {
+      if (playheadSec >= tot - 0.05) seekTimeline(0); // replay from the top
+      setPlaying(true);
+      return;
+    }
     if (c.t >= tot - 0.01) c.t = 0; // replay from the top when at the end
     swappingRef.current = false; // leftover swap must not block play()
     c.playing = true;
@@ -4131,6 +4138,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
   /** Play / pause the stage (the transport button + Space share this). */
   function togglePlay() {
+    if (previewMode === 'remotion' && !stageIsBlob) {
+      setPlaying((p) => !p);
+      return;
+    }
     if (clockRef.current.playing) stopClock();
     else startClock();
   }
@@ -8590,6 +8601,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         onFrameSec={onPlayerFrame}
                         scrubbing={scrubbing}
                         playing={playing}
+                        onEnded={() => setPlaying(false)}
                         freePlaceEdit={stackEditMode}
 
                         showAllWords={stackEditMode && showAllCardWords}

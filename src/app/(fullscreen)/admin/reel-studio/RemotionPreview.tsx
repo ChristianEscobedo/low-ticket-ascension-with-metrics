@@ -74,6 +74,7 @@ export default function RemotionPreview({
   onFrameSec,
   scrubbing = false,
   playing = false,
+  onEnded,
 }: {
 
   project: Pick<
@@ -122,6 +123,12 @@ export default function RemotionPreview({
    * the seek effect only corrects real drift instead of driving every frame.
    */
   playing?: boolean;
+  /**
+   * The Player reached the last frame and paused itself. In remotion mode the
+   * page's rAF clock doesn't run (the Player owns playback), so nothing else
+   * would flip the transport back to "play" — this does.
+   */
+  onEnded?: () => void;
 }) {
 
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
@@ -297,6 +304,8 @@ export default function RemotionPreview({
    */
   const onFrameSecRef = useRef(onFrameSec);
   onFrameSecRef.current = onFrameSec;
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
   // While scrubbing, the drag owns time — the Player's frame reports are stale
   // (it was mid-flight when the drag grabbed it) and must not write the clock.
   const scrubbingRef = useRef(scrubbing);
@@ -323,6 +332,9 @@ export default function RemotionPreview({
       const frame = e.detail?.frame;
       if (typeof frame === 'number' && Number.isFinite(frame)) {
         cb(Math.round((frame / plan.fps) * 100) / 100);
+        // The Player pauses itself at the last frame — tell the page so the
+        // transport flips back to "play".
+        if (frame >= plan.durationInFrames - 1) onEndedRef.current?.();
       }
     };
     p.addEventListener('frameupdate', onFrame as never);

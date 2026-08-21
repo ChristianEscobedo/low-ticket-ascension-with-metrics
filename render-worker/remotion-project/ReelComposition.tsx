@@ -168,8 +168,13 @@ const ClipLayer: React.FC<{
  * animationData — no delayRender, no hang. A failed lottie renders NOTHING:
  * the video plays on without it.
  */
-const SafeLottie: React.FC<{ src: string; style: React.CSSProperties }> = ({ src, style }) => {
+const SafeLottie: React.FC<{ src: string; style: React.CSSProperties; windowSec: number }> = ({
+  src,
+  style,
+  windowSec,
+}) => {
   const [data, setData] = useState<unknown>(null);
+  const [rate, setRate] = useState(1);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -184,6 +189,15 @@ const SafeLottie: React.FC<{ src: string; style: React.CSSProperties }> = ({ src
       .then((j) => {
         // A real lottie has a layers array — anything else isn't one.
         if (!j || !Array.isArray((j as { layers?: unknown }).layers)) throw new Error('not a lottie');
+        // Fit the FULL animation into the cue's window: a 3s lottie in a 1.5s
+        // fly-in used to get cut off mid-animation. playbackRate = the
+        // lottie's natural length / the window, so it plays end-to-end.
+        const d = j as { ip?: number; op?: number; fr?: number };
+        const lottieSec =
+          d.fr && d.op != null ? Math.max(0.1, (d.op - (d.ip ?? 0)) / d.fr) : 0;
+        if (alive && lottieSec > 0 && windowSec > 0) {
+          setRate(Math.round((lottieSec / windowSec) * 100) / 100);
+        }
         if (alive) setData(j);
       })
       .catch(() => {
@@ -196,7 +210,7 @@ const SafeLottie: React.FC<{ src: string; style: React.CSSProperties }> = ({ src
     };
   }, [src]);
   if (failed || !data) return null;
-  return <Lottie animationData={data} style={style} />;
+  return <Lottie animationData={data} style={style} playbackRate={rate} />;
 };
 
 /**
@@ -296,7 +310,7 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
           // motion is identical in the preview Player and in renderMedia.
           // Wins over `animated` when both are set. The wrapper's entrance/
           // exit/motion transforms apply either way.
-          <SafeLottie src={cue.src} style={mediaStyle} />
+          <SafeLottie src={cue.src} style={mediaStyle} windowSec={cue.durationInFrames / fps} />
         ) : cue.animated ? (
           // The animated sticker: Remotion's <Gif> decodes the GIF and shows
           // the frame for the CURRENT frame — frame math, never a CSS clock —
