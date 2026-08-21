@@ -286,17 +286,21 @@ function Block({
       {onTrimLeft && (
         <span
           onPointerDown={(e) => drag(e, onTrimLeft)}
-          className="absolute left-0 top-0 z-20 h-full w-2 cursor-ew-resize border-l-2 border-transparent hover:border-brass hover:bg-brass/30"
+          className="absolute left-0 top-0 z-20 flex h-full w-3 cursor-ew-resize items-center justify-center border-l-2 border-transparent opacity-0 transition-opacity hover:border-brass hover:bg-brass/30 group-hover:opacity-100"
           title="Drag to trim the start"
-        />
+        >
+          <span className="h-3.5 w-1 rounded-full bg-brass shadow" />
+        </span>
       )}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {onTrimRight && (
         <span
           onPointerDown={(e) => drag(e, onTrimRight)}
-          className="absolute right-0 top-0 z-20 h-full w-2 cursor-ew-resize border-r-2 border-transparent hover:border-brass hover:bg-brass/30"
+          className="absolute right-0 top-0 z-20 flex h-full w-3 cursor-ew-resize items-center justify-center border-r-2 border-transparent opacity-0 transition-opacity hover:border-brass hover:bg-brass/30 group-hover:opacity-100"
           title="Drag to trim the end"
-        />
+        >
+          <span className="h-3.5 w-1 rounded-full bg-brass shadow" />
+        </span>
       )}
     </div>
   );
@@ -572,9 +576,11 @@ export default function TimelineBoard({
                   el.addEventListener('pointermove', move);
                   el.addEventListener('pointerup', up);
                 }}
-                className="absolute left-0 top-0 z-20 h-full w-2.5 cursor-ew-resize border-l-2 border-transparent hover:border-brass hover:bg-brass/30"
+                className="absolute left-0 top-0 z-20 flex h-full w-3 cursor-ew-resize items-center justify-center border-l-2 border-transparent opacity-0 transition-opacity hover:border-brass hover:bg-brass/30 group-hover:opacity-100"
                 title="Drag to cut the head"
-              />
+              >
+                <span className="h-4 w-1 rounded-full bg-brass shadow" />
+              </span>
               {/* right trim handle */}
               <span
                 onPointerDown={(e) => {
@@ -601,9 +607,11 @@ export default function TimelineBoard({
                   el.addEventListener('pointermove', move);
                   el.addEventListener('pointerup', up);
                 }}
-                className="absolute right-0 top-0 z-20 h-full w-2.5 cursor-ew-resize border-r-2 border-transparent hover:border-brass hover:bg-brass/30"
+                className="absolute right-0 top-0 z-20 flex h-full w-3 cursor-ew-resize items-center justify-center border-r-2 border-transparent opacity-0 transition-opacity hover:border-brass hover:bg-brass/30 group-hover:opacity-100"
                 title="Drag to cut the tail"
-              />
+              >
+                <span className="h-4 w-1 rounded-full bg-brass shadow" />
+              </span>
             </div>
           );
         })}

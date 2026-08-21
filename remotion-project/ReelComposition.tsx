@@ -12,7 +12,7 @@
  * NOTE: this file exists twice (here and render-worker/remotion-project/), once
  * per build context. Edit it in one place and copy it over — they must agree.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Gif } from '@remotion/gif';
 import { Lottie } from '@remotion/lottie';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
@@ -161,6 +161,45 @@ const ClipLayer: React.FC<{
 };
 
 /**
+ * Fail-safe Lottie. @remotion/lottie's <Lottie src> fetches the .json with
+ * delayRender — a 404, a CORS block, or a file that isn't a lottie hangs the
+ * frame FOREVER (the whole stage went black when a bad lottie attached). We
+ * fetch + validate the json ourselves (8s cap), then mount <Lottie> with
+ * animationData — no delayRender, no hang. A failed lottie renders NOTHING:
+ * the video plays on without it.
+ */
+const SafeLottie: React.FC<{ src: string; style: React.CSSProperties }> = ({ src, style }) => {
+  const [data, setData] = useState<unknown>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const timer = setTimeout(() => {
+      if (alive) setFailed(true);
+    }, 8000);
+    fetch(src)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((j) => {
+        // A real lottie has a layers array — anything else isn't one.
+        if (!j || !Array.isArray((j as { layers?: unknown }).layers)) throw new Error('not a lottie');
+        if (alive) setData(j);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      })
+      .finally(() => clearTimeout(timer));
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [src]);
+  if (failed || !data) return null;
+  return <Lottie animationData={data} style={style} />;
+};
+
+/**
  * A word-triggered media cue: the image flies in when its word is spoken.
  *
  * Frame math again, never a CSS clock. Two motion cases:
@@ -257,7 +296,7 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
           // motion is identical in the preview Player and in renderMedia.
           // Wins over `animated` when both are set. The wrapper's entrance/
           // exit/motion transforms apply either way.
-          <Lottie src={cue.src} style={mediaStyle} />
+          <SafeLottie src={cue.src} style={mediaStyle} />
         ) : cue.animated ? (
           // The animated sticker: Remotion's <Gif> decodes the GIF and shows
           // the frame for the CURRENT frame — frame math, never a CSS clock —
