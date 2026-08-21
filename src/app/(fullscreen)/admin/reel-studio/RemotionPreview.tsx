@@ -73,7 +73,9 @@ export default function RemotionPreview({
   playheadSec,
   onFrameSec,
   scrubbing = false,
+  playing = false,
 }: {
+
   project: Pick<
     ReelProject,
     'clips' | 'audio' | 'captions' | 'captionStyle' | 'captionOverrides' | 'overlays'
@@ -110,7 +112,18 @@ export default function RemotionPreview({
    * its frame reports; on release one authoritative seek lands.
    */
   scrubbing?: boolean;
+  /**
+   * THE CHOPPY-PLAY FIX. The timeline's transport (play button / Space) runs
+   * the page's rAF clock, which advances `playheadSec` 60×/sec. Without this
+   * prop the Player was never told to PLAY — it sat paused while the seek
+   * effect called seekTo on it every frame (a seek per frame = the choppy,
+   * struggling playback). Now `playing` maps to the Player's own transport:
+   * when the clock plays, the Player plays ITSELF (smooth, frame-driven), and
+   * the seek effect only corrects real drift instead of driving every frame.
+   */
+  playing?: boolean;
 }) {
+
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
   const playerRef = useRef<PlayerRef>(null);
   /**
@@ -120,8 +133,16 @@ export default function RemotionPreview({
    * the video. Updated from the Player's own frame on every render.
    */
   const lastFrameRef = useRef(0);
+  /**
+   * Mirror of the `playing` prop, read by the follow effect's deferred
+   * callback. Declared up here (before the effects that read it) so there's
+   * no use-before-declaration. See the choppy-play effect below.
+   */
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
 
   // The SAME plan the renderer builds. When the editor state changes, the plan
+
   // (and therefore the preview) recomputes — identical to what gets rendered.
   // A throw here used to take the whole stage down; now it's caught + shown.
   //
@@ -231,11 +252,21 @@ export default function RemotionPreview({
       Math.min(plan.durationInFrames - 1, Math.round(playheadSec * plan.fps)),
     );
     try {
-      if (Math.abs(p.getCurrentFrame() - target) > 1) p.seekTo(target);
+      // While the clock is playing, the Player is playing ITSELF (the
+      // choppy-play effect above called play()). The clock's playheadSec ticks
+      // ~1 frame ahead/behind the Player's own frame every rAF — if we seekTo
+      // on that 1-frame drift we re-stutter the very playback we just smoothed.
+      // So while playing we only correct a REAL divergence (>6 frames ≈ a
+      // scrub/seek the Player missed), not the per-tick jitter. Paused, the
+      // tight >1 guard still lands a dragged playhead on the exact frame.
+      const cur = p.getCurrentFrame();
+      const tol = playingRef.current ? 6 : 1;
+      if (Math.abs(cur - target) > tol) p.seekTo(target);
     } catch {
       // The Player isn't mounted yet on the first paint; the next effect run seeks.
     }
   }, [playheadSec, plan]);
+
 
   /**
    * Restore the tracked frame after a plan rebuild. When the plan changes the
@@ -305,7 +336,33 @@ export default function RemotionPreview({
     }
   }, [scrubbing]);
 
+  /**
+   * THE CHOPPY-PLAY FIX (the effect). Map the timeline's `playing` onto the
+   * Player's own transport. When the clock plays, the Player plays ITSELF —
+   * smooth, frame-driven — instead of being seekTo'd every frame by the
+   * follow effect. While playing we also tell the follow effect to stand down
+   * (via playingRef) so it only corrects real drift, never drives the frame.
+   * No setState here, so it can't loop. Scrubbing still wins: a drag pauses.
+   * (playingRef is declared up top, before the effects that read it.)
+   */
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !plan) return;
+    try {
+      if (playing && !scrubbing) {
+
+        if (!p.isPlaying()) p.play();
+      } else if (!playing && p.isPlaying()) {
+        p.pause();
+      }
+    } catch {
+      /* not mounted yet */
+    }
+    // plan in deps so a rebuild re-asserts the play state on the fresh Player.
+  }, [playing, scrubbing, plan]);
+
   if (!plan) {
+
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-black p-4 text-center">
         <p className="text-[11px] font-semibold text-red-300">Could not build the render plan</p>

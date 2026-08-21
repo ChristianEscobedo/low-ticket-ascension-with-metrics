@@ -8882,7 +8882,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         playheadSec={playheadSec}
                         onFrameSec={onPlayerFrame}
                         scrubbing={scrubbing}
+                        playing={playing}
                         freePlaceEdit={stackEditMode}
+
                         showAllWords={stackEditMode && showAllCardWords}
                       />
                     {uploadJob && (
