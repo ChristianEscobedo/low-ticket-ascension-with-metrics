@@ -18,7 +18,7 @@
  * drag an edge to trim, click to select) — only the layout + look changed.
  * Pure presentational; the page owns all state.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   Film,
@@ -42,6 +42,7 @@ import type {
 import { effectiveClipDuration, reelDurationSec } from '@/lib/mothermode/reel/timeline';
 import { REEL_TRANSITIONS } from '@/lib/mothermode/reel/types';
 import { spriteCellStyle } from '@/lib/mothermode/reel/sceneCuts';
+import { peaksFor } from '@/lib/mothermode/reel/waveform';
 
 /** R4: the 4-frame sprite tile URL for a clip — ONE request instead of four. */
 function spriteUrl(url: string, durSec: number, frames = 4): string {
@@ -106,6 +107,35 @@ function SpriteStrip({ url, durSec, className }: { url: string; durSec: number; 
   );
 }
 
+/** R14 waveform: canvas bars behind the audio bed block (peaks cached client-side). */
+function WaveformLane({ url }: { url: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let alive = true;
+    void peaksFor(url, 600).then((peaks) => {
+      if (!alive || !peaks) return;
+      const cv = ref.current;
+      const ctx = cv?.getContext('2d');
+      if (!cv || !ctx) return;
+      const w = (cv.width = cv.offsetWidth * 2);
+      const h = (cv.height = cv.offsetHeight * 2);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(168,139,92,0.55)';
+      const step = w / peaks.length;
+      for (let i = 0; i < peaks.length; i += 1) {
+        const bh = Math.max(2, peaks[i] * h * 0.92);
+        ctx.fillRect(i * step, (h - bh) / 2, Math.max(1, step * 0.72), bh);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  return (
+    <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full opacity-70" />
+  );
+}
+
 const TRANSITION_GLYPH: Record<ReelTransitionType, string> = {
   crossfade: '◐',
   whip: '≫',
@@ -162,6 +192,7 @@ function Block({
   title,
   onSelect,
   onDragMove,
+  onDragEnd,
   onTrimLeft,
   onTrimRight,
   children,
@@ -175,6 +206,8 @@ function Block({
   onSelect?: () => void;
   /** Drag the whole block in time (delta seconds). */
   onDragMove?: (deltaSec: number) => void;
+  /** Pointer-up after any drag (move or trim) — e.g. re-sync the audio bed. */
+  onDragEnd?: () => void;
   /** Trim the left edge (delta seconds, + = later start). */
   onTrimLeft?: (deltaSec: number) => void;
   /** Trim the right edge (delta seconds, + = longer). */
@@ -199,6 +232,7 @@ function Block({
     const up = () => {
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
+      onDragEnd?.();
     };
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
@@ -260,6 +294,8 @@ export default function TimelineBoard({
   onOverlayRemove,
   onAudioMove,
   onAudioRemove,
+  onSeek,
+  onAudioMoveEnd,
 }: {
   clips: ReelClip[];
   captions: Record<string, ReelWord[]>;
@@ -280,6 +316,10 @@ export default function TimelineBoard({
   onOverlayRemove: (id: string) => void;
   onAudioMove: (offsetSec: number) => void;
   onAudioRemove: () => void;
+  /** Click a caption/media block: seek the playhead to its start. */
+  onSeek: (tSec: number) => void;
+  /** Pointer-up after dragging the audio bed — re-sync the audio element. */
+  onAudioMoveEnd?: () => void;
 }) {
   if (total <= 0) return null;
   const dragIndex = useRef<number | null>(null);
@@ -366,13 +406,27 @@ export default function TimelineBoard({
                     if (idx < 0 || idx === REEL_TRANSITIONS.length - 1) onTransition(c.id, null);
                     else onTransition(c.id, { ...c.transitionIn, type: REEL_TRANSITIONS[idx + 1] });
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!c.transitionIn) return;
+                    const d = c.transitionIn.durationSec;
+                    onTransition(c.id, {
+                      ...c.transitionIn,
+                      durationSec: d >= 0.8 ? 0.3 : d >= 0.5 ? 0.8 : 0.5,
+                    });
+                  }}
                   className={clsx(
                     'absolute left-0.5 top-0.5 z-40 flex h-4 w-4 items-center justify-center rounded-full border text-[8px] font-bold leading-none',
                     c.transitionIn
                       ? 'border-brass bg-brass text-ink'
                       : 'border-white/30 bg-black/70 text-white/60 opacity-0 group-hover:opacity-100',
                   )}
-                  title="Scene transition — click to cycle"
+                  title={
+                    c.transitionIn
+                      ? `${c.transitionIn.type} · ${c.transitionIn.durationSec}s — click: next style · right-click: duration · (past zoom: off)`
+                      : 'Scene transition — click: crossfade · whip · zoom · right-click: duration'
+                  }
                 >
                   {c.transitionIn ? TRANSITION_GLYPH[c.transitionIn.type] : '⇄'}
                 </button>
@@ -501,7 +555,8 @@ export default function TimelineBoard({
               fromPct={pct(b.from, total)}
               widthPct={pct(b.to, total) - pct(b.from, total)}
               tint="border-sky-400/40 bg-sky-400/20 hover:bg-sky-400/35"
-              title={`${b.name} — ${b.count} words`}
+              title={`${b.name} — ${b.count} words (click to seek)`}
+              onSelect={() => onSeek(b.from)}
             >
               <span className="flex items-center gap-1 text-[8px] font-medium text-sky-100">
                 <MessageSquareText className="h-2.5 w-2.5 shrink-0 text-sky-200" />
@@ -527,7 +582,8 @@ export default function TimelineBoard({
                 fromPct={pct(b.from, total)}
                 widthPct={pct(b.to, total) - pct(b.from, total)}
                 tint="border-fuchsia-400/40 bg-fuchsia-400/20 hover:bg-fuchsia-400/35"
-                title={`${b.kind} fly-in on "${b.label}"`}
+                title={`${b.kind} fly-in on "${b.label}" (click to seek)`}
+                onSelect={() => onSeek(b.from)}
               >
                 <span className="flex items-center gap-1 text-[8px] font-medium text-fuchsia-100">
                   <Icon className="h-2.5 w-2.5 shrink-0 text-fuchsia-200" />
@@ -588,6 +644,7 @@ export default function TimelineBoard({
           icon={<Music className="h-3 w-3 text-brass/80" />}
           tint="border-brass/30 bg-brass/[0.06]"
         >
+          <WaveformLane url={audio.url} />
           <Block
             fromPct={pct(audio.offsetSec, total)}
             widthPct={Math.max(3, pct(Math.min(total - audio.offsetSec, audio.durationSec ?? total - audio.offsetSec), total))}
@@ -597,6 +654,7 @@ export default function TimelineBoard({
               const deltaSec = (deltaPct / 100) * total;
               onAudioMove(Math.round(Math.max(0, Math.min(audio.offsetSec + deltaSec, total - 0.1)) * 10) / 10);
             }}
+            onDragEnd={onAudioMoveEnd}
           >
             <span className="flex items-center gap-1 text-[8px] font-medium text-bone/85">
               <Music className="h-2.5 w-2.5 shrink-0 text-brass" />

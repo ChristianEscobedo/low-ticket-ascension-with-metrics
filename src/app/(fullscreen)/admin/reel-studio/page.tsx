@@ -9089,6 +9089,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     }
                     onAudioMove={(offsetSec) => patch({ audio: { ...project.audio!, offsetSec } })}
                     onAudioRemove={() => patch({ audio: null })}
+                    onSeek={seekTimeline}
+                    onAudioMoveEnd={() => {
+                      // The bed moved — re-sync the audio element to the playhead
+                      // (the old lane did this on drag-release).
+                      const v = previewRef.current;
+                      syncAudioAt(playheadSec, v ? !v.paused : false);
+                    }}
                   />
                   {/* the playhead — grab the line itself to scrub */}
                   <div
