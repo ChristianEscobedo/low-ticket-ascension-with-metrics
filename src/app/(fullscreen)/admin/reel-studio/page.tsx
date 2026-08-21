@@ -144,6 +144,7 @@ import {
   transitionOverlapSec,
 } from '@/lib/mothermode/reel/timeline';
 import { makeClipId, WORD_FONTS, REEL_TRANSITIONS, type ReelMediaCue, type ReelOverlayClip, type ReelTransition, type ReelTransitionType } from '@/lib/mothermode/reel/types';
+import { snapToTargets, timelineSnapTargets } from '@/lib/mothermode/reel/scrubSnap';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -766,19 +767,27 @@ function TimelineStrip({
   );
 }
 
-/** The scrub ruler above the strip: zoom-aware ticks + clip-boundary notches + click/drag to seek. */
+/**
+ * The scrub ruler above the strip: zoom-aware ticks + clip-boundary notches +
+ * click/drag to seek — with a playhead marker and magnetic snapping to scene
+ * boundaries (the CapCut/Premiere magnet: a scrub within ~10px of a boundary
+ * lands ON it, so lining a cut up with a scene edge is no longer hand-eye).
+ */
 function TimeRuler({
   totalSec,
   clips,
   zoom,
   onScrub,
   wordMarks = [],
+  playheadSec,
 }: {
   totalSec: number;
   clips: ReelClip[];
   zoom: number;
   onScrub: (timelineSec: number) => void;
   wordMarks?: { t: number; label: string }[];
+  /** The studio clock — the ruler draws the playhead so a scrub has a target to look at. */
+  playheadSec?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const base = totalSec <= 45 ? 5 : totalSec <= 120 ? 10 : totalSec <= 300 ? 30 : 60;
@@ -787,13 +796,20 @@ function TimeRuler({
   const ticks: number[] = [];
   for (let t = 0; t <= totalSec; t += step) ticks.push(t);
 
+  // The magnet's targets: 0, every scene's start, the reel's end.
+  const snapTargets = clips.map((_, i) => timelineStartOf(clips, i));
 
   function scrubFromEvent(clientX: number) {
     const el = ref.current;
     if (!el || totalSec <= 0) return;
     const rect = el.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    onScrub(Math.round(frac * totalSec * 10) / 10);
+    const raw = Math.round(frac * totalSec * 10) / 10;
+    // Snap window: 10px worth of seconds — it scales with zoom for free (a
+    // zoomed-in ruler packs fewer seconds per px, so the magnet tightens).
+    const thresholdSec = rect.width > 0 ? (10 / rect.width) * totalSec : 0;
+    const snapped = snapToTargets(raw, timelineSnapTargets(snapTargets, totalSec), thresholdSec);
+    onScrub(snapped.t);
   }
 
   return (
@@ -841,6 +857,21 @@ function TimeRuler({
           {i + 1}
         </div>
       ))}
+      {/* the playhead ON the ruler — the strip's line used to be the only
+          marker, so a ruler scrub had nothing to aim at. The little diamond
+          rides the top edge; the line drops through the ticks. */}
+      {typeof playheadSec === 'number' && Number.isFinite(playheadSec) && totalSec > 0 && (
+        <>
+          <div
+            className="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-brass/90"
+            style={{ left: `${Math.min(100, (playheadSec / totalSec) * 100)}%` }}
+          />
+          <div
+            className="pointer-events-none absolute top-0 z-10 h-2 w-2 -translate-x-1/2 rotate-45 rounded-[1px] bg-brass"
+            style={{ left: `${Math.min(100, (playheadSec / totalSec) * 100)}%` }}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -9278,6 +9309,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       clips={project.clips}
                       zoom={pxPerSec / 36}
                       onScrub={seekTimeline}
+                      playheadSec={playheadSec}
                       wordMarks={
                         currentClip
                           ? (project.captions[currentClip.id] ?? []).map((w) => ({
