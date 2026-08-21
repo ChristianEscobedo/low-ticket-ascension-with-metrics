@@ -13,8 +13,22 @@ Commits, oldest → newest:
 | `64a612d` | Magnetic scrub snapping + ruler playhead |
 | `03c6578` | Pause the Player while scrubbing (the shake fix) |
 | `bb61f4b` | Per-type timeline lanes (captions + media cues) |
+| `6a6d9f0` | Timeline UI — selected scene shows its filmstrip + ruler tick cap |
+| `4ce2732` | Lane blocks share the filmstrip's 0–100% time axis (alignment fix) |
+
+> **Reverted — do NOT port:** `e9401b9` ("one clock — the timeline drives the
+> Player's play state") was an attempt to make the timeline the single clock by
+> adding `playing`/`onPlayStateChange` props to `RemotionPreview`. It caused an
+> infinite setState loop (React #185, "Maximum update depth exceeded") — the
+> Player's `frameupdate` → `setPlayheadSec` → re-render → effect re-fire →
+> `frameupdate`. Reverted in `1196ae9`. The two-clock concern it targeted is
+> real, but the fix must NOT re-trigger on the Player's own reported frames
+> (don't re-attach the frame listener every render; don't let a `playing` effect
+> fire in response to the Player's own frames). The pause-while-scrubbing fix
+> (`03c6578`) is the safe half and stays.
 
 ---
+
 
 ## 1. Lottie media cues — `4a7dee6`
 
@@ -107,6 +121,22 @@ self-contained), mounted in `page.tsx` right after the audio bed lane:
   it, but don't yet DRAG to re-time it (the overlay/audio lanes already drag).
   That's the natural follow-up.
 
+## 6. Lane blocks share the filmstrip's time axis — `4ce2732`
+
+**The bug:** the lanes rendered with a `w-16` label gutter on the left + a
+`flex-1` track. The gutter pushed the track right by 4rem+gap, but the video
+strip (`TimelineStrip`) and the playhead span the FULL container width. So a
+block at `left: 30%` of the track sat at a different time than the video frame
+at 30% of the strip — the lane blocks looked "started into the main video" and
+the timing read "way off".
+
+**The fix:** `TimelineLanes.tsx` `Lane` is now a FULL-WIDTH `relative` track
+(matching the overlay/audio lanes exactly), with the label as a small
+non-interactive chip (`pointer-events-none absolute left-1 z-10`) overlaying the
+track's left edge instead of a separate gutter column. Every lane is now on the
+SAME 0→100% time axis as the filmstrip + playhead, so a block's `%` lines up
+with the frame above it.
+
 ---
 
 ## Port checklist for Omega-v2
@@ -118,7 +148,10 @@ self-contained), mounted in `page.tsx` right after the audio bed lane:
 4. `scrubSnap.ts` + the ruler snap + playhead marker.
 5. The `scrubbing` prop: page state → preview pauses + ignores frame reports.
 6. `TimelineLanes.tsx` + the mount (needs `effectiveClipDuration` from
-   `reel/timeline` and the `ReelMediaCue`/`ReelWord` types).
+   `reel/timeline` and the `ReelMediaCue`/`ReelWord` types). Make each lane a
+   FULL-WIDTH track (no label gutter) so its blocks share the filmstrip's
+   0→100% time axis — see §6.
+
 
 Tests to carry: `media-cues`, `preview-throttle`, `scrub-snap`, and the
 `render-vendor-parity` guard.
