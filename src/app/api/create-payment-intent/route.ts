@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
       ? await getFunnelBySlug(funnel_slug).catch(() => null)
       : null;
     const mode: 'test' | 'live' = funnel?.testMode ? 'test' : 'live';
-    if (!(await getStripeSecretKeyForMode(mode))) {
+    const secretKey = await getStripeSecretKeyForMode(mode);
+    if (!secretKey) {
       return NextResponse.json(
         {
           error:
@@ -80,6 +81,43 @@ export async function POST(request: NextRequest) {
       );
     }
     const stripe = await getStripeClientForMode(mode);
+
+    // A RESTRICTED key (rk_test_ / rk_live_) only has the permissions granted
+    // at creation. The one-click path attaches + charges saved cards, which a
+    // restricted key without paymentMethods:write silently rejects — the
+    // checkout then "works" but falls through to the card form (and Link's
+    // OTP). Flag it up front so the fix (save the standard Secret key,
+    // sk_…, in /admin/stripe) is visible instead of silent.
+    const restrictedKey = secretKey.startsWith('rk_');
+
+    // Test-mode rehearsal attaches Stripe's test Visa when the customer has no
+    // card on file. That attach used to fail SILENTLY (`.catch(() =>
+    // undefined)`) and the one-click fell through to the PaymentElement form —
+    // with Link's saved-card OTP on top. Capture the failure so the one-click
+    // paths can return the real reason instead of a mysterious form.
+    let testCardAttachError: string | null = null;
+    const attachTestVisa = async () => {
+      try {
+        return await stripe.paymentMethods.attach('pm_card_visa', { customer: customerId });
+      } catch (e) {
+        testCardAttachError = e instanceof Error ? e.message : String(e);
+        return undefined;
+      }
+    };
+    // In test mode the one-click is a rehearsal — there is no real buyer card
+    // to collect, so a failed attach must STOP the flow with the reason, not
+    // fall through to a card form that can never be the right answer.
+    const testAttachFailureResponse = () =>
+      NextResponse.json(
+        {
+          error:
+            `One-click rehearsal couldn't attach the test Visa: ${testCardAttachError}. ` +
+            (restrictedKey
+              ? 'The saved secret key is a RESTRICTED key (rk_…) — it lacks the paymentMethods write permission this needs. In the Stripe dashboard → Developers → API keys, copy the standard "Secret key" (sk_test_…), NOT a "Restricted key", and re-save it in /admin/stripe.'
+              : 'Check the test secret key in /admin/stripe — re-copy the standard Secret key (sk_test_…) from the Stripe dashboard (Developers → API keys) with no extra spaces or line breaks.'),
+        },
+        { status: 500 }
+      );
 
     // The browser confirms this PaymentIntent with the publishable key for the
     // SAME mode — a test-mode PI confirmed against the live pk 400s in
@@ -183,10 +221,8 @@ export async function POST(request: NextRequest) {
       // (Live mode never auto-attaches; a live buyer with no card gets the
       // card form below.)
       if (!savedCard && mode === 'test') {
-        savedCard = await stripe.paymentMethods
-          .attach('pm_card_visa', { customer: customerId })
-          .then((pm) => pm)
-          .catch(() => undefined);
+        savedCard = await attachTestVisa();
+        if (!savedCard) return testAttachFailureResponse();
       }
       if (savedCard) {
         // Subscription items need a Price object — create it in THIS mode's
@@ -201,6 +237,10 @@ export async function POST(request: NextRequest) {
           customer: customerId,
           items: [{ price: subPrice.id }],
           default_payment_method: savedCard.id,
+          // Card-only on the invoice's PaymentIntent. The default (automatic
+          // payment methods) enables Link, and when this PI ever reaches the
+          // browser Link hijacks the confirm with its own saved-card OTP.
+          payment_settings: { payment_method_types: ['card'] },
           ...(first_period_paid
             ? { trial_period_days: subInterval === 'year' ? 365 : 30 }
             : { payment_behavior: 'default_incomplete' as const, expand: ['latest_invoice.payment_intent'] }),
@@ -209,9 +249,8 @@ export async function POST(request: NextRequest) {
         if (sub.status === 'active' || sub.status === 'trialing') {
           return NextResponse.json({ status: 'succeeded', subscription_id: sub.id });
         }
-        // 3DS on the saved card — confirm the first invoice inline. Stamp
-        // the invoice's PI with the funnel metadata so the webhook records
-        // the charge (a subscription created this way has no
+        // Stamp the invoice's PI with the funnel metadata so the webhook
+        // records the charge (a subscription created this way has no
         // checkout.session).
         const invoice = sub.latest_invoice as {
           payment_intent?: { id: string; status: string; client_secret: string | null } | string | null;
@@ -223,18 +262,46 @@ export async function POST(request: NextRequest) {
             .update(invoicePiId, { metadata: piMetadata, setup_future_usage: 'off_session' })
             .catch(() => {});
         }
-        if (invoicePi && typeof invoicePi === 'object' && invoicePi.client_secret) {
+        // default_incomplete does NOT charge the card in the create call —
+        // the invoice's PI sits at requires_confirmation. The old code handed
+        // its client_secret straight to the browser, which mounted the card
+        // form (with Link's OTP on top) — exactly the "form instead of
+        // one-click" bug. Confirm it SERVER-SIDE on the saved card instead,
+        // the same direct charge the working version makes. Only a card that
+        // demands 3DS comes back to the browser, inline and card-only.
+        let confirmedPi: { id: string; status: string; client_secret: string | null } | null =
+          invoicePi && typeof invoicePi === 'object' ? invoicePi : null;
+        if (
+          invoicePiId &&
+          (!confirmedPi ||
+            confirmedPi.status === 'requires_confirmation' ||
+            confirmedPi.status === 'requires_payment_method')
+        ) {
+          const confirmed = await stripe.paymentIntents
+            .confirm(invoicePiId, { payment_method: savedCard.id })
+            .catch(() => null);
+          if (confirmed) confirmedPi = confirmed;
+        }
+        if (confirmedPi && (confirmedPi.status === 'succeeded' || confirmedPi.status === 'processing')) {
           return NextResponse.json({
-            status: invoicePi.status === 'requires_action' ? 'requires_action' : 'requires_payment',
-            client_secret: invoicePi.client_secret,
-            payment_intent_id: invoicePi.id,
+            status: 'succeeded',
+            subscription_id: sub.id,
+            payment_intent_id: confirmedPi.id,
+          });
+        }
+        if (confirmedPi && confirmedPi.status === 'requires_action' && confirmedPi.client_secret) {
+          return NextResponse.json({
+            status: 'requires_action',
+            client_secret: confirmedPi.client_secret,
+            payment_intent_id: confirmedPi.id,
             subscription_id: sub.id,
             mode,
             publishableKey: publishableKey ?? null,
           });
         }
-        // No way to confirm inline — cancel so it never bills, and fall
-        // through to the plain PaymentIntent below.
+        // The saved card couldn't pay the first period — cancel so it never
+        // bills, and fall through to the plain PaymentIntent below, which
+        // collects a working card (card-only, no Link).
         await stripe.subscriptions.cancel(sub.id).catch(() => {});
       }
       // No saved card (or the sub couldn't confirm): the plain PaymentIntent
@@ -251,10 +318,8 @@ export async function POST(request: NextRequest) {
       let savedCard: (typeof cards.data)[number] | undefined = cards.data[0];
       // Same test-mode rehearsal convenience as the subscription path above.
       if (!savedCard && mode === 'test') {
-        savedCard = await stripe.paymentMethods
-          .attach('pm_card_visa', { customer: customerId })
-          .then((pm) => pm)
-          .catch(() => undefined);
+        savedCard = await attachTestVisa();
+        if (!savedCard) return testAttachFailureResponse();
       }
       if (savedCard) {
         const pi = await stripe.paymentIntents.create({
@@ -266,7 +331,10 @@ export async function POST(request: NextRequest) {
           confirm: true,
           off_session: false,
           metadata: piMetadata,
-          automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+          // Card-only: automatic_payment_methods also enables Link, and Link
+          // hijacks the confirm with its own saved-card OTP. The one-click is
+          // a saved CARD charge — never a wallet.
+          payment_method_types: ['card'],
         });
         if (pi.status === 'succeeded') {
           return NextResponse.json({ status: 'succeeded', payment_intent_id: pi.id });
@@ -288,7 +356,10 @@ export async function POST(request: NextRequest) {
       customer: customerId,
       receipt_email: customer_data.email,
       metadata: piMetadata,
-      automatic_payment_methods: { enabled: true },
+      // Card-only, never Link: with automatic_payment_methods the Payment
+      // Element renders Link's "saved card" above the form and the buyer gets
+      // a text-message OTP instead of a checkout. The funnel collects cards.
+      payment_method_types: ['card'],
       setup_future_usage: 'off_session',
     });
 

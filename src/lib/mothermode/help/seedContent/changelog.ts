@@ -805,6 +805,18 @@ export const HELP_CENTER_SEED_CHANGELOG: SeedChangelog[] = [
     ]),
     published: true,
   },
+  {
+    version: '2.38.0',
+    releasedOn: '2026-08-20',
+    entryType: 'fixed',
+    title: 'One-click upsells are truly one click — no form, no Link, no OTP',
+    body: cl([
+      '<p>The upsell bump used to spring a card form with Stripe <strong>Link</strong> on top — a "Use this card" panel and a text-message OTP — instead of just charging. Three leaks caused it, and all three are closed: the subscription bump\'s first period is now confirmed <strong>server-side</strong> on the buyer\'s saved card (it used to hand the invoice back to the browser unconfirmed), every PaymentIntent in the flow is <strong>card-only</strong> so Link can never render, and a failed test-mode card attach now stops with the real reason instead of silently falling through to a form.</p>',
+      '<p><strong>Why it matters:</strong> every bump in every funnel — present and future — is check-the-box, click, done. The first checkout saves the card; each upsell after it charges that card with one click. In a test-mode funnel the 4242 rehearsal needs no prior purchase at all.</p>',
+      '<p><strong>For admins:</strong> if a bump ever shows an error now, it names the fix. A <strong>restricted API key</strong> (rk_…) is the classic culprit — the config check (/api/stripe/config-check) flags rk_ keys with a warning, and the fix is always: save the standard "Secret key" (sk_…) from Stripe → Developers → API keys in /admin/stripe. Keys with invisible copy-paste characters are cleaned automatically on read now.</p>',
+    ]),
+    published: true,
+  },
 ];
 
 

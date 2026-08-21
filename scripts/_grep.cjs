@@ -1,13 +1,14 @@
-// Throwaway: grep a literal string in a file, print matching lines with numbers.
-// node scripts/_grep.cjs <file> <needle> [maxResults]
+// Tiny grep: node scripts/_grep.cjs <file> <pattern> [context]
 const fs = require('fs');
-const [, , file, needle, max] = process.argv;
+const [, , file, pattern, ctx] = process.argv;
+const re = new RegExp(pattern);
 const lines = fs.readFileSync(file, 'utf8').split('\n');
-let n = 0;
-const cap = parseInt(max || '40', 10);
-for (let i = 0; i < lines.length && n < cap; i += 1) {
-  if (lines[i].includes(needle)) {
-    console.log((i + 1) + ' | ' + lines[i].trim().slice(0, 140));
-    n += 1;
+const c = ctx ? parseInt(ctx, 10) : 0;
+for (let i = 0; i < lines.length; i++) {
+  if (re.test(lines[i])) {
+    for (let j = Math.max(0, i - c); j <= Math.min(lines.length - 1, i + c); j++) {
+      console.log((j + 1) + '|' + lines[j]);
+    }
+    if (c) console.log('---');
   }
 }

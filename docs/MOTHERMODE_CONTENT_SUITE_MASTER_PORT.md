@@ -73,6 +73,7 @@ are documented in full below.
 | 44 | **Outstand publishing** (the social-publishing backend: one API key turns the planner's schedule into real published posts across the connected accounts) (BUILT) | `src/utils/integrations/outstand.ts`, `/api/admin/outstand-publish`, the `outstand` row in `/admin/integrations`, `SchedulePanel.tsx` | `OUTSTAND_PUBLISHING_PORT.md` (spec: `OUTSTAND_PUBLISHING_TASK.md`) |
 | 45 | **Funnel test mode + inline Stripe checkout** (the per-funnel test/live toggle charging the TEST keys end-to-end with NO cross-mode fallback; the fully-inline ladder — FE checkout saves the card, one-time upsells bill it on confirm, the subscription upsell opens inline on a mode-local Price with the invoice PI stamped for the webhook; the 503 gates that name the missing key; the test-pk persistence fix; the client-facing setup guide) (BUILT) | migration `20261206000000_funnel_test_mode.sql`, `runtime-config.ts` (mode resolvers), `utils/stripe/config.ts`, `/api/create-payment-intent` + `/api/stripe/checkout` + `/api/stripe/publishable-key` + `/api/stripe/config-check`, `useStripeConfig.ts`, `MotherModeCheckout.tsx` + `OneClickCheckoutModal.tsx`, `admin/integrations/actions.ts` (merge rules), `/admin/stripe` | `FUNNEL_TEST_MODE_AND_STRIPE_CHECKOUT_PORT.md` + `STRIPE_SETUP_GUIDE.md` |
 | 46 | **Funnel outbound webhooks** (every sale fans out to the owner's endpoints: a funnel-level list on every sale + a per-page list on the checkout/each upsell page's own sale, fired from all three charge paths, with the editor's per-page Webhooks field + Test button; the inbound guard that skips metadata-less charges) (BUILT) | migration `20261207000000_funnel_webhooks.sql`, `src/lib/mothermode/sales/webhooks.ts`, the `WebhooksField` on the page tabs, `/api/webhooks` guard | `FUNNEL_OUTBOUND_WEBHOOKS_PORT.md` |
+| 47 | **One-click bump: the server-side charge** (the bump is a checkbox + one click, no form ever: the subscription's first period confirms SERVER-SIDE on the saved card, every PaymentIntent in the flow is card-only so Stripe Link + its OTP can never render, a failed test-mode card attach stops with the real reason instead of a silent form, `stripeKeyClean` strips invisible copy-paste characters from every key, and config-check flags restricted `rk_` keys with the named fix) (BUILT) | `/api/create-payment-intent` (the server confirm + card-only PIs + the loud attach), `runtime-config.ts` (`stripeKeyClean`), `/api/stripe/config-check` (rk_ detection), `OneClickCheckoutModal.tsx` (error-body surfacing) | `ONE_CLICK_BUMP_SERVER_CHARGE_PORT.md` |
 
 
 
@@ -664,8 +665,7 @@ Do this in order in the target codebase.
 - `OUTSTAND_PUBLISHING_PORT.md` (the Outstand social-publishing backend, SHIPPED; spec `OUTSTAND_PUBLISHING_TASK.md`)
 - `FUNNEL_TEST_MODE_AND_STRIPE_CHECKOUT_PORT.md` (the per-funnel test/live toggle + the fully-inline checkout ladder + the persistence fix, SHIPPED) + `STRIPE_SETUP_GUIDE.md` (the client-facing setup walkthrough)
 - `FUNNEL_OUTBOUND_WEBHOOKS_PORT.md` (funnel-level + per-page sale webhooks with the editor UI + the inbound phantom-charge guard, SHIPPED)
-- `EMAIL_MARKETING_KIT_SYSTEM_PORT.md` (updated: round 7 — the underline steering: the generator marks the ONE most important idea per email in `_underscores_`, the renderer makes it a real `<u>`)
-
+- `ONE_CLICK_BUMP_SERVER_CHARGE_PORT.md` (the one-click bump charges the saved card server-side — no form, no Link, no OTP; card-only PIs everywhere, the loud attach failure, the key sanitizer, rk_ detection in config-check, SHIPPED)
 
 
 

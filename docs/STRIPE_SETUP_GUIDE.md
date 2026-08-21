@@ -31,12 +31,15 @@ but Test is how you safely rehearse a full purchase.
 3. Click **Save**. The readiness panel at the top should flip both rows to
    green ("saved in dashboard").
 
-> **Tighter security (optional but recommended):** instead of the full
-> `sk_live_...` secret, you can create a **restricted key** (`rk_live_...`) with
-> just **PaymentIntents: Write**, **Customers: Write**, and **Prices: Write**
-> permissions (Developers → API keys → "Create restricted key"). The platform
-> only needs those three (Prices is how the one-click subscription upsell
-> creates the mode-local price).
+> **Tighter security (optional):** instead of the full `sk_live_...` secret,
+> you can create a **restricted key** (`rk_live_...`) — but it needs FOUR
+> write permissions or the one-click upsell breaks: **PaymentIntents: Write**,
+> **Customers: Write**, **PaymentMethods: Write** (the bump attaches + charges
+> the saved card), and **Prices: Write** (the one-click subscription creates
+> the mode-local price). The standard **Secret key** has all of it built in —
+> when in doubt, use that. The config check
+> (`/api/stripe/config-check?funnel=<slug>`) flags a saved `rk_` key with a
+> warning so you can see which one is in effect.
 
 ### Step 3: Connect the webhook (so sales get recorded)
 
@@ -76,11 +79,11 @@ Do this once, before showing any funnel to a real buyer.
 4. Save. The readiness panel should show all rows green.
 
 > If you used a restricted key for live, make the test one restricted too
-> (`rk_test_...`) with the same three permissions: **PaymentIntents: Write**,
-> **Customers: Write**, and **Prices: Write**. A restricted key *without* those
-> permissions is the #1 cause of the "no TEST key is saved" / "Permission
-> denied" errors at checkout — the key saves fine but Stripe refuses to create
-> the charge.
+> (`rk_test_...`) with the same four permissions: **PaymentIntents: Write**,
+> **Customers: Write**, **PaymentMethods: Write**, and **Prices: Write**. A
+> restricted key *without* those permissions is the #1 cause of the "no TEST
+> key is saved" / "Permission denied" errors at checkout — the key saves fine
+> but Stripe refuses to create the charge.
 
 ### Step 5: Flip a funnel into Test mode
 
@@ -116,7 +119,10 @@ When you're happy with the rehearsal:
 
 | Symptom | The cause | The fix |
 |---|---|---|
-| "No TEST key is saved" at checkout, but you saved it | The test key is a restricted key missing **PaymentIntents: Write** or **Customers: Write** | Edit the restricted key's permissions in Stripe, or use the full `sk_test_...` |
+ | "No TEST key is saved" at checkout, but you saved it | The test key is a restricted key missing **PaymentIntents: Write** or **Customers: Write** | Edit the restricted key's permissions in Stripe, or use the full `sk_test_...` |
+ | The upsell shows a card form (or a "Link" panel asking for a text-code) instead of charging in one click | Old bug — the bump handed an unconfirmed payment back to the browser and Stripe's Link wallet hijacked it. **Fixed:** the server charges the saved card directly now, and every payment form is card-only (no Link, ever) | Hard-refresh and retry. If an error shows, it names the cause — a restricted key missing **PaymentMethods: Write** is the classic one |
+ | The upsell error says "couldn't attach the test Visa" | In test mode the rehearsal attaches Stripe's test card, and the key rejected the attach | Use the standard **Secret key** (`sk_test_...`), not a restricted key — or add **PaymentMethods: Write** to it |
+ | The config check says a key is "unknown-format" | Usually a restricted key (`rk_...` — now detected and labeled) or an invisible character from copy-paste | Re-copy the key cleanly; stray spaces/line breaks are stripped automatically on read now |
 | "Permission denied… does not have the required permissions… Prices Write" on an upsell | The restricted key is missing **Prices: Write** (the one-click subscription creates a mode-local price) | Add Prices: Write to the key at the link in the error, or use the full `sk_test_...` / `sk_live_...` |
 | The card form never appears (a spinner or blank box) | The browser loaded the wrong publishable key (live pk against a test charge) | Make sure the **Test publishable key** field is filled in on /admin/stripe — the checkout reads it automatically once saved |
 | "Stripe not configured" even though keys are saved | The page cached the old state | Hard-refresh /admin/stripe; the readiness panel re-reads the database on load |

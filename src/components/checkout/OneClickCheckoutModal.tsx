@@ -419,9 +419,11 @@ export const OneClickCheckoutModal: React.FC<OneClickCheckoutModalProps> = ({
           }),
         });
 
-        if (!response.ok) throw new Error('Failed to create payment intent');
-
-        const data = await response.json();
+        // Parse the body BEFORE the ok check — a 500 carries the real reason
+        // (e.g. the restricted-key attach failure) and that's what the buyer
+        // needs to see, not a generic "failed".
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Failed to create payment intent');
 
         if (data.status === 'succeeded') {
           onSuccess();

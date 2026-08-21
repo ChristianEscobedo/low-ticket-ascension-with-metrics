@@ -15,7 +15,7 @@
 | The client | `src/utils/stripe/config.ts` | `getStripeClientForMode(mode)` builds the Stripe SDK client on the mode's secret. |
 | The pk endpoint | `/api/stripe/publishable-key?funnel=<slug>` | Resolves the publishable key for the funnel's mode; the response carries `mode` so the client knows. |
 | The client hook | `src/hooks/useStripeConfig.ts` | Caches Stripe.js per funnel slug; `stripePromiseForKey(key)` loads an explicit key. **No live env fallback when the endpoint says the funnel is in test mode.** |
-| The config check | `/api/stripe/config-check?funnel=<slug>` | Reports the funnel's mode + each key's presence with last4/length (catches a pk_live pasted into the test field). The modal uses it to seed a test customer on a test-mode funnel with no prior purchase. |
+| The config check | `/api/stripe/config-check?funnel=<slug>` | Reports the funnel's mode + each key's presence with last4/length (catches a pk_live pasted into the test field). Detects **restricted keys** (`rk_test` / `rk_live`) and attaches an explicit warning — the one-click bump needs the standard Secret key. The modal uses it to seed a test customer on a test-mode funnel with no prior purchase. |
 | The setup guide | `docs/STRIPE_SETUP_GUIDE.md` | The client-facing step-by-step (live keys, the webhook, test keys, the 4242 rehearsal, go-live) matched to the /admin/stripe field labels. |
 
 ## The charge paths (all three are mode-aware)
@@ -35,14 +35,21 @@
    subscription on the buyer's saved card (`default_payment_method`); the
    invoice's PaymentIntent gets the funnel metadata stamped so the webhook
    records the first charge (a subscription created this way has no
-   checkout.session). **No card on file:** the first period pays through the
-   proven plain-PI path (the FE checkout's own flow — the webhook records
-   it, `setup_future_usage` saves the card), and when that confirm succeeds
-   the modal quietly re-calls with `first_period_paid: true` — the
-   subscription opens on the just-saved card with a **trial carrying it to
-   the next period**, so no double charge. (The invoice-PI confirm path was
-   dropped: on the current Stripe API the sub sat "incomplete" and the
-   charge never recorded.)
+   checkout.session). **The first period is confirmed SERVER-SIDE:**
+   `default_incomplete` leaves the invoice PI at `requires_confirmation`, so
+   the route confirms it on the saved card
+   (`paymentIntents.confirm(invoicePiId, { payment_method })`) and returns
+   `succeeded` — the buyer never sees a form. (Handing that client_secret to
+   the browser instead was the Link-OTP bug: subscription invoice PIs default
+   to automatic payment methods, so the Payment Element rendered Link's
+   wallet. The sub is now created with
+   `payment_settings: { payment_method_types: ['card'] }`, and only a card
+   demanding 3DS comes back to the browser, inline and card-only.) **No card
+   on file:** the first period pays through the proven plain-PI path (the FE
+   checkout's own flow — the webhook records it, `setup_future_usage` saves
+   the card), and when that confirm succeeds the modal quietly re-calls with
+   `first_period_paid: true` — the subscription opens on the just-saved card
+   with a **trial carrying it to the next period**, so no double charge.
 3. **`/api/stripe/checkout`** — hosted subscription Checkout. Mode-aware
    secret; in test mode the line item builds from the resolved amount
    (`price_data`), never the synced live price id.
@@ -57,6 +64,18 @@ test-mode card only exists in the test account, which is exactly the
 isolation the toggle promises. The card form in the modal is the
 no-card-on-file fallback (a buyer who skipped the FE checkout); it collects
 the card inline, no redirect.
+
+**Every PaymentIntent in this flow is card-only**
+(`payment_method_types: ['card']` — the one-click charge, the fallback form
+PI, and subscription invoice PIs). `automatic_payment_methods` also enables
+**Link**, whose wallet rendered above the form and hijacked the confirm with
+a text-message OTP; card-only removes it permanently. And a failed test-mode
+attach is LOUD now — the route returns the real Stripe error (naming the
+restricted-key fix when the saved key is `rk_…`) instead of silently falling
+through to the form. Keys resolve through `stripeKeyClean()`, which strips
+invisible copy-paste characters (zero-width spaces, line breaks) that made a
+valid key read as `unknown-format`. See
+`docs/ONE_CLICK_BUMP_SERVER_CHARGE_PORT.md`.
 
 **The test-mode rehearsal convenience:** a test-mode funnel whose customer
 has no saved card gets Stripe's test Visa (`pm_card_visa`) attached
@@ -101,10 +120,13 @@ phantom purchase.
   subscription upsell opens inline, and /admin/purchases records each step.
   Skip the FE purchase and the upsells still click through — test mode
   attaches the test Visa when no card is on file.
-- The restricted-key recipe needs **PaymentIntents, Customers, AND Prices —
-  all Write** (the one-click subscription creates a mode-local Price; an
-  `rk_` key without `plan_write` 500s with "Permission denied"). The modal
-  surfaces the server's real error, so a permissions failure names its fix.
+- The restricted-key recipe needs **PaymentIntents, Customers, PaymentMethods,
+  AND Prices — all Write** (the one-click subscription creates a mode-local
+  Price and attaches the test Visa; an `rk_` key without those 500s with
+  "Permission denied"). Prefer the standard Secret key — config-check flags
+  `rk_` keys with a warning, the attach failure returns the real Stripe
+  error, and the modal surfaces the server's reason, so a permissions
+  failure names its fix.
 
 ## Port order
 

@@ -270,13 +270,29 @@ export async function getEmailProviderConfig(): Promise<{
 // ----------------------------------------------------------------------------
 // Stripe
 // ----------------------------------------------------------------------------
+
+/**
+ * Stripe keys (sk_/pk_/rk_/whsec_) are letters, digits, and underscores only.
+ * A copy from the dashboard can carry an invisible hitchhiker — a zero-width
+ * space, a BOM, a line break — that trim() doesn't all remove. The key then
+ * reads as "unknown-format" in config-check and every API call 401s or
+ * permission-errors. Strip everything that can't be part of the key.
+ */
+function stripeKeyClean(v: string | undefined | null): string | undefined {
+  if (!v) return undefined;
+  const cleaned = v.replace(/[^A-Za-z0-9_]/g, '');
+  return cleaned || undefined;
+}
+
 export async function getStripeSecretKey(): Promise<string> {
   return (
-    (await resolve(
-      'stripe',
-      'secret_key',
-      process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY,
-    )) ?? ''
+    stripeKeyClean(
+      await resolve(
+        'stripe',
+        'secret_key',
+        process.env.STRIPE_SECRET_KEY_LIVE ?? process.env.STRIPE_SECRET_KEY,
+      ),
+    ) ?? ''
   );
 }
 
@@ -296,11 +312,13 @@ export async function getStripeSecretKeyForMode(
     // test key"), never the live fallback. Charging live when you meant test
     // is the dangerous surprise.
     return (
-      (await resolve(
-        'stripe',
-        'secret_key_test',
-        process.env.STRIPE_SECRET_KEY_TEST,
-      )) ?? ''
+      stripeKeyClean(
+        await resolve(
+          'stripe',
+          'secret_key_test',
+          process.env.STRIPE_SECRET_KEY_TEST,
+        ),
+      ) ?? ''
     );
   }
   return getStripeSecretKey();
@@ -308,18 +326,22 @@ export async function getStripeSecretKeyForMode(
 
 export async function getStripeWebhookSecret(): Promise<string | null> {
   return (
-    (await resolve('stripe', 'webhook_secret', process.env.STRIPE_WEBHOOK_SECRET)) ?? null
+    stripeKeyClean(
+      await resolve('stripe', 'webhook_secret', process.env.STRIPE_WEBHOOK_SECRET),
+    ) ?? null
   );
 }
 
 export async function getStripePublishableKey(): Promise<string | null> {
   return (
-    (await resolve(
-      'stripe',
-      'publishable_key',
-      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE ??
-        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-    )) ?? null
+    stripeKeyClean(
+      await resolve(
+        'stripe',
+        'publishable_key',
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE ??
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+      ),
+    ) ?? null
   );
 }
 
@@ -339,11 +361,13 @@ export async function getStripePublishableKeyForMode(
 ): Promise<string | null> {
   if (mode === 'test') {
     return (
-      (await resolve(
-        'stripe',
-        'publishable_key_test',
-        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST,
-      )) ?? null
+      stripeKeyClean(
+        await resolve(
+          'stripe',
+          'publishable_key_test',
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST,
+        ),
+      ) ?? null
     );
   }
   return getStripePublishableKey();
