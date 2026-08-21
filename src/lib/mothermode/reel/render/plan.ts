@@ -139,6 +139,13 @@ export interface RenderMediaCue {
    * Copied verbatim from the project cue.
    */
   animated?: boolean;
+  /**
+   * Lottie sticker (a .json animation): the composition renders
+   * @remotion/lottie's <Lottie> (frame-driven — preview === render) instead
+   * of the static <Img>. Copied verbatim from the project cue; wins over
+   * `animated` when both are set.
+   */
+  lottie?: boolean;
   /** The trigger word (for logs/debugging). */
   wordText: string;
   /** Per-cue look (size/position/frame), copied verbatim from the project. */
@@ -303,6 +310,7 @@ export function shiftMediaCues(
         ...(cue.motion && cue.motion.length >= 2 ? { motion: cue.motion } : {}),
         ...(cue.sfx ? { sfx: cue.sfx } : {}),
         ...(cue.animated === true ? { animated: true } : {}),
+        ...(cue.lottie === true ? { lottie: true } : {}),
       });
     }
     // The cursor IS the next clip's start: advance from the (overlapped)

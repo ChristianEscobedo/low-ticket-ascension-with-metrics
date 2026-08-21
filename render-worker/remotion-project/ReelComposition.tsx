@@ -14,6 +14,7 @@
  */
 import React from 'react';
 import { Gif } from '@remotion/gif';
+import { Lottie } from '@remotion/lottie';
 import { AbsoluteFill, Audio, Img, OffthreadVideo, Sequence, interpolate, useCurrentFrame } from 'remotion';
 import { CaptionLayer } from './CaptionLayer';
 import type { RenderClip, RenderMediaCue, RenderPlan } from '../src/lib/mothermode/reel/render/plan';
@@ -249,7 +250,15 @@ const MediaCueLayer: React.FC<{ cue: RenderMediaCue; fps: number }> = ({ cue, fp
             : `translateY(${((1 - e) * 40).toFixed(1)}px) scale(${(0.82 + e * 0.18).toFixed(3)})${ambientTf}`,
         }}
       >
-        {cue.animated ? (
+        {cue.lottie ? (
+          // The Lottie sticker: @remotion/lottie's <Lottie> fetches the .json
+          // (delayRender, so the frame waits for it) and seeks the animation
+          // to the CURRENT frame — frame math, never a CSS clock — so the
+          // motion is identical in the preview Player and in renderMedia.
+          // Wins over `animated` when both are set. The wrapper's entrance/
+          // exit/motion transforms apply either way.
+          <Lottie src={cue.src} style={mediaStyle} />
+        ) : cue.animated ? (
           // The animated sticker: Remotion's <Gif> decodes the GIF and shows
           // the frame for the CURRENT frame — frame math, never a CSS clock —
           // so the animation is identical in the preview Player and in

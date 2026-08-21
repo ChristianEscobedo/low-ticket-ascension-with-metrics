@@ -32,6 +32,9 @@ importers:
       '@remotion/lambda':
         specifier: ^4.0.505
         version: 4.0.505(@remotion/bundler@4.0.505(@swc/helpers@0.5.5)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@swc/helpers@0.5.5)(postcss@8.5.15)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      '@remotion/lottie':
+        specifier: 4.0.505
+        version: 4.0.505(lottie-web@5.13.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@remotion/player':
         specifier: ^4.0.505
         version: 4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -1216,6 +1219,13 @@ packages:
 
   '@remotion/licensing@4.0.505':
     resolution: {integrity: sha512-kHP8puHqEqaiHk+qQDaM7xEPrd/bYbPO/ao9ToePudHiOkueRzCOd24u9ujoMkVJy1FHxFMB/VaYZztwhXFYUw==}
+
+  '@remotion/lottie@4.0.505':
+    resolution: {integrity: sha512-1u0i7u0rcC5JxeqtAn6hu4p7rKNbe2umPQAlyPT87jTUyZWrXhwMZen/Cy3ngdD1HowMNY3NLWyKBJ9lmFmj5Q==}
+    peerDependencies:
+      lottie-web: ^5
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@remotion/media-parser@4.0.505':
     resolution: {integrity: sha512-m95m0lc7UODwri8zdDFJcrKZM6CYSvT2fDD1rs0GrvvEf5HK+Puk1X1JZe0jnJATwtnMAguMP+HniS7KRbVTdA==}
@@ -3688,6 +3698,9 @@ packages:
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
+
+  lottie-web@5.13.0:
+    resolution: {integrity: sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ==}
 
   lower-case@2.0.2:
     resolution: {integrity: sha512-7fm3l3NAF9WfN6W3JOmf5drwpVqX78JtoGJ3A6W0a6ZnldM41w2fV5D490psKFTpMds8TJse/eHLFFsNHHjHgg==}
@@ -6606,6 +6619,13 @@ snapshots:
 
   '@remotion/licensing@4.0.505': {}
 
+  '@remotion/lottie@4.0.505(lottie-web@5.13.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      lottie-web: 5.13.0
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      remotion: 4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+
   '@remotion/media-parser@4.0.505': {}
 
   '@remotion/media-utils@4.0.505(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
@@ -9360,6 +9380,8 @@ snapshots:
   loose-envify@1.4.0:
     dependencies:
       js-tokens: 4.0.0
+
+  lottie-web@5.13.0: {}
 
   lower-case@2.0.2:
     dependencies:

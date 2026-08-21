@@ -298,6 +298,15 @@ export interface ReelMediaCue {
    * time). Omit/false = the static <Img> path. The url should be the GIF.
    */
   animated?: boolean;
+  /**
+   * Lottie sticker (a .json Lottie animation): the cue renderer swaps its
+   * <Img> for @remotion/lottie's <Lottie>, which is frame-driven — it seeks
+   * the animation to the current useCurrentFrame(), so the motion is
+   * identical in the preview Player and in renderMedia (which screenshots
+   * one frame at a time). Omit/false = the static <Img> path. The url should
+   * be the hosted .json. Wins over `animated` when both are set.
+   */
+  lottie?: boolean;
   /** Optional look (size/position/frame). Omit = the house card. */
   style?: ReelMediaCueStyle;
   /** A one-shot sound fired as the cue flies in (a whoosh, a pop). Omit =
@@ -788,6 +797,7 @@ function normalizeMediaCues(raw: unknown, captions: Record<string, ReelWord[]>):
         wordIndex,
         url,
         ...(o.animated === true ? { animated: true } : {}),
+        ...(o.lottie === true ? { lottie: true } : {}),
         ...(Number.isFinite(holdSec) ? { holdSec: Math.max(0.2, Math.min(8, holdSec)) } : {}),
         ...(style ? { style } : {}),
         ...(motion ? { motion } : {}),

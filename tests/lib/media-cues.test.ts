@@ -403,3 +403,81 @@ describe('media cues: animated stickers (the <Gif> branch)', () => {
     expect(worker).toBe(app);
   });
 });
+
+describe('media cues: lottie stickers (the <Lottie> branch)', () => {
+  const LOTTIE = 'https://cdn.example.com/stickers/confetti.json';
+
+  it('the lottie flag survives the save → load round-trip', () => {
+    const json = projectToJson({
+      clips: [clip('a')],
+      audio: null,
+      captions: { a: WORDS },
+      mediaCues: [{ id: 'c1', clipId: 'a', wordIndex: 1, url: LOTTIE, lottie: true }],
+    });
+    const normalized = normalizeProjectJson(json);
+    expect(normalized.mediaCues?.[0]).toMatchObject({ id: 'c1', lottie: true, url: LOTTIE });
+  });
+
+  it('a missing/false flag normalizes away (the static <Img> path stays the default)', () => {
+    const normalized = normalizeProjectJson({
+      clips: [clip('a')],
+      captions: { a: WORDS },
+      mediaCues: [
+        { id: 'c1', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png' },
+        { id: 'c2', clipId: 'a', wordIndex: 2, url: LOTTIE, lottie: false },
+        { id: 'c3', clipId: 'a', wordIndex: 0, url: LOTTIE, lottie: 'yes' },
+      ],
+    });
+    expect(normalized.mediaCues).toHaveLength(3);
+    for (const c of normalized.mediaCues ?? []) {
+      expect('lottie' in c).toBe(false);
+    }
+  });
+
+  it('the flag reaches the render plan verbatim (the composition reads cue.lottie)', () => {
+    const cues = shiftMediaCues(
+      {
+        clips: [clip('a')],
+        captions: { a: WORDS },
+        mediaCues: [{ id: 'c1', clipId: 'a', wordIndex: 1, url: LOTTIE, lottie: true }],
+      },
+      30,
+    );
+    expect(cues).toHaveLength(1);
+    expect(cues[0]).toMatchObject({ src: LOTTIE, lottie: true, wordText: 'money' });
+    // …and a static cue plans without the key at all.
+    const staticCue = shiftMediaCues(
+      {
+        clips: [clip('a')],
+        captions: { a: WORDS },
+        mediaCues: [{ id: 'c2', clipId: 'a', wordIndex: 1, url: 'https://cdn.example.com/cash.png' }],
+      },
+      30,
+    );
+    expect('lottie' in staticCue[0]).toBe(false);
+  });
+
+  it('the composition renders the <Lottie> branch for a lottie cue (both copies)', () => {
+    // The frame-driven <Lottie> is what makes preview === render for a Lottie
+    // sticker; this pins the branch so a refactor can't silently drop it back
+    // to a frozen <Img> of the .json URL (which would render nothing).
+    const { readFileSync } = require('node:fs');
+    const { join } = require('node:path');
+    const app = readFileSync(join(__dirname, '..', '..', 'remotion-project', 'ReelComposition.tsx'), 'utf8');
+    const worker = readFileSync(
+      join(__dirname, '..', '..', 'render-worker', 'remotion-project', 'ReelComposition.tsx'),
+      'utf8',
+    );
+    for (const [name, src] of [['app', app], ['worker', worker]] as const) {
+      expect(src.includes("from '@remotion/lottie'"), `${name} imports @remotion/lottie`).toBe(true);
+      expect(src.includes('cue.lottie'), `${name} branches on cue.lottie`).toBe(true);
+      expect(
+        src.includes('<Lottie src={cue.src}'),
+        `${name} renders <Lottie> for the lottie cue`,
+      ).toBe(true);
+    }
+    // The two compositions must stay byte-identical — the worker's is what
+    // burns the MP4.
+    expect(worker).toBe(app);
+  });
+});

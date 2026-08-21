@@ -32,6 +32,7 @@
     "@remotion/cli": "^4.0.505",
     "@remotion/gif": "4.0.505",
     "@remotion/lambda": "^4.0.505",
+    "@remotion/lottie": "4.0.505",
     "@remotion/player": "^4.0.505",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "9.8.0",
