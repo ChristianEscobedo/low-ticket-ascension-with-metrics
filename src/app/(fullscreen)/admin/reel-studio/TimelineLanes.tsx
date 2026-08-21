@@ -33,7 +33,17 @@ function pct(t: number, total: number): number {
   return Math.min(100, Math.max(0, (t / Math.max(total, 0.001)) * 100));
 }
 
-/** One lane row: a label gutter on the left, the track on the right. */
+/**
+ * One lane row: a FULL-WIDTH track with the label as a chip in its top-left.
+ *
+ * THE ALIGNMENT FIX. This used to be a `w-16` label gutter + a `flex-1` track.
+ * The gutter pushed the track right by 4rem+gap, but the video strip and the
+ * playhead above span the FULL container width — so a block at `left: 30%` of
+ * the track sat at a different time than the video frame at 30% of the strip.
+ * The lane blocks looked "started into the main video" and the timing read
+ * "way off". Matching the overlay/audio lanes (full-width track, no gutter)
+ * puts every lane on the SAME 0→100% time axis as the filmstrip + playhead.
+ */
 function Lane({
   label,
   icon,
@@ -47,17 +57,17 @@ function Lane({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mt-1.5 flex items-stretch gap-1.5">
-      <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border border-bone/10 bg-ink/60 py-1">
+    <div className={clsx('relative mt-1.5 h-8 overflow-hidden rounded-md border', tint)}>
+      {/* label chip — non-interactive, sits over the track's left edge */}
+      <div className="pointer-events-none absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded bg-ink/70 px-1 py-0.5">
         {icon}
-        <span className="text-[7px] font-bold uppercase tracking-wide text-bone/40">{label}</span>
+        <span className="text-[7px] font-bold uppercase tracking-wide text-bone/50">{label}</span>
       </div>
-      <div className={clsx('relative h-8 min-w-0 flex-1 overflow-hidden rounded-md border', tint)}>
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
+
 
 export default function TimelineLanes({
   clips,
