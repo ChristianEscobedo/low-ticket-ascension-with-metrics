@@ -2857,6 +2857,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
 
   /** R15: the stage is measured — the canvas is sized in pixels, never cut off. */
   const stageRef = useRef<HTMLDivElement>(null);
+  // Timeline vertical resize: 0 = auto height (the layout default).
+  // Dragging the splitter sets an explicit px height; the stage row above
+  // is grid 1fr, so it absorbs whatever the timeline gives up — which is
+  // also how you get a BIGGER preview (drag the timeline smaller).
+  const [timelineH, setTimelineH] = useState(0);
+  const timelineBoxRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = stageRef.current;
@@ -8891,7 +8897,37 @@ const [cueDragLocal, setCueDragLocal] = useState<{
             {project.audio && (
               <audio ref={audioRef} src={project.audio.url} preload="auto" className="hidden" />
             )}
-            <div className="shrink-0 px-4 pb-4">
+            {/* timeline resize splitter — drag up/down; double-click resets */}
+            <div
+              className="mx-4 mb-1 h-1.5 shrink-0 cursor-row-resize rounded-full bg-bone/10 transition-colors hover:bg-brass/40"
+              title="Drag to resize the timeline · double-click to reset"
+              onPointerDown={(e) => {
+                const el = timelineBoxRef.current;
+                if (!el) return;
+                e.preventDefault();
+                const startY = e.clientY;
+                const startH = el.offsetHeight;
+                const move = (ev: PointerEvent) => {
+                  const h = Math.min(
+                    Math.round(window.innerHeight * 0.7),
+                    Math.max(140, Math.round(startH + (startY - ev.clientY))),
+                  );
+                  setTimelineH(h);
+                };
+                const up = () => {
+                  window.removeEventListener('pointermove', move);
+                  window.removeEventListener('pointerup', up);
+                };
+                window.addEventListener('pointermove', move);
+                window.addEventListener('pointerup', up);
+              }}
+              onDoubleClick={() => setTimelineH(0)}
+            />
+            <div
+              ref={timelineBoxRef}
+              className={clsx('shrink-0 px-4 pb-4', timelineH > 0 && 'overflow-y-auto')}
+              style={timelineH > 0 ? { height: timelineH } : undefined}
+            >
 
               {/* timeline toolbar — row 1: actions; row 2: hints + zoom */}
               <div className="mb-1.5 space-y-1">

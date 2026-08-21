@@ -155,3 +155,18 @@ with the frame above it.
 
 Tests to carry: `media-cues`, `preview-throttle`, `scrub-snap`, and the
 `render-vendor-parity` guard.
+
+## 2026-08-21 — Player-transport playback + the resize splitter
+
+- **Timeline play = the Player's own play.** In remotion mode
+  `startClock`/`togglePlay` flip `playing` and return — the rAF clock no
+  longer runs on top of the Player (the stutter). `RemotionPreview` fires
+  `onEnded` at the last frame.
+- **Hold-drag persists.** `TimelineBoard` mirrors `liveHold` into a ref;
+  the window pointerup handler was reading a stale `null` closure.
+- **Resizable split.** A `cursor-row-resize` bar above the timeline sets
+  an explicit px height (`timelineH`, 0 = auto); the stage row is grid
+  `1fr` so the preview grows when the timeline shrinks. Double-click
+  resets. Clamped 140px…70vh.
+
+Full write-up: `docs/TIMELINE_RESIZE_AND_PLAYER_TRANSPORT_PORT.md`.

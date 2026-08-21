@@ -1,5 +1,15 @@
 # Reel Studio — System Port
 
+> **2026-08-21 (latest) — player-transport play + lottie fit + hold-drag
+> persist + a resizable timeline:** the timeline play button now just flips
+> the Player's `playing` prop in remotion mode (no more rAF clock fighting
+> the Player — the "timeline play is slow" fix); `SafeLottie` re-times itself
+> with `playbackRate` so the full animation fits the cue window; the lane
+> hold-drag reads a ref on pointerup so it actually saves; and a drag
+> splitter above the timeline trades height with the 1fr stage row (drag
+> down = bigger preview, double-click resets). Detail:
+> `docs/TIMELINE_RESIZE_AND_PLAYER_TRANSPORT_PORT.md`.
+
 > **2026-08-17 (latest) — the cue drag box tracks the playing frame + no
 > attach blink:** two cue-UX fixes on the Remotion preview. (1) The drag/move
 > outline used to stay on after the image flew out: the Player free-runs on

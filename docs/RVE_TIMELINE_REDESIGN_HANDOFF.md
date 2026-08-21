@@ -1,5 +1,12 @@
 # RVE-style timeline redesign — handoff
 
+> **2026-08-21 status:** the board is live and at parity — per-type
+> lanes, drag/trim/hold, snapping, zoom, Media/Audio rails. This wave
+> fixed the last three papercuts: timeline play now drives the Player's
+> own transport (smooth), lottie cues play fully (`playbackRate` fit),
+> hold-drags persist (ref fix), and the timeline/preview split drags.
+> See `docs/TIMELINE_RESIZE_AND_PLAYER_TRANSPORT_PORT.md`.
+
 **Where this picks up.** The Reel Studio timeline is being rebuilt to read like
 react-video-editor's (RVE): a left label gutter per track, colored blocks per
 type, drag-to-move + edge-trim handles, and a transport bar. The playback bugs

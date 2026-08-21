@@ -36,3 +36,10 @@ Attach a cue whose `url` is a hosted Lottie `.json` and set `lottie: true` on th
 2. Add `@remotion/lottie` pinned to the SAME Remotion version the target repo runs.
 3. Re-sync vendored worker copies and rebuild the worker image.
 4. Bring the 4 lottie tests in `tests/lib/media-cues.test.ts`; they pin the round-trip, the plan passthrough, and the composition branch in BOTH copies.
+
+## 2026-08-21 — the full animation plays
+
+`SafeLottie` now takes `windowSec` (the cue's on-screen window) and sets
+`playbackRate = lottieDuration / windowSec` from the JSON's `ip`/`op`/`fr`,
+so a 4s animation in a 1.5s cue plays through instead of cutting off.
+Both composition copies carry it — re-sync the vendored worker.
