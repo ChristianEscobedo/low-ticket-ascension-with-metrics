@@ -145,6 +145,7 @@ import {
 } from '@/lib/mothermode/reel/timeline';
 import { makeClipId, WORD_FONTS, REEL_TRANSITIONS, type ReelMediaCue, type ReelOverlayClip, type ReelTransition, type ReelTransitionType } from '@/lib/mothermode/reel/types';
 import { snapToTargets, timelineSnapTargets } from '@/lib/mothermode/reel/scrubSnap';
+import TimelineLanes from './TimelineLanes';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -9523,6 +9524,16 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       </div>
                     </div>
                   )}
+                  {/* 2A per-type lanes: captions + media cues (image/sticker/lottie)
+                      get their OWN rows under the video strip — every block is a
+                      seek target. These used to have no timeline presence at all. */}
+                  <TimelineLanes
+                    clips={project.clips}
+                    captions={project.captions ?? {}}
+                    mediaCues={project.mediaCues ?? []}
+                    total={total}
+                    onSeek={seekTimeline}
+                  />
                   {/* the playhead — grab the line itself to scrub */}
                   <div
                     className="absolute bottom-0 top-6 z-30 w-px cursor-ew-resize bg-brass shadow-[0_0_6px_rgba(168,139,92,0.8)]"
