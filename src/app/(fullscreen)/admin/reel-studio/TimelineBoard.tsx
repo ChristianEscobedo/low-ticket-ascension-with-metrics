@@ -124,7 +124,7 @@ function WaveformLane({ url }: { url: string }) {
       const w = (cv.width = cv.offsetWidth * 2);
       const h = (cv.height = cv.offsetHeight * 2);
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = 'rgba(168,139,92,0.55)';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       const step = w / peaks.length;
       for (let i = 0; i < peaks.length; i += 1) {
         const bh = Math.max(2, peaks[i] * h * 0.92);
@@ -181,8 +181,11 @@ function Lane({
 }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="mt-1 flex items-stretch gap-1">
-      <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border border-bone/10 bg-ink/70 py-1">
+    <div className="flex items-stretch gap-1 border-b border-white/[0.05] py-1">
+      {/* the gutter: a faint tinted chip carries the lane's identity — the
+          TRACK stays bare (RVE-style: only the BLOCKS are colored, and a block
+          spans just its own time range, never the whole row) */}
+      <div className={clsx('flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md py-1', tint)}>
         {icon}
         <span className="text-[7px] font-bold uppercase tracking-wide text-bone/40">{label}</span>
         <span className="flex items-center gap-0.5">
@@ -198,7 +201,7 @@ function Lane({
         </span>
       </div>
       {open ? (
-        <div className={clsx('relative min-w-0 flex-1 overflow-hidden rounded-md border', height, tint)}>
+        <div className={clsx('relative min-w-0 flex-1', height)}>
           {children}
         </div>
       ) : (
@@ -277,7 +280,7 @@ function Block({
         tint,
         selected && 'z-10 ring-2 ring-brass',
       )}
-      style={{ left: `${fromPct}%`, width: `${Math.max(1.5, widthPct)}%` }}
+      style={{ left: `${fromPct}%`, width: `${Math.max(1.5, widthPct)}%`, minWidth: 26 }}
       title={title}
     >
       {onTrimLeft && (
@@ -630,7 +633,7 @@ export default function TimelineBoard({
               key={b.id}
               fromPct={pct(b.from, total)}
               widthPct={pct(b.to, total) - pct(b.from, total)}
-              tint="border-sky-400/40 bg-sky-400/20 hover:bg-sky-400/35"
+              tint="border-sky-300/50 bg-sky-500/60 hover:bg-sky-500/75"
               title={`${b.name} — ${b.count} words (click to seek)`}
               onSelect={() => onSeek(b.from)}
             >
@@ -660,7 +663,7 @@ export default function TimelineBoard({
             <Block
               fromPct={pct(b.from, total)}
               widthPct={pct(to, total) - pct(b.from, total)}
-              tint="border-fuchsia-400/40 bg-fuchsia-400/20 hover:bg-fuchsia-400/35"
+              tint="border-fuchsia-300/50 bg-fuchsia-500/60 hover:bg-fuchsia-500/75"
               title={`${b.kind} fly-in on "${b.label}" — click to seek · right edge = hold`}
               onSelect={() => onSeek(b.from)}
               onTrimRight={
@@ -704,7 +707,7 @@ export default function TimelineBoard({
             <Block
               fromPct={Math.min(98, pct(o.offsetSec, total))}
               widthPct={Math.max(2, pct(eff, total))}
-              tint="border-violet-400/50 bg-violet-500/25"
+              tint="border-violet-300/50 bg-violet-500/65"
               title={`${o.name} — overlay @ ${o.offsetSec.toFixed(1)}s · drag to move (snaps) · right edge trims · click seeks`}
               onSelect={() => onSeek(o.offsetSec)}
               onDragMove={(deltaPct) => {
@@ -751,11 +754,10 @@ export default function TimelineBoard({
           icon={<Music className="h-3 w-3 text-brass/80" />}
           tint="border-brass/30 bg-brass/[0.06]"
         >
-          <WaveformLane url={audio.url} />
           <Block
             fromPct={pct(audio.offsetSec, total)}
             widthPct={Math.max(3, pct(Math.min(total - audio.offsetSec, audio.durationSec ?? total - audio.offsetSec), total))}
-            tint="border-brass/40 bg-brass/15"
+            tint="border-brass/60 bg-brass/70"
             title={`${audio.name} — drag to move the audio bed`}
             onDragMove={(deltaPct) => {
               const deltaSec = (deltaPct / 100) * total;
@@ -764,17 +766,20 @@ export default function TimelineBoard({
             }}
             onDragEnd={onAudioMoveEnd}
           >
-            <span className="flex items-center gap-1 text-[8px] font-medium text-bone/85">
-              <Music className="h-2.5 w-2.5 shrink-0 text-brass" />
+            {/* the waveform rides INSIDE the block (RVE-style: the block spans
+                the bed's own time range, peaks in white on the brass fill) */}
+            <WaveformLane url={audio.url} />
+            <span className="relative z-10 flex items-center gap-1 text-[8px] font-semibold text-ink">
+              <Music className="h-2.5 w-2.5 shrink-0" />
               {audio.name}
-              <span className="shrink-0 text-brass/80">@{audio.offsetSec.toFixed(1)}s</span>
+              <span className="shrink-0 text-ink/70">@{audio.offsetSec.toFixed(1)}s</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onAudioRemove();
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="ml-auto shrink-0 text-bone/40 hover:text-red-300"
+                className="ml-auto shrink-0 text-ink/50 hover:text-red-700"
                 title="Remove the audio bed"
               >
                 <Trash2 className="h-2.5 w-2.5" />

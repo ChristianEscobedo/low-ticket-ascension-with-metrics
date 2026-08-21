@@ -44,6 +44,7 @@ import {
   Film,
   FileText,
   GitFork,
+  Image as ImageIcon,
   Layers,
   Library,
   LayoutList,
@@ -144,6 +145,7 @@ import {
 import { makeClipId, WORD_FONTS, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
 import { snapToTargets, timelineSnapTargets } from '@/lib/mothermode/reel/scrubSnap';
 import TimelineBoard from './TimelineBoard';
+import MediaPanel from './MediaPanel';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -2666,7 +2668,7 @@ function ScheduleSheet({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'clips' | 'captions' | 'scripts' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes' | 'clone';
+type Tab = 'clips' | 'media' | 'audio' | 'captions' | 'scripts' | 'board' | 'director' | 'scoreboard' | 'vault' | 'post' | 'genes' | 'clone';
 
 /** R6a Board shot: one line of the story — prompt + footage, in order. */
 interface BoardShot {
@@ -4448,6 +4450,55 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     );
   }
 
+  /** The word under the playhead in the STAGE clip (cues key to words). */
+  function wordIndexAtPlayhead(): number | null {
+    if (!project || !stageClip) return null;
+    const words = project.captions[stageClip.id] ?? [];
+    if (!words.length) return null;
+    const local = previewTime + (stageClip.trimStartSec ?? 0);
+    for (let i = 0; i < words.length; i += 1) {
+      if (local >= words[i].start && local <= words[i].end) return i;
+    }
+    // In a gap between words — take the nearest word by start.
+    let best = 0;
+    let bestD = Infinity;
+    words.forEach((w, i) => {
+      const d = Math.abs(w.start - local);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  /** Media tab attach: a picked asset becomes a fly-in at the playhead's word. */
+  async function attachCueAtPlayhead(url: string, opts?: { animated?: boolean; lottie?: boolean }) {
+    if (!project || !stageClip) return;
+    const wi = wordIndexAtPlayhead();
+    if (wi == null) {
+      setError('No transcript words here — transcribe the scene first (the CC button).');
+      return;
+    }
+    const rest = (project.mediaCues ?? []).filter(
+      (c) => !(c.clipId === stageClip.id && c.wordIndex === wi),
+    );
+    await saveMediaCues([
+      ...rest,
+      {
+        id: makeClipId(),
+        clipId: stageClip.id,
+        wordIndex: wi,
+        url,
+        ...(opts?.animated ? { animated: true } : {}),
+        ...(opts?.lottie ? { lottie: true } : {}),
+      },
+    ]);
+    setNote(
+      `Fly-in attached on "${project.captions[stageClip.id]?.[wi]?.word ?? 'the word'}" — it's on a media lane.`,
+    );
+  }
+
   /** Cue source: GIPHY stickers — search → a transparent sticker attaches as
    *  the fly-in's image. The pick attaches the GIF with `animated` set, so the
    *  cue renders through the frame-driven <Gif> branch (preview === render). */
@@ -5749,6 +5800,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   ['post', 'Post', Layers],
                   ['clone', 'Clone', PersonStanding],
                   ['clips', 'Scenes', Film],
+                  ['media', 'Media', ImageIcon],
+                  ['audio', 'Audio', Music],
                   ['captions', 'Captions', Mic],
                   ['scripts', 'Scripts', FileText],
                   ['board', 'Board', LayoutList],
@@ -5786,6 +5839,8 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   {tab === 'post' && 'Post assets'}
                   {tab === 'clone' && 'AI Clone'}
                   {tab === 'clips' && 'Scenes'}
+                  {tab === 'media' && 'Media'}
+                  {tab === 'audio' && 'Audio'}
                   {tab === 'captions' && 'Captions'}
                   {tab === 'scripts' && 'Script Lab'}
                   {tab === 'board' && 'The Board'}
@@ -6107,7 +6162,30 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     </div>
                   ))}
 
-                  {/* audio bed — folded into Scenes (the timeline re-times it by dragging) */}
+                  {/* audio + b-roll moved to their own rail tabs (Audio / Media) */}
+                </div>
+              )}
+
+              {tab === 'media' && (
+                <MediaPanel
+                  hasWords={!!stageClip && (project.captions[stageClip.id]?.length ?? 0) > 0}
+                  onAttach={(url, opts) => void attachCueAtPlayhead(url, opts)}
+                  onAddOverlay={(o) => {
+                    patch({ overlays: [...(project.overlays ?? []), o] });
+                    setNote(`B-roll added at ${fmtSec(o.offsetSec)} — drag it on the overlay lane.`);
+                  }}
+                  getOffsetSec={() => clockRef.current.t}
+                  onNote={setNote}
+                  onError={setError}
+                />
+              )}
+
+              {tab === 'audio' && (
+                <div className="space-y-2">
+                  <p className="rounded-xl border border-bone/10 bg-bone/[0.03] px-2.5 py-2 text-[10px] leading-relaxed text-bone/45">
+                    The audio bed plays under the whole reel. Drag its block on the audio lane to
+                    re-time it — the waveform shows what plays where.
+                  </p>
                   <div className="rounded-xl border border-bone/10 bg-bone/[0.04] p-2.5">
                     <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-bone/40">
                       <Music className="h-3 w-3" /> Audio bed
@@ -6168,76 +6246,6 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         />
                       </div>
                     )}
-                  </div>
-
-                  {/* R25 overlay (b-roll) layers — add a clip ON TOP at the playhead */}
-                  <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.05] p-2.5">
-                    <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
-                      <Layers className="h-3 w-3" /> Overlay layers
-                      <span className="ml-auto text-[9px] font-normal normal-case text-violet-300/50">
-                        {(project.overlays ?? []).length} on the lane
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        value={overlayUrl}
-                        onChange={(e) => setOverlayUrl(e.target.value)}
-                        placeholder="https://… b-roll MP4/WebM"
-                        className="min-w-0 flex-1 rounded-lg border border-violet-500/25 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
-                      />
-                      <button
-                        onClick={() => void addOverlayByUrl()}
-                        disabled={!overlayUrl.trim()}
-                        className="shrink-0 rounded-lg bg-violet-500 px-2.5 py-1.5 text-[10px] font-semibold text-white hover:bg-violet-500/90 disabled:opacity-40"
-                        title="Add this clip as an overlay layer at the playhead"
-                      >
-                        + layer
-                      </button>
-                    </div>
-                    {/* Pexels b-roll: search → a stock clip attaches as an
-                        overlay at the playhead (no Seedance render, no upload). */}
-                    <div className="mt-1.5 flex items-center gap-1">
-                      <input
-                        value={brollQuery}
-                        onChange={(e) => setBrollQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void searchBroll();
-                        }}
-                        placeholder="or search Pexels b-roll (city, money, gym…)"
-                        className="min-w-0 flex-1 rounded-lg border border-violet-500/25 bg-ink px-2 py-1.5 text-[11px] text-bone/80 outline-none placeholder:text-bone/25"
-                      />
-                      <button
-                        onClick={() => void searchBroll()}
-                        disabled={brollBusy || !brollQuery.trim()}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-500/40 px-2 py-1.5 text-[10px] font-semibold text-violet-200 hover:bg-violet-500/15 disabled:opacity-40"
-                        title="Search Pexels stock videos — a clip attaches as an overlay at the playhead"
-                      >
-                        {brollBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                        search
-                      </button>
-                    </div>
-                    {brollResults && brollResults.length > 0 && (
-                      <div className="mt-1.5 grid max-h-32 grid-cols-3 gap-1 overflow-y-auto">
-                        {brollResults.slice(0, 12).map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => addBrollOverlay(c)}
-                            title={`${fmtSec(c.durationSec)} — add as an overlay at the playhead`}
-                            className="group relative overflow-hidden rounded border border-violet-400/20 hover:border-violet-400"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={c.thumbUrl} alt="" className="h-14 w-full object-cover" loading="lazy" />
-                            <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[8px] font-semibold text-white/90">
-                              {fmtSec(c.durationSec)}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <p className="mt-1 text-[9px] leading-relaxed text-violet-200/40">
-                      Plays picture-in-picture over the main track at the playhead. Drag it on the
-                      violet lane to re-time. (Compose burn-in for layers lands next round.)
-                    </p>
                   </div>
                 </div>
               )}
