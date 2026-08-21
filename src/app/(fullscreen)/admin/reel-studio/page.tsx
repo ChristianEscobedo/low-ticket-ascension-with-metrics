@@ -4014,11 +4014,34 @@ const [cueDragLocal, setCueDragLocal] = useState<{
         v.dataset.clipUrl = hit.clip.url;
         pendingSeekRef.current = srcLocal;
         v.src = hit.clip.url;
-      } else if (Math.abs(v.currentTime - srcLocal) > 0.12) {
-        try {
-          v.currentTime = srcLocal;
-        } catch {
-          /* metadata pending */
+      } else {
+        // DRIFT NUDGE (playing): a hard seek is a visible jump, so small drift
+        // closes with a playbackRate nudge instead — behind → 1.06× to catch up,
+        // ahead → 0.94× to ease off, back to 1× inside ~1.5 frames. Only a REAL
+        // divergence (>0.4s — a scrub/seek the element missed) hard-seeks.
+        // Paused keeps the old tight hard-seek (a dragged playhead lands exact).
+        const drift = v.currentTime - srcLocal;
+        const ad = Math.abs(drift);
+        if (clockRef.current.playing) {
+          if (ad > 0.4) {
+            v.playbackRate = 1;
+            try {
+              v.currentTime = srcLocal;
+            } catch {
+              /* metadata pending */
+            }
+          } else if (ad > 0.05) {
+            v.playbackRate = drift < 0 ? 1.06 : 0.94;
+          } else if (v.playbackRate !== 1) {
+            v.playbackRate = 1;
+          }
+        } else if (ad > 0.12) {
+          if (v.playbackRate !== 1) v.playbackRate = 1;
+          try {
+            v.currentTime = srcLocal;
+          } catch {
+            /* metadata pending */
+          }
         }
       }
       if (clockRef.current.playing && v.paused && !swappingRef.current) {
@@ -4097,6 +4120,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     setPlaying(false);
     const v = previewRef.current;
     if (v && !v.paused) v.pause();
+    if (v && v.playbackRate !== 1) v.playbackRate = 1; // drop any drift nudge
     const ov = overlayRef.current;
     if (ov && !ov.paused) ov.pause();
     syncAudioAt(c.t, false);
@@ -4127,6 +4151,37 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     syncVideoToClock(clockRef.current.t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.clips, project?.id, total]);
+
+  // SEAM PRELOAD: while playing, warm the NEXT scene's file ~1.5s before the
+  // boundary — a range fetch warms the HTTP cache and a detached preloading
+  // <video> warms the decode path, so the src swap at the seam (and Remotion's
+  // OffthreadVideo frame extraction) reads warm instead of hitching on a cold
+  // fetch. Deduped per clip id; best-effort, never blocks the clock.
+  const warmedClipRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!playing || !project) return;
+    const hit = clipAtTime(project.clips, playheadSec);
+    if (!hit) return;
+    const next = project.clips[hit.index + 1];
+    if (!next || warmedClipRef.current.has(next.id)) return;
+    if (effectiveClipDuration(hit.clip) - hit.local > 1.5) return;
+    warmedClipRef.current.add(next.id);
+    void fetch(next.url, { headers: { range: 'bytes=0-1048575' }, cache: 'force-cache' }).catch(
+      () => {},
+    );
+    try {
+      const warm = document.createElement('video');
+      warm.preload = 'auto';
+      warm.muted = true;
+      warm.src = next.url;
+      window.setTimeout(() => {
+        warm.removeAttribute('src');
+        warm.load();
+      }, 12000);
+    } catch {
+      /* best-effort */
+    }
+  }, [playheadSec, playing, project]);
 
   /**
    * CUT TAIL (non-destructive): the scene now ENDS at the playhead. This is the
@@ -8985,13 +9040,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   <div
                     className="relative w-full"
                     style={{
-                      // PAGE-WIDTH, ALWAYS. The scenes inside are %-of-total-time,
-                      // so the track is simply 100% of the visible strip — a 3-min
-                      // video crams more scenes into the SAME width instead of
-                      // growing thousands of px and shoving the preview off-screen.
-                      // (Zoom now only re-scales the SCENE widths via pxPerSec; the
-                      // strip itself stays put and scrolls if scenes overflow.)
-                      width: '100%',
+                      // PAGE-WIDTH at zoom 1; past fit the track is zoom× wider
+                      // and the strip SCROLLS (the scroller above clips it, so the
+                      // stage column never inflates — the old blowout bug). Every
+                      // child (ruler, board, playhead) is %-of-total-time, so one
+                      // width zooms the whole timeline like a real editor.
+                      width: `${Math.max(100, zoom * 100)}%`,
                     }}
                   >
                     <TimeRuler
@@ -9096,10 +9150,15 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       const v = previewRef.current;
                       syncAudioAt(playheadSec, v ? !v.paused : false);
                     }}
+                    playheadSec={playheadSec}
+                    ccOn={ccOn}
+                    onToggleCc={() => setCcOn((v) => !v)}
+                    onCueHold={(id, holdSec) => void patchCue(id, { holdSec })}
+                    onOverlayTrim={(id, trimEndSec) => patchOverlay(id, { trimEndSec })}
                   />
                   {/* the playhead — grab the line itself to scrub */}
                   <div
-                    className="absolute bottom-0 top-6 z-30 w-px cursor-ew-resize bg-brass shadow-[0_0_6px_rgba(168,139,92,0.8)]"
+                    className="absolute bottom-0 top-6 z-30 w-[2px] cursor-ew-resize bg-brass shadow-[0_0_6px_rgba(168,139,92,0.8)]"
                     style={{ left: `${Math.min(100, (playheadSec / Math.max(total, 0.001)) * 100)}%` }}
                     onPointerDown={(e) => {
                       e.stopPropagation();

@@ -21,6 +21,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
   Film,
   MessageSquareText,
   Image as ImageIcon,
@@ -155,12 +159,15 @@ function clipStartAt(clips: ReelClip[], index: number): number {
   return t;
 }
 
-/** One lane row: a label gutter on the left, the track on the right. */
+/** One lane row: a label gutter on the left, the track on the right.
+ *  The gutter's chevron folds the lane to a thin strip (RVE/Premiere lane
+ *  collapse — per-element lanes need it to keep the board short). */
 function Lane({
   label,
   icon,
   tint,
   height = 'h-9',
+  gutterExtra,
   children,
 }: {
   label: string;
@@ -168,17 +175,35 @@ function Lane({
   /** Border + bg tint classes for the track. */
   tint: string;
   height?: string;
+  /** Extra controls in the gutter (e.g. the captions lane's canvas eye). */
+  gutterExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(true);
   return (
     <div className="mt-1 flex items-stretch gap-1">
       <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border border-bone/10 bg-ink/70 py-1">
         {icon}
         <span className="text-[7px] font-bold uppercase tracking-wide text-bone/40">{label}</span>
+        <span className="flex items-center gap-0.5">
+          {gutterExtra}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-bone/30 hover:text-bone/70"
+            title={open ? 'Collapse this lane' : 'Expand this lane'}
+          >
+            {open ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+          </button>
+        </span>
       </div>
-      <div className={clsx('relative min-w-0 flex-1 overflow-hidden rounded-md border', height, tint)}>
-        {children}
-      </div>
+      {open ? (
+        <div className={clsx('relative min-w-0 flex-1 overflow-hidden rounded-md border', height, tint)}>
+          {children}
+        </div>
+      ) : (
+        <div className="h-1.5 min-w-0 flex-1 self-center rounded-full bg-bone/[0.07]" />
+      )}
     </div>
   );
 }
@@ -296,6 +321,11 @@ export default function TimelineBoard({
   onAudioRemove,
   onSeek,
   onAudioMoveEnd,
+  playheadSec,
+  onCueHold,
+  onOverlayTrim,
+  ccOn,
+  onToggleCc,
 }: {
   clips: ReelClip[];
   captions: Record<string, ReelWord[]>;
@@ -320,10 +350,43 @@ export default function TimelineBoard({
   onSeek: (tSec: number) => void;
   /** Pointer-up after dragging the audio bed — re-sync the audio element. */
   onAudioMoveEnd?: () => void;
+  /** The studio playhead — a snap target for block drags. */
+  playheadSec?: number;
+  /** A cue's right-edge drag commits a new holdSec (on release, not per move —
+   *  the persist path POSTs, so a per-move commit would hammer the API). */
+  onCueHold?: (id: string, holdSec: number) => void;
+  /** An overlay's right-edge drag trims its tail (local state — safe per move). */
+  onOverlayTrim?: (id: string, trimEndSec: number) => void;
+  /** The captions lane's eye: is the caption layer showing on the canvas. */
+  ccOn?: boolean;
+  onToggleCc?: () => void;
 }) {
   if (total <= 0) return null;
   const dragIndex = useRef<number | null>(null);
   const [liveTrim, setLiveTrim] = useState<{ id: string; trim: number } | null>(null);
+  const [liveHold, setLiveHold] = useState<{ id: string; hold: number } | null>(null);
+
+  // Snap targets for block drags: 0, every scene boundary, the end, the playhead
+  // (the same magnet the ruler has — a drag near an edge lands ON it).
+  const snapTargets = [
+    0,
+    ...clips.map((_, i) => clipStartAt(clips, i)),
+    total,
+    ...(typeof playheadSec === 'number' && Number.isFinite(playheadSec) ? [playheadSec] : []),
+  ];
+  function snapSec(t: number): number {
+    const threshold = Math.max(0.08, total * 0.008);
+    let best = t;
+    let bestD = threshold;
+    for (const s of snapTargets) {
+      const d = Math.abs(t - s);
+      if (d <= bestD) {
+        best = s;
+        bestD = d;
+      }
+    }
+    return best;
+  }
 
   // ---- captions + media blocks (same math the old TimelineLanes used) ------
   const captionBlocks = clips
@@ -347,9 +410,10 @@ export default function TimelineBoard({
       const start = clipStartAt(clips, clipIdx);
       const trimStart = clips[clipIdx].trimStartSec ?? 0;
       const from = start + Math.max(0, w.start - trimStart);
-      const to = start + Math.max(0.1, w.end - trimStart) + (cue.holdSec ?? 1.0);
+      const wordTo = start + Math.max(0.1, w.end - trimStart);
+      const hold = cue.holdSec ?? 1.0;
       const kind = cue.lottie ? 'lottie' : cue.animated ? 'sticker' : 'image';
-      return { id: cue.id, from, to, kind, label: w.word };
+      return { id: cue.id, from, wordTo, hold, kind, label: w.word };
     })
     .filter((b): b is NonNullable<typeof b> => b != null);
 
@@ -385,7 +449,7 @@ export default function TimelineBoard({
               className={clsx(
                 'group absolute top-0 h-full cursor-pointer overflow-hidden rounded-md border shadow-sm transition-colors',
                 selected
-                  ? 'z-10 border-brass bg-brass/25 ring-2 ring-brass'
+                  ? 'z-10 border-brass bg-brass/25 ring-2 ring-brass shadow-[0_0_16px_rgba(168,139,92,0.4)]'
                   : 'border-white/10 bg-neutral-900/60 hover:border-white/25',
               )}
               style={{ left: `${pct(clipStartAt(clips, i), total)}%`, width: `${Math.max(2, pct(eff, total))}%` }}
@@ -548,6 +612,18 @@ export default function TimelineBoard({
           label="captions"
           icon={<MessageSquareText className="h-3 w-3 text-sky-300/80" />}
           tint="border-sky-400/25 bg-sky-400/[0.05]"
+          gutterExtra={
+            onToggleCc ? (
+              <button
+                type="button"
+                onClick={onToggleCc}
+                className="text-bone/30 hover:text-bone/70"
+                title={ccOn ? 'Hide captions on the canvas' : 'Show captions on the canvas'}
+              >
+                {ccOn ? <Eye className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
+              </button>
+            ) : undefined
+          }
         >
           {captionBlocks.map((b) => (
             <Block
@@ -567,75 +643,106 @@ export default function TimelineBoard({
         </Lane>
       )}
 
-      {/* MEDIA lane (image / sticker / lottie fly-ins) */}
-      {mediaBlocks.length > 0 && (
-        <Lane
-          label="media"
-          icon={<ImageIcon className="h-3 w-3 text-fuchsia-300/80" />}
-          tint="border-fuchsia-400/25 bg-fuchsia-400/[0.05]"
-        >
-          {mediaBlocks.map((b) => {
-            const Icon = b.kind === 'lottie' ? Sparkles : b.kind === 'sticker' ? Sticker : ImageIcon;
-            return (
-              <Block
-                key={b.id}
-                fromPct={pct(b.from, total)}
-                widthPct={pct(b.to, total) - pct(b.from, total)}
-                tint="border-fuchsia-400/40 bg-fuchsia-400/20 hover:bg-fuchsia-400/35"
-                title={`${b.kind} fly-in on "${b.label}" (click to seek)`}
-                onSelect={() => onSeek(b.from)}
-              >
-                <span className="flex items-center gap-1 text-[8px] font-medium text-fuchsia-100">
-                  <Icon className="h-2.5 w-2.5 shrink-0 text-fuchsia-200" />
-                  {b.label}
-                </span>
-              </Block>
-            );
-          })}
-        </Lane>
-      )}
+      {/* MEDIA lanes — ONE ROW PER FLY-IN (two cues can overlap in time, so a
+          shared lane would stack them). Click seeks; the right edge drags the
+          hold (how long it stays after its word) and commits on release. */}
+      {mediaBlocks.map((b, bi) => {
+        const Icon = b.kind === 'lottie' ? Sparkles : b.kind === 'sticker' ? Sticker : ImageIcon;
+        const live = liveHold?.id === b.id ? liveHold.hold : null;
+        const to = b.wordTo + (live ?? b.hold);
+        return (
+          <Lane
+            key={b.id}
+            label={`media ${bi + 1}`}
+            icon={<Icon className="h-3 w-3 text-fuchsia-300/80" />}
+            tint="border-fuchsia-400/25 bg-fuchsia-400/[0.05]"
+          >
+            <Block
+              fromPct={pct(b.from, total)}
+              widthPct={pct(to, total) - pct(b.from, total)}
+              tint="border-fuchsia-400/40 bg-fuchsia-400/20 hover:bg-fuchsia-400/35"
+              title={`${b.kind} fly-in on "${b.label}" — click to seek · right edge = hold`}
+              onSelect={() => onSeek(b.from)}
+              onTrimRight={
+                onCueHold
+                  ? (deltaPct) => {
+                      const deltaSec = (deltaPct / 100) * total;
+                      const hold = Math.round(Math.max(0.3, Math.min(6, b.hold + deltaSec)) * 10) / 10;
+                      setLiveHold({ id: b.id, hold });
+                    }
+                  : undefined
+              }
+              onDragEnd={() => {
+                if (liveHold?.id === b.id && onCueHold) onCueHold(b.id, liveHold.hold);
+                setLiveHold(null);
+              }}
+            >
+              <span className="flex items-center gap-1 text-[8px] font-medium text-fuchsia-100">
+                <Icon className="h-2.5 w-2.5 shrink-0 text-fuchsia-200" />
+                {b.label}
+                {live != null && (
+                  <span className="shrink-0 rounded bg-fuchsia-400/40 px-0.5 font-bold">{live.toFixed(1)}s</span>
+                )}
+              </span>
+            </Block>
+          </Lane>
+        );
+      })}
 
-      {/* OVERLAY (b-roll) lane — drag to re-time, × to remove. */}
-      {overlays.length > 0 && (
-        <Lane
-          label="overlay"
-          icon={<Layers className="h-3 w-3 text-violet-300/80" />}
-          tint="border-violet-500/25 bg-violet-500/[0.06]"
-        >
-          {overlays.map((o) => {
-            const eff = effectiveClipDuration(o);
-            return (
-              <Block
-                key={o.id}
-                fromPct={Math.min(98, pct(o.offsetSec, total))}
-                widthPct={Math.max(2, pct(eff, total))}
-                tint="border-violet-400/50 bg-violet-500/25"
-                title={`${o.name} — overlay @ ${o.offsetSec.toFixed(1)}s (drag to move)`}
-                onDragMove={(deltaPct) => {
-                  const deltaSec = (deltaPct / 100) * total;
-                  onOverlayMove(o.id, Math.round(Math.max(0, Math.min(o.offsetSec + deltaSec, total - 0.1)) * 10) / 10);
-                }}
-              >
-                <span className="flex items-center gap-1 text-[8px] font-medium text-violet-100">
-                  <Layers className="h-2.5 w-2.5 shrink-0 text-violet-200" />
-                  {o.name}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOverlayRemove(o.id);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="ml-auto shrink-0 text-violet-200/60 hover:text-red-300"
-                    title="Remove this layer"
-                  >
-                    <Trash2 className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              </Block>
-            );
-          })}
-        </Lane>
-      )}
+      {/* OVERLAY (b-roll) lanes — ONE ROW PER LAYER (layers overlap in time).
+          Drag moves (snaps to scene edges + the playhead), right edge trims
+          the tail, click seeks, × removes. */}
+      {overlays.map((o, oi) => {
+        const eff = effectiveClipDuration(o);
+        return (
+          <Lane
+            key={o.id}
+            label={`overlay ${oi + 1}`}
+            icon={<Layers className="h-3 w-3 text-violet-300/80" />}
+            tint="border-violet-500/25 bg-violet-500/[0.06]"
+          >
+            <Block
+              fromPct={Math.min(98, pct(o.offsetSec, total))}
+              widthPct={Math.max(2, pct(eff, total))}
+              tint="border-violet-400/50 bg-violet-500/25"
+              title={`${o.name} — overlay @ ${o.offsetSec.toFixed(1)}s · drag to move (snaps) · right edge trims · click seeks`}
+              onSelect={() => onSeek(o.offsetSec)}
+              onDragMove={(deltaPct) => {
+                const deltaSec = (deltaPct / 100) * total;
+                const next = Math.max(0, Math.min(o.offsetSec + deltaSec, total - 0.1));
+                onOverlayMove(o.id, Math.round(snapSec(next) * 10) / 10);
+              }}
+              onTrimRight={
+                onOverlayTrim
+                  ? (deltaPct) => {
+                      const deltaSec = (deltaPct / 100) * total;
+                      const trim = Math.round(
+                        Math.max(0, Math.min(o.trimEndSec - deltaSec, o.durationSec - 0.1)) * 10,
+                      ) / 10;
+                      onOverlayTrim(o.id, trim);
+                    }
+                  : undefined
+              }
+            >
+              <span className="flex items-center gap-1 text-[8px] font-medium text-violet-100">
+                <Layers className="h-2.5 w-2.5 shrink-0 text-violet-200" />
+                {o.name}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOverlayRemove(o.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="ml-auto shrink-0 text-violet-200/60 hover:text-red-300"
+                  title="Remove this layer"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            </Block>
+          </Lane>
+        );
+      })}
 
       {/* AUDIO lane — drag to re-time, × to remove. */}
       {audio && (
@@ -652,7 +759,8 @@ export default function TimelineBoard({
             title={`${audio.name} — drag to move the audio bed`}
             onDragMove={(deltaPct) => {
               const deltaSec = (deltaPct / 100) * total;
-              onAudioMove(Math.round(Math.max(0, Math.min(audio.offsetSec + deltaSec, total - 0.1)) * 10) / 10);
+              const next = Math.max(0, Math.min(audio.offsetSec + deltaSec, total - 0.1));
+              onAudioMove(Math.round(snapSec(next) * 10) / 10);
             }}
             onDragEnd={onAudioMoveEnd}
           >
