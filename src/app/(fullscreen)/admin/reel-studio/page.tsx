@@ -3268,6 +3268,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
   const audioInput = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const [playheadSec, setPlayheadSec] = useState(0);
+  /**
+   * THE SHAKE FIX (page side). True while the user drags the timeline playhead.
+   * Passed to RemotionPreview, which pauses the Player and ignores its stale
+   * frame reports for the drag's duration — so the drag is the ONLY writer of
+   * time and the preview stops shaking. Cleared on pointer-up.
+   */
+  const [scrubbing, setScrubbing] = useState(false);
   const pendingSeekRef = useRef<number | null>(null);
   /**
    * R25 THE PLAYBACK CLOCK — the single source of truth for time.
@@ -8837,6 +8844,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         aspect={aspect === '9:16' ? 'vertical' : aspect === '16:9' ? 'landscape' : 'square'}
                         playheadSec={playheadSec}
                         onFrameSec={onPlayerFrame}
+                        scrubbing={scrubbing}
                         freePlaceEdit={stackEditMode}
                         showAllWords={stackEditMode && showAllCardWords}
                       />
@@ -9525,6 +9533,10 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       const el = e.currentTarget as HTMLElement;
                       const container = el.parentElement as HTMLElement;
                       el.setPointerCapture(e.pointerId);
+                      // THE SHAKE FIX: claim time for the drag. RemotionPreview
+                      // pauses the Player + ignores its stale frame reports while
+                      // this is set, so the drag is the ONLY writer of playheadSec.
+                      setScrubbing(true);
                       // rAF-coalesced scrub: state updates at most once per painted frame,
                       // with one final commit on release.
                       let pendingFrac = 0;
@@ -9544,6 +9556,9 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         el.removeEventListener('pointerup', up);
                         cancelAnimationFrame(raf);
                         seekTimeline(Math.round(pendingFrac * total * 10) / 10);
+                        // Release the claim AFTER the final seek lands — one
+                        // authoritative frame, then the Player can report again.
+                        setScrubbing(false);
                       };
 
                       el.addEventListener('pointermove', move);

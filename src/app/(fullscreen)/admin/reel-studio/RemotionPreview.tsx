@@ -72,6 +72,7 @@ export default function RemotionPreview({
   fps = DEFAULT_FPS,
   playheadSec,
   onFrameSec,
+  scrubbing = false,
 }: {
   project: Pick<
     ReelProject,
@@ -100,6 +101,15 @@ export default function RemotionPreview({
   freePlaceEdit?: boolean;
   /** Edit mode opt-in: show EVERY card word (not just the on-screen page). */
   showAllWords?: boolean;
+  /**
+   * THE SHAKE FIX. While the user drags the timeline playhead, the drag is the
+   * SINGLE writer of time. Without this the Player kept playing (its own
+   * transport) and reported frames back through onFrameSec while the drag also
+   * wrote playheadSec — two writers fighting every frame, so the preview shook
+   * and the playhead clunked. While `scrubbing` we pause the Player and ignore
+   * its frame reports; on release one authoritative seek lands.
+   */
+  scrubbing?: boolean;
 }) {
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
   const playerRef = useRef<PlayerRef>(null);
@@ -256,10 +266,15 @@ export default function RemotionPreview({
    */
   const onFrameSecRef = useRef(onFrameSec);
   onFrameSecRef.current = onFrameSec;
+  // While scrubbing, the drag owns time — the Player's frame reports are stale
+  // (it was mid-flight when the drag grabbed it) and must not write the clock.
+  const scrubbingRef = useRef(scrubbing);
+  scrubbingRef.current = scrubbing;
   useEffect(() => {
     const p = playerRef.current;
     if (!p || !plan) return;
     const onFrame = (e: { detail?: { frame?: unknown } }) => {
+      if (scrubbingRef.current) return;
       const cb = onFrameSecRef.current;
       if (!cb) return;
       const frame = e.detail?.frame;
@@ -270,6 +285,25 @@ export default function RemotionPreview({
     p.addEventListener('frameupdate', onFrame as never);
     return () => p.removeEventListener('frameupdate', onFrame as never);
   }, [plan]);
+
+  /**
+   * Pause the Player the instant a scrub starts. The Player has `controls` and
+   * no `playing` prop, so it free-runs; left alone it keeps advancing (and
+   * firing frameupdate) while the drag tries to steer — the shake. Pausing on
+   * scrub-start makes the drag the only thing moving time. We do NOT auto-
+   * resume on release: the user hits play (or Space) to continue, which is the
+   * CapCut/Premiere scrub behavior.
+   */
+  useEffect(() => {
+    if (!scrubbing) return;
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      if (p.isPlaying()) p.pause();
+    } catch {
+      /* not mounted yet */
+    }
+  }, [scrubbing]);
 
   if (!plan) {
     return (
