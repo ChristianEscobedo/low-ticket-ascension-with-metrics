@@ -21,6 +21,7 @@
  * (the useCaptionEdit return) — this file owns no state of its own.
  */
 import dynamic from 'next/dynamic';
+import { useCallback, useMemo } from 'react';
 import type {
   ReelClip,
   ReelMediaCue,
@@ -120,7 +121,9 @@ export function CaptionEditSurface({
   // The WordDragLayer's word list — identical on both branches: the current
   // clip's words, free-placed at the playhead's page, with the live local
   // drag offsets merged in.
-  const dragWords = (() => {
+  // useMemo: this list feeds the WordDragLayer's measure effect — a fresh
+  // array identity per render re-ran it (measure -> setState -> render).
+  const dragWords = useMemo(() => {
     if (!currentClip) return [];
     const base = project.captions[currentClip.id] ?? [];
     const clipSec = Math.max(
@@ -178,7 +181,16 @@ export function CaptionEditSurface({
       }
     }
     return list;
-  })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentClip, project, playheadSec, showAllCardWords, wordPlaceLocal, wordScaleLocal, fxTarget]);
+
+  // Stable identity — an inline closure here re-ran the measure effect on
+  // EVERY render (same loop).
+  const mapGlyphIndex = useCallback(
+    (i: number) =>
+      currentClip ? planWordIndexFromClipIndex(project, currentClip.id, i) ?? i : i,
+    [project, currentClip],
+  );
 
   return (
     <>
@@ -293,14 +305,7 @@ export function CaptionEditSurface({
                 selectedIndex={
                   fxWords && fxWords.size === 1 ? Array.from(fxWords)[0] : null
                 }
-                {...(surface === 'remotion'
-                  ? {
-                      mapGlyphIndex: (i: number) =>
-                        currentClip
-                          ? planWordIndexFromClipIndex(project, currentClip.id, i) ?? i
-                          : i,
-                    }
-                  : {})}
+                {...(surface === 'remotion' ? { mapGlyphIndex } : {})}
                 onSelect={(index) => {
                   // Select WITHOUT seeking — clicking a word to edit it
                   // must not move the playhead. The word is already on

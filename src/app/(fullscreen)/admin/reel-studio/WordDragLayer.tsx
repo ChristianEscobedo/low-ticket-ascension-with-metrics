@@ -260,7 +260,33 @@ export default function WordDragLayer({
           height: (r.height / Math.max(1, fr.height)) * 100,
         };
       }
-      setGlyphBox(next);
+      // No-op when nothing actually moved: during a move/scale drag the
+      // parent re-renders per pointermove, this effect re-ran, and an
+      // unconditional setGlyphBox (new object identity) re-rendered AGAIN —
+      // a measure -> setState -> render -> measure loop per mousemove.
+      setGlyphBox((prev) => {
+        const keys = Object.keys(next);
+        if (keys.length === Object.keys(prev).length) {
+          let same = true;
+          for (const k of keys) {
+            const a = prev[Number(k)];
+            const b = next[Number(k)];
+            if (
+              !a ||
+              !b ||
+              Math.abs(a.left - b.left) > 0.05 ||
+              Math.abs(a.top - b.top) > 0.05 ||
+              Math.abs(a.width - b.width) > 0.05 ||
+              Math.abs(a.height - b.height) > 0.05
+            ) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return prev;
+        }
+        return next;
+      });
     };
     measure();
     // The Remotion Player re-renders the frame ASYNC after a seek. Measuring

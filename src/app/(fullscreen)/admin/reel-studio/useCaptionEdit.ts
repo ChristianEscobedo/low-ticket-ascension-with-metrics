@@ -11,7 +11,7 @@
  * source — the page imports them back (they're used in its JSX too), and the
  * hook file never imports the page (no cycle).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   ReelClip,
   ReelProject,
@@ -212,6 +212,22 @@ export function useCaptionEdit({
    *  from its current mark. Individual is the truth — global is bulk. */
   const [fxScope, setFxScope] = useState<'global' | 'individual'>('global');
   const [fxTarget, setFxTarget] = useState<number | null>(null);
+  // Debounced persistence: local state is the truth the instant an edit lands;
+  // the save POST fires 600ms after the LAST edit (a drag commit, a scale
+  // commit, a style click, every arrow nudge each used to POST the FULL
+  // project). Unmount flushes whatever is pending.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<ReelProject | null>(null);
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (pendingSaveRef.current) {
+        void post({ action: 'save', project: pendingSaveRef.current });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   /** Individual scope: merge a mark patch onto ONE word and persist. */
   async function applyWordMark(
@@ -239,7 +255,14 @@ export function useCaptionEdit({
       captions: { ...project.captions, [clipId]: words },
     };
     setProject(updated);
-    await post({ action: 'save', project: updated });
+    pendingSaveRef.current = updated;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const p = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      saveTimerRef.current = null;
+      if (p) void post({ action: 'save', project: p });
+    }, 600);
   }
 
   /** Merge a mark patch onto every picked word and persist (the subtitle
@@ -475,6 +498,13 @@ export function useCaptionEdit({
     // transform at 60fps, never a plan rebuild, never an invisible box, never
     // a teleport-on-release. This is the smooth path: you drag the word you see.
     const baseTransform = t.style.transform || '';
+    // The Remotion Player SCALES the composition to the stage (~0.35x), so a
+    // pixel translate on the glyph is in COMPOSITION px and the word crawled
+    // at a fraction of the pointer — "clunky, doesn't react". Calibrate from
+    // the glyph's own rendered-vs-layout size so the word tracks the pointer
+    // 1:1 (the unscaled edit stage reports 1 — a no-op there).
+    const glyphScaleX = glyph.width / Math.max(1, t.offsetWidth) || 1;
+    const glyphScaleY = glyph.height / Math.max(1, t.offsetHeight) || 1;
     let moved = false;
     let last = { xPct: startCX, yPct: startCY };
     // A rAF loop owns the glyph's transform for the WHOLE drag and re-applies
@@ -486,7 +516,10 @@ export function useCaptionEdit({
     const delta = { x: 0, y: 0 };
     let raf = 0;
     const paint = () => {
-      t.style.transform = `${baseTransform} translate(${delta.x}px, ${delta.y}px)`;
+      // Write ONLY when the value changed (a move) or a re-render cleared it —
+      // an unconditional write every frame fought React for the whole drag.
+      const want = `${baseTransform} translate(${delta.x / glyphScaleX}px, ${delta.y / glyphScaleY}px)`;
+      if (t.style.transform !== want) t.style.transform = want;
       raf = requestAnimationFrame(paint);
     };
     raf = requestAnimationFrame(paint);

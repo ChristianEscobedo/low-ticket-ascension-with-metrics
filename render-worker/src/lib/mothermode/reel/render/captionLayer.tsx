@@ -1442,12 +1442,29 @@ return (
             if (mark?.hidden) {
               return null;
             }
-            // skip free-placed words (painted in absOverlay)
+            // Free-placed words paint in the absOverlay — but keep an
+            // INVISIBLE in-flow placeholder in the row so the siblings do NOT
+            // reflow around the hole on commit (the "one word pushes the other
+            // words around" jump). visibility:hidden holds the slot's metrics
+            // without painting; the overlay glyph carries data-caption-word.
             if (
               typeof mark?.xPct === 'number' &&
               typeof mark?.yPct === 'number'
             ) {
-              return null;
+              return (
+                <span
+                  key={`fp-hole-${idx}`}
+                  aria-hidden
+                  style={{
+                    ...css.word,
+                    visibility: 'hidden',
+                    display: 'inline-block',
+                    position: 'relative',
+                  }}
+                >
+                  {w.text}
+                </span>
+              );
             }
 
             // Base style: active look for the spoken/power word, idle look
