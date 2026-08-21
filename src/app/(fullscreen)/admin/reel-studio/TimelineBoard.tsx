@@ -409,7 +409,12 @@ export default function TimelineBoard({
       const trimStart = c.trimStartSec ?? 0;
       const first = Math.max(0, words[0].start - trimStart);
       const last = Math.max(first + 0.1, words[words.length - 1].end - trimStart);
-      return { id: c.id, name: c.name, from: start + first, to: start + last, count: words.length };
+      // RVE shows the caption's TEXT on the block — the first words.
+      const preview = words
+        .slice(0, 5)
+        .map((x) => x.word)
+        .join(' ');
+      return { id: c.id, name: c.name, from: start + first, to: start + last, count: words.length, preview };
     })
     .filter((b): b is NonNullable<typeof b> => b != null);
 
@@ -425,7 +430,10 @@ export default function TimelineBoard({
       const wordTo = start + Math.max(0.1, w.end - trimStart);
       const hold = cue.holdSec ?? 1.0;
       const kind = cue.lottie ? 'lottie' : cue.animated ? 'sticker' : 'image';
-      return { id: cue.id, from, wordTo, hold, kind, label: w.word };
+      // The block shows the media's own thumbnail + filename (RVE-style) —
+      // the trigger word moves to the tooltip.
+      const name = cue.url.split('/').pop()?.split('?')[0]?.slice(0, 40) || kind;
+      return { id: cue.id, from, wordTo, hold, kind, label: w.word, url: cue.url, name };
     })
     .filter((b): b is NonNullable<typeof b> => b != null);
 
@@ -652,7 +660,8 @@ export default function TimelineBoard({
             >
               <span className="flex items-center gap-1 text-[8px] font-medium text-sky-100">
                 <MessageSquareText className="h-2.5 w-2.5 shrink-0 text-sky-200" />
-                {b.count}w
+                <span className="truncate">{b.preview}</span>
+                <span className="shrink-0 text-sky-200/60">{b.count}w</span>
               </span>
             </Block>
           ))}
@@ -677,7 +686,7 @@ export default function TimelineBoard({
               fromPct={pct(b.from, total)}
               widthPct={pct(to, total) - pct(b.from, total)}
               tint="border-fuchsia-300/50 bg-fuchsia-500/60 hover:bg-fuchsia-500/75"
-              title={`${b.kind} fly-in on "${b.label}" — click to seek · right edge = hold`}
+              title={`${b.name} — ${b.kind} fly-in on "${b.label}" — click to seek · right edge = hold`}
               onSelect={() => onSeek(b.from)}
               onTrimRight={
                 onCueHold
@@ -695,8 +704,21 @@ export default function TimelineBoard({
               }}
             >
               <span className="flex items-center gap-1 text-[8px] font-medium text-fuchsia-100">
-                <Icon className="h-2.5 w-2.5 shrink-0 text-fuchsia-200" />
-                {b.label}
+                {b.kind === 'lottie' ? (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-fuchsia-400/30">
+                    <Icon className="h-2.5 w-2.5 text-fuchsia-200" />
+                  </span>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={b.url}
+                    alt=""
+                    loading="lazy"
+                    draggable={false}
+                    className="h-5 w-5 shrink-0 rounded object-cover"
+                  />
+                )}
+                <span className="truncate">{b.name}</span>
                 {live != null && (
                   <span className="shrink-0 rounded bg-fuchsia-400/40 px-0.5 font-bold">{live.toFixed(1)}s</span>
                 )}
@@ -742,8 +764,21 @@ export default function TimelineBoard({
               }
             >
               <span className="flex items-center gap-1 text-[8px] font-medium text-violet-100">
-                <Layers className="h-2.5 w-2.5 shrink-0 text-violet-200" />
-                {o.name}
+                {/\.(jpe?g|png|webp|gif)(\?|$)/i.test(o.url) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={o.url}
+                    alt=""
+                    loading="lazy"
+                    draggable={false}
+                    className="h-5 w-5 shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <span className="h-5 w-5 shrink-0 overflow-hidden rounded">
+                    <StripFrame url={o.url} t={0.5} className="h-full w-full object-cover" />
+                  </span>
+                )}
+                <span className="truncate">{o.name}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

@@ -28,6 +28,7 @@ import { aiGenerateImage } from '@/components/mothermode/content/aiClient';
 import { makeClipId, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
 import type { GiphySticker } from '@/utils/integrations/giphy';
 import type { PexelsClip } from '@/utils/integrations/pexels';
+import type { LottieFileResult } from '@/utils/integrations/lottiefiles';
 
 const UPLOAD_API = '/api/admin/reel-upload-url';
 
@@ -112,6 +113,10 @@ export default function MediaPanel({
   // ---- lottie -------------------------------------------------------------
   const [lottieUrl, setLottieUrl] = useState('');
   const lottieInput = useRef<HTMLInputElement>(null);
+  const [lottieQuery, setLottieQuery] = useState('');
+  const [lottieResults, setLottieResults] = useState<LottieFileResult[] | null>(null);
+  const [lottieBusy, setLottieBusy] = useState(false);
+  const [myLotties, setMyLotties] = useState<{ url: string; name: string }[] | null>(null);
   // ---- b-roll -------------------------------------------------------------
   const [brollQuery, setBrollQuery] = useState('');
   const [brollResults, setBrollResults] = useState<PexelsClip[] | null>(null);
@@ -139,13 +144,13 @@ export default function MediaPanel({
   }
 
   /** Signed-URL upload → the Media Library → the public URL (or null). */
-  async function uploadFile(file: File): Promise<string | null> {
+  async function uploadFile(file: File, kind: 'image' | 'lottie' = 'image'): Promise<string | null> {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
     try {
       const mint = await fetch(UPLOAD_API, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ext, contentType: file.type || undefined, kind: 'image' }),
+        body: JSON.stringify({ ext, contentType: file.type || undefined, kind }),
       });
       const mintJson = await mint.json();
       if (!mintJson.success) {
@@ -175,7 +180,7 @@ export default function MediaPanel({
             action: 'ingest',
             name: file.name.replace(/\.[^.]+$/, '').slice(0, 80) || 'Media',
             url,
-            kind: 'image',
+            kind,
             source: 'upload',
             tags: ['cue'],
           }),
@@ -262,7 +267,7 @@ export default function MediaPanel({
   async function uploadLottie(file: File) {
     setUpBusy(true);
     try {
-      const url = await uploadFile(file);
+      const url = await uploadFile(file, 'lottie');
       if (url) onAttach(url, { lottie: true });
     } finally {
       setUpBusy(false);
@@ -274,6 +279,78 @@ export default function MediaPanel({
     if (!/^https?:\/\//i.test(url)) return;
     onAttach(url, { lottie: true });
     setLottieUrl('');
+  }
+
+  /** My lotties — the Media Library's lottie kind (+ legacy .json uploads). */
+  async function loadLotties() {
+    if (myLotties !== null) return;
+    try {
+      const res = await fetch('/api/admin/media-library', { cache: 'no-store' });
+      const json = await res.json();
+      const rows = (json.assets ?? json.records ?? []) as {
+        url?: string;
+        name?: string;
+        kind?: string;
+      }[];
+      setMyLotties(
+        rows
+          .filter(
+            (a) =>
+              a.url && /^https?:\/\//i.test(a.url) && (a.kind === 'lottie' || /\.json(\?|$)/i.test(a.url)),
+          )
+          .map((a) => ({ url: a.url as string, name: a.name ?? '' })),
+      );
+    } catch {
+      setMyLotties([]);
+    }
+  }
+
+  async function searchLottie() {
+    const q = lottieQuery.trim();
+    if (!q || lottieBusy) return;
+    setLottieBusy(true);
+    try {
+      const res = await fetch(`/api/admin/reel-lottie?q=${encodeURIComponent(q)}`);
+      const j = (await res.json()) as {
+        success?: boolean;
+        results?: LottieFileResult[];
+        error?: string;
+      };
+      if (!res.ok || !j.success) {
+        onError(j.error || 'Lottie search failed.');
+        setLottieResults([]);
+        return;
+      }
+      setLottieResults(j.results ?? []);
+    } catch {
+      setLottieResults([]);
+    } finally {
+      setLottieBusy(false);
+    }
+  }
+
+  /** A searched lottie attaches AND lands in My lotties (the library keeps it). */
+  async function attachSearchedLottie(l: LottieFileResult) {
+    onAttach(l.jsonUrl, { lottie: true });
+    try {
+      await fetch('/api/admin/media-library', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ingest',
+          name: l.name.slice(0, 80),
+          url: l.jsonUrl,
+          kind: 'lottie',
+          source: 'lottiefiles',
+          tags: ['cue'],
+        }),
+      });
+    } catch {
+      /* convenience */
+    }
+    setMyLotties((prev) =>
+      prev ? [{ url: l.jsonUrl, name: l.name }, ...prev.filter((a) => a.url !== l.jsonUrl)] : prev,
+    );
   }
 
   async function searchBroll() {
@@ -502,6 +579,63 @@ export default function MediaPanel({
         <p className="text-[8px] leading-3 text-bone/30">
           A lottie plays its vector animation in the preview and burns into the MP4.
         </p>
+        {/* the lottie LIBRARY: search LottieFiles, or re-use your own */}
+        <div className="flex items-center gap-1">
+          <input
+            value={lottieQuery}
+            onChange={(e) => setLottieQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void searchLottie();
+            }}
+            placeholder="search the LottieFiles library (check, confetti…)"
+            className="min-w-0 flex-1 rounded border border-fuchsia-400/25 bg-ink px-1.5 py-1 text-[9px] text-bone/80 outline-none placeholder:text-bone/25"
+          />
+          <button
+            onClick={() => void searchLottie()}
+            disabled={lottieBusy || !lottieQuery.trim()}
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-fuchsia-400/40 px-1.5 py-1 text-[9px] font-semibold text-fuchsia-200/90 hover:bg-fuchsia-500/15 disabled:opacity-40"
+          >
+            {lottieBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            search
+          </button>
+        </div>
+        {lottieResults && lottieResults.length > 0 && (
+          <div className="grid max-h-36 grid-cols-4 gap-1 overflow-y-auto">
+            {lottieResults.slice(0, 24).map((l) => (
+              <button
+                key={l.id}
+                onClick={() => void attachSearchedLottie(l)}
+                title={`${l.name} — lottie fly-in at the playhead (saved to My lotties)`}
+                className="overflow-hidden rounded border border-fuchsia-400/20 bg-[repeating-conic-gradient(#1c1c1c_0%_25%,#262626_0%_50%)] bg-[length:12px_12px] hover:border-fuchsia-400"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={l.imageUrl} alt={l.name} className="h-12 w-full object-contain" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
+        {myLotties === null ? (
+          <button
+            onClick={() => void loadLotties()}
+            className="text-[10px] text-bone/40 hover:underline"
+          >
+            My lotties…
+          </button>
+        ) : myLotties.length > 0 ? (
+          <div className="grid max-h-28 grid-cols-4 gap-1 overflow-y-auto">
+            {myLotties.slice(0, 16).map((a) => (
+              <button
+                key={a.url}
+                onClick={() => onAttach(a.url, { lottie: true })}
+                title={`${a.name || a.url} — lottie fly-in at the playhead`}
+                className="flex h-12 items-center justify-center gap-0.5 rounded border border-fuchsia-400/20 bg-fuchsia-500/10 px-1 text-[8px] font-semibold text-fuchsia-200/80 hover:border-fuchsia-400"
+              >
+                <Sparkles className="h-3 w-3 shrink-0" />
+                <span className="truncate">{a.name || 'lottie'}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </Section>
 
       {/* B-ROLL (overlay layers) */}
