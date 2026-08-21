@@ -8846,6 +8846,13 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         playheadSec={playheadSec}
                         onFrameSec={onPlayerFrame}
                         scrubbing={scrubbing}
+                        playing={playing}
+                        onPlayStateChange={(p) => {
+                          // The Player's own button, routed through the timeline's
+                          // transport so the clock follows it (one clock, two doors).
+                          if (p && !clockRef.current.playing) startClock();
+                          else if (!p && clockRef.current.playing) stopClock();
+                        }}
                         freePlaceEdit={stackEditMode}
                         showAllWords={stackEditMode && showAllCardWords}
                       />
