@@ -73,8 +73,6 @@ export default function RemotionPreview({
   playheadSec,
   onFrameSec,
   scrubbing = false,
-  playing,
-  onPlayStateChange,
 }: {
   project: Pick<
     ReelProject,
@@ -112,17 +110,6 @@ export default function RemotionPreview({
    * its frame reports; on release one authoritative seek lands.
    */
   scrubbing?: boolean;
-  /**
-   * ONE CLOCK. The timeline's play state, driven INTO the Player. Without this
-   * the Player free-ran on its own transport while the timeline ran a second
-   * clock — the two drifted and both wrote the playhead, so the preview
-   * flickered and the timeline shook. Now the timeline is the authority: this
-   * prop plays/pauses the Player, and the Player's own button reports back
-   * through onPlayStateChange so the timeline follows it. Two doors, one state.
-   */
-  playing?: boolean;
-  /** The Player's own play/pause button, reported UP to the timeline. */
-  onPlayStateChange?: (playing: boolean) => void;
 }) {
   const size = RENDER_SIZES[aspect] ?? RENDER_SIZES.vertical;
   const playerRef = useRef<PlayerRef>(null);
@@ -317,45 +304,6 @@ export default function RemotionPreview({
       /* not mounted yet */
     }
   }, [scrubbing]);
-
-  /**
-   * ONE CLOCK, driven down. The timeline's `playing` prop plays/pauses the
-   * Player. Guarded by isPlaying() so we only act on a real mismatch — never
-   * spam play()/pause() on every render. While scrubbing the scrub effect owns
-   * the pause, so this stays out of the way.
-   */
-  useEffect(() => {
-    if (playing == null || scrubbing) return;
-    const p = playerRef.current;
-    if (!p || !plan) return;
-    try {
-      const is = p.isPlaying();
-      if (playing && !is) p.play();
-      else if (!playing && is) p.pause();
-    } catch {
-      /* not mounted yet */
-    }
-  }, [playing, scrubbing, plan]);
-
-  /**
-   * ONE CLOCK, reported up. The Player's own play/pause button (and its
-   * spacebar) fire these; we hand the new state to the timeline so the
-   * timeline's transport follows. Two doors into the same state.
-   */
-  const onPlayStateChangeRef = useRef(onPlayStateChange);
-  onPlayStateChangeRef.current = onPlayStateChange;
-  useEffect(() => {
-    const p = playerRef.current;
-    if (!p || !plan) return;
-    const onPlay = () => onPlayStateChangeRef.current?.(true);
-    const onPause = () => onPlayStateChangeRef.current?.(false);
-    p.addEventListener('play', onPlay as never);
-    p.addEventListener('pause', onPause as never);
-    return () => {
-      p.removeEventListener('play', onPlay as never);
-      p.removeEventListener('pause', onPause as never);
-    };
-  }, [plan]);
 
   if (!plan) {
     return (
