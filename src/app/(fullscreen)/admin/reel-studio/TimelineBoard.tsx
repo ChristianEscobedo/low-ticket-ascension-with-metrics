@@ -41,6 +41,70 @@ import type {
 } from '@/lib/mothermode/reel/types';
 import { effectiveClipDuration, reelDurationSec } from '@/lib/mothermode/reel/timeline';
 import { REEL_TRANSITIONS } from '@/lib/mothermode/reel/types';
+import { spriteCellStyle } from '@/lib/mothermode/reel/sceneCuts';
+
+/** R4: the 4-frame sprite tile URL for a clip — ONE request instead of four. */
+function spriteUrl(url: string, durSec: number, frames = 4): string {
+  return `/api/admin/reel-sprite?url=${encodeURIComponent(url)}&dur=${Math.max(0.3, durSec).toFixed(1)}&frames=${frames}`;
+}
+
+/** A single filmstrip frame (server thumb; degrades to a soft gradient cell). */
+function StripFrame({ url, t, className }: { url: string; t: number; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return <div className={clsx('bg-gradient-to-br from-white/[0.07] to-white/[0.02]', className)} />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/admin/reel-thumbnail?url=${encodeURIComponent(url)}&t=${Math.max(0, t).toFixed(1)}`}
+      alt=""
+      loading="lazy"
+      draggable={false}
+      onError={() => setBroken(true)}
+      className={className}
+    />
+  );
+}
+
+/** R4 filmstrip frames: one tiled JPEG sliced by CSS; falls back to per-frame thumbs on error. */
+function SpriteStrip({ url, durSec, className }: { url: string; durSec: number; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  const src = spriteUrl(url, durSec);
+  if (broken) {
+    const frames = [
+      0.5,
+      Math.max(0.5, durSec / 3),
+      Math.max(0.5, (2 * durSec) / 3),
+      Math.max(0.5, durSec - 1),
+    ];
+    return (
+      <>
+        {frames.map((t, k) => (
+          <StripFrame key={k} url={url} t={t} className={className} />
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={className}
+          style={{
+            backgroundImage: `url("${src}")`,
+            backgroundRepeat: 'no-repeat',
+            ...spriteCellStyle(i),
+          }}
+        />
+      ))}
+      {/* hidden probe: swaps to per-frame thumbs when the sprite errors */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="hidden" onError={() => setBroken(true)} />
+    </>
+  );
+}
 
 const TRANSITION_GLYPH: Record<ReelTransitionType, string> = {
   crossfade: '◐',
@@ -313,6 +377,11 @@ export default function TimelineBoard({
                   {c.transitionIn ? TRANSITION_GLYPH[c.transitionIn.type] : '⇄'}
                 </button>
               )}
+              {/* the filmstrip — 4 sprite frames fill the block (the look the old
+                  TimelineStrip had; selection is a brass WASH so frames show through) */}
+              <div className="pointer-events-none flex h-full w-full opacity-90 transition-opacity duration-150 group-hover:opacity-100">
+                <SpriteStrip url={c.url} durSec={c.durationSec} className="h-full w-1/4 object-cover" />
+              </div>
               {/* keyframe diamonds */}
               {c.motion && c.motion.length >= 2 &&
                 c.motion.map((k, ki) => (

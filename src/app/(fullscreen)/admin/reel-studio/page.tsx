@@ -70,7 +70,6 @@ import {
 import type {
   ReelProject,
   ReelClip,
-  ReelAudioTrack,
   ReelWord,
   CaptionPreset,
 } from '@/lib/mothermode/reel/types';
@@ -97,7 +96,6 @@ import {
   type CaptionOverrides,
   type CaptionStyleDef,
 } from '@/lib/mothermode/reel/captions';
-import { spriteCellStyle } from '@/lib/mothermode/reel/sceneCuts';
 import { CaptionGallery } from './CaptionGallery';
 import { SubtitlePanel } from './SubtitlePanel';
 import ScriptLabPanel from './ScriptLabPanel';
@@ -143,9 +141,9 @@ import {
   timelineErrors,
   transitionOverlapSec,
 } from '@/lib/mothermode/reel/timeline';
-import { makeClipId, WORD_FONTS, REEL_TRANSITIONS, type ReelMediaCue, type ReelOverlayClip, type ReelTransition, type ReelTransitionType } from '@/lib/mothermode/reel/types';
+import { makeClipId, WORD_FONTS, type ReelMediaCue, type ReelOverlayClip } from '@/lib/mothermode/reel/types';
 import { snapToTargets, timelineSnapTargets } from '@/lib/mothermode/reel/scrubSnap';
-import TimelineLanes from './TimelineLanes';
+import TimelineBoard from './TimelineBoard';
 import { suggestCuesForWords } from '@/lib/mothermode/reel/cueSuggest';
 import { parseGeneTags } from '@/lib/mothermode/reel/genes';
 import {
@@ -172,7 +170,6 @@ import {
   validateScheduleSettings,
   type ScheduleCheck,
 } from '@/lib/mothermode/reel/schedule';
-import { peaksFor } from '@/lib/mothermode/reel/waveform';
 import {
   MOTION_PRESETS,
   detectPreset,
@@ -446,331 +443,6 @@ function spriteUrl(url: string, durSec: number, frames = 4): string {
   return `/api/admin/reel-sprite?url=${encodeURIComponent(url)}&dur=${Math.max(0.3, durSec).toFixed(1)}&frames=${frames}`;
 }
 
-/** R4 filmstrip frames: one tiled JPEG sliced by CSS; falls back to per-frame thumbs on error. */
-function SpriteStrip({ url, durSec, className }: { url: string; durSec: number; className?: string }) {
-  const [broken, setBroken] = useState(false);
-  const src = spriteUrl(url, durSec);
-  if (broken) {
-    const frames = [
-      0.5,
-      Math.max(0.5, durSec / 3),
-      Math.max(0.5, (2 * durSec) / 3),
-      Math.max(0.5, durSec - 1),
-    ];
-    return (
-      <>
-        {frames.map((t, k) => (
-          <Thumb key={k} url={url} t={t} className={className} />
-        ))}
-      </>
-    );
-  }
-  return (
-    <>
-      {[0, 1, 2, 3].map((i) => (
-        <span
-          key={i}
-          className={className}
-          style={{
-            backgroundImage: `url("${src}")`,
-            backgroundRepeat: 'no-repeat',
-            ...spriteCellStyle(i),
-          }}
-        />
-      ))}
-      {/* hidden probe: swaps to per-frame thumbs when the sprite errors */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="hidden" onError={() => setBroken(true)} />
-    </>
-  );
-}
-
-
-
-// ---------------------------------------------------------------------------
-// Timeline strip
-// ---------------------------------------------------------------------------
-
-/** Seam glyphs on the strip: crossfade ◐, whip ≫, zoom ◎ (the top-left dot). */
-const TRANSITION_GLYPH: Record<ReelTransitionType, string> = {
-  crossfade: '◐',
-  whip: '≫',
-  zoom: '◎',
-};
-
-function TimelineStrip({
-  clips,
-  selectedId,
-  onSelect,
-  onTrim,
-  onReorder,
-  onScrub,
-  onScrubIn,
-  onLeftTrim,
-  onKeyMove,
-  onTransition,
-  pxPerSec,
-}: {
-
-  clips: ReelClip[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onTrim: (id: string, trimEndSec: number) => void;
-  onReorder: (id: string, toIndex: number) => void;
-  onScrub: (clip: ReelClip, trimEndSec: number) => void;
-  /** Left-edge in-point drag: live preview seek to the new first frame. */
-  onScrubIn?: (clip: ReelClip, inSec: number) => void;
-  /** Left-edge release: the server cuts the head off (in-point trim). */
-  onLeftTrim?: (clip: ReelClip, inSec: number) => void;
-  /** R15: drag a keyframe diamond to re-time it. */
-  onKeyMove?: (clip: ReelClip, keyIndex: number, tSec: number) => void;
-  /** Scene transitions: set/clear the transition INTO a clip (the seam before it). */
-  onTransition?: (id: string, transitionIn: ReelTransition | null) => void;
-  /** R12: fixed px/sec so trimming one scene never re-lays-out the others. */
-  pxPerSec: number;
-}) {
-
-  const total = reelDurationSec(clips);
-  const [liveTrim, setLiveTrim] = useState<{ id: string; trim: number } | null>(null);
-  const dragIndex = useRef<number | null>(null);
-  if (total <= 0) return null;
-
-  return (
-    <div className="flex h-32 w-full gap-1 overflow-hidden rounded-xl border border-white/10 bg-ink/50 p-1.5">
-
-      {clips.map((c, i) => {
-        const eff = effectiveClipDuration(c);
-        const live = liveTrim?.id === c.id ? liveTrim.trim : null;
-        const shownDur = live != null ? Math.max(0.1, c.durationSec - live) : eff;
-        const selected = c.id === selectedId;
-        return (
-          <div
-            key={c.id}
-            draggable
-            onDragStart={() => {
-              dragIndex.current = i;
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (dragIndex.current != null && dragIndex.current !== i) {
-                onReorder(clips[dragIndex.current].id, i);
-              }
-              dragIndex.current = null;
-            }}
-            onClick={() => onSelect(c.id)}
-            className={clsx(
-              'group relative h-full shrink-0 cursor-pointer overflow-hidden rounded-lg border shadow-sm transition-colors',
-              // Selected = a brass WASH over the filmstrip, not an opaque fill.
-              // bg-brass/90 used to bury the SpriteStrip frames under a solid tan
-              // slab — the "flat tan rectangle" look. Now the frames show through
-              // and the selection reads as a glowing border + tint.
-              selected
-                ? 'z-10 border-brass bg-brass/25 ring-2 ring-brass shadow-[0_0_16px_rgba(168,139,92,0.4)]'
-                : 'border-white/10 hover:border-white/25 bg-neutral-900/60',
-            )}
-
-            style={{
-              // PERCENTAGE of total time — the strip is ALWAYS exactly page-width.
-              // The old `Math.max(52, eff * pxPerSec)` PIXEL width is why a long
-              // clip blew the timeline thousands of px past the right edge of the
-              // screen and shoved the preview off with it. Now each scene takes its
-              // share of the 100%-wide strip (eff / total), so a 3-min video just
-              // crams more scenes into the SAME page-width — the timeline never
-              // grows. (The trim/keyframe drag handlers read the block's real
-              // rendered px width at drag time, so they still resolve seconds
-              // correctly.) minWidth keeps a sliver visible for a tiny scene.
-              width: `${(eff / Math.max(total, 0.001)) * 100}%`,
-              minWidth: 40,
-            }}
-            title={`${c.name} — ${fmtSec(eff)}`}
-          >
-            {/* Scene transition seam: the top-left dot edits the transition INTO
-                this scene. Click cycles off → crossfade → whip → zoom → off;
-                right-click cycles the duration 0.3 → 0.5 → 0.8s. The plan
-                overlaps the two scenes by that many frames and the composition
-                blends them frame-exactly (preview and MP4 agree). */}
-            {i > 0 && onTransition && (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!c.transitionIn) {
-                    onTransition(c.id, { type: REEL_TRANSITIONS[0], durationSec: 0.4 });
-                    return;
-                  }
-                  const idx = REEL_TRANSITIONS.indexOf(c.transitionIn.type);
-                  if (idx < 0 || idx === REEL_TRANSITIONS.length - 1) {
-                    onTransition(c.id, null); // past the last style → back to a hard cut
-                  } else {
-                    onTransition(c.id, { ...c.transitionIn, type: REEL_TRANSITIONS[idx + 1] });
-                  }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!c.transitionIn) return;
-                  const d = c.transitionIn.durationSec;
-                  onTransition(c.id, {
-                    ...c.transitionIn,
-                    durationSec: d >= 0.8 ? 0.3 : d >= 0.5 ? 0.8 : 0.5,
-                  });
-                }}
-                className={clsx(
-                  'absolute left-0.5 top-0.5 z-40 flex h-4 w-4 items-center justify-center rounded-full border text-[8px] font-bold leading-none shadow transition-opacity',
-                  c.transitionIn
-                    ? 'border-brass bg-brass text-ink'
-                    : 'border-white/30 bg-black/70 text-white/60 opacity-0 group-hover:opacity-100',
-                )}
-                title={
-                  c.transitionIn
-                    ? `${c.transitionIn.type} · ${c.transitionIn.durationSec}s — click: next style · right-click: duration · (past zoom: off)`
-                    : 'Scene transition — click: crossfade · whip · zoom · right-click: duration'
-                }
-              >
-                {c.transitionIn ? TRANSITION_GLYPH[c.transitionIn.type] : '⇄'}
-              </button>
-            )}
-            {/* R14 live drag bubble: exact seconds while trimming */}
-            {live != null && (
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-30 whitespace-nowrap bg-brass px-1.5 py-0.5 text-center text-[9px] font-bold text-ink">
-                {fmtCs(c.durationSec)} — {fmtCs(shownDur)}{' '}
-                {live > 0 && <span>(≈{fmtCs(live)})</span>}
-              </div>
-            )}
-            <div className="pointer-events-none flex h-full w-full opacity-90 transition-opacity duration-150 group-hover:opacity-100">
-              <SpriteStrip url={c.url} durSec={c.durationSec} className="h-full w-1/4 object-cover" />
-            </div>
-
-            {/* R15 keyframe diamonds — DRAGGABLE: drag a — to move the keyframe in time */}
-            {c.motion && c.motion.length >= 2 && (
-              <>
-                {c.motion.map((k, ki) => (
-                  <span
-                    key={ki}
-                    onPointerDown={(e) => {
-                      if (!onKeyMove) return;
-                      e.stopPropagation();
-                      e.preventDefault();
-                      const el = e.currentTarget as HTMLElement;
-                      const block = el.parentElement as HTMLElement;
-                      const startX = e.clientX;
-                      const startT = k.t;
-                      el.setPointerCapture(e.pointerId);
-                      const move = (ev: PointerEvent) => {
-                        const pxPerSec = block.getBoundingClientRect().width / Math.max(eff, 0.01);
-                        const t = Math.round(
-                          Math.max(0, Math.min(startT + (ev.clientX - startX) / pxPerSec, eff)) * 100,
-                        ) / 100;
-                        onKeyMove(c, ki, t);
-                      };
-                      const up = () => {
-                        el.removeEventListener('pointermove', move);
-                        el.removeEventListener('pointerup', up);
-                      };
-                      el.addEventListener('pointermove', move);
-                      el.addEventListener('pointerup', up);
-                    }}
-                    className={clsx(
-                      'absolute top-0.5 z-20 flex h-4 w-4 -translate-x-1/2 items-center justify-center text-[10px] font-bold leading-none drop-shadow',
-                      // brass-on-brass fix: the SELECTED block is brass-filled, so its diamonds go ink
-                      selected ? 'text-ink' : 'text-brass',
-                      onKeyMove ? 'cursor-ew-resize hover:scale-125' : 'pointer-events-none',
-                    )}
-                    style={{ left: `${Math.min(97, (k.t / Math.max(eff, 0.01)) * 100)}%` }}
-                    title={`key @ ${k.t.toFixed(2)}s — drag to re-time`}
-                  >
-                    —
-                  </span>
-                ))}
-              </>
-            )}
-            {/* floating info chips — the modern filmstrip look */}
-            <div className="pointer-events-none absolute bottom-1.5 left-1.5 flex max-w-[68%] items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 backdrop-blur-[2px]">
-              <span className="text-[9px] font-bold text-brass">{i + 1}</span>
-              <span className="truncate text-[9px] text-white/85">{c.name}</span>
-            </div>
-            <span
-              className={clsx(
-                'pointer-events-none absolute bottom-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-semibold backdrop-blur-[2px]',
-                live != null && live > 0 ? 'bg-brass text-ink' : 'bg-black/75 text-white/60',
-              )}
-            >
-              {fmtSec(shownDur)}
-            </span>
-
-            {/* left-edge in-point handle (server round-trip on release) */}
-            <div
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const el = e.currentTarget as HTMLElement;
-                const block = el.parentElement as HTMLElement;
-                const pxPerSec = block.getBoundingClientRect().width / eff;
-                const startX = e.clientX;
-                let inSec = 0;
-                el.setPointerCapture(e.pointerId);
-                const move = (ev: PointerEvent) => {
-                  const deltaSec = (ev.clientX - startX) / pxPerSec;
-                  inSec =
-                    Math.round(Math.max(0, Math.min(deltaSec, c.durationSec - 0.5)) * 10) / 10;
-                  onScrubIn?.(c, inSec);
-                };
-                const up = () => {
-                  el.removeEventListener('pointermove', move);
-                  el.removeEventListener('pointerup', up);
-                  if (inSec > 0.05) onLeftTrim?.(c, inSec);
-                };
-                el.addEventListener('pointermove', move);
-                el.addEventListener('pointerup', up);
-              }}
-              className="absolute left-0 top-0 z-20 flex h-full w-4 cursor-ew-resize items-center justify-center border-l-2 border-transparent transition-colors hover:border-brass hover:bg-brass/30"
-              title="Drag to cut the head"
-            >
-              <span className="pointer-events-none h-6 w-1 rounded-full bg-bone/30 group-hover:bg-brass/70" />
-            </div>
-            {/* right-edge trim handle */}
-            <div
-
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const el = e.currentTarget as HTMLElement;
-                const block = el.parentElement as HTMLElement;
-                const pxPerSec = block.getBoundingClientRect().width / eff;
-                const startX = e.clientX;
-                const startTrim = c.trimEndSec;
-                let trim = startTrim;
-                el.setPointerCapture(e.pointerId);
-                const move = (ev: PointerEvent) => {
-                  const deltaSec = (ev.clientX - startX) / pxPerSec;
-                  trim =
-                    Math.round(
-                      Math.max(0, Math.min(startTrim - deltaSec, c.durationSec - 0.1)) * 10,
-                    ) / 10;
-                  setLiveTrim({ id: c.id, trim });
-                  onScrub(c, trim);
-                };
-                const up = () => {
-                  el.removeEventListener('pointermove', move);
-                  el.removeEventListener('pointerup', up);
-                  setLiveTrim(null);
-                  onTrim(c.id, trim);
-                };
-                el.addEventListener('pointermove', move);
-                el.addEventListener('pointerup', up);
-              }}
-              className="absolute right-0 top-0 z-20 flex h-full w-4 cursor-ew-resize items-center justify-center border-r-2 border-transparent transition-colors hover:border-brass hover:bg-brass/30"
-              title="Drag to cut the tail"
-            >
-              <span className="pointer-events-none h-6 w-1 rounded-full bg-bone/30 group-hover:bg-brass/70" />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 /**
  * The scrub ruler above the strip: zoom-aware ticks + clip-boundary notches +
@@ -887,35 +559,6 @@ function TimeRuler({
   );
 }
 
-
-/** R14 waveform lane: canvas bars behind the audio bed block (peaks cached client-side). */
-function WaveformLane({ url }: { url: string }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    let alive = true;
-    void peaksFor(url, 600).then((peaks) => {
-      if (!alive || !peaks) return;
-      const cv = ref.current;
-      const ctx = cv?.getContext('2d');
-      if (!cv || !ctx) return;
-      const w = (cv.width = cv.offsetWidth * 2);
-      const h = (cv.height = cv.offsetHeight * 2);
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = 'rgba(168,139,92,0.55)';
-      const step = w / peaks.length;
-      for (let i = 0; i < peaks.length; i += 1) {
-        const bh = Math.max(2, peaks[i] * h * 0.92);
-        ctx.fillRect(i * step, (h - bh) / 2, Math.max(1, step * 0.72), bh);
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, [url]);
-  return (
-    <canvas ref={ref} className="pointer-events-none absolute inset-0 h-full w-full opacity-70" />
-  );
-}
 
 /**
  * R17: load the Google fonts a preset needs (one <link> per family, deduped).
@@ -9400,9 +9043,17 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     </div>
                   )}
 
-                  <TimelineStrip
+                  {/* RVE timeline board — ONE component, one lane per type:
+                      video (filmstrip) / captions / media / overlay / audio.
+                      Same handlers the old strip + lanes used; TimeRuler and
+                      the playhead line stay where they were. */}
+                  <TimelineBoard
                     clips={project.clips}
-                    pxPerSec={pxPerSec}
+                    captions={project.captions ?? {}}
+                    mediaCues={project.mediaCues ?? []}
+                    overlays={project.overlays ?? []}
+                    audio={project.audio ?? null}
+                    total={total}
                     selectedId={selectedClip}
                     onSelect={setSelectedClip}
                     onTrim={(id, trim) => patchClip(id, { trimEndSec: trim })}
@@ -9420,8 +9071,6 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                     onKeyMove={(c, ki, t) => setMotionKey(c, ki, { t })}
                     onTransition={(id, t) => {
                       // The seam picker: set/clear the transition INTO a clip.
-                      // Undo-safe via patch; the plan + preview pick it up on
-                      // the next render pass.
                       patch({
                         clips: project.clips.map((c) => {
                           if (c.id !== id) return c;
@@ -9434,143 +9083,12 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                         }),
                       });
                     }}
-                  />
-
-                  {/* R25 OVERLAY (b-roll) LAYERS lane — drag a block to re-time it */}
-                  {(project.overlays ?? []).length > 0 && (
-                    <div className="relative mt-1.5 h-9 overflow-hidden rounded-lg border border-violet-500/25 bg-violet-500/[0.06]">
-                      {(project.overlays ?? []).map((o) => {
-                        const eff = effectiveClipDuration(o);
-                        return (
-                          <div
-                            key={o.id}
-                            className="group absolute top-0 flex h-full cursor-grab items-center gap-1 overflow-hidden rounded-md border border-violet-400/50 bg-violet-500/25 px-1.5 active:cursor-grabbing"
-                            style={{
-                              left: `${Math.min(98, (o.offsetSec / Math.max(total, 0.001)) * 100)}%`,
-                              width: `${Math.max(2, (eff / Math.max(total, 0.001)) * 100)}%`,
-                            }}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              const el = e.currentTarget as HTMLElement;
-                              const track = el.parentElement as HTMLElement;
-                              const pxPerSec = track.getBoundingClientRect().width / Math.max(total, 0.001);
-                              const startX = e.clientX;
-                              const startOffset = o.offsetSec;
-                              el.setPointerCapture(e.pointerId);
-                              const move = (ev: PointerEvent) => {
-                                const deltaSec = (ev.clientX - startX) / pxPerSec;
-                                patchOverlay(o.id, {
-                                  offsetSec:
-                                    Math.round(Math.max(0, Math.min(startOffset + deltaSec, total - 0.1)) * 10) / 10,
-                                });
-                              };
-                              const up = () => {
-                                el.removeEventListener('pointermove', move);
-                                el.removeEventListener('pointerup', up);
-                              };
-                              el.addEventListener('pointermove', move);
-                              el.addEventListener('pointerup', up);
-                            }}
-                            title={`${o.name} — overlay @ ${fmtSec(o.offsetSec)} (drag to move)`}
-                          >
-                            <Layers className="h-3 w-3 shrink-0 text-violet-200" />
-                            <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-violet-100">
-                              {o.name}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                patch({ overlays: (project.overlays ?? []).filter((x) => x.id !== o.id) });
-                              }}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              className="shrink-0 text-violet-200/60 hover:text-red-300"
-                              title="Remove this layer"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {/* audio bed track — drag the block to re-time it against the cut */}
-                  {project.audio && (
-                    <div className="relative mt-1.5 h-10 overflow-hidden rounded-lg border border-bone/15 bg-ink/70">
-                      <WaveformLane url={project.audio.url} />
-                      <div
-                        className="group absolute top-0 flex h-full cursor-grab items-center gap-1.5 overflow-hidden rounded-md border border-brass/40 bg-brass/15 px-2 active:cursor-grabbing"
-                        style={{
-                          left: `${(project.audio.offsetSec / Math.max(total, 0.001)) * 100}%`,
-                          width: `${Math.max(
-                            3,
-                            (Math.min(
-                              total - project.audio.offsetSec,
-                              project.audio.durationSec ?? total - project.audio.offsetSec,
-                            ) /
-                              Math.max(total, 0.001)) *
-                              100,
-                          )}%`,
-                        }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          const el = e.currentTarget as HTMLElement;
-                          const track = el.parentElement as HTMLElement;
-                          const pxPerSec = track.getBoundingClientRect().width / Math.max(total, 0.001);
-                          const startX = e.clientX;
-                          const bed = project.audio as ReelAudioTrack;
-                          const startOffset = bed.offsetSec;
-                          el.setPointerCapture(e.pointerId);
-                          const move = (ev: PointerEvent) => {
-                            const deltaSec = (ev.clientX - startX) / pxPerSec;
-                            const offset =
-                              Math.round(
-                                Math.max(0, Math.min(startOffset + deltaSec, total - 0.1)) * 10,
-                              ) / 10;
-                            patch({ audio: { ...bed, offsetSec: offset } });
-                          };
-                          const up = () => {
-                            el.removeEventListener('pointermove', move);
-                            el.removeEventListener('pointerup', up);
-                            const v = previewRef.current;
-                            syncAudioAt(playheadSec, v ? !v.paused : false);
-                          };
-                          el.addEventListener('pointermove', move);
-                          el.addEventListener('pointerup', up);
-                        }}
-                        title="Drag to move the audio bed in time"
-                      >
-                        <Music className="h-3 w-3 shrink-0 text-brass" />
-                        <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-bone/85">
-                          {project.audio.name}
-                        </span>
-                        <span className="shrink-0 text-[9px] font-semibold text-brass/80">
-                          @{fmtSec(project.audio.offsetSec)}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            patch({ audio: null });
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          className="shrink-0 text-bone/40 hover:text-red-300"
-                          title="Remove the audio bed"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {/* 2A per-type lanes: captions + media cues (image/sticker/lottie)
-                      get their OWN rows under the video strip — every block is a
-                      seek target. These used to have no timeline presence at all. */}
-                  <TimelineLanes
-                    clips={project.clips}
-                    captions={project.captions ?? {}}
-                    mediaCues={project.mediaCues ?? []}
-                    total={total}
-                    onSeek={seekTimeline}
+                    onOverlayMove={(id, offsetSec) => patchOverlay(id, { offsetSec })}
+                    onOverlayRemove={(id) =>
+                      patch({ overlays: (project.overlays ?? []).filter((x) => x.id !== id) })
+                    }
+                    onAudioMove={(offsetSec) => patch({ audio: { ...project.audio!, offsetSec } })}
+                    onAudioRemove={() => patch({ audio: null })}
                   />
                   {/* the playhead — grab the line itself to scrub */}
                   <div
