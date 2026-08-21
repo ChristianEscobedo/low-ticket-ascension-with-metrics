@@ -3349,23 +3349,35 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     }
   }
 
-  /** Drive the preview to the exact cut frame while trimming (the CLOCK seeks). */
+  /**
+   * Drive the preview to the exact cut frame while trimming — WITHOUT moving
+   * the playhead. This used to call seekTimeline, which sets clockRef.t +
+   * setPlayheadSec on every pointermove: the playhead chased the trim edge
+   * across the timeline (the "reduce clip always moves the playhead" report)
+   * and the whole strip re-laid-out around it. A trim is a PREVIEW of the new
+   * edge, not a seek — so we sync the video element to the cut frame directly
+   * and leave clockRef.t + the playhead exactly where the user parked them.
+   * The trim commits on pointer-up via onTrim → patchClip (which re-syncs the
+   * stage through the clip-list effect), so the preview still lands right.
+   */
   function scrubToCut(clip: ReelClip, trimEndSec: number) {
     if (!project) return;
     const idx = project.clips.findIndex((c) => c.id === clip.id);
     if (idx < 0) return;
     const eff = Math.max(0.1, clip.durationSec - (clip.trimStartSec ?? 0) - trimEndSec);
-    seekTimeline(timelineStartOf(project.clips, idx) + Math.max(0, eff - 0.05));
+    syncVideoToClock(timelineStartOf(project.clips, idx) + Math.max(0, eff - 0.05));
   }
 
-  /** Drive the preview to the new FIRST frame while dragging the left edge. */
+  /** Drive the preview to the new FIRST frame while dragging the left edge —
+   *  same deal as scrubToCut: preview the frame, don't move the playhead. */
   function scrubToIn(clip: ReelClip, inSec: number) {
     if (!project) return;
     const idx = project.clips.findIndex((c) => c.id === clip.id);
     if (idx < 0) return;
     const local = Math.max(0, inSec - (clip.trimStartSec ?? 0)) + 0.05;
-    seekTimeline(timelineStartOf(project.clips, idx) + local);
+    syncVideoToClock(timelineStartOf(project.clips, idx) + local);
   }
+
 
 
   const load = useCallback(async () => {
@@ -4680,8 +4692,22 @@ const [cueDragLocal, setCueDragLocal] = useState<{
    * RemotionPreview never fights this: the reported frame IS the seek target.
    */
   const onPlayerFrame = useCallback((sec: number) => {
+    // THE TWO-CLOCK FIX. While the timeline's own clock is playing (the
+    // transport button / Space → startClock → clockTick), the CLOCK is the
+    // single writer of playheadSec — clockTick sets it every rAF. If the
+    // Player ALSO writes its frame back here, the two fight: clockTick writes
+    // t, the Player reports a frame a beat behind, the playhead stutters back
+    // and the preview shakes. So while the clock is playing we IGNORE the
+    // Player's report — the clock already knows where time is. When the clock
+    // is NOT playing (the user hit the Player's own button, which free-runs),
+    // the Player is the only thing moving, so we DO take its frame to keep the
+    // playhead + the cue on-screen gate in sync. This adds no new effect and
+    // no setState in a render loop, so it can't cause the #185 depth crash the
+    // reverted one-clock attempt did.
+    if (clockRef.current.playing) return;
     setPlayheadSec(sec);
   }, []);
+
 
   /** Picker pick: attach the image to the pending word. One cue per word (re-pick replaces).
    *  `animated` marks a GIF sticker — the cue renders through Remotion's
