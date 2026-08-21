@@ -560,8 +560,12 @@ function TimelineStrip({
             onClick={() => onSelect(c.id)}
             className={clsx(
               'group relative h-full shrink-0 cursor-pointer overflow-hidden rounded-lg border shadow-sm transition-colors',
+              // Selected = a brass WASH over the filmstrip, not an opaque fill.
+              // bg-brass/90 used to bury the SpriteStrip frames under a solid tan
+              // slab — the "flat tan rectangle" look. Now the frames show through
+              // and the selection reads as a glowing border + tint.
               selected
-                ? 'z-10 border-brass/70 bg-brass/90 ring-1 ring-brass/70 shadow-[0_0_14px_rgba(168,139,92,0.28)]'
+                ? 'z-10 border-brass bg-brass/25 ring-2 ring-brass shadow-[0_0_16px_rgba(168,139,92,0.4)]'
                 : 'border-white/10 hover:border-white/25 bg-neutral-900/60',
             )}
 
@@ -634,7 +638,7 @@ function TimelineStrip({
                 {live > 0 && <span>(≈{fmtCs(live)})</span>}
               </div>
             )}
-            <div className="pointer-events-none flex h-full w-full opacity-75 transition-opacity duration-150 group-hover:opacity-100">
+            <div className="pointer-events-none flex h-full w-full opacity-90 transition-opacity duration-150 group-hover:opacity-100">
               <SpriteStrip url={c.url} durSec={c.durationSec} className="h-full w-1/4 object-cover" />
             </div>
 
@@ -794,8 +798,14 @@ function TimeRuler({
   const base = totalSec <= 45 ? 5 : totalSec <= 120 ? 10 : totalSec <= 300 ? 30 : 60;
   const NICE = zoom >= 4 ? [0.5, 1, 2, 5, 10, 30, 60] : zoom >= 2 ? [1, 2, 5, 10, 15, 30, 60, 120, 300] : [1, 2, 5, 10, 15, 30, 60, 120, 300];
   const step = NICE.find((s) => s * Math.max(1, zoom) >= base) ?? 300;
+  // Cap the tick count — a fine `step` over a long reel used to draw hundreds
+  // of labels, the unreadable "wall of ticks". Widen the step until the count
+  // fits, so the ruler always shows a handful of readable marks.
+  const MAX_TICKS = 24;
+  let effStep = step;
+  while (effStep > 0 && totalSec / effStep > MAX_TICKS) effStep *= 2;
   const ticks: number[] = [];
-  for (let t = 0; t <= totalSec; t += step) ticks.push(t);
+  for (let t = 0; t <= totalSec; t += effStep) ticks.push(Math.round(t * 10) / 10);
 
   // The magnet's targets: 0, every scene's start, the reel's end.
   const snapTargets = clips.map((_, i) => timelineStartOf(clips, i));
