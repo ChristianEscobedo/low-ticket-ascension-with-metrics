@@ -306,6 +306,18 @@ export default function RemotionPreview({
     if (!p || !plan) return;
     const onFrame = (e: { detail?: { frame?: unknown } }) => {
       if (scrubbingRef.current) return;
+      // THE #185 LOOP FIX: only write the clock back while the Player is
+      // actually PLAYING. A paused Player still fires frameupdate after a
+      // follow-effect seekTo — writing that frame back changed playheadSec,
+      // which re-ran the follow effect, which seekTo'd again… a setState
+      // loop until React's depth cap (#185) crashed the composition. Paused,
+      // the timeline owns the playhead anyway (drags/seeks set it directly),
+      // so the write-back is only needed to follow the Player's OWN transport.
+      try {
+        if (!p.isPlaying()) return;
+      } catch {
+        return;
+      }
       const cb = onFrameSecRef.current;
       if (!cb) return;
       const frame = e.detail?.frame;

@@ -500,7 +500,8 @@ function TimeRuler({
   return (
     <div
       ref={ref}
-      className="relative h-6 w-full cursor-ew-resize select-none rounded-t-lg border border-b-0 border-bone/15 bg-ink/80"
+      className="relative h-6 cursor-ew-resize select-none rounded-t-lg border border-b-0 border-bone/15 bg-ink/80"
+      style={{ marginLeft: 60, width: 'calc(100% - 60px)' }}
       onPointerDown={(e) => {
         const el = e.currentTarget;
         el.setPointerCapture(e.pointerId);
@@ -5520,7 +5521,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
     if (!playing) return;
     const el = stripScrollRef.current;
     if (!el || total <= 0) return;
-    const x = (playheadSec / Math.max(total, 0.001)) * el.scrollWidth;
+    const x = 60 + (playheadSec / Math.max(total, 0.001)) * Math.max(1, el.scrollWidth - 60);
     const view = el.clientWidth;
     if (x < el.scrollLeft + 40 || x > el.scrollLeft + view - 80) {
       el.scrollLeft = Math.max(0, x - view / 2);
@@ -9087,7 +9088,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                           <div
                             key={t}
                             className="pointer-events-none absolute top-0 z-20 h-6 border-l-2 border-amber-400/60 pl-0.5 text-[8px] font-bold leading-3 text-amber-300/90"
-                            style={{ left: `${(t / total) * 100}%` }}
+                            style={{ left: `calc(60px + ${t / total} * (100% - 60px))` }}
                             title={`Story card ${k + 2} starts here (15s cards)`}
                           >
                             ×{k + 2}
@@ -9098,7 +9099,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   {targetSec < total && (
                     <div
                       className="pointer-events-none absolute bottom-0 top-6 z-20 border-l-2 border-dashed border-amber-400/70 pl-1 text-[8px] font-bold leading-3 text-amber-300/90"
-                      style={{ left: `${(targetSec / total) * 100}%` }}
+                      style={{ left: `calc(60px + ${targetSec / total} * (100% - 60px))` }}
                       title={`${targetTypeLabel(postTarget)} target: ${fmtSec(targetSec)} — you're ${fmtSec(total - targetSec)} over`}
                     >
                       ≈{fmtSec(targetSec)}
@@ -9167,7 +9168,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                   {/* the playhead — grab the line itself to scrub */}
                   <div
                     className="absolute bottom-0 top-6 z-30 w-[2px] cursor-ew-resize bg-brass shadow-[0_0_6px_rgba(168,139,92,0.8)]"
-                    style={{ left: `${Math.min(100, (playheadSec / Math.max(total, 0.001)) * 100)}%` }}
+                    style={{ left: `calc(60px + ${Math.min(1, playheadSec / Math.max(total, 0.001))} * (100% - 60px))` }}
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
@@ -9184,7 +9185,7 @@ const [cueDragLocal, setCueDragLocal] = useState<{
                       let raf = 0;
                       const move = (ev: PointerEvent) => {
                         const rect = container.getBoundingClientRect();
-                        pendingFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+                        pendingFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left - 60) / Math.max(1, rect.width - 60)));
                         if (!raf) {
                           raf = requestAnimationFrame(() => {
                             raf = 0;
