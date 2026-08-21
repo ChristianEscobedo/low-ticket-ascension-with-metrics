@@ -11,10 +11,11 @@
  * Both @remotion/player and the composition are browser-only, so they're loaded
  * with next/dynamic ssr:false.
  */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Player, type PlayerRef } from '@remotion/player';
 import { buildRenderPlan, DEFAULT_FPS, RENDER_SIZES } from '@/lib/mothermode/reel/render/plan';
+import { planRebuildWaitMs } from '@/lib/mothermode/reel/previewThrottle';
 import type { ReelProject } from '@/lib/mothermode/reel/types';
 
 // The composition is browser-only (imports `remotion`); never SSR it.
@@ -113,20 +114,87 @@ export default function RemotionPreview({
   // The SAME plan the renderer builds. When the editor state changes, the plan
   // (and therefore the preview) recomputes — identical to what gets rendered.
   // A throw here used to take the whole stage down; now it's caught + shown.
-  const plan = useMemo(() => {
+  //
+  // THE LOCK-UP FIX: the plan is STATE, not a render-time memo. An edit during
+  // a pointer drag streams state changes at pointermove rate (~60/s); rebuilding
+  // the plan synchronously on each one re-rendered the ENTIRE composition 60
+  // times a second — the "preview locks up every now and then" report. Now a
+  // content signature decides whether anything changed at all (playback
+  // re-renders skip even the stringify), and rebuilds are throttled to one per
+  // PREVIEW_PLAN_MIN_GAP_MS with a trailing apply, so the final state is never
+  // stale but a drag never floods the main thread.
+  const buildArgsRef = useRef({ project, fps, width: size.width, height: size.height, freePlaceEdit, showAllWords });
+  buildArgsRef.current = { project, fps, width: size.width, height: size.height, freePlaceEdit, showAllWords };
+
+  const buildPlan = useCallback(() => {
+    const a = buildArgsRef.current;
     try {
-      const base = buildRenderPlan(project, { fps, width: size.width, height: size.height });
+      const base = buildRenderPlan(a.project, { fps: a.fps, width: a.width, height: a.height });
       // Studio-only: free-place Edit mode. showAllWords is the opt-in "every
       // card word" toggle — off, Edit shows just the on-screen page (Preview's
       // visibility). Neither is ever set for the final render.
-      return freePlaceEdit
-        ? { ...base, freePlaceEdit: true as const, showAllWords }
+      return a.freePlaceEdit
+        ? { ...base, freePlaceEdit: true as const, showAllWords: a.showAllWords }
         : base;
     } catch (e) {
       console.error('[RemotionPreview] buildRenderPlan threw:', e);
       return null;
     }
-  }, [project, fps, size.width, size.height, freePlaceEdit, showAllWords]);
+  }, []);
+
+  const [plan, setPlan] = useState<ReturnType<typeof buildPlan>>(() => buildPlan());
+
+  // The content signature. Field check first: playback re-renders (the
+  // playhead ticks state at 30fps) keep the same project object + scalars, so
+  // they skip the stringify entirely. Only a real content change produces a
+  // new sig. (buildArgsRef.current is a fresh object per render, so compare
+  // the FIELDS, not the wrapper.)
+  const sigCacheRef = useRef<{
+    project: unknown;
+    fps: number;
+    w: number;
+    h: number;
+    fp: boolean;
+    sa: boolean;
+    sig: string;
+  } | null>(null);
+  const cached = sigCacheRef.current;
+  let sig: string;
+  if (
+    cached &&
+    cached.project === project &&
+    cached.fps === fps &&
+    cached.w === size.width &&
+    cached.h === size.height &&
+    cached.fp === freePlaceEdit &&
+    cached.sa === showAllWords
+  ) {
+    sig = cached.sig;
+  } else {
+    sig = JSON.stringify(buildArgsRef.current);
+    sigCacheRef.current = {
+      project,
+      fps,
+      w: size.width,
+      h: size.height,
+      fp: freePlaceEdit,
+      sa: showAllWords,
+      sig,
+    };
+  }
+
+  const lastSigRef = useRef(sig);
+  const lastBuildAtRef = useRef(0);
+  useEffect(() => {
+    if (sig === lastSigRef.current) return;
+    lastSigRef.current = sig;
+    const wait = planRebuildWaitMs(lastBuildAtRef.current, performance.now());
+    const t = setTimeout(() => {
+      lastBuildAtRef.current = performance.now();
+      setPlan(buildPlan());
+    }, wait);
+    return () => clearTimeout(t);
+  }, [sig, buildPlan]);
 
   /**
    * Follow the timeline. Seek only on a real difference (>1 frame) so we never
